@@ -8,6 +8,7 @@ import asyncio, contextlib, glob, json, re
 from logging import getLogger
 from types import TracebackType
 from typing import Any, Iterable, Optional, Protocol, Sequence, Union
+from urllib.parse import unquote, urlsplit
 import ujson
 from asyncpg import Connection, Pool, Record as BaseRecord, create_pool
 from discord.ext.commands import Context, check
@@ -83,17 +84,28 @@ class Database:
                 cur.execute(f.read())
         conn.close()
 
+    @staticmethod
+    def _dsn_parts(uri: str) -> tuple[str, str, str, int, str]:
+        parsed = urlsplit(uri)
+        if parsed.scheme not in {"postgres", "postgresql"}:
+            raise ValueError(f"unsupported database scheme: {parsed.scheme or 'missing'}")
+        if not parsed.hostname:
+            raise ValueError("database host is missing")
+        return (
+            unquote(parsed.username or ""),
+            unquote(parsed.password or ""),
+            parsed.hostname,
+            parsed.port or 5432,
+            parsed.path.lstrip("/") or "postgres",
+        )
+
     async def connect(self) -> Pool:
         """open pool, create db if missing"""
-        tail = self.uri.replace("postgres://", "")
-        auth, rest = tail.split("@")
-        user, pw = auth.split(":")
-        host_port, name = rest.split("/")
-        host, port = host_port.split(":")
+        user, pw, host, port, name = self._dsn_parts(self.uri)
         try:
             self.pool = await self._make_pool()
         except Exception:
-            await asyncio.to_thread(self._create_db, name, user, pw, host, int(port))
+            await asyncio.to_thread(self._create_db, name, user, pw, host, port)
             self.pool = await self._make_pool()
         try:
             await self.execute("CREATE EXTENSION IF NOT EXISTS timescaledb;")

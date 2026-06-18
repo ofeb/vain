@@ -5,8 +5,8 @@ import os
 from pathlib import Path
 from typing import Final
 
-root: Final[Path] = Path(__file__).resolve().parents[2]
-repo_root: Final[Path] = root.parent
+repo_root: Final[Path] = Path(__file__).resolve().parents[2]
+root: Final[Path] = repo_root
 
 try:
     from dotenv import load_dotenv
