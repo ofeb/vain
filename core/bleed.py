@@ -25,6 +25,7 @@ log = logging.getLogger("bleed")
 
 
 _SKIP_DIRS = frozenset({"models", "__pycache__"})
+_SAFE_JISHAKU_COMMANDS = frozenset({"invite", "rtt"})
 
 
 def _has_setup_entry(path: Path) -> bool:
@@ -245,9 +246,21 @@ class Bleed(commands.AutoShardedBot):
     async def _load_jishaku(self) -> None:
         try:
             await self.load_extension("jishaku")
+            self._harden_jishaku()
             log.info("jishaku loaded")
         except Exception as e:
             log.warning(f"jishaku failed: {e}")
+
+    def _harden_jishaku(self) -> None:
+        """remove jishaku commands that can execute code, read files, or control the host"""
+        root = self.get_command("jsk")
+        if not isinstance(root, commands.Group):
+            return
+
+        for command in list(root.commands):
+            if command.name in _SAFE_JISHAKU_COMMANDS:
+                continue
+            root.remove_command(command.name)
 
     async def _load_extensions(self) -> None:
         extensions = _discover_extensions("ext")
