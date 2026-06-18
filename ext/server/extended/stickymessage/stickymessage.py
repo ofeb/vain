@@ -16,7 +16,7 @@ class StickymessageCommands(Package):
 
     @group(
         name="stickymessage",
-        aliases=["stickymsg"],
+        aliases=["sticky", "sm"],
         description="Set up a sticky message in one or multiple channels",
     )
     @has_permissions(manage_guild=True)
@@ -79,6 +79,7 @@ class StickymessageCommands(Package):
 
     @stickymessage.command(
         name="remove",
+        aliases=["delete", "del"],
         description="Remove a sticky message from a channel",
         example=",stickymessage remove #general",
     )

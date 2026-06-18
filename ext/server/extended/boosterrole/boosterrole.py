@@ -135,8 +135,8 @@ class BoosterroleCommands(Package):
 
     @boosterrole_award.command(
         name="unset",
+        aliases=["delete", "remove"],
         description="Remove the reward role",
-        aliases=["reset", "clear", "delete", "remove", "del", "d", "r", "c", "cl"],
     )
     @has_permissions(manage_roles=True, manage_guild=True)
     async def boosterrole_award_unset(self, ctx):
@@ -153,6 +153,7 @@ class BoosterroleCommands(Package):
 
     @boosterrole.command(
         name="base",
+        aliases=["baseid"],
         description="Set the base role for where boost roles will go under",
         example=",boosterrole base @brs",
     )
@@ -222,7 +223,11 @@ class BoosterroleCommands(Package):
         )
         return True
 
-    @boosterrole.command(name="list", description="View all booster roles")
+    @boosterrole.command(
+        name="list",
+        aliases=["view"],
+        description="View all booster roles",
+    )
     @has_permissions(manage_guild=True)
     async def boosterrole_list(self, ctx):
         """show all boost roles"""
@@ -273,6 +278,7 @@ class BoosterroleCommands(Package):
 
     @boosterrole.command(
         name="color",
+        aliases=["colour"],
         description="Get your own custom booster color role",
         example=",boosterrole color #ff0000",
     )
@@ -324,6 +330,7 @@ class BoosterroleCommands(Package):
 
     @boosterrole.command(
         name="remove",
+        aliases=["delete", "del"],
         description="Remove custom color booster role",
     )
     @is_booster()
@@ -346,7 +353,11 @@ class BoosterroleCommands(Package):
         )
         return await ctx.success("booster role removed")
 
-    @boosterrole.command(name="cleanup", description="Clean up unused booster roles")
+    @boosterrole.command(
+        name="cleanup",
+        aliases=["purge", "truncate"],
+        description="Clean up unused booster roles",
+    )
     @has_permissions(manage_roles=True, manage_guild=True)
     async def boosterrole_cleanup(self, ctx):
         """clean stale booster roles"""
@@ -373,6 +384,7 @@ class BoosterroleCommands(Package):
 
     @boosterrole.command(
         name="random",
+        aliases=["randomhex"],
         description="Set a booster role with a random hex code",
     )
     @is_booster()
@@ -440,6 +452,7 @@ class BoosterroleCommands(Package):
 
     @boosterrole.command(
         name="rename",
+        aliases=["name"],
         description="Edit your booster roles name",
         example=",boosterrole rename richgang",
     )

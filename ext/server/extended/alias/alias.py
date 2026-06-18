@@ -8,6 +8,7 @@ class AliasCommands(Package):
 
     @group(
         name="alias",
+        aliases=["shortcut"],
         description="Create your own shortcuts for commands",
         invoke_without_command=True,
     )
@@ -18,6 +19,7 @@ class AliasCommands(Package):
 
     @alias.command(
         name="view",
+        aliases=["show"],
         description="View command execution for alias",
         example=",alias view hi",
     )
@@ -38,6 +40,7 @@ class AliasCommands(Package):
 
     @alias.command(
         name="removeall",
+        aliases=["delall", "deleteeall"],
         description="Remove an alias for command",
         example=",alias removeall avatar",
     )
@@ -53,13 +56,12 @@ class AliasCommands(Package):
 
     @alias.command(
         name="list",
-        aliases=["ls", "l"],
         description="List every alias for all commands",
     )
     @has_permissions(manage_guild=True)
     async def alias_list(self, ctx):
         """list all server aliases"""
-        entries = await self.db.fetchall(
+        entries = await self.db.fetch(
             """SELECT alias, command_name FROM aliases WHERE guild_id = $1""",
             ctx.guild.id,
         )
@@ -78,6 +80,7 @@ class AliasCommands(Package):
 
     @alias.command(
         name="add",
+        aliases=["create"],
         description="Create an alias for command",
         example=",alias add hi avatar",
     )
@@ -94,6 +97,7 @@ class AliasCommands(Package):
 
     @alias.command(
         name="remove",
+        aliases=["del", "delete"],
         description="Remove an alias for command",
         example=",alias remove hi",
     )
@@ -107,7 +111,11 @@ class AliasCommands(Package):
         )
         return await ctx.success(f"removed alias `{shortcut}`")
 
-    @alias.command(name="reset", description="Reset every alias for all commands")
+    @alias.command(
+        name="reset",
+        aliases=["clear"],
+        description="Reset every alias for all commands",
+    )
     @has_permissions(manage_guild=True)
     async def alias_reset(self, ctx):
         """wipe all aliases"""
