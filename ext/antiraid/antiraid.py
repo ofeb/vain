@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import shlex
 from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
 
@@ -10,7 +11,7 @@ from discord.ext import commands
 from discord.ext.commands import CommandError, group, has_permissions
 
 from core.discord.package import Package
-from core.tools.convert import MemberConvert, StatusConvert
+from core.tools.convert import MemberConvert, RoleConvert, StatusConvert
 from core.tools.flags import AntiRaidFlags
 
 from .models import AntiraidConfig, ModuleConfig
@@ -18,7 +19,88 @@ from .models import AntiraidConfig, ModuleConfig
 MASSJOIN_WINDOW_SECONDS = 10
 
 
-class Antiraid(Package, commands.Cog):
+def _iter_permission_channels(
+    guild: discord.Guild,
+) -> list[discord.abc.GuildChannel]:
+    channels: list[discord.abc.GuildChannel] = []
+    for channel in guild.channels:
+        if isinstance(
+            channel,
+            (
+                discord.CategoryChannel,
+                discord.TextChannel,
+                discord.VoiceChannel,
+                discord.StageChannel,
+                discord.ForumChannel,
+            ),
+        ):
+            channels.append(channel)
+    return channels
+
+
+def _build_external_apps_targets(
+    guild: discord.Guild,
+    bot_member: discord.Member,
+    excluded_roles: set[discord.Role],
+) -> tuple[list[discord.Role], int]:
+    everyone = guild.default_role
+    targets: list[discord.Role] = []
+    seen: set[int] = set()
+
+    if everyone not in excluded_roles:
+        targets.append(everyone)
+        seen.add(everyone.id)
+
+    for role in guild.roles:
+        if role.id in seen or role in excluded_roles:
+            continue
+        if role >= bot_member.top_role:
+            continue
+        targets.append(role)
+        seen.add(role.id)
+
+    skipped = sum(
+        1
+        for role in guild.roles
+        if role not in excluded_roles
+        and role != everyone
+        and role >= bot_member.top_role
+    )
+    return targets, skipped
+
+
+def _deny_external_apps_overwrite(
+    existing: discord.PermissionOverwrite | None,
+) -> discord.PermissionOverwrite:
+    overwrite = discord.PermissionOverwrite()
+    if existing:
+        for key, value in existing:
+            if value is not None:
+                overwrite.update(**{key: value})
+    overwrite.update(use_external_apps=False)
+    return overwrite
+
+
+def _overwrite_denies_external_apps(
+    existing: discord.PermissionOverwrite | None,
+) -> bool:
+    return existing is not None and existing.use_external_apps is False
+
+
+def _channels_needing_external_apps_update(
+    guild: discord.Guild,
+    target_roles: list[discord.Role],
+) -> list[discord.abc.GuildChannel]:
+    channels: list[discord.abc.GuildChannel] = []
+    for channel in _iter_permission_channels(guild):
+        for role in target_roles:
+            if not _overwrite_denies_external_apps(channel.overwrites_for(role)):
+                channels.append(channel)
+                break
+    return channels
+
+
+class Antiraid(Package):
     """antiraid configuration and enforcement."""
 
     def __init__(self, bot):
@@ -203,6 +285,81 @@ class Antiraid(Package, commands.Cog):
                 members.append(member)
         return members
 
+    async def _parse_excluded_roles(
+        self,
+        ctx,
+        flags: str | None,
+    ) -> list[discord.Role]:
+        tokens = shlex.split(flags or "")
+        if not tokens:
+            return []
+
+        excluded_tokens: list[str] = []
+        current_flag: str | None = None
+
+        for token in tokens:
+            if token == "--excluded":
+                current_flag = "excluded"
+                continue
+            if token.startswith("--"):
+                raise CommandError(f"unknown flag `{token}`")
+            if current_flag != "excluded":
+                raise CommandError("this command only accepts the `--excluded` flag")
+            excluded_tokens.append(token)
+
+        if not excluded_tokens:
+            raise CommandError("provide at least one role after `--excluded`")
+
+        converter = RoleConvert()
+        roles: list[discord.Role] = []
+        seen: set[int] = set()
+        for token in excluded_tokens:
+            role = await converter.convert(ctx, token)
+            if role.id in seen:
+                continue
+            roles.append(role)
+            seen.add(role.id)
+        return roles
+
+    async def _disable_external_apps(
+        self,
+        guild: discord.Guild,
+        target_roles: list[discord.Role],
+        *,
+        reason: str,
+    ) -> tuple[int, int, int]:
+        channels_touched = 0
+        roles_updated = 0
+        failures = 0
+
+        for channel in _channels_needing_external_apps_update(guild, target_roles):
+            merged_overwrites = dict(channel.overwrites)
+            changed = False
+
+            for role in target_roles:
+                current = channel.overwrites_for(role)
+                if _overwrite_denies_external_apps(current):
+                    continue
+                merged_overwrites[role] = _deny_external_apps_overwrite(current)
+                roles_updated += 1
+                changed = True
+
+            if not changed:
+                continue
+
+            try:
+                await channel.edit(overwrites=merged_overwrites, reason=reason)
+            except discord.Forbidden:
+                failures += 1
+                continue
+            except discord.HTTPException:
+                failures += 1
+                continue
+
+            channels_touched += 1
+
+        return channels_touched, roles_updated, failures
+
     @group(
         name="antiraid",
         usage="(subcommand)",
@@ -302,6 +459,101 @@ class Antiraid(Package, commands.Cog):
             Embed(title="Antiraid whitelist", color=self.color),
             lines,
         )
+
+    @antiraid.command(
+        name="apps",
+        usage="[--excluded role ...]",
+        example='--excluded "@staff" "@mods"',
+    )
+    @has_permissions(manage_guild=True)
+    async def antiraid_apps(self, ctx, *, flags: str = None):
+        """Disable external app usage across guild channels for non-excluded roles."""
+        bot_member = ctx.guild.me or ctx.guild.get_member(self.bot.user.id)
+        if bot_member is None:
+            raise CommandError("I could not resolve my server member")
+        if not bot_member.guild_permissions.manage_roles:
+            raise CommandError("I need the **manage roles** permission for this command")
+        if not bot_member.guild_permissions.manage_channels:
+            raise CommandError("I need the **manage channels** permission for this command")
+
+        excluded_roles = set(await self._parse_excluded_roles(ctx, flags))
+        target_roles, skipped = _build_external_apps_targets(
+            ctx.guild,
+            bot_member,
+            excluded_roles,
+        )
+        if not target_roles:
+            raise CommandError("there are no roles available for me to update")
+
+        channels = _channels_needing_external_apps_update(ctx.guild, target_roles)
+        if not channels:
+            return await ctx.success(
+                "Disabled **use external apps** is already enforced for the selected roles"
+            )
+
+        channels_touched, _, failures = await self._disable_external_apps(
+            ctx.guild,
+            target_roles,
+            reason=f"antiraid apps by {ctx.author}",
+        )
+        if channels_touched <= 0:
+            raise CommandError("I could not update any channel permissions")
+
+        summary = (
+            f"Disabled **use external apps** in **{channels_touched}** "
+            f"channel{'s' if channels_touched != 1 else ''} for **{len(target_roles)}** "
+            f"role{'s' if len(target_roles) != 1 else ''}"
+        )
+        if ctx.guild.default_role in target_roles:
+            summary += ", including **@everyone**"
+        if excluded_roles:
+            excluded = ", ".join(f"**{role.name}**" for role in excluded_roles)
+            summary += f"\nExcluded: {excluded}"
+        if skipped:
+            summary += (
+                f"\nSkipped: **{skipped}** role{'s' if skipped != 1 else ''} "
+                "above my **highest role**"
+            )
+        if failures:
+            summary += (
+                f"\nFailed updates: **{failures}** channel{'s' if failures != 1 else ''}"
+            )
+        return await ctx.success(summary)
+
+    @antiraid.command(
+        name="reset",
+        aliases=["clear"],
+    )
+    @has_permissions(manage_guild=True)
+    async def antiraid_reset(self, ctx):
+        """Reset antiraid configuration back to its default state."""
+        await self._set_raid_state(ctx.guild.id, False)
+        await self._set_punish_until(ctx.guild.id, None)
+        for module, threshold, action in (
+            ("massjoin", 5, "ban"),
+            ("avatar", 0, "kick"),
+            ("newaccounts", 7, "ban"),
+        ):
+            await self.db.upsert_antiraid_module(
+                ctx.guild.id,
+                module,
+                enabled=False,
+                threshold=threshold,
+                action=action,
+                lock_channels=False,
+                punish_new=False,
+            )
+
+        unlocked = await self._unlock_channels(ctx.guild)
+        self.joins.pop(ctx.guild.id, None)
+        await self._refresh_config(ctx.guild.id)
+
+        message = "Reset **antiraid** configuration"
+        if unlocked:
+            message += (
+                f" and unlocked **{unlocked}** channel{'s' if unlocked != 1 else ''}"
+            )
+        return await ctx.success(message)
 
     @antiraid.command(
         name="massjoin",
@@ -413,7 +665,7 @@ class Antiraid(Package, commands.Cog):
             f"Punishment is set to **{action}** and the minimum account age is **{threshold}** days"
         )
 
-    @commands.Cog.listener()
+    @Package.listener()
     async def on_member_join(self, member: discord.Member) -> None:
         if member.guild is None:
             return
