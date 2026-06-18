@@ -197,6 +197,7 @@ class Role(Package):
             ctx,
             action="role remove",
             case_id=case_id,
+            meta={"target_id": member.id, "role_id": role.id},
         )
         return await ctx.success(
             f"Removed **{role.name}** from **{member}** - {self._default_reason(reason)}"
@@ -263,6 +264,7 @@ class Role(Package):
             ctx,
             action="role add",
             case_id=case_id,
+            meta={"target_id": member.id, "role_id": role.id},
         )
         return await ctx.success(
             f"Added **{role.name}** to **{member}** - {self._default_reason(reason)}"
@@ -332,7 +334,7 @@ class Role(Package):
                 ctx.author,
                 "role delete",
                 case_id or 0,
-                {"role": snapshot},
+                {"role": snapshot, "role_id": role_id},
             )
         return await ctx.success(
             f"Deleted role **{role_name}** - {self._default_reason(reason)}"
