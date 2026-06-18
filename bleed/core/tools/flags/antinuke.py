@@ -1,16 +1,21 @@
-"""antinuke command flags definition.
-used when parsing antinuke setup commands.
-extends discord.py FlagConverter"""
+"""antinuke command flags definition."""
 
 from discord.ext.commands import FlagConverter, flag
-from typing import Optional
 
 
-class AntiNukeFlags(FlagConverter, prefix='--', delimiter=' '):
-    """flags for antinuke command config"""
-    ban: Optional[int] = flag(default=None, description='max bans before trigger')
-    kick: Optional[int] = flag(default=None, description='max kicks before trigger')
-    role: Optional[int] = flag(default=None, description='max role deletes before trigger')
-    channel: Optional[int] = flag(default=None, description='max channel deletes before trigger')
-    webhook: Optional[int] = flag(default=None, description='max webhooks before trigger')
-    punishment: Optional[str] = flag(default='ban', description='ban kick or strip')
+class AntiNukeFlags(FlagConverter, case_insensitive=True, prefix="--", delimiter=" "):
+    """flags shared by the documented antinuke setup commands."""
+
+    punishment: str = flag(
+        aliases=["action", "do"],
+        default="kick",
+        description="ban kick or stripstaff",
+    )
+    threshold: int = flag(
+        default=3,
+        description="max actions before trigger",
+    )
+    command: bool = flag(
+        default=False,
+        description="count bleed commands toward the threshold",
+    )

@@ -6,5 +6,6 @@ from .member import MemberConvert
 from .role import RoleConvert
 from .channel import ChannelConvert
 from .color import ColorConvert
+from .status import StatusConvert
 
-__all__ = ["MemberConvert", "RoleConvert", "ChannelConvert", "ColorConvert"]
+__all__ = ["MemberConvert", "RoleConvert", "ChannelConvert", "ColorConvert", "StatusConvert"]
