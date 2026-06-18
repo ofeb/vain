@@ -1,10 +1,83 @@
-from discord.ext.commands import group, has_permissions
+import discord
+from discord.ext.commands import CommandError, group, has_permissions
 
 from core.discord.package import Package
 
 
 class Role(Package):
     """role management"""
+
+    def _audit_reason(self, ctx, reason: str | None) -> str:
+        base = reason or "no reason provided"
+        return f"{base} | executed by {ctx.author} ({ctx.author.id})"
+
+    def _default_reason(self, reason: str | None) -> str:
+        return reason or "no reason provided"
+
+    def _ensure_manageable_role(self, ctx, role: discord.Role) -> None:
+        if ctx.guild is None:
+            raise CommandError("this command can only be used in a server")
+        if role == ctx.guild.default_role:
+            raise CommandError("you cannot delete the default role")
+        if role.managed:
+            raise CommandError("you cannot delete an integration role")
+
+        author = ctx.author if isinstance(ctx.author, discord.Member) else None
+        bot_member = ctx.guild.me or ctx.guild.get_member(self.bot.user.id if self.bot.user else 0)
+        if author and ctx.guild.owner_id != author.id and role >= author.top_role:
+            raise CommandError("that role is above or equal to your highest role")
+        if bot_member is None:
+            raise CommandError("I could not resolve my server member")
+        if role >= bot_member.top_role:
+            raise CommandError("that role is above or equal to my highest role")
+
+    async def _create_case(
+        self,
+        ctx,
+        *,
+        action: str,
+        target_id: int,
+        reason: str | None,
+    ) -> int | None:
+        if getattr(self.db, "pool", None) is None:
+            return None
+        return await self.db.create_case(
+            guild_id=ctx.guild.id,
+            action=action,
+            target_id=target_id,
+            moderator_id=ctx.author.id,
+            reason=self._default_reason(reason),
+        )
+
+    async def _send_modlog(
+        self,
+        ctx,
+        *,
+        action: str,
+        target_name: str,
+        case_id: int | None,
+        reason: str | None,
+    ) -> None:
+        if getattr(self.db, "pool", None) is None:
+            return
+        channel_id = await self.db.get_modlog_channel(ctx.guild.id)
+        if not channel_id:
+            return
+        channel = ctx.guild.get_channel(channel_id)
+        if not isinstance(channel, discord.TextChannel):
+            return
+
+        embed = discord.Embed(
+            color=self.color,
+            title=f"Case #{case_id}" if case_id is not None else "Moderation action",
+            description=(
+                f"**Action:** {action}\n"
+                f"**Target:** {target_name}\n"
+                f"**Moderator:** {ctx.author}\n"
+                f"**Reason:** {self._default_reason(reason)}"
+            ),
+        )
+        await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
     @group(
         name="role",
@@ -91,9 +164,55 @@ class Role(Package):
         name="delete",
         description="Deletes a role",
     )
-    async def role_delete(self, ctx, role):
+    @has_permissions(manage_roles=True)
+    async def role_delete(
+        self,
+        ctx,
+        role: discord.Role,
+        *,
+        reason: str = None,
+    ):
         """delete role"""
-        pass
+        self._ensure_manageable_role(ctx, role)
+
+        snapshot = {
+            "name": role.name,
+            "permissions": role.permissions.value,
+            "color": role.color.value,
+            "hoist": role.hoist,
+            "mentionable": role.mentionable,
+            "position": role.position,
+        }
+        role_name = role.name
+        role_id = role.id
+
+        await role.delete(reason=self._audit_reason(ctx, reason))
+
+        case_id = await self._create_case(
+            ctx,
+            action="role delete",
+            target_id=role_id,
+            reason=reason,
+        )
+        await self._send_modlog(
+            ctx,
+            action="role delete",
+            target_name=role_name,
+            case_id=case_id,
+            reason=reason,
+        )
+        if ctx.guild is not None and isinstance(ctx.author, discord.Member):
+            ctx.bot.dispatch(
+                "antinuke_action",
+                ctx.guild,
+                ctx.author,
+                "role delete",
+                case_id or 0,
+                {"role": snapshot},
+            )
+        return await ctx.success(
+            f"Deleted role **{role_name}** - {self._default_reason(reason)}"
+        )
 
     @role.command(
         name="mentionable",

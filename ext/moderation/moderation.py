@@ -1,12 +1,106 @@
 from __future__ import annotations
 
+import discord
 from discord.ext.commands import command, has_permissions
+from discord.ext.commands import CommandError
 
 from core.discord.package import Package
 
 
 class ModerationCommands(Package):
     """standalone moderation commands"""
+
+    def _audit_reason(self, ctx, reason: str | None) -> str:
+        base = reason or "no reason provided"
+        return f"{base} | executed by {ctx.author} ({ctx.author.id})"
+
+    def _default_reason(self, reason: str | None) -> str:
+        return reason or "no reason provided"
+
+    def _ensure_targetable(self, ctx, member: discord.Member) -> None:
+        if ctx.guild is None:
+            raise CommandError("this command can only be used in a server")
+        if member.id == ctx.author.id:
+            raise CommandError("you cannot moderate yourself")
+        if member.id == ctx.guild.owner_id:
+            raise CommandError("you cannot moderate the server owner")
+
+        author = ctx.author if isinstance(ctx.author, discord.Member) else None
+        bot_member = ctx.guild.me or ctx.guild.get_member(self.bot.user.id if self.bot.user else 0)
+        if author and ctx.guild.owner_id != author.id and member.top_role >= author.top_role:
+            raise CommandError("that member is above or equal to your highest role")
+        if bot_member is None:
+            raise CommandError("I could not resolve my server member")
+        if member.top_role >= bot_member.top_role:
+            raise CommandError("that member is above or equal to my highest role")
+
+    async def _create_case(
+        self,
+        ctx,
+        *,
+        action: str,
+        target_id: int,
+        reason: str | None,
+    ) -> int | None:
+        if getattr(self.db, "pool", None) is None:
+            return None
+        return await self.db.create_case(
+            guild_id=ctx.guild.id,
+            action=action,
+            target_id=target_id,
+            moderator_id=ctx.author.id,
+            reason=self._default_reason(reason),
+        )
+
+    async def _send_modlog(
+        self,
+        ctx,
+        *,
+        action: str,
+        target: discord.abc.User | None,
+        case_id: int | None,
+        reason: str | None,
+    ) -> None:
+        if getattr(self.db, "pool", None) is None:
+            return
+        channel_id = await self.db.get_modlog_channel(ctx.guild.id)
+        if not channel_id:
+            return
+        channel = ctx.guild.get_channel(channel_id)
+        if not isinstance(channel, discord.TextChannel):
+            return
+
+        target_label = str(target) if target else "Unknown User"
+        embed = discord.Embed(
+            color=self.color,
+            title=f"Case #{case_id}" if case_id is not None else "Moderation action",
+            description=(
+                f"**Action:** {action}\n"
+                f"**Target:** {target_label}\n"
+                f"**Moderator:** {ctx.author}\n"
+                f"**Reason:** {self._default_reason(reason)}"
+            ),
+        )
+        await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+
+    def _dispatch_antinuke_action(
+        self,
+        ctx,
+        *,
+        action: str,
+        case_id: int | None,
+        meta: dict | None = None,
+    ) -> None:
+        if ctx.guild is None or not isinstance(ctx.author, discord.Member):
+            return
+        ctx.bot.dispatch(
+            "antinuke_action",
+            ctx.guild,
+            ctx.author,
+            action,
+            case_id or 0,
+            meta,
+        )
 
     @command(
         name="tempban",
@@ -242,9 +336,110 @@ class ModerationCommands(Package):
         name="ban",
         description="No description given",
     )
-    async def ban(self, ctx, member, delete_history, *, reason):
+    @has_permissions(ban_members=True)
+    async def ban(
+        self,
+        ctx,
+        member: discord.Member,
+        delete_history: int = 0,
+        *,
+        reason: str = None,
+    ):
         """ban a member"""
-        pass
+        self._ensure_targetable(ctx, member)
+
+        delete_days = max(0, min(int(delete_history or 0), 7))
+        role_ids = [
+            role.id
+            for role in member.roles
+            if role != ctx.guild.default_role
+        ]
+        target_display = str(member)
+        target_id = member.id
+
+        await member.ban(
+            delete_message_seconds=delete_days * 86400,
+            reason=self._audit_reason(ctx, reason),
+        )
+
+        case_id = await self._create_case(
+            ctx,
+            action="ban",
+            target_id=target_id,
+            reason=reason,
+        )
+        await self._send_modlog(
+            ctx,
+            action="ban",
+            target=member,
+            case_id=case_id,
+            reason=reason,
+        )
+        self._dispatch_antinuke_action(
+            ctx,
+            action="ban",
+            case_id=case_id,
+            meta={
+                "target_id": target_id,
+                "target_display": target_display,
+                "role_ids": role_ids,
+            },
+        )
+        return await ctx.success(
+            f"Banned **{target_display}** - {self._default_reason(reason)}"
+        )
+
+    @command(
+        name="kick",
+        description="Kick the mentioned user",
+    )
+    @has_permissions(kick_members=True)
+    async def kick(
+        self,
+        ctx,
+        member: discord.Member,
+        *,
+        reason: str = None,
+    ):
+        """kick a member"""
+        self._ensure_targetable(ctx, member)
+
+        role_ids = [
+            role.id
+            for role in member.roles
+            if role != ctx.guild.default_role
+        ]
+        target_display = str(member)
+        target_id = member.id
+
+        await member.kick(reason=self._audit_reason(ctx, reason))
+
+        case_id = await self._create_case(
+            ctx,
+            action="kick",
+            target_id=target_id,
+            reason=reason,
+        )
+        await self._send_modlog(
+            ctx,
+            action="kick",
+            target=member,
+            case_id=case_id,
+            reason=reason,
+        )
+        self._dispatch_antinuke_action(
+            ctx,
+            action="kick",
+            case_id=case_id,
+            meta={
+                "target_id": target_id,
+                "target_display": target_display,
+                "role_ids": role_ids,
+            },
+        )
+        return await ctx.success(
+            f"Kicked **{target_display}** - {self._default_reason(reason)}"
+        )
 
     @command(
         name="ban recent",
