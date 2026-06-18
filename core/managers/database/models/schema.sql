@@ -76,6 +76,13 @@ CREATE TABLE IF NOT EXISTS antinuke (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS antinuke_actions (
+    guild_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    action VARCHAR(32) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS antiraid_config (
     guild_id BIGINT PRIMARY KEY,
     raid_active BOOLEAN NOT NULL DEFAULT FALSE,
@@ -589,3 +596,4 @@ CREATE INDEX IF NOT EXISTS idx_sticky_message_guild ON sticky_message(guild_id);
 CREATE INDEX IF NOT EXISTS idx_pagination_guild ON pagination(guild_id);
 CREATE INDEX IF NOT EXISTS idx_trackers_guild ON trackers(guild_id);
 CREATE INDEX IF NOT EXISTS idx_antiraid_modules_guild ON antiraid_modules(guild_id);
+CREATE INDEX IF NOT EXISTS idx_antinuke_actions_lookup ON antinuke_actions(guild_id, user_id, action, created_at);

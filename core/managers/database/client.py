@@ -396,6 +396,47 @@ class Database:
             guild_id,
         )
 
+    async def log_antinuke_action(self, guild_id: int, user_id: int, action: str) -> None:
+        """store one antinuke action for threshold counting"""
+        await self.execute(
+            """
+            INSERT INTO antinuke_actions (guild_id, user_id, action)
+            VALUES ($1, $2, $3)
+            """,
+            guild_id,
+            user_id,
+            action,
+        )
+
+    async def get_antinuke_action_count(
+        self,
+        guild_id: int,
+        user_id: int,
+        action: str,
+        window_seconds: int,
+    ) -> int:
+        """count recent antinuke actions for one user/module window"""
+        row = await self.fetchrow(
+            """
+            SELECT COUNT(*) AS total
+            FROM antinuke_actions
+            WHERE guild_id = $1
+              AND user_id = $2
+              AND action = $3
+              AND created_at >= (
+                    CURRENT_TIMESTAMP - ($4::INT || ' seconds')::INTERVAL
+              )
+            """,
+            guild_id,
+            user_id,
+            action,
+            window_seconds,
+            cached=False,
+        )
+        if not row:
+            return 0
+        return int(row.total or 0)
+
     async def migrate(self) -> Optional[bool]:
         """run pending sql migration files"""
         if await self.fetchval("SELECT count(*) FROM pokemon.users") > 10:
