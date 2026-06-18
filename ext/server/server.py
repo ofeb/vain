@@ -77,11 +77,11 @@ class ServerCommands(Package):
         await ctx.send(embed=e)
 
     @command(
-        name="banner",
-        aliases=["serverbanner"],
+        name="serverbanner",
+        aliases=["guildbanner"],
         description="View the server's banner",
     )
-    async def banner(self, ctx):
+    async def serverbanner(self, ctx):
         """show server banner"""
         if not ctx.guild.banner:
             from discord.ext.commands import CommandError

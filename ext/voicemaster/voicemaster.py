@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import contextlib
 from typing import Optional, Union
 
@@ -22,6 +23,8 @@ class VoiceControl(commands.Cog):
 
     async def cog_load(self) -> None:
         """Clean up empty channels on load."""
+        if getattr(self.bot.db, "pool", None) is None:
+            return
         await self._cleanup_empty_channels()
         self._cleanup_loop.start()
 
@@ -36,6 +39,9 @@ class VoiceControl(commands.Cog):
 
     async def _cleanup_empty_channels(self):
         """Delete empty voice channels from database and Discord."""
+        if getattr(self.bot.db, "pool", None) is None:
+            return
+
         to_delete = []
         
         rows = await self.bot.db.fetch(
