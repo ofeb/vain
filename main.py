@@ -1,4 +1,4 @@
-from bleed.__exec__ import main
+from __exec__ import main
 
 
 if __name__ == "__main__":
