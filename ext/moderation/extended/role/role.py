@@ -4,6 +4,20 @@ from discord.ext.commands import CommandError, group, has_permissions
 from core.discord.package import Package
 
 
+def _parse_color(value: str | None) -> discord.Color | None:
+    if not value:
+        return None
+    raw = value.strip().lower()
+    if raw.startswith("#"):
+        raw = raw[1:]
+    if len(raw) != 6:
+        return None
+    try:
+        return discord.Color(int(raw, 16))
+    except ValueError:
+        return None
+
+
 class Role(Package):
     """role management"""
 
@@ -14,13 +28,19 @@ class Role(Package):
     def _default_reason(self, reason: str | None) -> str:
         return reason or "no reason provided"
 
-    def _ensure_manageable_role(self, ctx, role: discord.Role) -> None:
+    def _ensure_manageable_role(
+        self,
+        ctx,
+        role: discord.Role,
+        *,
+        action: str = "manage",
+    ) -> None:
         if ctx.guild is None:
             raise CommandError("this command can only be used in a server")
         if role == ctx.guild.default_role:
-            raise CommandError("you cannot delete the default role")
+            raise CommandError(f"you cannot {action} the default role")
         if role.managed:
-            raise CommandError("you cannot delete an integration role")
+            raise CommandError(f"you cannot {action} an integration role")
 
         author = ctx.author if isinstance(ctx.author, discord.Member) else None
         bot_member = ctx.guild.me or ctx.guild.get_member(self.bot.user.id if self.bot.user else 0)
@@ -30,6 +50,42 @@ class Role(Package):
             raise CommandError("I could not resolve my server member")
         if role >= bot_member.top_role:
             raise CommandError("that role is above or equal to my highest role")
+
+    def _ensure_targetable_member(self, ctx, member: discord.Member) -> None:
+        if ctx.guild is None:
+            raise CommandError("this command can only be used in a server")
+        if member.id == ctx.author.id:
+            raise CommandError("you cannot modify your own roles with this command")
+        if member.id == ctx.guild.owner_id:
+            raise CommandError("you cannot modify the server owner's roles")
+
+        author = ctx.author if isinstance(ctx.author, discord.Member) else None
+        bot_member = ctx.guild.me or ctx.guild.get_member(self.bot.user.id if self.bot.user else 0)
+        if author and ctx.guild.owner_id != author.id and member.top_role >= author.top_role:
+            raise CommandError("that member is above or equal to your highest role")
+        if bot_member is None:
+            raise CommandError("I could not resolve my server member")
+        if member.top_role >= bot_member.top_role:
+            raise CommandError("that member is above or equal to my highest role")
+
+    def _dispatch_antinuke_action(
+        self,
+        ctx,
+        *,
+        action: str,
+        case_id: int | None,
+        meta: dict | None = None,
+    ) -> None:
+        if ctx.guild is None or not isinstance(ctx.author, discord.Member):
+            return
+        ctx.bot.dispatch(
+            "antinuke_action",
+            ctx.guild,
+            ctx.author,
+            action,
+            case_id or 0,
+            meta,
+        )
 
     async def _create_case(
         self,
@@ -108,9 +164,43 @@ class Role(Package):
         name="remove",
         description="Removes role from a member",
     )
-    async def role_remove(self, ctx, member, role):
+    @has_permissions(manage_roles=True)
+    async def role_remove(
+        self,
+        ctx,
+        member: discord.Member,
+        role: discord.Role,
+        *,
+        reason: str = None,
+    ):
         """remove role from member"""
-        pass
+        self._ensure_targetable_member(ctx, member)
+        self._ensure_manageable_role(ctx, role, action="remove")
+        if role not in member.roles:
+            return await ctx.warn(f"**{member}** does not have **{role.name}**")
+
+        await member.remove_roles(role, reason=self._audit_reason(ctx, reason))
+        case_id = await self._create_case(
+            ctx,
+            action="role remove",
+            target_id=member.id,
+            reason=reason,
+        )
+        await self._send_modlog(
+            ctx,
+            action="role remove",
+            target_name=f"{member} -> {role.name}",
+            case_id=case_id,
+            reason=reason,
+        )
+        self._dispatch_antinuke_action(
+            ctx,
+            action="role remove",
+            case_id=case_id,
+        )
+        return await ctx.success(
+            f"Removed **{role.name}** from **{member}** - {self._default_reason(reason)}"
+        )
 
     @role.command(
         name="hoist",
@@ -140,9 +230,43 @@ class Role(Package):
         name="add",
         description="Adds role to a member",
     )
-    async def role_add(self, ctx, member, role):
+    @has_permissions(manage_roles=True)
+    async def role_add(
+        self,
+        ctx,
+        member: discord.Member,
+        role: discord.Role,
+        *,
+        reason: str = None,
+    ):
         """add role to member"""
-        pass
+        self._ensure_targetable_member(ctx, member)
+        self._ensure_manageable_role(ctx, role, action="give")
+        if role in member.roles:
+            return await ctx.warn(f"**{member}** already has **{role.name}**")
+
+        await member.add_roles(role, reason=self._audit_reason(ctx, reason))
+        case_id = await self._create_case(
+            ctx,
+            action="role add",
+            target_id=member.id,
+            reason=reason,
+        )
+        await self._send_modlog(
+            ctx,
+            action="role add",
+            target_name=f"{member} -> {role.name}",
+            case_id=case_id,
+            reason=reason,
+        )
+        self._dispatch_antinuke_action(
+            ctx,
+            action="role add",
+            case_id=case_id,
+        )
+        return await ctx.success(
+            f"Added **{role.name}** to **{member}** - {self._default_reason(reason)}"
+        )
 
     @role.command(
         name="color",
@@ -173,7 +297,7 @@ class Role(Package):
         reason: str = None,
     ):
         """delete role"""
-        self._ensure_manageable_role(ctx, role)
+        self._ensure_manageable_role(ctx, role, action="delete")
 
         snapshot = {
             "name": role.name,
@@ -282,6 +406,51 @@ class Role(Package):
         name="create",
         description="Creates a role with optional color",
     )
-    async def role_create(self, ctx, color, role):
+    @has_permissions(manage_roles=True)
+    async def role_create(
+        self,
+        ctx,
+        first: str,
+        *,
+        rest: str = None,
+    ):
         """create role"""
-        pass
+        if ctx.guild is None:
+            raise CommandError("this command can only be used in a server")
+        color = _parse_color(first)
+        if color is not None:
+            if not rest:
+                raise CommandError("provide a role name after the color")
+            role_name = rest.strip()
+        else:
+            role_name = first if rest is None else f"{first} {rest}".strip()
+            color = discord.Color.default()
+
+        if not role_name:
+            raise CommandError("provide a role name")
+
+        role = await ctx.guild.create_role(
+            name=role_name,
+            color=color,
+            reason=self._audit_reason(ctx, reason=None),
+        )
+        case_id = await self._create_case(
+            ctx,
+            action="role create",
+            target_id=role.id,
+            reason=None,
+        )
+        await self._send_modlog(
+            ctx,
+            action="role create",
+            target_name=role.name,
+            case_id=case_id,
+            reason=None,
+        )
+        self._dispatch_antinuke_action(
+            ctx,
+            action="role create",
+            case_id=case_id,
+            meta={"role_id": role.id},
+        )
+        return await ctx.success(f"Created role **{role.name}**")

@@ -17,6 +17,15 @@ class ModerationCommands(Package):
     def _default_reason(self, reason: str | None) -> str:
         return reason or "no reason provided"
 
+    def _coerce_delete_days(self, value, *, default: int = 0) -> int:
+        if value in (None, ""):
+            return default
+        try:
+            days = int(value)
+        except (TypeError, ValueError):
+            days = default
+        return max(0, min(days, 7))
+
     def _ensure_targetable(self, ctx, member: discord.Member) -> None:
         if ctx.guild is None:
             raise CommandError("this command can only be used in a server")
@@ -328,9 +337,62 @@ class ModerationCommands(Package):
         name="softban",
         description="Softbans the mentioned user and deleting 1 day of messages",
     )
-    async def softban(self, ctx, member, delete_history, *, reason):
+    @has_permissions(ban_members=True)
+    async def softban(
+        self,
+        ctx,
+        member: discord.Member,
+        delete_history: int = 1,
+        *,
+        reason: str = None,
+    ):
         """softban a member"""
-        pass
+        self._ensure_targetable(ctx, member)
+
+        delete_days = self._coerce_delete_days(delete_history, default=1)
+        role_ids = [
+            role.id
+            for role in member.roles
+            if role != ctx.guild.default_role
+        ]
+        target_display = str(member)
+        target_id = member.id
+
+        await member.ban(
+            delete_message_seconds=delete_days * 86400,
+            reason=self._audit_reason(ctx, reason),
+        )
+        await ctx.guild.unban(
+            discord.Object(id=target_id),
+            reason=self._audit_reason(ctx, "softban removal"),
+        )
+
+        case_id = await self._create_case(
+            ctx,
+            action="softban",
+            target_id=target_id,
+            reason=reason,
+        )
+        await self._send_modlog(
+            ctx,
+            action="softban",
+            target=member,
+            case_id=case_id,
+            reason=reason,
+        )
+        self._dispatch_antinuke_action(
+            ctx,
+            action="softban",
+            case_id=case_id,
+            meta={
+                "target_id": target_id,
+                "target_display": target_display,
+                "role_ids": role_ids,
+            },
+        )
+        return await ctx.success(
+            f"Softbanned **{target_display}** - {self._default_reason(reason)}"
+        )
 
     @command(
         name="ban",
@@ -348,7 +410,7 @@ class ModerationCommands(Package):
         """ban a member"""
         self._ensure_targetable(ctx, member)
 
-        delete_days = max(0, min(int(delete_history or 0), 7))
+        delete_days = self._coerce_delete_days(delete_history, default=0)
         role_ids = [
             role.id
             for role in member.roles
