@@ -26,26 +26,42 @@ log = logging.getLogger("bleed")
 _SKIP_DIRS = frozenset({"models", "__pycache__"})
 
 
+def _has_setup_entry(path: Path) -> bool:
+    target = path / "__init__.py" if path.is_dir() else path
+    try:
+        source = target.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    return "def setup(" in source or "async def setup(" in source
+
+
 def _discover_extensions(ext_dir: str = "ext") -> tuple[str, ...]:
-    """scan ext/ and return dotted module paths for every loadable cog.
-    handles flat (ext.moderation) and nested (ext.server.prefix) layouts.
-    a dir is loadable if it has __init__.py and its parent does NOT"""
+    """scan ext/ and return dotted module paths for every loadable extension.
+    package-style extensions load once from their top-level folder.
+    non-package folders load each top-level python module with a setup entrypoint."""
     base = Path(ext_dir)
     if not base.exists():
         log.warning(f"ext dir not found: {base.resolve()}")
         return ()
 
-    has_init: set[Path] = {
-        p.parent for p in base.rglob("__init__.py")
-        if p.parent != base and p.parent.name not in _SKIP_DIRS
-    }
-
     found: list[str] = []
-    for d in sorted(has_init):
-        if d.parent in has_init:
+    for child in sorted(base.iterdir()):
+        if child.name.startswith("_") or child.name in _SKIP_DIRS:
             continue
-        dotted = ".".join(d.relative_to(Path(".")).parts)
-        found.append(dotted)
+        if child.is_dir():
+            if (child / "__init__.py").exists():
+                if _has_setup_entry(child):
+                    found.append(".".join(child.relative_to(Path(".")).parts))
+                continue
+            for py_file in sorted(child.glob("*.py")):
+                if py_file.stem.startswith("_") or py_file.stem in _SKIP_DIRS:
+                    continue
+                if _has_setup_entry(py_file):
+                    found.append(".".join(py_file.relative_to(Path(".")).with_suffix("").parts))
+            continue
+        if child.suffix == ".py" and child.stem != "__init__":
+            if _has_setup_entry(child):
+                found.append(".".join(child.relative_to(Path(".")).with_suffix("").parts))
 
     found.sort()
     log.debug(f"discovered {len(found)} extensions: {', '.join(found)}")

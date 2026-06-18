@@ -22,7 +22,6 @@ class PrefixCommands(Package):
 
     @prefix.command(
         name="set",
-        aliases=["add"],
         description="Set command prefix for server",
         example=",prefix set !",
     )

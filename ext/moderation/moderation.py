@@ -4,7 +4,7 @@ import contextlib
 import discord
 from datetime import timedelta
 from discord.ext import tasks
-from discord.ext.commands import command, has_permissions
+from discord.ext.commands import command, group, has_permissions
 from discord.ext.commands import CommandError
 
 from core.discord.package import Package
@@ -312,12 +312,22 @@ class ModerationCommands(Package):
         """view case log"""
         pass
 
-    @command(
+    @group(
         name="timeout",
         description="Mutes the provided member using Discords timeout feature",
+        invoke_without_command=True,
     )
     async def timeout(self, ctx, member, duration, *, reason):
         """timeout a member"""
+        pass
+
+    @timeout.command(
+        name="list",
+        description="View list of timed out members",
+    )
+    @has_permissions(moderate_members=True)
+    async def timeout_list(self, ctx):
+        """list timed out members"""
         pass
 
     @command(

@@ -11,6 +11,7 @@ from typing import Any, Iterable, Optional, Protocol, Sequence, Union
 from urllib.parse import unquote, urlsplit
 import ujson
 from asyncpg import Connection, Pool, Record as BaseRecord, create_pool
+from asyncpg.exceptions import InvalidCatalogNameError
 from discord.ext.commands import Context, check
 from ..values import database
 
@@ -104,7 +105,7 @@ class Database:
         user, pw, host, port, name = self._dsn_parts(self.uri)
         try:
             self.pool = await self._make_pool()
-        except Exception:
+        except InvalidCatalogNameError:
             await asyncio.to_thread(self._create_db, name, user, pw, host, port)
             self.pool = await self._make_pool()
         try:

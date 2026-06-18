@@ -14,7 +14,6 @@ from .extended.purge.purge import Purge
 from .extended.history.history import History
 from .extended.proof.proof import Proof
 from .extended.notes.notes import Notes
-from .extended.timeout.timeout import Timeout
 from .extended.slowmode.slowmode import Slowmode
 from .extended.revokefiles.revokefiles import Revokefiles
 from .extended.restrictcommand.restrictcommand import Restrictcommand
@@ -33,7 +32,6 @@ class Moderation(
     History,
     Proof,
     Notes,
-    Timeout,
     Slowmode,
     Revokefiles,
     Restrictcommand,
