@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 from typing import Final
 
+from .app_emojis import prime_emoji_environment
+
 repo_root: Final[Path] = Path(__file__).resolve().parents[2]
 root: Final[Path] = repo_root
 
@@ -14,6 +16,8 @@ try:
     load_dotenv(repo_root / ".env")
 except Exception:
     pass
+
+prime_emoji_environment()
 
 
 def _env(name: str, default: str = "") -> str:
