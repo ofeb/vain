@@ -43,8 +43,8 @@ class GoodbyeCommands(Package):
         if timer:
             if timer < 6:
                 return await ctx.warn("self-destruct timer must be at least `6` seconds")
-            if timer > 120:
-                return await ctx.warn("self-destruct timer must stay under `120` seconds")
+            if timer > 60:
+                return await ctx.warn("self-destruct timer must stay under `60` seconds")
         try:
             await self.db.execute(
                 """INSERT INTO leave_messages (guild_id, channel_id, message, self_destruct) VALUES ($1, $2, $3, $4);""",
@@ -118,12 +118,15 @@ class GoodbyeCommands(Package):
     async def goodbye_variables(self, ctx) -> Message:
         """show available template vars"""
         return await ctx.normal(
-            "check all **variables** at: https://docs.bleed.bot/bot/embed-code-variables/variables",
+            "check all **variables** at: https://bleed.bot/resources/scripting/variables",
             emoji=":information_source:",
         )
 
     async def on_member_remove(self, member: Member) -> None:
         """fire on member leave"""
+        if await self.db.get_antiraid_state(member.guild.id):
+            return
+
         rate = await self.bot.object_cache.ratelimited(
             f"leave_messages:{member.guild.id}", 1, 5
         )
@@ -140,9 +143,9 @@ class GoodbyeCommands(Package):
                 builder = await self.create_embed(
                     row.message, member=member, user=member
                 )
-                if row.delete_after:
-                    builder.data["delete_after"] = row.delete_after
+                if row.self_destruct:
+                    builder.data["delete_after"] = row.self_destruct
                 try:
-                    return await builder.send(ch)
+                    await builder.send(ch)
                 except Exception:
-                    pass
+                    continue

@@ -3,6 +3,7 @@ wraps asyncpg with basic caching built in.
 use fetch fetchrow fetchval or execute"""
 
 from __future__ import annotations
+from datetime import datetime
 import asyncio, glob, json, re
 from logging import getLogger
 from types import TracebackType
@@ -186,6 +187,214 @@ class Database:
         async with self.pool.acquire() as conn:
             async with conn.transaction():
                 return await conn.executemany(sql, args)
+
+    async def set_antiraid_state(self, guild_id: int, active: bool) -> None:
+        """persist the current raid-state toggle for a guild"""
+        await self.execute(
+            """
+            INSERT INTO antiraid_config (guild_id, raid_active)
+            VALUES ($1, $2)
+            ON CONFLICT (guild_id) DO UPDATE SET
+                raid_active = EXCLUDED.raid_active,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            guild_id,
+            active,
+        )
+
+    async def get_antiraid_state(self, guild_id: int) -> bool:
+        """return whether the guild is currently marked as raiding"""
+        value = await self.fetchval(
+            "SELECT raid_active FROM antiraid_config WHERE guild_id = $1",
+            guild_id,
+        )
+        return bool(value)
+
+    async def set_antiraid_punish_until(
+        self,
+        guild_id: int,
+        until: datetime | None,
+    ) -> None:
+        """persist the punishment window end timestamp for massjoin protection"""
+        await self.execute(
+            """
+            INSERT INTO antiraid_config (guild_id, punish_until)
+            VALUES ($1, $2)
+            ON CONFLICT (guild_id) DO UPDATE SET
+                punish_until = EXCLUDED.punish_until,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            guild_id,
+            until,
+        )
+
+    async def get_antiraid_punish_until(self, guild_id: int) -> datetime | None:
+        """return the punishment window end for a guild if one is active"""
+        return await self.fetchval(
+            "SELECT punish_until FROM antiraid_config WHERE guild_id = $1",
+            guild_id,
+        )
+
+    async def upsert_antiraid_module(
+        self,
+        guild_id: int,
+        module: str,
+        *,
+        enabled: bool,
+        threshold: int | None = None,
+        action: str | None = None,
+        lock_channels: bool | None = None,
+        punish_new: bool | None = None,
+    ) -> None:
+        """insert or update one antiraid module row"""
+        await self.execute(
+            """
+            INSERT INTO antiraid_modules (
+                guild_id,
+                module,
+                enabled,
+                threshold,
+                action,
+                lock_channels,
+                punish_new
+            )
+            VALUES (
+                $1,
+                $2,
+                $3,
+                COALESCE($4, 5),
+                COALESCE($5, 'ban'),
+                COALESCE($6, FALSE),
+                COALESCE($7, FALSE)
+            )
+            ON CONFLICT (guild_id, module) DO UPDATE SET
+                enabled = EXCLUDED.enabled,
+                threshold = COALESCE($4, antiraid_modules.threshold),
+                action = COALESCE($5, antiraid_modules.action),
+                lock_channels = COALESCE($6, antiraid_modules.lock_channels),
+                punish_new = COALESCE($7, antiraid_modules.punish_new),
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            guild_id,
+            module,
+            enabled,
+            threshold,
+            action,
+            lock_channels,
+            punish_new,
+        )
+
+    async def get_antiraid_module(self, guild_id: int, module: str) -> Optional[Row]:
+        """fetch one antiraid module row"""
+        return await self.fetchrow(
+            """
+            SELECT module, enabled, threshold, action, lock_channels, punish_new
+            FROM antiraid_modules
+            WHERE guild_id = $1 AND module = $2
+            """,
+            guild_id,
+            module,
+        )
+
+    async def fetch_antiraid_modules(self, guild_id: int) -> list[Row]:
+        """fetch all antiraid module rows for a guild"""
+        return await self.fetch(
+            """
+            SELECT module, enabled, threshold, action, lock_channels, punish_new
+            FROM antiraid_modules
+            WHERE guild_id = $1
+            ORDER BY module
+            """,
+            guild_id,
+        )
+
+    async def toggle_antiraid_whitelist(self, guild_id: int, user_id: int) -> bool:
+        """toggle a one-time antiraid whitelist entry"""
+        exists = await self.fetchrow(
+            "SELECT 1 FROM antiraid_whitelist WHERE guild_id = $1 AND user_id = $2",
+            guild_id,
+            user_id,
+        )
+        if exists:
+            await self.execute(
+                "DELETE FROM antiraid_whitelist WHERE guild_id = $1 AND user_id = $2",
+                guild_id,
+                user_id,
+            )
+            return False
+
+        await self.execute(
+            "INSERT INTO antiraid_whitelist (guild_id, user_id) VALUES ($1, $2)",
+            guild_id,
+            user_id,
+        )
+        return True
+
+    async def consume_antiraid_whitelist(self, guild_id: int, user_id: int) -> bool:
+        """consume a one-time antiraid whitelist entry on join"""
+        exists = await self.fetchrow(
+            "SELECT 1 FROM antiraid_whitelist WHERE guild_id = $1 AND user_id = $2",
+            guild_id,
+            user_id,
+        )
+        if not exists:
+            return False
+
+        await self.execute(
+            "DELETE FROM antiraid_whitelist WHERE guild_id = $1 AND user_id = $2",
+            guild_id,
+            user_id,
+        )
+        return True
+
+    async def is_antiraid_whitelisted(self, guild_id: int, user_id: int) -> bool:
+        """check whether a guild/user one-time antiraid whitelist exists"""
+        return bool(
+            await self.fetchrow(
+                "SELECT 1 FROM antiraid_whitelist WHERE guild_id = $1 AND user_id = $2",
+                guild_id,
+                user_id,
+            )
+        )
+
+    async def fetch_antiraid_whitelist(self, guild_id: int) -> list[Row]:
+        """fetch one-time antiraid whitelist rows for a guild"""
+        return await self.fetch(
+            """
+            SELECT user_id, created_at
+            FROM antiraid_whitelist
+            WHERE guild_id = $1
+            ORDER BY created_at
+            """,
+            guild_id,
+        )
+
+    async def add_antiraid_locked_channel(self, guild_id: int, channel_id: int) -> None:
+        """remember a text channel locked during raid state"""
+        await self.execute(
+            """
+            INSERT INTO antiraid_locked_channels (guild_id, channel_id)
+            VALUES ($1, $2)
+            ON CONFLICT (guild_id, channel_id) DO NOTHING
+            """,
+            guild_id,
+            channel_id,
+        )
+
+    async def fetch_antiraid_locked_channels(self, guild_id: int) -> list[int]:
+        """return channel ids locked by antiraid for a guild"""
+        rows = await self.fetch(
+            "SELECT channel_id FROM antiraid_locked_channels WHERE guild_id = $1",
+            guild_id,
+        )
+        return [row.channel_id for row in rows]
+
+    async def clear_antiraid_locked_channels(self, guild_id: int) -> None:
+        """clear remembered locked-channel state for a guild"""
+        await self.execute(
+            "DELETE FROM antiraid_locked_channels WHERE guild_id = $1",
+            guild_id,
+        )
 
     async def migrate(self) -> Optional[bool]:
         """run pending sql migration files"""

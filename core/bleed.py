@@ -12,7 +12,7 @@ from discord import app_commands
 from discord.ext import commands
 from discord.ext.commands import HybridCommand, HybridGroup
 
-from .discord.ctx import Context
+from .discord.ctx import Cache, Context
 from .managers.database.client import Database
 from .managers.redis.client import BleedCache
 from .managers.watch import Watcher
@@ -97,6 +97,7 @@ class Bleed(commands.AutoShardedBot):
         self.color: int = color.base
         self.db = Database()
         self.redis: Optional[BleedCache] = None
+        self.object_cache = Cache(self)
         self.guard = Guard()
         self.watcher: Optional[Watcher] = None
         self.started_at = datetime.datetime.now(datetime.timezone.utc)
@@ -400,12 +401,18 @@ class Bleed(commands.AutoShardedBot):
         self._seen_message_ids.add(msg.id)
         if len(self._seen_message_ids) > 5000:
             self._seen_message_ids.clear()
-        await self.process_commands(msg)
+        ctx = await self.get_context(msg)
+        if msg.guild:
+            self.dispatch("context", ctx)
+            if not ctx.valid:
+                self.dispatch("valid_message", ctx)
+        await self.invoke(ctx)
 
     async def on_message_edit(self, before: discord.Message, after: discord.Message) -> None:
         if before.content == after.content or after.author.bot or not self.is_ready():
             return
-        await self.process_commands(after)
+        ctx = await self.get_context(after)
+        await self.invoke(ctx)
 
     async def on_command_error(self, ctx: Context, err: Exception) -> None:
         err = self._unwrap(err)

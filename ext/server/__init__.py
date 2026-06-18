@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+from asyncio import Lock
+from collections import defaultdict
+
 from discord.ext import commands
 
 from core.discord.mixin import _Meta
+from core.discord.package import Package
 
 from .server import ServerCommands
 from .extended.alias.alias import AliasCommands
 from .extended.autoresponder.autoresponder import AutoresponderCommands
 from .extended.badge.badge import BadgeCommands
+from .extended.boost.boost import BoostCommands
 from .extended.boosterrole.boosterrole import BoosterroleCommands
 from .extended.customize.customize import CustomizeCommands
 from .extended.disable.command.command import CommandDisableCommands
@@ -39,6 +44,7 @@ class Server(
     AliasCommands,
     WebhookCommands,
     BoosterroleCommands,
+    BoostCommands,
     WelcomeCommands,
     GoodbyeCommands,
     StickymessageCommands,
@@ -65,6 +71,53 @@ class Server(
     metaclass=_Meta,
 ):
     """main server extension — all subcommands combined"""
+
+    def __init__(self, bot) -> None:
+        Package.__init__(self, bot)
+        self.ar_locks = defaultdict(Lock)
+        self.leave_locks = defaultdict(Lock)
+        self.join_locks = defaultdict(Lock)
+        self.boost_locks = defaultdict(Lock)
+        self.sticky_locks = defaultdict(Lock)
+        self.pinned_ids = {}
+
+    @commands.Cog.listener("on_member_join")
+    async def _welcome_listener(self, member) -> None:
+        await WelcomeCommands.on_member_agree(self, member)
+
+    @commands.Cog.listener("on_member_remove")
+    async def _goodbye_listener(self, member) -> None:
+        await GoodbyeCommands.on_member_remove(self, member)
+
+    @commands.Cog.listener("on_context")
+    async def _autoresponder_listener(self, ctx) -> None:
+        await AutoresponderCommands.on_context(self, ctx)
+
+    @commands.Cog.listener("on_valid_message")
+    async def _sticky_listener(self, ctx) -> None:
+        await StickymessageCommands.on_valid_message(self, ctx)
+
+    @commands.Cog.listener("on_raw_reaction_add")
+    async def _pagination_reaction_listener(self, payload) -> None:
+        await PaginationCommands.on_raw_reaction_add(self, payload)
+
+    @commands.Cog.listener("on_paginator_update")
+    async def _pagination_update_listener(self, message, row, page) -> None:
+        await PaginationCommands.on_paginator_update(self, message, row, page)
+
+    @commands.Cog.listener("on_vanity_change")
+    async def _tracker_vanity_listener(self, vanity) -> None:
+        await SettingsCommands.on_vanity_change(self, vanity)
+
+    @commands.Cog.listener("on_username_change")
+    async def _tracker_username_listener(self, username) -> None:
+        await SettingsCommands.on_username_change(self, username)
+
+    @commands.Cog.listener("on_member_update")
+    async def _boost_listener(self, before, after) -> None:
+        if before.premium_since == after.premium_since or after.premium_since is None:
+            return
+        await BoostCommands.on_member_boost(self, after)
 
 
 async def setup(bot) -> None:

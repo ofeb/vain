@@ -98,8 +98,8 @@ class PaginationCommands(Package):
         )
         if not row:
             raise CommandError("that message isnt a paginator")
-        await message.add_reaction(":arrow_left:")
-        await message.add_reaction(":arrow_right:")
+        await message.add_reaction("⬅️")
+        await message.add_reaction("➡️")
         return await ctx.message.add_reaction(":white_check_mark:")
 
     @pagination.command(name="set", description="Set up an existing embed to be paginated")
@@ -154,8 +154,28 @@ class PaginationCommands(Package):
             row.pages.pop(idx)
         except IndexError:
             raise CommandError("that page doesnt exist")
+        if not row.pages:
+            await self.db.execute(
+                """DELETE FROM pagination WHERE guild_id = $1 AND channel_id = $2 AND message_id = $3""",
+                ctx.guild.id,
+                message.channel.id,
+                message.id,
+            )
+            return await ctx.success(
+                f"removed the last page and deleted [`{message.id}`]({message.jump_url})"
+            )
+
+        current_page = min(row.current_page, len(row.pages) - 1)
+        await self.db.execute(
+            """UPDATE pagination SET pages = $1, current_page = $2 WHERE guild_id = $3 AND channel_id = $4 AND message_id = $5""",
+            row.pages,
+            current_page,
+            ctx.guild.id,
+            message.channel.id,
+            message.id,
+        )
         if row.current_page == idx:
-            self.bot.dispatch("paginator_update", message, row, idx)
+            self.bot.dispatch("paginator_update", message, row, current_page)
         return await ctx.success(
             f"removed page **{page_id}** from [`{message.id}`]({message.jump_url})"
         )
@@ -179,7 +199,14 @@ class PaginationCommands(Package):
         if not row:
             return
         msg = await channel.fetch_message(payload.message_id)
-        self.bot.dispatch("paginator_update", msg, row, row.current_page + 1)
+        emoji = str(payload.emoji)
+        if emoji == "⬅️":
+            page = row.current_page - 1
+        elif emoji == "➡️":
+            page = row.current_page + 1
+        else:
+            return
+        self.bot.dispatch("paginator_update", msg, row, page)
 
     async def on_paginator_update(self, message: Message, row, page: int):
         """render a new page"""

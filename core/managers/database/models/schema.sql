@@ -76,6 +76,39 @@ CREATE TABLE IF NOT EXISTS antinuke (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS antiraid_config (
+    guild_id BIGINT PRIMARY KEY,
+    raid_active BOOLEAN NOT NULL DEFAULT FALSE,
+    punish_until TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS antiraid_modules (
+    guild_id BIGINT NOT NULL,
+    module VARCHAR(32) NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    threshold INT NOT NULL DEFAULT 5,
+    action VARCHAR(16) NOT NULL DEFAULT 'ban',
+    lock_channels BOOLEAN NOT NULL DEFAULT FALSE,
+    punish_new BOOLEAN NOT NULL DEFAULT FALSE,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, module)
+);
+
+CREATE TABLE IF NOT EXISTS antiraid_whitelist (
+    guild_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS antiraid_locked_channels (
+    guild_id BIGINT NOT NULL,
+    channel_id BIGINT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, channel_id)
+);
+
 CREATE TABLE IF NOT EXISTS users (
     user_id BIGINT,
     guild_id BIGINT,
@@ -434,6 +467,94 @@ CREATE TABLE IF NOT EXISTS invocation (
     PRIMARY KEY (guild_id, command)
 );
 
+CREATE TABLE IF NOT EXISTS silenced (
+    guild_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS command_usage (
+    guild_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    command_name VARCHAR(100) NOT NULL,
+    uses BIGINT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, user_id, command_name)
+);
+
+CREATE TABLE IF NOT EXISTS join_messages (
+    guild_id BIGINT NOT NULL,
+    channel_id BIGINT NOT NULL,
+    message TEXT NOT NULL,
+    self_destruct INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, channel_id)
+);
+
+CREATE TABLE IF NOT EXISTS leave_messages (
+    guild_id BIGINT NOT NULL,
+    channel_id BIGINT NOT NULL,
+    message TEXT NOT NULL,
+    self_destruct INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, channel_id)
+);
+
+CREATE TABLE IF NOT EXISTS boost_messages (
+    guild_id BIGINT NOT NULL,
+    channel_id BIGINT NOT NULL,
+    message TEXT NOT NULL,
+    self_destruct INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, channel_id)
+);
+
+CREATE TABLE IF NOT EXISTS auto_responders (
+    guild_id BIGINT NOT NULL,
+    trigger TEXT NOT NULL,
+    response TEXT,
+    strict BOOLEAN NOT NULL DEFAULT TRUE,
+    reply BOOLEAN NOT NULL DEFAULT FALSE,
+    self_destruct INT,
+    delete_trigger BOOLEAN NOT NULL DEFAULT FALSE,
+    ignore_command_checks BOOLEAN NOT NULL DEFAULT FALSE,
+    allowed_role_ids BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    denied_role_ids BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    allowed_channel_ids BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    denied_channel_ids BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, trigger)
+);
+
+CREATE TABLE IF NOT EXISTS sticky_message (
+    guild_id BIGINT NOT NULL,
+    channel_id BIGINT NOT NULL,
+    code TEXT NOT NULL,
+    last_message BIGINT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, channel_id)
+);
+
+CREATE TABLE IF NOT EXISTS pagination (
+    guild_id BIGINT NOT NULL,
+    message_id BIGINT NOT NULL,
+    channel_id BIGINT NOT NULL,
+    creator_id BIGINT NOT NULL,
+    pages TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    current_page INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, channel_id, message_id)
+);
+
+CREATE TABLE IF NOT EXISTS trackers (
+    guild_id BIGINT NOT NULL,
+    tracker_type VARCHAR(32) NOT NULL,
+    channel_ids BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, tracker_type)
+);
+
 CREATE INDEX IF NOT EXISTS idx_moderation_guild_user ON moderation(guild_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_blacklist_user ON blacklist(user_id);
 CREATE INDEX IF NOT EXISTS idx_blacklist_guild ON blacklist(guild_id);
@@ -459,3 +580,12 @@ CREATE INDEX IF NOT EXISTS idx_timers_time ON timers(time);
 
 CREATE INDEX IF NOT EXISTS idx_emoji_usage_guild ON emoji_usage(guild_id);
 CREATE INDEX IF NOT EXISTS idx_invocation_guild ON invocation(guild_id);
+CREATE INDEX IF NOT EXISTS idx_command_usage_guild_user ON command_usage(guild_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_join_messages_guild ON join_messages(guild_id);
+CREATE INDEX IF NOT EXISTS idx_leave_messages_guild ON leave_messages(guild_id);
+CREATE INDEX IF NOT EXISTS idx_boost_messages_guild ON boost_messages(guild_id);
+CREATE INDEX IF NOT EXISTS idx_auto_responders_guild ON auto_responders(guild_id);
+CREATE INDEX IF NOT EXISTS idx_sticky_message_guild ON sticky_message(guild_id);
+CREATE INDEX IF NOT EXISTS idx_pagination_guild ON pagination(guild_id);
+CREATE INDEX IF NOT EXISTS idx_trackers_guild ON trackers(guild_id);
+CREATE INDEX IF NOT EXISTS idx_antiraid_modules_guild ON antiraid_modules(guild_id);

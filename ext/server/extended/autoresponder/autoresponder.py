@@ -62,7 +62,7 @@ class AutoresponderCommands(Package):
             query = "INSERT INTO auto_responders (guild_id, trigger, denied_role_ids) VALUES($1, $2, $3) ON CONFLICT(guild_id, trigger) DO UPDATE SET denied_role_ids = excluded.denied_role_ids"
             await self.db.execute(query, ctx.guild.id, trigger, ids)
         else:
-            data = await self.db.fetch(
+            data = await self.db.fetchrow(
                 """SELECT denied_role_ids, allowed_role_ids FROM auto_responders WHERE guild_id = $1 AND trigger = $2""",
                 ctx.guild.id, trigger,
             )
@@ -96,7 +96,7 @@ class AutoresponderCommands(Package):
             query = "INSERT INTO auto_responders (guild_id, trigger, denied_channel_ids) VALUES($1, $2, $3) ON CONFLICT(guild_id, trigger) DO UPDATE SET denied_channel_ids = excluded.denied_channel_ids"
             await self.db.execute(query, ctx.guild.id, trigger, ids)
         else:
-            data = await self.db.fetch(
+            data = await self.db.fetchrow(
                 """SELECT denied_channel_ids, allowed_channel_ids FROM auto_responders WHERE guild_id = $1 AND trigger = $2""",
                 ctx.guild.id, trigger,
             )
@@ -127,7 +127,10 @@ class AutoresponderCommands(Package):
     @has_permissions(manage_channels=True)
     async def autoresponder_variables(self, ctx):
         """show ar variables"""
-        pass
+        return await ctx.normal(
+            "check all **variables** at: https://bleed.bot/resources/scripting/variables",
+            emoji=":information_source:",
+        )
 
     @autoresponder.command(
         name="update",
@@ -194,6 +197,7 @@ class AutoresponderCommands(Package):
         parameters={
             "self_destruct": {"converter": int, "default": None},
             "not_strict": {"no_value": True, "default": False},
+            "delete": {"no_value": True, "default": False},
             "reply": {"no_value": True, "default": False},
             "ignore_command_check": {"no_value": True, "default": False},
         },
@@ -208,27 +212,35 @@ class AutoresponderCommands(Package):
             raise CommandError("expected: trigger, response")
         trigger, response = parts
         timer = ctx.parameters.get("self_destruct", None)
+        if timer:
+            if timer < 6:
+                raise CommandError("self-destruct timer must be at least `6` seconds")
+            if timer > 60:
+                raise CommandError("self-destruct timer must stay under `60` seconds")
         strict = not ctx.parameters.get("not_strict", False)
+        should_delete = bool(ctx.parameters.get("delete", False))
         should_reply = bool(ctx.parameters.get("reply", False))
         skip_check = bool(ctx.parameters.get("ignore_command_check", False))
         await self.db.execute(
             """
             INSERT INTO auto_responders (
-                guild_id, trigger, response, strict, reply, self_destruct, ignore_command_checks
+                guild_id, trigger, response, strict, reply, self_destruct, delete_trigger, ignore_command_checks
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             ON CONFLICT (guild_id, trigger)
             DO UPDATE SET
                 response = EXCLUDED.response,
                 strict = EXCLUDED.strict,
                 reply = EXCLUDED.reply,
                 self_destruct = EXCLUDED.self_destruct,
+                delete_trigger = EXCLUDED.delete_trigger,
                 ignore_command_checks = EXCLUDED.ignore_command_checks;
             """,
-            ctx.guild.id, trigger, response, strict, should_reply, timer, skip_check,
+            ctx.guild.id, trigger, response, strict, should_reply, timer, should_delete, skip_check,
         )
         flags = ""
         flags += "(strict)" if strict else "(non-strict)"
+        flags += "(delete trigger)" if should_delete else ""
         flags += "(reply)" if should_reply else ""
         flags += "(bypass check)" if skip_check else ""
         if timer:
@@ -250,10 +262,18 @@ class AutoresponderCommands(Package):
         if set([ctx.channel.id]) & set(rec.denied_channel_ids):
             return
         kwargs = {"reference": ctx.message} if rec.reply else {}
-        return await ctx.send(rec.response, delete_after=rec.self_destruct, **kwargs)
+        message = await ctx.send(rec.response, delete_after=rec.self_destruct, **kwargs)
+        if rec.delete_trigger:
+            try:
+                await ctx.message.delete()
+            except Exception:
+                pass
+        return message
 
     async def on_context(self, ctx):
         """handle autoresponder on message"""
+        if ctx.guild is None or ctx.author.bot:
+            return
         async with self.ar_locks[f"auto_responder:{ctx.channel.id}"]:
             data = await self.bot.db.fetch(
                 """SELECT * FROM auto_responders WHERE guild_id = $1""",
