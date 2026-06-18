@@ -421,6 +421,10 @@ class BleedHelp:
             await self._send_cmd(cmd)
 
     def _find(self, bot: commands.Bot, query: str) -> Command | None:
+        direct = bot.get_command(query.strip())
+        if direct is not None:
+            return direct
+
         parts = query.strip().split()
         if not parts:
             return None
@@ -429,7 +433,7 @@ class BleedHelp:
             return c.name.lower() == name or any(a.lower() == name for a in c.aliases)
 
         node: Command | None = None
-        for c in bot.walk_commands():
+        for c in bot.commands:
             if _match(parts[0].lower(), c):
                 node = c
                 break
@@ -529,4 +533,3 @@ class BleedHelp:
             description=f"no command named **`{query}`**\nuse `{p}help` to browse all commands",
         )
         await self._send(e)
-

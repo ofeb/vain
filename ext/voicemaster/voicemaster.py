@@ -10,7 +10,7 @@ from discord.ext import commands, tasks
 
 from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe, group
-from core.managers.values import color
+from core.managers.values import bot as bot_config, color, emojis
 from .views import VoiceInterface
 
 
@@ -20,13 +20,69 @@ class VoiceControl(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self._cooldowns: dict = {}
+        self.bot.add_view(VoiceInterface(self))
+
+    def _interface_usage_lines(self, support_url: str) -> list[str]:
+        return [
+            f"{emojis.interface.lock} — [`Lock`]({support_url}) the voice channel",
+            f"{emojis.interface.unlock} — [`Unlock`]({support_url}) the voice channel",
+            f"{emojis.interface.ghost} — [`Ghost`]({support_url}) the voice channel",
+            f"{emojis.interface.reveal} — [`Reveal`]({support_url}) the voice channel",
+            f"{emojis.interface.claim} — [`Claim`]({support_url}) the voice channel",
+            f"{emojis.interface.disconnect} — [`Disconnect`]({support_url}) a member",
+            f"{emojis.interface.activity} — [`Start`]({support_url}) a new voice channel activity",
+            f"{emojis.interface.information} — [`View`]({support_url}) channel information",
+            f"{emojis.interface.increase} — [`Increase`]({support_url}) the user limit",
+            f"{emojis.interface.decrease} — [`Decrease`]({support_url}) the user limit",
+        ]
+
+    def _interface_usage_blocks(self) -> list[str]:
+        support_url = bot_config.support
+        lines = self._interface_usage_lines(support_url)
+        block = "\n".join(lines)
+        if len(block) <= 1024:
+            return [block]
+
+        if support_url.startswith("https://"):
+            compact_url = "http://" + support_url.removeprefix("https://")
+            compact_lines = self._interface_usage_lines(compact_url)
+            compact_block = "\n".join(compact_lines)
+            if len(compact_block) <= 1024:
+                return [compact_block]
+            lines = compact_lines
+
+        midpoint = (len(lines) + 1) // 2
+        blocks = [
+            "\n".join(lines[:midpoint]),
+            "\n".join(lines[midpoint:]),
+        ]
+        return [block for block in blocks if block]
+
+    def _interface_embed(self, guild: discord.Guild) -> discord.Embed:
+        """Build the bleed-style VoiceMaster interface embed."""
+        embed = discord.Embed(
+            color=color.base,
+            title="VoiceMaster Interface",
+            description="Click the buttons below to control your voice channel",
+        )
+        embed.set_author(
+            name=guild.name,
+            icon_url=guild.icon.url if guild.icon else None,
+        )
+        if self.bot.user is not None:
+            embed.set_thumbnail(url=self.bot.user.display_avatar.url)
+        usage_blocks = self._interface_usage_blocks()
+        embed.add_field(name="**Button Usage**", value=usage_blocks[0], inline=False)
+        for block in usage_blocks[1:]:
+            embed.add_field(name="\u200b", value=block, inline=False)
+        return embed
 
     async def cog_load(self) -> None:
         """Clean up empty channels on load."""
         if getattr(self.bot.db, "pool", None) is None:
             return
-        await self._cleanup_empty_channels()
-        self._cleanup_loop.start()
+        if not self._cleanup_loop.is_running():
+            self._cleanup_loop.start()
 
     async def cog_unload(self) -> None:
         """Cleanup on unload."""
@@ -37,6 +93,10 @@ class VoiceControl(commands.Cog):
         """Periodically clean up empty voice channels."""
         await self._cleanup_empty_channels()
 
+    @_cleanup_loop.before_loop
+    async def _before_cleanup_loop(self) -> None:
+        await self.bot.wait_until_ready()
+
     async def _cleanup_empty_channels(self):
         """Delete empty voice channels from database and Discord."""
         if getattr(self.bot.db, "pool", None) is None:
@@ -45,24 +105,31 @@ class VoiceControl(commands.Cog):
         to_delete = []
         
         rows = await self.bot.db.fetch(
-            "SELECT channel_id FROM voicemaster.channels"
+            "SELECT channel_id FROM voicemaster_channels"
         )
         
         for row in rows:
             channel_id = row["channel_id"]
             channel = self.bot.get_channel(channel_id)
-            
-            if not channel or not channel.members:
-                if channel:
-                    try:
-                        await channel.delete(reason="VoiceMaster: Empty channel cleanup")
-                    except discord.HTTPException:
-                        pass
+
+            if channel is None:
+                with contextlib.suppress(discord.HTTPException, discord.Forbidden, discord.NotFound):
+                    channel = await self.bot.fetch_channel(channel_id)
+
+            if not isinstance(channel, discord.VoiceChannel):
+                to_delete.append(channel_id)
+                continue
+
+            if not channel.members:
+                try:
+                    await channel.delete(reason="VoiceMaster: Empty channel cleanup")
+                except discord.HTTPException:
+                    pass
                 to_delete.append(channel_id)
         
         if to_delete:
             await self.bot.db.executemany(
-                "DELETE FROM voicemaster.channels WHERE channel_id = $1",
+                "DELETE FROM voicemaster_channels WHERE channel_id = $1",
                 [(cid,) for cid in to_delete]
             )
 
@@ -82,6 +149,83 @@ class VoiceControl(commands.Cog):
         
         self._cooldowns[key] = (last_time, count + 1)
         return None
+
+    @staticmethod
+    def _resolve_channel_name(config, member: discord.Member) -> str:
+        value = str(config.get("default_name") or "").strip()
+        if value:
+            return value
+        return f"{member.display_name}'s channel"
+
+    @staticmethod
+    def _resolve_region(config) -> str | None:
+        value = str(config.get("region") or "").strip().lower()
+        if value in {"", "auto", "none", "null"}:
+            return None
+        return value
+
+    @staticmethod
+    def _resolve_bitrate(config, guild: discord.Guild) -> int | None:
+        raw_limit = getattr(guild, "bitrate_limit", None)
+        try:
+            guild_limit = int(raw_limit) if raw_limit is not None else None
+        except (TypeError, ValueError):
+            guild_limit = None
+
+        raw_value = config.get("bitrate")
+        try:
+            bitrate = int(raw_value) if raw_value not in (None, "") else 64000
+        except (TypeError, ValueError):
+            bitrate = 64000
+
+        if bitrate <= 0:
+            bitrate = 64000
+
+        if guild_limit is not None and guild_limit > 0:
+            return min(bitrate, guild_limit)
+        return bitrate
+
+    async def _create_member_channel(
+        self,
+        member: discord.Member,
+        config,
+        trigger_channel: discord.VoiceChannel,
+    ) -> None:
+        category = member.guild.get_channel(config["category_id"]) or trigger_channel.category
+        channel = await member.guild.create_voice_channel(
+            name=self._resolve_channel_name(config, member),
+            category=category,
+            bitrate=self._resolve_bitrate(config, member.guild),
+            rtc_region=self._resolve_region(config),
+            reason=f"VoiceMaster: Created channel for {member}",
+        )
+
+        try:
+            await member.move_to(channel, reason="VoiceMaster: Moved to new channel")
+        except discord.HTTPException:
+            await channel.delete(reason="VoiceMaster: Failed to move member")
+            return
+
+        await channel.set_permissions(
+            member,
+            read_messages=True,
+            connect=True,
+            reason=f"VoiceMaster: Owner permissions for {member}",
+        )
+
+        await self.bot.db.execute(
+            """INSERT INTO voicemaster_channels (guild_id, channel_id, owner_id)
+               VALUES ($1, $2, $3)""",
+            member.guild.id,
+            channel.id,
+            member.id,
+        )
+
+        if role_id := config.get("role_id"):
+            role = member.guild.get_role(role_id)
+            if role and role not in member.roles:
+                with contextlib.suppress(discord.HTTPException):
+                    await member.add_roles(role, reason="VoiceMaster: Default role")
 
     async def cog_check(self, ctx: Context) -> bool:
         """Check if user can use voicemaster commands."""
@@ -106,7 +250,7 @@ class VoiceControl(commands.Cog):
             raise commands.CommandError("You're not connected to a **voice channel**")
         
         owner_id = await self.bot.db.fetchval(
-            "SELECT owner_id FROM voicemaster.channels WHERE channel_id = $1",
+            "SELECT owner_id FROM voicemaster_channels WHERE channel_id = $1",
             ctx.author.voice.channel.id
         )
         
@@ -144,7 +288,7 @@ class VoiceControl(commands.Cog):
     async def voicemaster_setup(self, ctx: Context) -> None:
         """Begin VoiceMaster server configuration setup."""
         if await self.bot.db.fetchrow(
-            "SELECT * FROM voicemaster.configuration WHERE guild_id = $1",
+            "SELECT * FROM voicemaster_configuration WHERE guild_id = $1",
             ctx.guild.id
         ):
             return await ctx.fail(
@@ -169,17 +313,10 @@ class VoiceControl(commands.Cog):
             connect=True,
         )
         
-        embed = discord.Embed(
-            title="VoiceMaster Interface",
-            description="Use the buttons below to control your voice channel",
-            color=color.base,
-        )
-        embed.set_author(name=ctx.guild.name, icon_url=ctx.guild.icon)
-        
-        await interface.send(embed=embed, view=VoiceInterface(self))
+        await interface.send(embed=self._interface_embed(ctx.guild), view=VoiceInterface(self))
         
         await self.bot.db.execute(
-            """INSERT INTO voicemaster.configuration 
+            """INSERT INTO voicemaster_configuration 
                (guild_id, category_id, interface_id, channel_id) 
                VALUES ($1, $2, $3, $4)""",
             ctx.guild.id, category.id, interface.id, channel.id
@@ -193,7 +330,7 @@ class VoiceControl(commands.Cog):
     async def voicemaster_reset(self, ctx: Context) -> None:
         """Reset server configuration for VoiceMaster."""
         row = await self.bot.db.fetchrow(
-            "DELETE FROM voicemaster.configuration WHERE guild_id = $1 RETURNING category_id, interface_id, channel_id",
+            "DELETE FROM voicemaster_configuration WHERE guild_id = $1 RETURNING category_id, interface_id, channel_id",
             ctx.guild.id
         )
         
@@ -216,21 +353,21 @@ class VoiceControl(commands.Cog):
         """Redirect voice channels to custom category."""
         try:
             await self.bot.db.execute(
-                "UPDATE voicemaster.configuration SET category_id = $2 WHERE guild_id = $1",
+                "UPDATE voicemaster_configuration SET category_id = $2 WHERE guild_id = $1",
                 ctx.guild.id, channel.id
             )
             await ctx.success(f"Set {channel.name} as the voice category")
         except Exception:
             await ctx.fail("Server is not configured")
 
-    @voicemaster.command(name="category private")
+    @voicemaster.command(name="category private", slash=False)
     @commands.has_permissions(manage_guild=True)
     @describe(channel="Private voice channel category")
     async def voicemaster_category_private(self, ctx: Context, channel: discord.CategoryChannel) -> None:
         """Set the private category for VoiceMaster channels."""
         try:
             await self.bot.db.execute(
-                "UPDATE voicemaster.configuration SET private_category_id = $2 WHERE guild_id = $1",
+                "UPDATE voicemaster_configuration SET private_category_id = $2 WHERE guild_id = $1",
                 ctx.guild.id, channel.id
             )
             await ctx.success(f"Set {channel.name} as the private category")
@@ -241,7 +378,7 @@ class VoiceControl(commands.Cog):
     async def voicemaster_default(self, ctx: Context) -> None:
         """View default VoiceMaster settings."""
         config = await self.bot.db.fetchrow(
-            "SELECT * FROM voicemaster.configuration WHERE guild_id = $1",
+            "SELECT * FROM voicemaster_configuration WHERE guild_id = $1",
             ctx.guild.id
         )
         
@@ -254,69 +391,69 @@ class VoiceControl(commands.Cog):
         embed.add_field(name="Default Role", value=f"<@{config.get('role_id', 0)}>", inline=True)
         await ctx.send(embed=embed)
 
-    @voicemaster.command(name="default interface")
+    @voicemaster.command(name="default interface", slash=False)
     @describe(setting="Enable or disable interface")
     async def voicemaster_default_interface(self, ctx: Context, setting: bool) -> None:
         """Send interface to new Voice Channels."""
         try:
             await self.bot.db.execute(
-                "UPDATE voicemaster.configuration SET send_interface = $2 WHERE guild_id = $1",
+                "UPDATE voicemaster_configuration SET send_interface = $2 WHERE guild_id = $1",
                 ctx.guild.id, setting
             )
             await ctx.success(f"Interface sending {'enabled' if setting else 'disabled'}")
         except Exception:
             await ctx.fail("Server is not configured")
 
-    @voicemaster.command(name="default role")
+    @voicemaster.command(name="default role", slash=False)
     @commands.has_permissions(manage_guild=True, manage_roles=True)
     @describe(role="Default role for voice channels")
     async def voicemaster_default_role(self, ctx: Context, role: discord.Role) -> None:
         """Set the default role for VoiceMaster."""
         try:
             await self.bot.db.execute(
-                "UPDATE voicemaster.configuration SET role_id = $2 WHERE guild_id = $1",
+                "UPDATE voicemaster_configuration SET role_id = $2 WHERE guild_id = $1",
                 ctx.guild.id, role.id
             )
             await ctx.success(f"Set {role.mention} as default role")
         except Exception:
             await ctx.fail("Server is not configured")
 
-    @voicemaster.command(name="default bitrate")
+    @voicemaster.command(name="default bitrate", slash=False)
     @commands.has_permissions(manage_guild=True)
     @describe(bitrate="Default bitrate in kbps")
     async def voicemaster_default_bitrate(self, ctx: Context, bitrate: int) -> None:
         """Edit default bitrate for new Voice Channels."""
         try:
             await self.bot.db.execute(
-                "UPDATE voicemaster.configuration SET bitrate = $2 WHERE guild_id = $1",
+                "UPDATE voicemaster_configuration SET bitrate = $2 WHERE guild_id = $1",
                 ctx.guild.id, bitrate * 1000
             )
             await ctx.success(f"Set default bitrate to {bitrate}kbps")
         except Exception:
             await ctx.fail("Server is not configured")
 
-    @voicemaster.command(name="default name")
+    @voicemaster.command(name="default name", slash=False)
     @commands.has_permissions(manage_guild=True)
     @describe(name="Default name for new channels")
     async def voicemaster_default_name(self, ctx: Context, name: str) -> None:
         """Set default name for new Voice Channels."""
         try:
             await self.bot.db.execute(
-                "UPDATE voicemaster.configuration SET default_name = $2 WHERE guild_id = $1",
+                "UPDATE voicemaster_configuration SET default_name = $2 WHERE guild_id = $1",
                 ctx.guild.id, name
             )
             await ctx.success(f"Set default name to {name}")
         except Exception:
             await ctx.fail("Server is not configured")
 
-    @voicemaster.command(name="default region")
+    @voicemaster.command(name="default region", slash=False)
     @commands.has_permissions(manage_guild=True)
     @describe(region="Voice region")
     async def voicemaster_default_region(self, ctx: Context, region: str) -> None:
         """Edit default region for new Voice Channels."""
         try:
             await self.bot.db.execute(
-                "UPDATE voicemaster.configuration SET region = $2 WHERE guild_id = $1",
+                "UPDATE voicemaster_configuration SET region = $2 WHERE guild_id = $1",
                 ctx.guild.id, region.lower()
             )
             await ctx.success(f"Set default region to {region}")
@@ -381,7 +518,7 @@ class VoiceControl(commands.Cog):
     async def voicemaster_claim(self, ctx: Context) -> None:
         """Claim an inactive voice channel."""
         await self.bot.db.execute(
-            "UPDATE voicemaster.channels SET owner_id = $2 WHERE channel_id = $1",
+            "UPDATE voicemaster_channels SET owner_id = $2 WHERE channel_id = $1",
             ctx.author.voice.channel.id, ctx.author.id
         )
         
@@ -404,7 +541,7 @@ class VoiceControl(commands.Cog):
             return await ctx.fail(f"{member} is not in your channel")
         
         await self.bot.db.execute(
-            "UPDATE voicemaster.channels SET owner_id = $2 WHERE channel_id = $1",
+            "UPDATE voicemaster_channels SET owner_id = $2 WHERE channel_id = $1",
             ctx.author.voice.channel.id, member.id
         )
         
@@ -450,7 +587,7 @@ class VoiceControl(commands.Cog):
     async def voicemaster_role(self, ctx: Context, role: discord.Role) -> None:
         """Grant roles to members who join and remove from members leaving."""
         await self.bot.db.execute(
-            "UPDATE voicemaster.channels SET role_id = $2 WHERE channel_id = $1",
+            "UPDATE voicemaster_channels SET role_id = $2 WHERE channel_id = $1",
             ctx.author.voice.channel.id, role.id
         )
         await ctx.success(f"Set {role.mention} as join role")
@@ -470,7 +607,7 @@ class VoiceControl(commands.Cog):
     async def voicemaster_music(self, ctx: Context, setting: bool) -> None:
         """Change your channel to a Music Only channel."""
         await self.bot.db.execute(
-            "UPDATE voicemaster.channels SET music_mode = $2 WHERE channel_id = $1",
+            "UPDATE voicemaster_channels SET music_mode = $2 WHERE channel_id = $1",
             ctx.author.voice.channel.id, setting
         )
         await ctx.success(f"Music mode {'enabled' if setting else 'disabled'}")
@@ -479,7 +616,7 @@ class VoiceControl(commands.Cog):
     async def voicemaster_sendinterface(self, ctx: Context) -> None:
         """Forcefully resend VoiceMaster interface."""
         config = await self.bot.db.fetchrow(
-            "SELECT interface_id FROM voicemaster.configuration WHERE guild_id = $1",
+            "SELECT interface_id FROM voicemaster_configuration WHERE guild_id = $1",
             ctx.guild.id
         )
         
@@ -490,13 +627,7 @@ class VoiceControl(commands.Cog):
         if not interface:
             return await ctx.fail("Interface channel not found")
         
-        embed = discord.Embed(
-            title="VoiceMaster Interface",
-            description="Use the buttons below to control your voice channel",
-            color=color.base,
-        )
-        
-        await interface.send(embed=embed, view=VoiceInterface(self))
+        await interface.send(embed=self._interface_embed(ctx.guild), view=VoiceInterface(self))
         await ctx.success("Interface resent")
 
     @voicemaster.command(name="status")
@@ -504,7 +635,7 @@ class VoiceControl(commands.Cog):
     async def voicemaster_status(self, ctx: Context, status: str) -> None:
         """Set a status for your voice channel."""
         await self.bot.db.execute(
-            "UPDATE voicemaster.channels SET status = $2 WHERE channel_id = $1",
+            "UPDATE voicemaster_channels SET status = $2 WHERE channel_id = $1",
             ctx.author.voice.channel.id, status
         )
         await ctx.success(f"Set status to {status}")
@@ -517,12 +648,12 @@ class VoiceControl(commands.Cog):
         
         await ctx.success(f"You're in {ctx.author.voice.channel.name}")
 
-    @voicemaster.command(name="join role")
+    @voicemaster.command(name="join role", slash=False)
     @describe(role="Role to grant on join")
     async def voicemaster_join_role(self, ctx: Context, role: discord.Role) -> None:
         """Set role to grant on voice join."""
         await self.bot.db.execute(
-            "UPDATE voicemaster.configuration SET join_role_id = $2 WHERE guild_id = $1",
+            "UPDATE voicemaster_configuration SET join_role_id = $2 WHERE guild_id = $1",
             ctx.guild.id, role.id
         )
         await ctx.success(f"Set {role.mention} as join role")
@@ -561,71 +692,34 @@ class VoiceControl(commands.Cog):
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
         """Handle voice state updates for VoiceMaster."""
-        if not after.channel:
-            if before.channel:
-                await self._handle_leave(member, before.channel)
+        if before.channel == after.channel:
             return
-        
-        if before and before.channel == after.channel:
+
+        if before.channel is not None:
+            await self._handle_leave(member, before.channel)
+
+        if after.channel is None:
             return
-        
+
         config = await self.bot.db.fetchrow(
-            "SELECT * FROM voicemaster.configuration WHERE guild_id = $1",
-            member.guild.id
+            "SELECT * FROM voicemaster_configuration WHERE guild_id = $1",
+            member.guild.id,
         )
-        
         if not config or config["channel_id"] != after.channel.id:
             return
-        
+
         cooldown_key = f"vm_create:{member.id}"
         if self._get_cooldown(cooldown_key, 1, 10):
-            try:
+            with contextlib.suppress(discord.HTTPException):
                 await member.move_to(None)
-            except discord.HTTPException:
-                pass
             return
-        
-        category = member.guild.get_channel(config["category_id"]) or after.channel.category
-        bitrate = min(config.get("bitrate", 64000), member.guild.bitrate_limit)
-        
-        channel = await member.guild.create_voice_channel(
-            name=config.get("default_name", f"{member.display_name}'s channel"),
-            category=category,
-            bitrate=bitrate,
-            rtc_region=config.get("region"),
-            reason=f"VoiceMaster: Created channel for {member}"
-        )
-        
-        try:
-            await member.move_to(channel, reason="VoiceMaster: Moved to new channel")
-        except discord.HTTPException:
-            await channel.delete(reason="VoiceMaster: Failed to move member")
-            return
-        
-        await channel.set_permissions(
-            member,
-            connect=True,
-            reason=f"VoiceMaster: Owner permissions for {member}"
-        )
-        
-        await self.bot.db.execute(
-            """INSERT INTO voicemaster.channels (guild_id, channel_id, owner_id) 
-               VALUES ($1, $2, $3)""",
-            member.guild.id, channel.id, member.id
-        )
-        
-        if role_id := config.get("role_id"):
-            role = member.guild.get_role(role_id)
-            if role and role not in member.roles:
-                try:
-                    await member.add_roles(role, reason="VoiceMaster: Default role")
-                except discord.HTTPException:
-                    pass
+
+        await self._create_member_channel(member, config, after.channel)
 
     async def _handle_leave(self, member: discord.Member, channel: discord.VoiceChannel):
         """Handle user leaving a voice channel."""
         config = await self.bot.db.fetchrow(
-            "SELECT role_id FROM voicemaster.configuration WHERE guild_id = $1",
+            "SELECT role_id FROM voicemaster_configuration WHERE guild_id = $1",
             member.guild.id
         )
         
@@ -642,7 +736,7 @@ class VoiceControl(commands.Cog):
             return
         
         owner_id = await self.bot.db.fetchval(
-            "DELETE FROM voicemaster.channels WHERE channel_id = $1 RETURNING owner_id",
+            "DELETE FROM voicemaster_channels WHERE channel_id = $1 RETURNING owner_id",
             channel.id
         )
         

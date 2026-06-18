@@ -527,9 +527,14 @@ CREATE TABLE IF NOT EXISTS voicemaster_configuration (
     guild_id BIGINT PRIMARY KEY,
     channel_id BIGINT,
     category_id BIGINT,
+    interface_id BIGINT,
+    private_category_id BIGINT,
     role_id BIGINT,
     bitrate INT,
     region VARCHAR(50),
+    send_interface BOOLEAN NOT NULL DEFAULT TRUE,
+    default_name TEXT,
+    join_role_id BIGINT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -537,9 +542,24 @@ CREATE TABLE IF NOT EXISTS voicemaster_channels (
     guild_id BIGINT,
     channel_id BIGINT,
     owner_id BIGINT,
+    role_id BIGINT,
+    music_mode BOOLEAN NOT NULL DEFAULT FALSE,
+    status TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (channel_id)
 );
+
+ALTER TABLE voicemaster_configuration
+    ADD COLUMN IF NOT EXISTS interface_id BIGINT,
+    ADD COLUMN IF NOT EXISTS private_category_id BIGINT,
+    ADD COLUMN IF NOT EXISTS send_interface BOOLEAN NOT NULL DEFAULT TRUE,
+    ADD COLUMN IF NOT EXISTS default_name TEXT,
+    ADD COLUMN IF NOT EXISTS join_role_id BIGINT;
+
+ALTER TABLE voicemaster_channels
+    ADD COLUMN IF NOT EXISTS role_id BIGINT,
+    ADD COLUMN IF NOT EXISTS music_mode BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS status TEXT;
 
 CREATE TABLE IF NOT EXISTS tictactoe (
     user_id BIGINT PRIMARY KEY,

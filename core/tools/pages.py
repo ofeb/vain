@@ -11,6 +11,10 @@ def _copy_embed(embed: discord.Embed) -> discord.Embed:
     return discord.Embed.from_dict(embed.to_dict())
 
 
+def _entry_label(total: int) -> str:
+    return "entry" if total == 1 else "entries"
+
+
 def build_pages(
     embed: discord.Embed,
     lines: Sequence[str] | Iterable[str],
@@ -31,13 +35,12 @@ def build_pages(
         page.description = "\n\n".join(
             piece for piece in (page.description, body) if piece
         ).strip()
-        if total > 1:
-            original_footer = page.footer.text if page.footer else None
-            footer = f"Page {index}/{total} ({len(entries)} Entries)"
-            if original_footer:
-                footer = f"{original_footer} • {footer}"
-            icon_url = page.footer.icon_url if page.footer else None
-            page.set_footer(text=footer, icon_url=icon_url)
+        original_footer = page.footer.text if page.footer else None
+        footer = f"Page {index}/{total} ({len(entries)} {_entry_label(len(entries))})"
+        if original_footer:
+            footer = f"{original_footer} • {footer}"
+        icon_url = page.footer.icon_url if page.footer else None
+        page.set_footer(text=footer, icon_url=icon_url)
         pages.append(page)
 
     return pages

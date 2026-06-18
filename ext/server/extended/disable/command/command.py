@@ -48,6 +48,7 @@ class CommandDisableCommands(Package):
                 [target.id],
                 ["channel" if isinstance(target, TextChannel) else "member"],
             )
+        await ctx.bot.invalidate_command_access_cache(ctx.guild.id, command.qualified_name)
         return await ctx.success(
             f"**disabled** `{command.qualified_name}` for {target.mention}"
         )
@@ -116,4 +117,5 @@ class CommandDisableCommands(Package):
                 all_ids,
                 ["channel"] * len(all_ids),
             )
+        await ctx.bot.invalidate_command_access_cache(ctx.guild.id, command.qualified_name)
         return await ctx.success(f"**disabled** `{command.qualified_name}` in all channels")

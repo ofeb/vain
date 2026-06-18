@@ -6,7 +6,7 @@ import contextlib
 import datetime
 import logging
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Awaitable, Callable, Iterable, Optional
 
 import discord
 from discord import app_commands
@@ -89,7 +89,28 @@ _BLACKLIST_SQL = """
     LIMIT 1
 """
 
-_PREFIX_TTL = 120
+_USER_PREFIX_SQL = "SELECT prefix FROM self_prefix WHERE user_id = $1"
+
+_GUILD_PREFIX_SQL = """
+    SELECT COALESCE(
+        (SELECT prefixes FROM config WHERE guild_id = $1),
+        CASE
+            WHEN (SELECT prefix FROM guilds WHERE guild_id = $1) IS NOT NULL
+                THEN ARRAY[(SELECT prefix FROM guilds WHERE guild_id = $1)]::TEXT[]
+            ELSE ARRAY[$2]::TEXT[]
+        END
+    )
+"""
+
+_SILENCED_SQL = """
+    SELECT 1 FROM silenced
+    WHERE guild_id = $1 AND user_id = $2
+    LIMIT 1
+"""
+
+_PREFIX_TTL = 300
+_ACCESS_TTL = 60
+_MESSAGE_STATE_TTL = 30
 
 _DISABLED_CMD_SQL = """
     SELECT object_ids FROM disabled_commands
@@ -164,20 +185,68 @@ class Bleed(commands.AutoShardedBot):
         )
         self._bleed_help.register(self)
 
+    async def remember(self, key: str, ttl: int, loader: Callable[[], Awaitable[object]]) -> object:
+        """small local ttl cache for hot runtime reads"""
+        cached = await self.object_cache.get(key)
+        if cached is not None:
+            return cached["value"]
+        value = await loader()
+        await self.object_cache.set(key, {"value": value}, ttl=ttl)
+        return value
+
+    async def forget(self, *keys: str) -> None:
+        for key in keys:
+            await self.object_cache.delete(key)
+
+    async def invalidate_prefix_cache(
+        self,
+        *,
+        guild_id: int | None = None,
+        user_id: int | None = None,
+    ) -> None:
+        keys: list[str] = []
+        if guild_id is not None:
+            keys.append(f"prefix:guild:{guild_id}")
+        if user_id is not None:
+            keys.append(f"prefix:user:{user_id}")
+        if keys:
+            await self.forget(*keys)
+
+    async def invalidate_command_access_cache(self, guild_id: int, command_name: str) -> None:
+        qualified = command_name.lower()
+        await self.forget(
+            f"restrict:{guild_id}:{qualified}",
+            f"disabled:{guild_id}:{qualified}",
+        )
+
+    async def _fetch_user_prefix(self, user_id: int) -> Optional[str]:
+        return await self.remember(
+            f"prefix:user:{user_id}",
+            _PREFIX_TTL,
+            lambda: self.db.fetchval(_USER_PREFIX_SQL, user_id),
+        )
+
+    async def _fetch_guild_prefixes(self, guild_id: int) -> list[str]:
+        result = await self.remember(
+            f"prefix:guild:{guild_id}",
+            _PREFIX_TTL,
+            lambda: self.db.fetchval(_GUILD_PREFIX_SQL, guild_id, bot.prefix),
+        )
+        return list(result) if result else [bot.prefix]
+
     async def _fetch_prefixes(self, guild_id: int, user_id: int) -> dict:
         """pull prefix data from cache or db"""
         key = f"prefix:{guild_id}:{user_id}"
         if self.redis and (hit := await self.redis.get(key)):
             return hit
 
-        user_pfx, guild_pfxs, legacy_prefix = await asyncio.gather(
-            self.db.fetchval("SELECT prefix FROM self_prefix WHERE user_id = $1", user_id),
-            self.db.fetchval("SELECT prefixes FROM config WHERE guild_id = $1", guild_id),
-            self.db.fetchval("SELECT prefix FROM guilds WHERE guild_id = $1", guild_id),
+        user_pfx, guild_pfxs = await asyncio.gather(
+            self._fetch_user_prefix(user_id),
+            self._fetch_guild_prefixes(guild_id),
         )
         data = {
             "user": user_pfx,
-            "guild": list(guild_pfxs) if guild_pfxs else ([legacy_prefix] if legacy_prefix else [bot.prefix]),
+            "guild": guild_pfxs or [bot.prefix],
         }
         if self.redis:
             await self.redis.set(key, data, ex=_PREFIX_TTL)
@@ -311,8 +380,15 @@ class Bleed(commands.AutoShardedBot):
         if ctx.guild is None:
             return True
 
-        if not await self.is_owner(ctx.author):
-            if await self.db.fetchval(_BLACKLIST_SQL, ctx.author.id, ctx.guild.id):
+        owner = await self.is_owner(ctx.author)
+
+        if not owner:
+            blacklisted = await self.remember(
+                f"blacklist:{ctx.guild.id}:{ctx.author.id}",
+                _ACCESS_TTL,
+                lambda: self.db.fetchval(_BLACKLIST_SQL, ctx.author.id, ctx.guild.id),
+            )
+            if bool(blacklisted):
                 raise commands.CheckFailure("youre **blacklisted** from using this bot")
 
         if ctx.command is None:
@@ -321,8 +397,12 @@ class Bleed(commands.AutoShardedBot):
         cmd_name = ctx.command.qualified_name.lower()
         is_help = cmd_name == "help"
 
-        if not is_help:
-            rows = await self.db.fetch(_RESTRICTIONS_SQL, ctx.guild.id, cmd_name)
+        if not is_help and not owner:
+            rows = await self.remember(
+                f"restrict:{ctx.guild.id}:{cmd_name}",
+                _ACCESS_TTL,
+                lambda: self.db.fetch(_RESTRICTIONS_SQL, ctx.guild.id, cmd_name),
+            )
             if rows:
                 allowed = {r.role_id for r in rows}
                 if not (allowed & {r.id for r in ctx.author.roles}):
@@ -331,7 +411,11 @@ class Bleed(commands.AutoShardedBot):
                     )
                     raise commands.CheckFailure(f"only {mentions} can use `{cmd_name}`")
 
-            disabled = await self.db.fetchrow(_DISABLED_CMD_SQL, ctx.guild.id, ctx.command.qualified_name)
+            disabled = await self.remember(
+                f"disabled:{ctx.guild.id}:{cmd_name}",
+                _ACCESS_TTL,
+                lambda: self.db.fetchrow(_DISABLED_CMD_SQL, ctx.guild.id, ctx.command.qualified_name),
+            )
             if disabled and (ctx.author.id in disabled.object_ids or ctx.channel.id in disabled.object_ids):
                 raise commands.CheckFailure(f"`{ctx.command.qualified_name}` is disabled here")
 
@@ -341,7 +425,7 @@ class Bleed(commands.AutoShardedBot):
         if missing:
             raise commands.BotMissingPermissions(missing)
 
-        if not is_help and self.redis:
+        if not owner and not is_help and self.redis:
             from .tools.ratelimit import ratelimiter
             retry = ratelimiter(f"cmds:{ctx.author.id}", ctx.author.id, rate=2, per=4)
             if retry:
@@ -419,13 +503,16 @@ class Bleed(commands.AutoShardedBot):
         if msg.guild:
             if not msg.channel.permissions_for(msg.guild.me).send_messages:
                 return
-            if await self.db.fetchval(
-                "SELECT 1 FROM silenced WHERE guild_id = $1 AND user_id = $2",
-                msg.guild.id, msg.author.id,
-            ):
-                with contextlib.suppress(discord.HTTPException):
-                    await msg.delete()
-                return
+            if not await self.is_owner(msg.author):
+                silenced = await self.remember(
+                    f"silenced:{msg.guild.id}:{msg.author.id}",
+                    _MESSAGE_STATE_TTL,
+                    lambda: self.db.fetchval(_SILENCED_SQL, msg.guild.id, msg.author.id),
+                )
+                if bool(silenced):
+                    with contextlib.suppress(discord.HTTPException):
+                        await msg.delete()
+                    return
         if msg.id in self._seen_message_ids:
             return
         self._seen_message_ids.add(msg.id)

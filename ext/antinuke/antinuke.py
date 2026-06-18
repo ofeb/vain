@@ -65,9 +65,6 @@ class Antinuke(Package):
         if ctx.guild is None:
             raise CommandError("this command can only be used in a server")
 
-        if await self.bot.is_owner(ctx.author):
-            return True
-
         if ctx.command and ctx.command.name == "admin":
             if ctx.author.id != ctx.guild.owner_id:
                 raise CommandError(
@@ -1173,6 +1170,7 @@ class Antinuke(Package):
         enabled = config.enabled_count()
         whitelisted_bots = 0
         whitelisted_members = 0
+        super_admins = {ctx.guild.owner_id, *config.admins}
 
         for user_id in config.whitelist:
             user = self.bot.get_user(user_id) or ctx.guild.get_member(user_id)
@@ -1202,7 +1200,7 @@ class Antinuke(Package):
         embed.add_field(
             name="General",
             value=(
-                f"**Super Admins:** {len(config.admins)}"
+                f"**Super Admins:** {len(super_admins)}"
                 f"\n**Whitelisted Bots:** {whitelisted_bots}"
                 f"\n**Whitelisted Members:** {whitelisted_members}"
                 f"\n**Protection Modules:** {enabled} enabled"
@@ -1251,6 +1249,10 @@ class Antinuke(Package):
         """Give a member permissions to edit antinuke settings."""
         if getattr(member, "bot", False):
             return await ctx.warn("You cannot make a bot an **antinuke admin**")
+        if member.id == ctx.guild.owner_id:
+            return await ctx.warn(
+                "The **server owner** is already an **antinuke admin** by default"
+            )
 
         admins = await self.db.fetchval(
             """
@@ -1280,11 +1282,16 @@ class Antinuke(Package):
     async def antinuke_admins(self, ctx):
         """View all antinuke admins."""
         config = await self._get_config(ctx.guild.id)
-        if not config.admins:
+        admin_ids = [ctx.guild.owner_id, *config.admins]
+        seen: set[int] = set()
+        deduped_admin_ids = [
+            user_id for user_id in admin_ids if not (user_id in seen or seen.add(user_id))
+        ]
+        if not deduped_admin_ids:
             return await ctx.warn("There are no **antinuke admins**")
         return await ctx.paginate(
             Embed(title="Antinuke Admins", color=self.color),
-            [f"<@{user_id}>" for user_id in config.admins],
+            [f"<@{user_id}>" for user_id in deduped_admin_ids],
         )
 
     @antinuke.command(name="list")
@@ -1295,23 +1302,33 @@ class Antinuke(Package):
 
         for name, module in config.enabled_modules():
             details = [f"do: {module.punishment or 'kick'}"]
-            if name not in {"botadd", "vanity"}:
+            if name in {"botadd", "vanity"}:
+                details.append("threshold: N/A")
+            else:
                 details.append(f"threshold: {module.threshold}")
             if name in {"ban", "kick", "role"}:
                 details.append(f"cmd: {'on' if module.command else 'off'}")
-            entries.append(f"**{name}** ({', '.join(details)})")
+            entries.append(f"{name} ({', '.join(details)})")
 
         for user_id in config.whitelist:
             user = self.bot.get_user(user_id) or ctx.guild.get_member(user_id)
             label = str(user) if user else "Unknown User"
             kind = "BOT" if user and user.bot else ("UNKNOWN" if user is None else "MEMBER")
-            entries.append(f"**{label}** whitelisted (`{user_id}`) [`{kind}`]")
+            entries.append(f"{label} whitelisted ({user_id}) [{kind}]")
 
         if not entries:
             return await ctx.warn("There are no **antinuke modules** enabled")
+        width = max(2, len(str(len(entries))))
+        numbered = [
+            f"{index:0{width}d} {entry}" for index, entry in enumerate(entries, start=1)
+        ]
+        embed = Embed(title="Antinuke modules & whitelist", color=self.color).set_author(
+            name=str(ctx.author),
+            icon_url=ctx.author.display_avatar.url,
+        )
         return await ctx.paginate(
-            Embed(title="Antinuke modules & whitelist", color=self.color),
-            entries,
+            embed,
+            numbered,
         )
 
     @antinuke.command(

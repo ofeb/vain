@@ -35,6 +35,7 @@ class PrefixCommands(Package):
             ctx.guild.id,
             [prefix],
         )
+        await ctx.bot.invalidate_prefix_cache(guild_id=ctx.guild.id)
         return await ctx.success(f"guild prefix is now `{prefix}`")
 
     @prefix.command(
@@ -59,6 +60,7 @@ class PrefixCommands(Package):
             ctx.guild.id,
             existing,
         )
+        await ctx.bot.invalidate_prefix_cache(guild_id=ctx.guild.id)
         return await ctx.success(f"`{prefix}` added as a guild prefix")
 
     @prefix.command(
@@ -74,6 +76,7 @@ class PrefixCommands(Package):
             ctx.guild.id,
             [bot_config.prefix],
         )
+        await ctx.bot.invalidate_prefix_cache(guild_id=ctx.guild.id)
         return await ctx.success(f"server prefixes reset to `{bot_config.prefix}`")
 
     @prefix.command(
@@ -98,6 +101,7 @@ class PrefixCommands(Package):
                 existing,
                 ctx.guild.id,
             )
+            await ctx.bot.invalidate_prefix_cache(guild_id=ctx.guild.id)
             return await ctx.success(f"removed prefix `{prefix}`")
         else:
             return await ctx.fail("no custom prefix set to remove")
@@ -117,6 +121,7 @@ class PrefixCommands(Package):
             ctx.author.id,
             prefix,
         )
+        await ctx.bot.invalidate_prefix_cache(user_id=ctx.author.id)
         return await ctx.success(f"your personal prefix is now `{prefix}`")
 
     @prefix_self.command(
@@ -129,4 +134,5 @@ class PrefixCommands(Package):
         await self.db.execute(
             """DELETE FROM self_prefix WHERE user_id = $1""", ctx.author.id
         )
+        await ctx.bot.invalidate_prefix_cache(user_id=ctx.author.id)
         return await ctx.success("personal prefix cleared")

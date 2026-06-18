@@ -14,32 +14,31 @@ if TYPE_CHECKING:
 
 
 PANEL_EMOJIS: dict[str, str] = {
-    "lock": emojis.lock if hasattr(emojis, 'lock') else "🔒",
-    "unlock": emojis.unlock if hasattr(emojis, 'unlock') else "🔓",
-    "ghost": emojis.ghost if hasattr(emojis, 'ghost') else "👻",
-    "reveal": emojis.reveal if hasattr(emojis, 'reveal') else "👁️",
-    "claim": emojis.claim if hasattr(emojis, 'claim') else "📋",
-    "disconnect": emojis.disconnect if hasattr(emojis, 'disconnect') else "🔌",
-    "activity": emojis.activity if hasattr(emojis, 'activity') else "🎮",
-    "information": emojis.information if hasattr(emojis, 'information') else "ℹ️",
-    "increase": emojis.increase if hasattr(emojis, 'increase') else "➕",
-    "decrease": emojis.decrease if hasattr(emojis, 'decrease') else "➖",
+    "lock": emojis.interface.lock,
+    "unlock": emojis.interface.unlock,
+    "ghost": emojis.interface.ghost,
+    "reveal": emojis.interface.reveal,
+    "claim": emojis.interface.claim,
+    "disconnect": emojis.interface.disconnect,
+    "activity": emojis.interface.activity,
+    "information": emojis.interface.information,
+    "increase": emojis.interface.increase,
+    "decrease": emojis.interface.decrease,
 }
 
 ACTIVITY_TYPES: list[dict[str, str]] = [
-    {"id": "880218394199220334", "name": "Watch Together", "emoji": "\N{TELEVISION}"},
-    {"id": "755827207812677713", "name": "Poker Night", "emoji": "\N{PLAYING CARD BLACK JOKER}"},
-    {"id": "832012774040141894", "name": "Chess In The Park", "emoji": "\N{BLACK CHESS PAWN}"},
-    {"id": "902271654783242291", "name": "Sketch Heads", "emoji": "\N{LOWER LEFT PENCIL}"},
-    {"id": "879863686565621790", "name": "Letter League", "emoji": "\N{INPUT SYMBOL FOR LATIN LETTERS}"},
-    {"id": "879863976006127627", "name": "Word Snacks", "emoji": "\N{CANDY}"},
-    {"id": "852509694341283871", "name": "SpellCast", "emoji": "\N{SPARKLES}"},
-    {"id": "832025144389533716", "name": "Blazing 8s", "emoji": "\N{FIRE}"},
-    {"id": "945737671223947305", "name": "Putt Party", "emoji": "\N{FLAG IN HOLE}"},
-    {"id": "903769130790969345", "name": "Land-io", "emoji": "\N{DESERT ISLAND}"},
-    {"id": "947957217959759964", "name": "Bobble League", "emoji": "\N{SOCCER BALL}"},
-    {"id": "950505761862189096", "name": "Know What I Meme", "emoji": "\N{THINKING FACE}"},
-    {"id": "1007373802981822582", "name": "Gartic Phone", "emoji": "\N{ARTIST PALETTE}"},
+    {"id": "755827207812677713", "name": "Poker Night", "emoji": "♠"},
+    {"id": "902271654783242291", "name": "Sketch Heads", "emoji": "🎨"},
+    {"id": "880218394199220334", "name": "Watch Together", "emoji": "🎥"},
+    {"id": "832025144389533716", "name": "Blazing 8s", "emoji": "🎴"},
+    {"id": "832012774040141894", "name": "Chess in the Park", "emoji": "♟"},
+    {"id": "832013003968348200", "name": "Checkers in the Park", "emoji": "⚪"},
+    {"id": "879863686565621790", "name": "Letter League", "emoji": "🅰"},
+    {"id": "879863976006127627", "name": "Word Snacks", "emoji": "🍬"},
+    {"id": "852509694341283871", "name": "Spell Cast", "emoji": "🪄"},
+    {"id": "945737671223947305", "name": "Putt Party", "emoji": "⛳"},
+    {"id": "903769130790969345", "name": "Land-io", "emoji": "👁"},
+    {"id": "947957217959759964", "name": "Bobble League", "emoji": "⚽"},
 ]
 
 
@@ -49,38 +48,55 @@ async def _reply(
     *,
     view: ui.View | None = None,
 ) -> None:
-    """Send a branded embed, choosing response vs. followup as needed."""
+    """Send a branded embed using the same deferred interaction flow as bleed."""
     kwargs: dict[str, Any] = {"embed": embed, "ephemeral": True}
     if view is not None:
         kwargs["view"] = view
-    if interaction.response.is_done():
-        await interaction.followup.send(**kwargs)
-    else:
-        await interaction.response.send_message(**kwargs)
+    with contextlib.suppress(discord.InteractionResponded):
+        await interaction.response.defer(ephemeral=True)
+    await interaction.followup.send(**kwargs)
 
 
-def _success(text: str) -> discord.Embed:
-    """Create a success embed."""
+def _message_embed(
+    interaction: discord.Interaction,
+    text: str,
+    *,
+    color_value: int,
+    emoji: str = "",
+) -> discord.Embed:
+    prefix = f"{emoji} " if emoji else ""
     return discord.Embed(
-        description=f"{emojis.approve if hasattr(emojis, 'approve') else '✅'} {text}",
-        color=color.base,
+        description=f"{prefix}{interaction.user.mention}: {text}",
+        color=color_value,
     )
 
 
-def _warning(text: str) -> discord.Embed:
-    """Create a warning embed."""
-    return discord.Embed(
-        description=f"{emojis.deny if hasattr(emojis, 'deny') else '❌'} {text}",
-        color=color.base,
-    )
+def _approve(
+    interaction: discord.Interaction,
+    text: str,
+    *,
+    emoji: str = emojis.approve,
+) -> discord.Embed:
+    return _message_embed(interaction, text, color_value=color.approve, emoji=emoji)
 
 
-def _neutral(text: str, emoji: str = "") -> discord.Embed:
-    """Create a neutral embed."""
-    return discord.Embed(
-        description=f"{emoji} {text}",
-        color=color.base,
-    )
+def _warn(
+    interaction: discord.Interaction,
+    text: str,
+    *,
+    emoji: str = emojis.warn,
+) -> discord.Embed:
+    return _message_embed(interaction, text, color_value=color.warn, emoji=emoji)
+
+
+def _neutral(
+    interaction: discord.Interaction,
+    text: str,
+    *,
+    emoji: str = "",
+    color_value: int = color.neutral,
+) -> discord.Embed:
+    return _message_embed(interaction, text, color_value=color_value, emoji=emoji)
 
 
 class DisconnectMembers(ui.Select):
@@ -90,18 +106,17 @@ class DisconnectMembers(ui.Select):
         self.member = member
         self.guild = member.guild
         self.channel = member.voice.channel  # type: ignore[union-attr]
-        members_list = [m for m in self.channel.members if m != member]
         super().__init__(
             placeholder="Choose members...",
             min_values=1,
-            max_values=len(members_list),
+            max_values=len(self.channel.members),
             options=[
                 discord.SelectOption(
                     value=str(occupant.id),
-                    label=f"{occupant.display_name}",
-                    emoji="\N{BUST IN SILHOUETTE}",
+                    label=f"{occupant} ({occupant.id})",
+                    emoji="👤",
                 )
-                for occupant in members_list
+                for occupant in self.channel.members
             ],
         )
 
@@ -126,7 +141,8 @@ class DisconnectMembers(ui.Select):
 
         word = "member" if disconnected == 1 else "members"
         await interaction.followup.send(
-            embed=_success(
+            embed=_approve(
+                interaction,
                 f"Successfully **disconnected** `{disconnected}` {word} (`{failed}` failed)",
             ),
             ephemeral=True,
@@ -166,7 +182,10 @@ class ActivitySelection(ui.Select):
             )
         except discord.HTTPException:
             await interaction.followup.send(
-                embed=_warning("Failed to create an **invite** for the selected **activity**!"),
+                embed=_warn(
+                    interaction,
+                    "Failed to create an **invite** for the selected **activity**!",
+                ),
                 ephemeral=True,
             )
             return
@@ -187,7 +206,7 @@ class VoiceInterface(ui.View):
     async def _get_owner_id(self, channel_id: int) -> int | None:
         """Get the owner ID of a voice channel."""
         return await self.cog.bot.db.fetchval(
-            "SELECT owner_id FROM voicemaster.channels WHERE channel_id = $1",
+            "SELECT owner_id FROM voicemaster_channels WHERE channel_id = $1",
             channel_id,
         )
 
@@ -195,12 +214,12 @@ class VoiceInterface(ui.View):
         """Check if the user can interact with the interface."""
         user = interaction.user
         if not isinstance(user, discord.Member) or user.voice is None or user.voice.channel is None:
-            await _reply(interaction, _warning("You're not connected to a **voice channel**"))
+            await _reply(interaction, _warn(interaction, "You're not connected to a **voice channel**"))
             return False
 
         owner_id = await self._get_owner_id(user.voice.channel.id)
         if not owner_id:
-            await _reply(interaction, _warning("You're not in a **VoiceMaster** channel!"))
+            await _reply(interaction, _warn(interaction, "You're not in a **VoiceMaster** channel!"))
             return False
 
         custom_id = (interaction.data or {}).get("custom_id")
@@ -208,19 +227,22 @@ class VoiceInterface(ui.View):
             if user.id == owner_id:
                 await _reply(
                     interaction,
-                    _warning("You already have **ownership** of this voice channel!"),
+                    _warn(interaction, "You already have **ownership** of this voice channel!"),
                 )
                 return False
             if owner_id in (member.id for member in user.voice.channel.members):
                 await _reply(
                     interaction,
-                    _warning("You can't claim this **voice channel**, the owner is still active here."),
+                    _warn(
+                        interaction,
+                        "You can't claim this **voice channel**, the owner is still active here.",
+                    ),
                 )
                 return False
             return True
 
         if user.id != owner_id:
-            await _reply(interaction, _warning("You don't own a **voice channel**!"))
+            await _reply(interaction, _warn(interaction, "You don't own a **voice channel**!"))
             return False
 
         return True
@@ -234,7 +256,10 @@ class VoiceInterface(ui.View):
             connect=False,
             reason=f"VoiceMaster: {interaction.user} locked voice channel",
         )
-        await _reply(interaction, _success("Your **voice channel** has been locked"))
+        await _reply(
+            interaction,
+            _warn(interaction, "Your **voice channel** has been locked", emoji=":lock:"),
+        )
 
     @ui.button(emoji=PANEL_EMOJIS["unlock"], custom_id="voicemaster:unlock")
     async def unlock(self, interaction: discord.Interaction, button: ui.Button) -> None:
@@ -245,7 +270,10 @@ class VoiceInterface(ui.View):
             connect=None,
             reason=f"VoiceMaster: {interaction.user} unlocked voice channel",
         )
-        await _reply(interaction, _success("Your **voice channel** has been unlocked"))
+        await _reply(
+            interaction,
+            _warn(interaction, "Your **voice channel** has been unlocked", emoji=":unlock:"),
+        )
 
     @ui.button(emoji=PANEL_EMOJIS["ghost"], custom_id="voicemaster:ghost")
     async def ghost(self, interaction: discord.Interaction, button: ui.Button) -> None:
@@ -256,7 +284,7 @@ class VoiceInterface(ui.View):
             view_channel=False,
             reason=f"VoiceMaster: {interaction.user} made voice channel hidden",
         )
-        await _reply(interaction, _success("Your **voice channel** has been hidden"))
+        await _reply(interaction, _approve(interaction, "Your **voice channel** has been hidden"))
 
     @ui.button(emoji=PANEL_EMOJIS["reveal"], custom_id="voicemaster:reveal")
     async def reveal(self, interaction: discord.Interaction, button: ui.Button) -> None:
@@ -267,21 +295,21 @@ class VoiceInterface(ui.View):
             view_channel=None,
             reason=f"VoiceMaster: {interaction.user} revealed voice channel",
         )
-        await _reply(interaction, _success("Your **voice channel** has been revealed"))
+        await _reply(interaction, _approve(interaction, "Your **voice channel** has been revealed"))
 
     @ui.button(emoji=PANEL_EMOJIS["claim"], custom_id="voicemaster:claim")
     async def claim(self, interaction: discord.Interaction, button: ui.Button) -> None:
         """Claim an inactive voice channel."""
         channel = interaction.user.voice.channel  # type: ignore[union-attr]
         await self.cog.bot.db.execute(
-            "UPDATE voicemaster.channels SET owner_id = $2 WHERE channel_id = $1",
+            "UPDATE voicemaster_channels SET owner_id = $2 WHERE channel_id = $1",
             channel.id,
             interaction.user.id,
         )
         if channel.name.endswith("channel"):
             with contextlib.suppress(discord.HTTPException):
                 await channel.edit(name=f"{interaction.user.display_name}'s channel")
-        await _reply(interaction, _success("You are now the owner of this **channel**!"))
+        await _reply(interaction, _approve(interaction, "You are now the owner of this **channel**!"))
 
     @ui.button(emoji=PANEL_EMOJIS["disconnect"], custom_id="voicemaster:disconnect")
     async def disconnect(self, interaction: discord.Interaction, button: ui.Button) -> None:
@@ -290,7 +318,7 @@ class VoiceInterface(ui.View):
         view.add_item(DisconnectMembers(interaction.user))  # type: ignore[arg-type]
         await _reply(
             interaction,
-            _neutral("Select members from the **dropdown** to disconnect.", "\N{HAMMER}"),
+            _neutral(interaction, "Select members from the **dropdown** to disconnect.", emoji="🔨"),
             view=view,
         )
 
@@ -301,7 +329,11 @@ class VoiceInterface(ui.View):
         view.add_item(ActivitySelection(interaction.user))  # type: ignore[arg-type]
         await _reply(
             interaction,
-            _neutral("Select an activity from the **dropdown** to start!", PANEL_EMOJIS["activity"]),
+            _neutral(
+                interaction,
+                "Select an activity from the **dropdown** to start!",
+                emoji=PANEL_EMOJIS["activity"],
+            ),
             view=view,
         )
 
@@ -317,7 +349,7 @@ class VoiceInterface(ui.View):
         embed = discord.Embed(
             title=channel.name,
             description=(
-                f"**Owner:** {interaction.user.mention} (`{interaction.user.id}`)"
+                f"**Owner:** {interaction.user} (`{interaction.user.id}`)"
                 + "\n**Locked:** "
                 + (emojis.approve if locked else emojis.deny)
                 + "\n**Created:** "
@@ -326,7 +358,7 @@ class VoiceInterface(ui.View):
                 + f"\n**Connected:** `{len(channel.members)}`"
                 + (f"/`{channel.user_limit}`" if channel.user_limit else "")
             ),
-            color=color.base,
+            color=color.neutral,
         )
         embed.set_author(
             name=interaction.user.display_name,
@@ -369,7 +401,7 @@ class VoiceInterface(ui.View):
         if limit == 99:
             await _reply(
                 interaction,
-                _warning("Channel member limit cannot be more than **99 members**!"),
+                _warn(interaction, "Channel member limit cannot be more than **99 members**!"),
             )
             return
         await channel.edit(
@@ -378,7 +410,7 @@ class VoiceInterface(ui.View):
         )
         await _reply(
             interaction,
-            _success(f"Your **voice channel**'s limit has been updated to `{limit + 1}`"),
+            _approve(interaction, f"Your **voice channel**'s limit has been updated to `{limit + 1}`"),
         )
 
     @ui.button(emoji=PANEL_EMOJIS["decrease"], custom_id="voicemaster:decrease")
@@ -389,7 +421,7 @@ class VoiceInterface(ui.View):
         if limit == 0:
             await _reply(
                 interaction,
-                _warning("Channel member limit must be greater than **0 members**"),
+                _warn(interaction, "Channel member limit must be greater than **0 members**"),
             )
             return
         await channel.edit(
@@ -398,7 +430,8 @@ class VoiceInterface(ui.View):
         )
         await _reply(
             interaction,
-            _success(
+            _approve(
+                interaction,
                 "Your **voice channel**'s limit has been **removed**"
                 if (limit - 1) == 0
                 else f"Your **voice channel**'s limit has been updated to `{limit - 1}`",

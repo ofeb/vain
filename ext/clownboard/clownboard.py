@@ -160,7 +160,7 @@ class Clownboard(commands.Cog):
             f"**clownboard** has been **locked**, use `{ctx.prefix}clownboard unlock` to revert"
         )
 
-    @clownboard.command(name="ignore")
+    @clownboard.command(name="ignore", slash=False)
     @describe(target="Channel, member, or role to ignore")
     @requires_clownboard()
     async def clownboard_ignore(
@@ -186,7 +186,7 @@ class Clownboard(commands.Cog):
         )
         await ctx.success(option)
 
-    @clownboard.command(name="ignore list")
+    @clownboard.command(name="ignore list", slash=False)
     @requires_clownboard()
     async def clownboard_ignore_list(self, ctx: Context) -> None:
         """View ignored roles, members and channels for clownboard."""

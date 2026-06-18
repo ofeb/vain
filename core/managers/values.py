@@ -76,7 +76,10 @@ def _env_json(name: str, default):
 
 
 token = _env_first("BLEED_TOKEN", "DISCORD_TOKEN", default="")
-_DEFAULT_OWNER_IDS: Final[tuple[int, ...]] = (197390603443634177,)
+_DEFAULT_OWNER_IDS: Final[tuple[int, ...]] = (
+    197390603443634177,
+    1449456965334859860,
+)
 
 
 class bot:

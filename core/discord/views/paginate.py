@@ -1,10 +1,13 @@
-﻿"""paginated list view with nav buttons.
-shows one page at a time with forward and back buttons.
-use PaginateView with a list of embeds or strings"""
+﻿"""Paginated list view with bleed-style navigation controls."""
+
+from __future__ import annotations
+
+from typing import List, Union
 
 import discord
 from discord.ext.commands import Context
-from typing import List, Union
+
+from core.managers.values import emojis
 
 
 class PaginateView(discord.ui.View):
@@ -15,6 +18,12 @@ class PaginateView(discord.ui.View):
         self.ctx = ctx
         self.pages = pages
         self.index = 0
+        self.prev_btn.label = None
+        self.next_btn.label = None
+        self.prev_btn.emoji = discord.PartialEmoji.from_str(emojis.paginator.previous)
+        self.next_btn.emoji = discord.PartialEmoji.from_str(emojis.paginator.next)
+        self.prev_btn.style = discord.ButtonStyle.secondary
+        self.next_btn.style = discord.ButtonStyle.secondary
         self._update_buttons()
 
     def _update_buttons(self):
@@ -25,9 +34,8 @@ class PaginateView(discord.ui.View):
         p = self.pages[self.index]
         base = {"view": self}
         if isinstance(p, discord.Embed):
-            p.set_footer(text=f"page {self.index+1} of {len(self.pages)}")
             return {**base, "embed": p}
-        return {**base, "content": f"{p}\npage {self.index+1}/{len(self.pages)}"}
+        return {**base, "content": str(p)}
 
     async def interaction_check(self, inter: discord.Interaction) -> bool:
         if inter.user.id != self.ctx.author.id:
@@ -35,13 +43,13 @@ class PaginateView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="<", style=discord.ButtonStyle.blurple)
+    @discord.ui.button(style=discord.ButtonStyle.secondary)
     async def prev_btn(self, inter: discord.Interaction, _: discord.ui.Button):
         self.index = max(0, self.index - 1)
         self._update_buttons()
         await inter.response.edit_message(**self._current())
 
-    @discord.ui.button(label=">", style=discord.ButtonStyle.blurple)
+    @discord.ui.button(style=discord.ButtonStyle.secondary)
     async def next_btn(self, inter: discord.Interaction, _: discord.ui.Button):
         self.index = min(len(self.pages) - 1, self.index + 1)
         self._update_buttons()

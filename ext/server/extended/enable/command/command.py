@@ -41,6 +41,7 @@ class CommandEnableCommands(Package):
             """UPDATE disabled_commands SET object_ids = $1, object_types = $2 WHERE guild_id = $3 AND command = $4""",
             obj_ids, obj_types, ctx.guild.id, command.qualified_name,
         )
+        await ctx.bot.invalidate_command_access_cache(ctx.guild.id, command.qualified_name)
         return await ctx.success(
             f"**enabled** `{command.qualified_name}` for {target.mention}"
         )
@@ -69,6 +70,7 @@ class CommandEnableCommands(Package):
             """UPDATE disabled_commands SET object_ids = $1, object_types = $2 WHERE guild_id = $3 AND command = $4""",
             obj_ids, obj_types, ctx.guild.id, command.qualified_name,
         )
+        await ctx.bot.invalidate_command_access_cache(ctx.guild.id, command.qualified_name)
         return await ctx.success(
             f"**enabled** `{command.qualified_name}` in all channels"
         )

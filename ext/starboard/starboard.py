@@ -344,7 +344,7 @@ class Starboard(commands.Cog):
             f"successfully **{'enabled' if setting else 'disabled'}** starboard timestamps"
         )
 
-    @starboard.command(name="ignore")
+    @starboard.command(name="ignore", slash=False)
     @describe(target="Channel, member, or role to ignore")
     @requires_starboard()
     async def starboard_ignore(
@@ -370,7 +370,7 @@ class Starboard(commands.Cog):
         )
         await ctx.success(option)
 
-    @starboard.command(name="ignore list")
+    @starboard.command(name="ignore list", slash=False)
     @requires_starboard()
     async def starboard_ignore_list(self, ctx: Context) -> None:
         """View ignored roles, members and channels for starboard."""

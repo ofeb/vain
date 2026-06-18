@@ -39,6 +39,9 @@ class Row(BaseRecord):
     def __dict__(self) -> dict:
         return dict(self)
 
+    def get(self, key: str, default: Any = None) -> Any:
+        return self[key] if key in self else default
+
 
 class ConnProto(Protocol):
     """connection context manager type"""
@@ -54,11 +57,25 @@ class Database:
         self.pool: Optional[Pool] = None
         self.cache: dict = {}
 
-    def _encode(self, *data: Any):
-        return ujson.dumps(data[1])
+    def _encode(self, value: Any) -> str:
+        """serialize json/jsonb values for asyncpg.
 
-    def _decode(self, *data: Any):
-        return ujson.loads(data[1])
+        some callers already pass serialized json strings while others pass
+        python dict/list values directly. keep both working.
+        """
+        if isinstance(value, str):
+            return value
+        return ujson.dumps(value)
+
+    def _decode(self, value: Any) -> Any:
+        """deserialize json/jsonb values returned by asyncpg."""
+        if value is None:
+            return None
+        if isinstance(value, (bytes, bytearray, memoryview)):
+            value = bytes(value).decode("utf-8")
+        if isinstance(value, str):
+            return ujson.loads(value)
+        return value
 
     async def _init_conn(self, conn: Connection) -> None:
         for name in ("json", "jsonb"):
