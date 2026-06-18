@@ -116,6 +116,51 @@ CREATE TABLE IF NOT EXISTS antiraid_locked_channels (
     PRIMARY KEY (guild_id, channel_id)
 );
 
+CREATE TABLE IF NOT EXISTS server_settings (
+    guild_id BIGINT PRIMARY KEY,
+    jail_channel_id BIGINT,
+    jail_role_id BIGINT,
+    jail_message_channel_id BIGINT,
+    muted_role_id BIGINT,
+    imuted_role_id BIGINT,
+    rmuted_role_id BIGINT,
+    member_base_role_id BIGINT,
+    autonick TEXT,
+    dj_role_id BIGINT,
+    premium_role_id BIGINT,
+    joinlog_channel_id BIGINT,
+    google_safety_level BOOLEAN DEFAULT FALSE,
+    disable_custom_fms BOOLEAN DEFAULT FALSE,
+    autoplay TEXT,
+    jail_message TEXT,
+    jail_remove_roles BOOLEAN NOT NULL DEFAULT TRUE,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS staff_roles (
+    guild_id BIGINT NOT NULL,
+    role_id BIGINT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, role_id)
+);
+
+CREATE TABLE IF NOT EXISTS modlog_config (
+    guild_id BIGINT PRIMARY KEY,
+    channel_id BIGINT NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS modlog_cases (
+    guild_id BIGINT NOT NULL,
+    case_id INT NOT NULL,
+    action VARCHAR(64) NOT NULL,
+    target_id BIGINT,
+    moderator_id BIGINT,
+    reason TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, case_id)
+);
+
 CREATE TABLE IF NOT EXISTS users (
     user_id BIGINT,
     guild_id BIGINT,
@@ -597,3 +642,5 @@ CREATE INDEX IF NOT EXISTS idx_pagination_guild ON pagination(guild_id);
 CREATE INDEX IF NOT EXISTS idx_trackers_guild ON trackers(guild_id);
 CREATE INDEX IF NOT EXISTS idx_antiraid_modules_guild ON antiraid_modules(guild_id);
 CREATE INDEX IF NOT EXISTS idx_antinuke_actions_lookup ON antinuke_actions(guild_id, user_id, action, created_at);
+CREATE INDEX IF NOT EXISTS idx_staff_roles_guild ON staff_roles(guild_id);
+CREATE INDEX IF NOT EXISTS idx_modlog_cases_guild ON modlog_cases(guild_id, created_at);

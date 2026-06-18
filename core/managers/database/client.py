@@ -437,6 +437,159 @@ class Database:
             return 0
         return int(row.total or 0)
 
+    async def get_server_settings(self, guild_id: int) -> Optional[Row]:
+        """fetch one guild settings row"""
+        return await self.fetchrow(
+            "SELECT * FROM server_settings WHERE guild_id = $1",
+            guild_id,
+        )
+
+    async def set_server_settings(self, guild_id: int, **fields) -> None:
+        """upsert one guild settings row with the provided fields"""
+        if not fields:
+            return
+        columns = list(fields.keys())
+        values = list(fields.values())
+        insert_columns = ", ".join(columns)
+        insert_params = ", ".join(f"${index}" for index in range(2, len(values) + 2))
+        updates = ", ".join(f"{column} = EXCLUDED.{column}" for column in columns)
+        await self.execute(
+            (
+                "INSERT INTO server_settings (guild_id, "
+                + insert_columns
+                + ", updated_at) VALUES ($1, "
+                + insert_params
+                + ", CURRENT_TIMESTAMP) "
+                + "ON CONFLICT (guild_id) DO UPDATE SET "
+                + updates
+                + ", updated_at = CURRENT_TIMESTAMP"
+            ),
+            guild_id,
+            *values,
+        )
+
+    async def reset_server_settings(self, guild_id: int) -> None:
+        """delete the guild settings row"""
+        await self.execute(
+            "DELETE FROM server_settings WHERE guild_id = $1",
+            guild_id,
+        )
+
+    async def toggle_staff_role(self, guild_id: int, role_id: int) -> bool:
+        """toggle a configured staff role"""
+        existing = await self.fetchrow(
+            "SELECT 1 FROM staff_roles WHERE guild_id = $1 AND role_id = $2",
+            guild_id,
+            role_id,
+        )
+        if existing:
+            await self.execute(
+                "DELETE FROM staff_roles WHERE guild_id = $1 AND role_id = $2",
+                guild_id,
+                role_id,
+            )
+            return False
+
+        await self.execute(
+            """
+            INSERT INTO staff_roles (guild_id, role_id)
+            VALUES ($1, $2)
+            ON CONFLICT (guild_id, role_id) DO NOTHING
+            """,
+            guild_id,
+            role_id,
+        )
+        return True
+
+    async def list_staff_roles(self, guild_id: int) -> list[int]:
+        """list configured staff role ids for a guild"""
+        rows = await self.fetch(
+            """
+            SELECT role_id
+            FROM staff_roles
+            WHERE guild_id = $1
+            ORDER BY created_at
+            """,
+            guild_id,
+        )
+        return [int(row.role_id) for row in rows]
+
+    async def set_modlog_channel(self, guild_id: int, channel_id: int) -> None:
+        """upsert the guild modlog channel"""
+        await self.execute(
+            """
+            INSERT INTO modlog_config (guild_id, channel_id, updated_at)
+            VALUES ($1, $2, CURRENT_TIMESTAMP)
+            ON CONFLICT (guild_id) DO UPDATE SET
+                channel_id = EXCLUDED.channel_id,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            guild_id,
+            channel_id,
+        )
+
+    async def get_modlog_channel(self, guild_id: int) -> int | None:
+        """fetch the modlog channel id for a guild"""
+        return await self.fetchval(
+            "SELECT channel_id FROM modlog_config WHERE guild_id = $1",
+            guild_id,
+        )
+
+    async def clear_modlog_channel(self, guild_id: int) -> None:
+        """delete the modlog channel binding for a guild"""
+        await self.execute(
+            "DELETE FROM modlog_config WHERE guild_id = $1",
+            guild_id,
+        )
+
+    async def create_case(
+        self,
+        guild_id: int,
+        action: str,
+        target_id: int | None,
+        moderator_id: int | None,
+        reason: str | None,
+    ) -> int:
+        """insert one modlog case and return the next case id"""
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                row = await conn.fetchrow(
+                    """
+                    SELECT COALESCE(MAX(case_id), 0) + 1 AS next_id
+                    FROM modlog_cases
+                    WHERE guild_id = $1
+                    """,
+                    guild_id,
+                )
+                case_id = int(row["next_id"])
+                await conn.execute(
+                    """
+                    INSERT INTO modlog_cases (
+                        guild_id,
+                        case_id,
+                        action,
+                        target_id,
+                        moderator_id,
+                        reason
+                    )
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                    """,
+                    guild_id,
+                    case_id,
+                    action,
+                    target_id,
+                    moderator_id,
+                    reason,
+                )
+                return case_id
+
+    async def reset_modlog_cases(self, guild_id: int) -> None:
+        """delete all modlog cases for a guild"""
+        await self.execute(
+            "DELETE FROM modlog_cases WHERE guild_id = $1",
+            guild_id,
+        )
+
     async def migrate(self) -> Optional[bool]:
         """run pending sql migration files"""
         if await self.fetchval("SELECT count(*) FROM pokemon.users") > 10:
@@ -465,3 +618,7 @@ class Database:
             self.execute(f"DELETE FROM {t} WHERE {column} = $1", value)
             for t in tables
         ])
+
+    async def purge_guild_data(self, guild_id: int) -> None:
+        """delete every row that belongs to one guild"""
+        await self.purge("guild_id", guild_id)
