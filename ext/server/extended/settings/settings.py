@@ -82,7 +82,7 @@ class SettingsCommands(Package):
         """Server configuration."""
         return await ctx.send_help()
 
-    @settings.command(name="modlog")
+    @settings.command(name="modlog", aliases=["jaillog"])
     @has_permissions(manage_guild=True)
     async def settings_modlog(self, ctx, channel: TextChannel = None):
         """Set the mod log channel."""
@@ -94,7 +94,10 @@ class SettingsCommands(Package):
             f"Successfully **updated** the mod log channel to {target.mention}"
         )
 
-    @settings.command(name="googlesafetylevel")
+    @settings.command(
+        name="googlesafetylevel",
+        aliases=["googlesafety", "safetylevel", "gs"],
+    )
     @has_permissions(manage_guild=True)
     async def settings_google_safety_level(self, ctx, setting: str):
         """Enable or disable Google safety level."""
@@ -149,7 +152,7 @@ class SettingsCommands(Package):
             f"Successfully **set** the jail channel to {channel.mention}"
         )
 
-    @settings.command(name="jailrole")
+    @settings.command(name="jailrole", aliases=["jailed", "jailedrole"])
     @has_permissions(manage_guild=True)
     async def settings_jailrole(self, ctx, role: RoleOrClear):
         """Set the jail role."""
@@ -163,7 +166,7 @@ class SettingsCommands(Package):
             f"Successfully **set** the jail role to {role.mention}"
         )
 
-    @settings.command(name="muted")
+    @settings.command(name="muted", aliases=["textmute", "mute"])
     @has_permissions(manage_guild=True)
     async def settings_muted(self, ctx, role: RoleOrClear):
         """Set the muted role."""
@@ -177,7 +180,7 @@ class SettingsCommands(Package):
             f"Successfully **set** the muted role to {role.mention}"
         )
 
-    @settings.command(name="imuted")
+    @settings.command(name="imuted", aliases=["imute"])
     @has_permissions(manage_guild=True)
     async def settings_imuted(self, ctx, role: RoleOrClear):
         """Set the image muted role."""
@@ -191,7 +194,7 @@ class SettingsCommands(Package):
             f"Successfully **set** the image muted role to {role.mention}"
         )
 
-    @settings.command(name="rmuted")
+    @settings.command(name="rmuted", aliases=["rmute"])
     @has_permissions(manage_guild=True)
     async def settings_rmuted(self, ctx, role: RoleOrClear):
         """Set the reaction muted role."""
@@ -234,7 +237,7 @@ class SettingsCommands(Package):
             f"Successfully **set** the DJ role to {role.mention}"
         )
 
-    @settings.command(name="premiumrole")
+    @settings.command(name="premiumrole", aliases=["premiumid", "pr"])
     @has_permissions(manage_guild=True)
     async def settings_premiumrole(self, ctx, role: RoleOrClear):
         """Set the premium role."""
@@ -248,7 +251,7 @@ class SettingsCommands(Package):
             f"Successfully **set** the premium role to {role.mention}"
         )
 
-    @settings.command(name="joinlogs", aliases=["joinlog"])
+    @settings.command(name="joinlogs", aliases=["joinlog", "jl"])
     @has_permissions(manage_guild=True)
     async def settings_joinlogs(self, ctx, channel: TextChannel = None):
         """Set the join and leave log channel."""
@@ -260,7 +263,7 @@ class SettingsCommands(Package):
             f"Successfully **set** the join log channel to {target.mention}"
         )
 
-    @settings.command(name="baserole")
+    @settings.command(name="baserole", aliases=["baseid"])
     @has_permissions(manage_guild=True)
     async def settings_baserole(self, ctx, role: RoleOrClear):
         """Set the base role."""
@@ -274,7 +277,7 @@ class SettingsCommands(Package):
             f"Successfully **set** the base role to {role.mention}"
         )
 
-    @settings.command(name="jailmsg")
+    @settings.command(name="jailmsg", aliases=["jailmessage"])
     @has_permissions(manage_guild=True)
     async def settings_jailmsg(self, ctx, *, message: str):
         """Set the jail message."""
@@ -302,7 +305,7 @@ class SettingsCommands(Package):
             f"Successfully **set** jail role removal to **{status}**"
         )
 
-    @settings.command(name="disablecustomfms")
+    @settings.command(name="disablecustomfms", aliases=["disablefms"])
     @has_permissions(manage_channels=True)
     async def settings_disablecustomfms(self, ctx, setting: str):
         """Enable or disable custom now playing commands."""
@@ -329,7 +332,7 @@ class SettingsCommands(Package):
         status = "enabled" if toggle else "disabled"
         return await ctx.success(f"Successfully **{status}** autoplay")
 
-    @settings.command(name="reset")
+    @settings.command(name="reset", aliases=["clear"])
     @has_permissions(administrator=True)
     async def settings_reset(self, ctx):
         """Reset server data."""
@@ -343,7 +346,7 @@ class SettingsCommands(Package):
         await self.db.reset_modlog_cases(ctx.guild.id)
         return await ctx.success("Successfully **reset** server cases")
 
-    @settings.command(name="config", aliases=["configuration"])
+    @settings.command(name="config", aliases=["list", "configuration"])
     @has_permissions(manage_guild=True)
     async def settings_config(self, ctx):
         """View current server settings."""

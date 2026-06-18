@@ -19,7 +19,6 @@ class GoodbyeCommands(Package):
         name="goodbye",
         usage="(subcommand) <args> --params",
         example="goodbye add #bye See ya {user}",
-        aliases=["bye"],
         invoke_without_command=True,
     )
     @has_permissions(manage_guild=True)
@@ -113,7 +112,7 @@ class GoodbyeCommands(Package):
             return await ctx.search("no goodbye channels set up")
         return await ctx.paginate(Embed(title="Goodbye Channels"), channels)
 
-    @goodbye.command(name="variables")
+    @goodbye.command(name="variables", aliases=["vars"])
     @has_permissions(manage_guild=True)
     async def goodbye_variables(self, ctx) -> Message:
         """show available template vars"""

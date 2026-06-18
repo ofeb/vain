@@ -29,7 +29,7 @@ class WelcomeCommands(Package):
     @welcome.command(
         name="add",
         example=",welcome add #hi Hi {user.mention}! --self_destruct 10",
-        aliases=["create"],
+        aliases=["create", "set"],
         flags=Parameters,
     )
     @has_permissions(manage_guild=True)
@@ -111,7 +111,7 @@ class WelcomeCommands(Package):
             return await ctx.search("no welcome channels set up")
         return await ctx.paginate(Embed(title="Welcome Channels"), channels)
 
-    @welcome.command(name="variables")
+    @welcome.command(name="variables", aliases=["vars"])
     @has_permissions(manage_guild=True)
     async def welcome_variables(self, ctx) -> Message:
         """show available template vars"""
