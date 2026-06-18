@@ -175,6 +175,19 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_suggestions_review_message
     ON suggestions(guild_id, review_message_id)
     WHERE review_message_id IS NOT NULL;
 
+CREATE TABLE IF NOT EXISTS webhooks (
+    guild_id BIGINT NOT NULL,
+    name TEXT NOT NULL,
+    channel_id BIGINT NOT NULL,
+    webhook_id BIGINT NOT NULL,
+    token TEXT NOT NULL,
+    owner_id BIGINT NOT NULL,
+    locked BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, name)
+);
+
 CREATE TABLE IF NOT EXISTS server_settings (
     guild_id BIGINT PRIMARY KEY,
     jail_channel_id BIGINT,

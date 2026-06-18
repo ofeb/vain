@@ -1,25 +1,75 @@
-from typing import Optional
-from discord.ext.commands import group, has_permissions, CommandError, EmbedConverter, param, MessageLinkConverter
-from discord import Embed, Webhook, Message
+from __future__ import annotations
+
+import contextlib
+import re
+
+import aiohttp
+import discord
+from discord.ext import commands
+from discord.ext.commands import CommandError, group, has_permissions
+
 from core.discord.package import Package
 from lib.classes.embed import Script
-import string
-import random
+
+SPACE_RE = re.compile(r"\s+")
+DISCORD_NAME_RE = re.compile("discord", re.IGNORECASE)
+CLYDE_NAME_RE = re.compile("clyde", re.IGNORECASE)
+FORBIDDEN_NAME_RE = re.compile(r"[@#:`]")
+WEBHOOK_NAME_MAX = 80
 
 
-def make_token(length: int = 8) -> str:
-    """generate short random id"""
-    pool = string.ascii_lowercase + string.digits
-    return "".join(random.choice(pool) for _ in range(length))
+def _sanitize_webhook_name(name: str) -> str:
+    cleaned = FORBIDDEN_NAME_RE.sub("", name)
+    cleaned = DISCORD_NAME_RE.sub("discrd", cleaned)
+    cleaned = CLYDE_NAME_RE.sub("clyd", cleaned)
+    if cleaned.casefold() in {"everyone", "here"}:
+        cleaned = f"{cleaned}-hook"
+    return cleaned[:WEBHOOK_NAME_MAX]
 
 
 class WebhookCommands(Package):
-    """webhook management commands"""
+    """server webhook management."""
+
+    def _normalize_name(self, name: str) -> str:
+        return SPACE_RE.sub("", name.strip().lower())
+
+    async def _resolve_webhook(self, ctx, identifier: str):
+        token = identifier.strip()
+        record = None
+        if token.isdigit():
+            record = await self.db.fetch_webhook_by_id(ctx.guild.id, int(token))
+        if record is None:
+            record = await self.db.fetch_webhook_by_name(
+                ctx.guild.id,
+                _sanitize_webhook_name(self._normalize_name(token)),
+            )
+        return record
+
+    def _is_locked_for(self, ctx, record) -> bool:
+        return bool(record["locked"]) and int(record["owner_id"]) != ctx.author.id
+
+    async def _get_replied_message(self, ctx) -> discord.Message | None:
+        reference = getattr(ctx.message, "reference", None)
+        message_id = getattr(reference, "message_id", None)
+        if not message_id:
+            return None
+
+        resolved = getattr(reference, "resolved", None)
+        if isinstance(resolved, discord.Message):
+            return resolved
+
+        with contextlib.suppress(commands.BadArgument):
+            return await commands.MessageConverter().convert(ctx, str(message_id))
+        return None
+
+    async def _webhook_client(self, record):
+        url = f"https://discord.com/api/webhooks/{record['webhook_id']}/{record['token']}"
+        session = aiohttp.ClientSession()
+        return session, discord.Webhook.from_url(url, session=session)
 
     @group(
         name="webhook",
-        aliases=["webhooks", "wh"],
-        description="Set up webhooks in your server",
+        description="set up webhooks in your server",
         invoke_without_command=True,
     )
     async def webhook(self, ctx):
@@ -28,142 +78,213 @@ class WebhookCommands(Package):
 
     @webhook.command(
         name="create",
-        aliases=["c", "add", "setup", "a"],
-        description="Create webhook to forward messages to",
-        example=",webhook create purp",
+        description="create webhook to forward messages to",
+        example=",webhook create updates",
     )
     @has_permissions(manage_webhooks=True)
     async def webhook_create(self, ctx, *, name: str):
-        """make a new webhook"""
-        wh = await ctx.channel.create_webhook(
-            name=name, reason=f"Requested by {ctx.author}"
-        )
-        token = make_token()
-        await self.db.execute(
-            """INSERT INTO webhooks (guild_id, channel_id, id, name, url, created_by) VALUES($1, $2, $3, $4, $5, $6)""",
+        if not isinstance(ctx.channel, discord.TextChannel):
+            raise CommandError("webhooks can only be created in text channels")
+
+        clean_name = self._normalize_name(name)
+        if not clean_name:
+            raise CommandError("provide a webhook name")
+        storage_name = _sanitize_webhook_name(clean_name)
+        if not storage_name:
+            raise CommandError("that webhook name becomes empty after sanitizing")
+        if await self.db.fetch_webhook_by_name(ctx.guild.id, storage_name):
+            raise CommandError("that webhook already exists")
+
+        try:
+            webhook = await ctx.channel.create_webhook(
+                name=storage_name,
+                reason=f"webhook created by {ctx.author}",
+            )
+        except discord.HTTPException as exc:
+            if getattr(exc, "code", None) == 50035:
+                raise CommandError(
+                    "discord rejected that webhook name; avoid reserved names, `discord`, `clyde`, and special characters like `@`, `#`, `:`, and `` ` ``"
+                ) from exc
+            raise
+
+        await self.db.add_webhook(
             ctx.guild.id,
+            storage_name,
             ctx.channel.id,
-            token,
-            name,
-            wh.url,
+            webhook.id,
+            webhook.token or "",
             ctx.author.id,
         )
-        return await ctx.success(
-            f"Webhook `{token}` created in {ctx.channel.mention}. Save this id — you'll need it to edit webhook messages!"
+
+        note = ""
+        if storage_name != clean_name:
+            note = f" (sanitized from `{clean_name}`)"
+        await ctx.success(
+            f"created webhook **{storage_name}** for {ctx.channel.mention}{note}"
         )
 
     @webhook.command(
+        name="list",
+        description="list all available webhooks in the server",
+    )
+    @has_permissions(manage_webhooks=True)
+    async def webhook_list(self, ctx):
+        rows = await self.db.list_webhooks(ctx.guild.id)
+        if not rows:
+            raise CommandError("no webhooks found")
+
+        lines = []
+        for index, row in enumerate(rows, start=1):
+            channel = ctx.guild.get_channel(int(row["channel_id"]))
+            channel_label = channel.mention if channel else f"`{row['channel_id']}`"
+            locked = " (locked)" if row["locked"] else ""
+            lines.append(
+                f"`{index:02d}` **{row['name']}** - {channel_label} (`{row['webhook_id']}`){locked}"
+            )
+
+        embed = discord.Embed(title="Webhooks", color=self.color)
+        embed.set_author(name=str(ctx.author), icon_url=ctx.author.display_avatar.url)
+        await ctx.paginate(embed, lines)
+
+    @webhook.command(
+        name="send",
+        aliases=["message"],
+        description="send message to existing channel webhook",
+        example=",webhook send updates hello",
+    )
+    @has_permissions(manage_webhooks=True)
+    async def webhook_send(self, ctx, identifier: str, *, message: str):
+        record = await self._resolve_webhook(ctx, identifier)
+        if not record:
+            raise CommandError("webhook not found")
+        if self._is_locked_for(ctx, record):
+            raise CommandError("that webhook is locked")
+
+        builder = Script(message, ctx.author)
+        await builder.compile(user=ctx.author, guild=ctx.guild, channel=ctx.channel)
+        payload = await builder.data(
+            True,
+            user=ctx.author,
+            guild=ctx.guild,
+            channel=ctx.channel,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+        session, webhook = await self._webhook_client(record)
+        try:
+            await webhook.send(**payload)
+        finally:
+            await session.close()
+
+        await ctx.success(f"sent webhook **{record['name']}**")
+
+    @webhook.command(
         name="edit",
-        aliases=["editmsg", "e"],
-        description="Send message to existing channel webhook",
-        example=",webhook edit https://discord.com/channels/... {embed}{description: yo}",
+        aliases=["editmessage"],
+        description="edit an existing webhook message",
+        example=",webhook edit <message link> hello",
     )
     @has_permissions(manage_webhooks=True)
     async def webhook_edit(
         self,
         ctx,
-        message: Message = param(
-            converter=MessageLinkConverter, default=MessageLinkConverter.fallback
-        ),
-        embed_code: Optional[EmbedConverter] = None,
+        message_link: str | None = None,
+        *,
+        message: str | None = None,
     ):
-        """edit existing webhook message"""
-        if not embed_code:
-            raise CommandError("gotta provide an embed code")
-        row = await self.db.fetchrow(
-            """SELECT * FROM webhooks WHERE guild_id = $1 AND message_ids @> ARRAY[$2];""",
-            ctx.guild.id,
-            message.id,
+        target = None
+        content = message
+
+        if message_link:
+            with contextlib.suppress(commands.BadArgument):
+                target = await commands.MessageConverter().convert(ctx, message_link)
+            if target is None:
+                replied = await self._get_replied_message(ctx)
+                if replied is None:
+                    raise CommandError("invalid message link")
+                target = replied
+                content = f"{message_link} {message or ''}".strip()
+        else:
+            target = await self._get_replied_message(ctx)
+
+        if target is None or not content:
+            return await ctx.send_help()
+        if not target.webhook_id:
+            raise CommandError("that message was not sent by a webhook")
+
+        record = await self.db.fetch_webhook_by_id(ctx.guild.id, int(target.webhook_id))
+        if not record:
+            raise CommandError("webhook not found")
+        if self._is_locked_for(ctx, record):
+            raise CommandError("that webhook is locked")
+
+        builder = Script(content, ctx.author)
+        await builder.compile(user=ctx.author, guild=ctx.guild, channel=ctx.channel)
+        payload = await builder.data(
+            True,
+            user=ctx.author,
+            guild=ctx.guild,
+            channel=ctx.channel,
+            allowed_mentions=discord.AllowedMentions.none(),
         )
-        if not row:
-            raise CommandError(
-                f"no webhook found for [that message]({message.jump_url})"
-            )
-        builder = Script(embed_code, ctx.author)
-        await builder.compile()
-        await builder.send(message)
-        return await ctx.success(
-            f"edited webhook message [`{message.id}`]({message.jump_url}) for `{row.id}`"
-        )
+
+        session, webhook = await self._webhook_client(record)
+        try:
+            await webhook.edit_message(target.id, **payload)
+        finally:
+            await session.close()
+
+        await ctx.success(f"updated webhook **{record['name']}**")
 
     @webhook.command(
         name="delete",
-        aliases=["del", "rem", "remove", "d", "r"],
-        description="Delete webhook for a channel",
-        example=",webhook delete tx53151",
+        aliases=["remove", "del"],
+        description="delete webhook for a channel",
+        example=",webhook delete updates",
     )
     @has_permissions(manage_webhooks=True)
-    async def webhook_delete(self, ctx, identifier: str):
-        """remove a webhook"""
-        row = await self.db.fetchrow(
-            """DELETE FROM webhooks WHERE guild_id = $1 AND id = $2 RETURNING *""",
-            ctx.guild.id,
-            identifier,
-        )
-        if not row:
-            raise CommandError(f"no webhook found with id `{identifier}`")
-        from ext.information.views import confirm
-        prompt = await ctx.warning(
-            f"you sure you wanna delete webhook `{identifier}`?"
-        )
-        confirmed = await confirm(self, ctx, prompt)
-        if confirmed:
-            ch = ctx.guild.get_channel(row.channel_id)
-            wh = Webhook.from_url(
-                row.url, client=self.bot, bot_token=self.bot.config["token"]
-            )
-            await wh.delete()
-            return await ctx.success(
-                f"deleted webhook for {ch.mention if ch else 'deleted channel'} (`{identifier}`)"
-            )
-        else:
-            await prompt.delete()
+    async def webhook_delete(self, ctx, *, identifier: str):
+        record = await self._resolve_webhook(ctx, identifier)
+        if not record:
+            raise CommandError("webhook not found")
+        if self._is_locked_for(ctx, record):
+            raise CommandError("that webhook is locked")
+
+        session, webhook = await self._webhook_client(record)
+        try:
+            await webhook.delete(reason=f"webhook removed by {ctx.author}")
+        finally:
+            await session.close()
+
+        await self.db.remove_webhook(ctx.guild.id, record["name"])
+        await ctx.success(f"deleted webhook **{record['name']}**")
 
     @webhook.command(
-        name="send",
-        description="Send message to existing channel webhook",
-        example=",webhook send txru114 {embed}{description: sup}",
+        name="lock",
+        description="lock your webhook from being accessed by others",
     )
     @has_permissions(manage_webhooks=True)
-    async def webhook_send(self, ctx, identifier: str, embed_code: EmbedConverter):
-        """send through existing webhook"""
-        row = await self.db.fetchrow(
-            """SELECT * FROM webhooks WHERE guild_id = $1 AND id = $2""",
-            ctx.guild.id,
-            identifier,
-        )
-        if not row:
-            raise CommandError(f"no webhook found with id `{identifier}`")
-        builder = Script(embed_code, ctx.author)
-        await builder.compile()
-        payload = await builder.data(True)
-        wh = Webhook.from_url(
-            row.url, client=self.bot, bot_token=self.bot.config["token"]
-        )
-        await wh.send(**payload)
+    async def webhook_lock(self, ctx, *, identifier: str):
+        record = await self._resolve_webhook(ctx, identifier)
+        if not record:
+            raise CommandError("webhook not found")
+        if int(record["owner_id"]) != ctx.author.id:
+            raise CommandError("only the webhook owner can lock it")
+
+        await self.db.set_webhook_lock(ctx.guild.id, record["name"], True)
+        await ctx.success(f"locked webhook **{record['name']}**")
 
     @webhook.command(
-        name="list",
-        aliases=["ls", "show", "view"],
-        description="List all available webhooks in the server",
+        name="unlock",
+        description="unlock your webhook from being accessed by others",
     )
     @has_permissions(manage_webhooks=True)
-    async def webhook_list(self, ctx):
-        """list server webhooks"""
-        entries = await self.db.fetch(
-            """SELECT id, created_by FROM webhooks WHERE guild_id = $1""",
-            ctx.guild.id,
-        )
-        if not entries:
-            raise CommandError("no webhooks exist in this server")
-        lines = []
-        for entry in entries:
-            usr = self.bot.get_user(entry.created_by)
-            if usr:
-                lines.append(f"`{entry.id}` {usr.mention} — **{usr}**")
-        return await ctx.paginate(
-            Embed(title="Server Webhooks").set_author(
-                name=str(ctx.author), icon_url=ctx.author.display_avatar.url
-            ),
-            lines,
-        )
+    async def webhook_unlock(self, ctx, *, identifier: str):
+        record = await self._resolve_webhook(ctx, identifier)
+        if not record:
+            raise CommandError("webhook not found")
+        if int(record["owner_id"]) != ctx.author.id:
+            raise CommandError("only the webhook owner can unlock it")
+
+        await self.db.set_webhook_lock(ctx.guild.id, record["name"], False)
+        await ctx.success(f"unlocked webhook **{record['name']}**")
