@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import contextlib
 import discord
+from datetime import timedelta
+from discord.ext import tasks
 from discord.ext.commands import command, has_permissions
 from discord.ext.commands import CommandError
 
@@ -9,6 +12,14 @@ from core.discord.package import Package
 
 class ModerationCommands(Package):
     """standalone moderation commands"""
+
+    async def cog_load(self) -> None:
+        if self.db.pool is not None:
+            self.tempban_watcher.start()
+
+    async def cog_unload(self) -> None:
+        if self.tempban_watcher.is_running():
+            self.tempban_watcher.cancel()
 
     def _audit_reason(self, ctx, reason: str | None) -> str:
         base = reason or "no reason provided"
@@ -25,6 +36,42 @@ class ModerationCommands(Package):
         except (TypeError, ValueError):
             days = default
         return max(0, min(days, 7))
+
+    def _parse_duration_seconds(self, value: str | None) -> int | None:
+        if not value:
+            return None
+        raw = str(value).strip().lower()
+        if raw.isdigit():
+            return int(raw)
+        units = {
+            "s": 1,
+            "m": 60,
+            "h": 3600,
+            "d": 86400,
+            "w": 604800,
+        }
+        if len(raw) < 2 or raw[-1] not in units or not raw[:-1].isdigit():
+            return None
+        return int(raw[:-1]) * units[raw[-1]]
+
+    def _format_duration(self, seconds: int) -> str:
+        units = (
+            ("week", 604800),
+            ("day", 86400),
+            ("hour", 3600),
+            ("minute", 60),
+            ("second", 1),
+        )
+        parts: list[str] = []
+        remainder = max(0, int(seconds))
+        for label, chunk in units:
+            if remainder < chunk:
+                continue
+            count, remainder = divmod(remainder, chunk)
+            parts.append(f"{count} {label}{'' if count == 1 else 's'}")
+            if len(parts) == 2:
+                break
+        return ", ".join(parts) if parts else "0 seconds"
 
     def _ensure_targetable(self, ctx, member: discord.Member) -> None:
         if ctx.guild is None:
@@ -116,9 +163,68 @@ class ModerationCommands(Package):
         description="No description given",
     )
     @has_permissions(ban_members=True)
-    async def tempban(self, ctx, member, duration, *, reason):
+    async def tempban(
+        self,
+        ctx,
+        member: discord.Member,
+        duration: str,
+        *,
+        reason: str = None,
+    ):
         """temporarily ban a member"""
-        pass
+        self._ensure_targetable(ctx, member)
+
+        seconds = self._parse_duration_seconds(duration)
+        if not seconds or seconds < 1:
+            raise CommandError("duration must look like `30m`, `2h`, `7d`, or `1w`")
+
+        target_display = str(member)
+        target_id = member.id
+        role_ids = [
+            role.id
+            for role in member.roles
+            if role != ctx.guild.default_role
+        ]
+        unban_at = discord.utils.utcnow() + timedelta(seconds=seconds)
+
+        await member.ban(
+            delete_message_seconds=0,
+            reason=self._audit_reason(ctx, reason),
+        )
+        case_id = await self._create_case(
+            ctx,
+            action="tempban",
+            target_id=target_id,
+            reason=reason,
+        )
+        await self.db.add_tempban(
+            ctx.guild.id,
+            target_id,
+            unban_at,
+            ctx.author.id,
+            self._default_reason(reason),
+            case_id,
+        )
+        await self._send_modlog(
+            ctx,
+            action="tempban",
+            target=member,
+            case_id=case_id,
+            reason=reason,
+        )
+        self._dispatch_antinuke_action(
+            ctx,
+            action="tempban",
+            case_id=case_id,
+            meta={
+                "target_id": target_id,
+                "target_display": target_display,
+                "role_ids": role_ids,
+            },
+        )
+        return await ctx.success(
+            f"Tempbanned **{target_display}** for **{self._format_duration(seconds)}** - {self._default_reason(reason)}"
+        )
 
     @command(
         name="warn",
@@ -502,6 +608,19 @@ class ModerationCommands(Package):
         return await ctx.success(
             f"Kicked **{target_display}** - {self._default_reason(reason)}"
         )
+
+    @tasks.loop(seconds=30)
+    async def tempban_watcher(self) -> None:
+        for entry in await self.db.fetch_due_tempbans():
+            guild = self.bot.get_guild(int(entry["guild_id"]))
+            if guild is None:
+                continue
+            with contextlib.suppress(discord.Forbidden, discord.HTTPException):
+                await guild.unban(
+                    discord.Object(id=int(entry["user_id"])),
+                    reason="tempban expired",
+                )
+            await self.db.remove_tempban(int(entry["guild_id"]), int(entry["user_id"]))
 
     @command(
         name="ban recent",

@@ -257,6 +257,17 @@ CREATE TABLE IF NOT EXISTS modlog_cases (
     PRIMARY KEY (guild_id, case_id)
 );
 
+CREATE TABLE IF NOT EXISTS tempbans (
+    guild_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    unban_at TIMESTAMP NOT NULL,
+    moderator_id BIGINT,
+    reason TEXT,
+    case_id INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, user_id)
+);
+
 CREATE TABLE IF NOT EXISTS users (
     user_id BIGINT,
     guild_id BIGINT,

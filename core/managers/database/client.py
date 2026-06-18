@@ -944,6 +944,64 @@ class Database:
             guild_id,
         )
 
+    async def add_tempban(
+        self,
+        guild_id: int,
+        user_id: int,
+        unban_at: datetime,
+        moderator_id: int | None,
+        reason: str | None,
+        case_id: int | None,
+    ) -> None:
+        """insert or update one scheduled tempban"""
+        await self.execute(
+            """
+            INSERT INTO tempbans (
+                guild_id,
+                user_id,
+                unban_at,
+                moderator_id,
+                reason,
+                case_id
+            )
+            VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT (guild_id, user_id) DO UPDATE
+            SET unban_at = EXCLUDED.unban_at,
+                moderator_id = EXCLUDED.moderator_id,
+                reason = EXCLUDED.reason,
+                case_id = EXCLUDED.case_id
+            """,
+            guild_id,
+            user_id,
+            unban_at,
+            moderator_id,
+            reason,
+            case_id,
+        )
+
+    async def remove_tempban(self, guild_id: int, user_id: int) -> None:
+        """delete one scheduled tempban"""
+        await self.execute(
+            """
+            DELETE FROM tempbans
+            WHERE guild_id = $1 AND user_id = $2
+            """,
+            guild_id,
+            user_id,
+        )
+
+    async def fetch_due_tempbans(self) -> list[Row]:
+        """list tempbans that should be removed now"""
+        return await self.fetch(
+            """
+            SELECT *
+            FROM tempbans
+            WHERE unban_at <= CURRENT_TIMESTAMP
+            ORDER BY unban_at
+            """,
+            cached=False,
+        )
+
     async def toggle_autoresponder_exclusive(
         self,
         guild_id: int,
