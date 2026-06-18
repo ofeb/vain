@@ -4,15 +4,8 @@ from discord.ext.commands import group
 from datetime import datetime
 
 from core.discord.package import Package
-from core.managers.values import color
-
-
 class Birthday(Package):
     """birthday management"""
-
-    def __init__(self, bot):
-        self.bot = bot
-        self.color = color.base
 
     @group(
         name="birthday",

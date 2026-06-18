@@ -20,13 +20,13 @@ class Reaction(commands.Cog):
         self.bot = bot
 
     @hybrid(
-        name="reaction",
+        name="react",
         description="Add a reaction(s) to a message",
         guild_only=True,
     )
     @describe(message="Message to react to", emoji="Emoji to react with")
     @commands.has_permissions(manage_messages=True)
-    async def reaction(
+    async def react(
         self,
         ctx: Context,
         message: discord.Message,

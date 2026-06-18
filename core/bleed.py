@@ -230,15 +230,11 @@ class Bleed(commands.AutoShardedBot):
         if not schema_path.exists():
             log.warning(f"schema.sql not found at {schema_path}")
             return
-        
+
         try:
-            with open(schema_path, "r") as f:
-                schema = f.read()
-            
-            statements = [s.strip() for s in schema.split(";") if s.strip()]
-            for statement in statements:
-                await self.db.execute(statement)
-            
+            schema = schema_path.read_text(encoding="utf-8")
+            async with self.db.pool.acquire() as conn:
+                await conn.execute(schema)
             log.info("schema migration completed successfully")
         except Exception as e:
             log.warning(f"schema migration failed: {e}")

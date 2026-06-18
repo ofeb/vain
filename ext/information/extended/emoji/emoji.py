@@ -5,15 +5,8 @@ from discord import Embed
 import aiohttp
 
 from core.discord.package import Package
-from core.managers.values import color
-
-
 class Emoji(Package):
     """emoji management"""
-
-    def __init__(self, bot):
-        self.bot = bot
-        self.color = color.base
 
     @group(
         name="emoji",

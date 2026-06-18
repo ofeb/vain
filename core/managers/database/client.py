@@ -70,7 +70,13 @@ class Database:
             )
 
     async def _make_pool(self) -> Pool:
-        pool = await create_pool(dsn=self.uri, init=self._init_conn, record_class=Row)
+        pool = await create_pool(
+            dsn=self.uri,
+            init=self._init_conn,
+            record_class=Row,
+            min_size=1,
+            max_size=5,
+        )
         log.info(f"db pool ready {pool.__hash__()}")
         return pool
 
