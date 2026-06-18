@@ -590,6 +590,144 @@ class Database:
             guild_id,
         )
 
+    async def toggle_autoresponder_exclusive(
+        self,
+        guild_id: int,
+        trigger: str,
+        target_type: str,
+        target_id: int,
+    ) -> bool:
+        """toggle an exclusive channel or role target for one autoresponder"""
+        existing = await self.fetchrow(
+            """
+            SELECT 1
+            FROM autoresponder_exclusive
+            WHERE guild_id = $1 AND trigger = $2 AND target_type = $3 AND target_id = $4
+            """,
+            guild_id,
+            trigger,
+            target_type,
+            target_id,
+        )
+        if existing:
+            await self.execute(
+                """
+                DELETE FROM autoresponder_exclusive
+                WHERE guild_id = $1 AND trigger = $2 AND target_type = $3 AND target_id = $4
+                """,
+                guild_id,
+                trigger,
+                target_type,
+                target_id,
+            )
+            return False
+
+        await self.execute(
+            """
+            INSERT INTO autoresponder_exclusive (guild_id, trigger, target_type, target_id)
+            VALUES ($1, $2, $3, $4)
+            """,
+            guild_id,
+            trigger,
+            target_type,
+            target_id,
+        )
+        return True
+
+    async def list_autoresponder_exclusives(
+        self,
+        guild_id: int,
+        trigger: str,
+    ) -> list[Row]:
+        """list exclusive role and channel targets for one autoresponder"""
+        return await self.fetch(
+            """
+            SELECT target_type, target_id
+            FROM autoresponder_exclusive
+            WHERE guild_id = $1 AND trigger = $2
+            ORDER BY target_type, target_id
+            """,
+            guild_id,
+            trigger,
+        )
+
+    async def toggle_autoresponder_role(
+        self,
+        guild_id: int,
+        trigger: str,
+        role_id: int,
+        mode: str,
+    ) -> bool:
+        """toggle a role add or remove action for one autoresponder"""
+        existing = await self.fetchrow(
+            """
+            SELECT 1
+            FROM autoresponder_roles
+            WHERE guild_id = $1 AND trigger = $2 AND role_id = $3 AND mode = $4
+            """,
+            guild_id,
+            trigger,
+            role_id,
+            mode,
+        )
+        if existing:
+            await self.execute(
+                """
+                DELETE FROM autoresponder_roles
+                WHERE guild_id = $1 AND trigger = $2 AND role_id = $3 AND mode = $4
+                """,
+                guild_id,
+                trigger,
+                role_id,
+                mode,
+            )
+            return False
+
+        await self.execute(
+            """
+            INSERT INTO autoresponder_roles (guild_id, trigger, role_id, mode)
+            VALUES ($1, $2, $3, $4)
+            """,
+            guild_id,
+            trigger,
+            role_id,
+            mode,
+        )
+        return True
+
+    async def list_autoresponder_roles(
+        self,
+        guild_id: int,
+        trigger: str,
+        mode: str,
+    ) -> list[int]:
+        """list role ids configured for one autoresponder mode"""
+        rows = await self.fetch(
+            """
+            SELECT role_id
+            FROM autoresponder_roles
+            WHERE guild_id = $1 AND trigger = $2 AND mode = $3
+            ORDER BY role_id
+            """,
+            guild_id,
+            trigger,
+            mode,
+        )
+        return [int(row.role_id) for row in rows]
+
+    async def list_autoresponder_role_triggers(self, guild_id: int) -> list[str]:
+        """list distinct triggers that have role actions configured"""
+        rows = await self.fetch(
+            """
+            SELECT DISTINCT trigger
+            FROM autoresponder_roles
+            WHERE guild_id = $1
+            ORDER BY trigger
+            """,
+            guild_id,
+        )
+        return [str(row.trigger) for row in rows]
+
     async def migrate(self) -> Optional[bool]:
         """run pending sql migration files"""
         if await self.fetchval("SELECT count(*) FROM pokemon.users") > 10:

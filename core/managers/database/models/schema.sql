@@ -579,6 +579,24 @@ CREATE TABLE IF NOT EXISTS auto_responders (
     PRIMARY KEY (guild_id, trigger)
 );
 
+CREATE TABLE IF NOT EXISTS autoresponder_exclusive (
+    guild_id BIGINT NOT NULL,
+    trigger TEXT NOT NULL,
+    target_type TEXT NOT NULL,
+    target_id BIGINT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, trigger, target_type, target_id)
+);
+
+CREATE TABLE IF NOT EXISTS autoresponder_roles (
+    guild_id BIGINT NOT NULL,
+    trigger TEXT NOT NULL,
+    role_id BIGINT NOT NULL,
+    mode TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, trigger, role_id, mode)
+);
+
 CREATE TABLE IF NOT EXISTS sticky_message (
     guild_id BIGINT NOT NULL,
     channel_id BIGINT NOT NULL,
@@ -637,6 +655,8 @@ CREATE INDEX IF NOT EXISTS idx_join_messages_guild ON join_messages(guild_id);
 CREATE INDEX IF NOT EXISTS idx_leave_messages_guild ON leave_messages(guild_id);
 CREATE INDEX IF NOT EXISTS idx_boost_messages_guild ON boost_messages(guild_id);
 CREATE INDEX IF NOT EXISTS idx_auto_responders_guild ON auto_responders(guild_id);
+CREATE INDEX IF NOT EXISTS idx_autoresponder_exclusive_guild ON autoresponder_exclusive(guild_id, trigger);
+CREATE INDEX IF NOT EXISTS idx_autoresponder_roles_guild ON autoresponder_roles(guild_id, trigger);
 CREATE INDEX IF NOT EXISTS idx_sticky_message_guild ON sticky_message(guild_id);
 CREATE INDEX IF NOT EXISTS idx_pagination_guild ON pagination(guild_id);
 CREATE INDEX IF NOT EXISTS idx_trackers_guild ON trackers(guild_id);
