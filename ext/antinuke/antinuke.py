@@ -39,7 +39,7 @@ PUNISHMENT_ORDER = {
 }
 
 
-class Antinuke(Package, commands.Cog):
+class Antinuke(Package):
     """server antinuke configuration and enforcement."""
 
     def __init__(self, bot):
@@ -368,12 +368,15 @@ class Antinuke(Package, commands.Cog):
         module_name: str,
         *,
         immediate: bool = False,
+        command_detected: bool = False,
     ) -> bool:
         config = await self._get_config(guild.id)
         module = getattr(config, module_name)
         if not module.status:
             return False
         if actor.id in self._exempt_ids(guild, config):
+            return False
+        if command_detected and not module.command:
             return False
 
         threshold = None
@@ -498,6 +501,26 @@ class Antinuke(Package, commands.Cog):
                     reason="antinuke revert: role delete",
                 )
 
+    async def _restore_role_snapshot(
+        self,
+        guild: discord.Guild,
+        data: dict[str, Any],
+    ) -> None:
+        with contextlib.suppress(discord.Forbidden, discord.HTTPException):
+            recreated = await guild.create_role(
+                name=str(data.get("name") or "restored-role"),
+                permissions=discord.Permissions(int(data.get("permissions") or 0)),
+                color=discord.Color(int(data.get("color") or 0)),
+                hoist=bool(data.get("hoist", False)),
+                mentionable=bool(data.get("mentionable", False)),
+                reason="antinuke revert: role delete",
+            )
+            with contextlib.suppress(discord.HTTPException):
+                await recreated.edit(
+                    position=int(data.get("position") or 1),
+                    reason="antinuke revert: role delete",
+                )
+
     async def _remove_joined_bot(self, member: discord.Member, punishment: str) -> bool:
         action = "ban" if punishment == "ban" else "kick"
         with contextlib.suppress(discord.Forbidden, discord.HTTPException):
@@ -508,7 +531,7 @@ class Antinuke(Package, commands.Cog):
             return True
         return False
 
-    @commands.Cog.listener()
+    @Package.listener()
     async def on_member_ban(self, guild: discord.Guild, user: discord.User) -> None:
         entry = await self._latest_audit(
             guild,
@@ -520,7 +543,7 @@ class Antinuke(Package, commands.Cog):
             return
         await self._handle_module_action(guild, actor, "ban")
 
-    @commands.Cog.listener()
+    @Package.listener()
     async def on_raw_member_remove(self, payload: discord.RawMemberRemoveEvent) -> None:
         guild = self.bot.get_guild(payload.guild_id)
         if guild is None:
@@ -535,7 +558,7 @@ class Antinuke(Package, commands.Cog):
             return
         await self._handle_module_action(guild, actor, "kick")
 
-    @commands.Cog.listener()
+    @Package.listener()
     async def on_guild_channel_create(self, channel: discord.abc.GuildChannel) -> None:
         entry = await self._latest_audit(
             channel.guild,
@@ -549,7 +572,7 @@ class Antinuke(Package, commands.Cog):
             with contextlib.suppress(discord.Forbidden, discord.HTTPException):
                 await channel.delete(reason="antinuke revert: channel create")
 
-    @commands.Cog.listener()
+    @Package.listener()
     async def on_guild_channel_delete(self, channel: discord.abc.GuildChannel) -> None:
         entry = await self._latest_audit(
             channel.guild,
@@ -562,7 +585,7 @@ class Antinuke(Package, commands.Cog):
         if await self._handle_module_action(channel.guild, actor, "channel"):
             await self._restore_deleted_channel(channel)
 
-    @commands.Cog.listener()
+    @Package.listener()
     async def on_guild_role_create(self, role: discord.Role) -> None:
         entry = await self._latest_audit(
             role.guild,
@@ -576,7 +599,7 @@ class Antinuke(Package, commands.Cog):
             with contextlib.suppress(discord.Forbidden, discord.HTTPException):
                 await role.delete(reason="antinuke revert: role create")
 
-    @commands.Cog.listener()
+    @Package.listener()
     async def on_guild_role_delete(self, role: discord.Role) -> None:
         entry = await self._latest_audit(
             role.guild,
@@ -589,7 +612,7 @@ class Antinuke(Package, commands.Cog):
         if await self._handle_module_action(role.guild, actor, "role"):
             await self._restore_deleted_role(role)
 
-    @commands.Cog.listener()
+    @Package.listener()
     async def on_guild_emojis_update(
         self,
         guild: discord.Guild,
@@ -604,7 +627,7 @@ class Antinuke(Package, commands.Cog):
             return
         await self._handle_module_action(guild, actor, "emoji")
 
-    @commands.Cog.listener()
+    @Package.listener()
     async def on_webhooks_update(self, channel: discord.abc.GuildChannel) -> None:
         entry = await self._latest_audit(
             channel.guild,
@@ -616,7 +639,7 @@ class Antinuke(Package, commands.Cog):
         if await self._handle_module_action(channel.guild, actor, "webhook"):
             await self._remove_created_webhook(channel, getattr(entry.target, "id", None))
 
-    @commands.Cog.listener()
+    @Package.listener()
     async def on_guild_update(self, before: discord.Guild, after: discord.Guild) -> None:
         if before.vanity_url_code == after.vanity_url_code:
             return
@@ -626,7 +649,7 @@ class Antinuke(Package, commands.Cog):
             return
         await self._handle_module_action(after, actor, "vanity", immediate=True)
 
-    @commands.Cog.listener()
+    @Package.listener()
     async def on_member_join(self, member: discord.Member) -> None:
         if not member.bot:
             return
@@ -671,7 +694,7 @@ class Antinuke(Package, commands.Cog):
                 description.append("I could not punish the inviter due to missing permissions.")
         await self._notify_owner(member.guild, "\n".join(description))
 
-    @commands.Cog.listener()
+    @Package.listener()
     async def on_guild_role_update(self, before: discord.Role, after: discord.Role) -> None:
         if before.permissions == after.permissions:
             return
@@ -725,7 +748,7 @@ class Antinuke(Package, commands.Cog):
                 ),
             )
 
-    @commands.Cog.listener()
+    @Package.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member) -> None:
         if before.roles == after.roles:
             return
@@ -798,6 +821,48 @@ class Antinuke(Package, commands.Cog):
                     reason="antinuke revert: member dangerous role remove",
                 ),
             )
+
+    @Package.listener()
+    async def on_antinuke_action(
+        self,
+        guild: discord.Guild,
+        actor: discord.Member,
+        action: str,
+        case_id: int,
+        meta: dict | None = None,
+    ) -> None:
+        mapping = {
+            "ban": "ban",
+            "tempban": "ban",
+            "softban": "ban",
+            "kick": "kick",
+            "role delete": "role",
+            "role remove": "role",
+            "role add": "role",
+            "role create": "role",
+        }
+        module = mapping.get(action)
+        if module is None:
+            return
+
+        triggered = await self._handle_module_action(
+            guild,
+            actor,
+            module,
+            command_detected=True,
+        )
+        if not triggered or module != "role" or not meta:
+            return
+
+        if action == "role create" and meta.get("role_id"):
+            role = guild.get_role(int(meta["role_id"]))
+            if role is not None:
+                with contextlib.suppress(discord.Forbidden, discord.HTTPException):
+                    await role.delete(reason="antinuke revert: role create")
+            return
+
+        if action == "role delete" and meta.get("role"):
+            await self._restore_role_snapshot(guild, dict(meta["role"]))
 
     @group(
         name="antinuke",
