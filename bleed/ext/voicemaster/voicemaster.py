@@ -125,6 +125,7 @@ class VoiceControl(commands.Cog):
         name="voicemaster",
         description="Make temporary voice channels in your server!",
         guild_only=True,
+        invoke_without_command=True,
     )
     async def voicemaster(self, ctx: Context) -> None:
         """Main voicemaster command group."""

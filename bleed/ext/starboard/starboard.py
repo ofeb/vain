@@ -105,6 +105,7 @@ class Starboard(commands.Cog):
         name="starboard",
         description="Showcase the best messages in your server",
         guild_only=True,
+        invoke_without_command=True,
     )
     async def starboard(self, ctx: Context) -> None:
         """Main starboard command group."""

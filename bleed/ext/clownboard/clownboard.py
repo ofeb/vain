@@ -105,6 +105,7 @@ class Clownboard(commands.Cog):
         name="clownboard",
         description="Showcase the worst messages in your server",
         guild_only=True,
+        invoke_without_command=True,
     )
     async def clownboard(self, ctx: Context) -> None:
         """Main clownboard command group."""

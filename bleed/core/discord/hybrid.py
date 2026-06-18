@@ -192,7 +192,13 @@ def _hybrid_group(name: str | None = None, **attrs: Any):
 
             def sub_deco(sub_fn):
                 sub_prepared = _inject_descriptions(_wrap_callback(sub_fn, guilds=sg, dms=sd, groupchats=sc), sub_params)
-                cmd = _orig_command(*args, **kw)(sub_prepared)
+                cmd_name = kw.get("name") or sub_fn.__name__
+                try:
+                    cmd = _orig_command(*args, **kw)(sub_prepared)
+                except (TypeError, ValueError) as e:
+                    log.warning("hybrid /%s slash failed (%s), prefix-only", cmd_name, e)
+                    fallback_kw = {**kw, "with_app_command": False}
+                    cmd = _orig_command(*args, **fallback_kw)(sub_prepared)
                 cmd.example = sub_example
                 cmd.parameters = sub_params
                 return cmd
