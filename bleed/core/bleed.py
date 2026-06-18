@@ -18,7 +18,7 @@ from .managers.redis.client import BleedCache
 from .managers.watch import Watcher
 from .managers.guard import Guard
 from .tools.embed import Script, parse
-from .managers.values import token, bot, color, database, redis
+from .managers.values import token, bot, color, database, redis, emojis
 
 log = logging.getLogger("bleed")
 
@@ -103,11 +103,22 @@ class Bleed(commands.AutoShardedBot):
         self._seen_message_ids: set[int] = set()
         self._guild_slash_commands: list[app_commands.Command] = []
         self._guild_slash_synced = False
+        self.owners = set(bot.owners)
+        self.config = {
+            "token": token,
+            "prefix": bot.prefix,
+            "emojis": {
+                "success": emojis.approve,
+                "fail": emojis.deny,
+                "warning": emojis.warn,
+                "loading": emojis.loading,
+            },
+        }
 
         super().__init__(
             command_prefix=self._get_prefix,
             intents=_intents(),
-            owners=set(bot.owners),
+            owner_ids=self.owners,
             allowed_mentions=discord.AllowedMentions(
                 users=True, roles=False, everyone=False, replied_user=False
             ),

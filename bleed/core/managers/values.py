@@ -1,50 +1,123 @@
 from __future__ import annotations
 
+import json
+import os
 from pathlib import Path
 from typing import Final
 
-token = "MTUxMTQ1NjA0NDUwNzcyOTk5MQ.GWsqgz.7rmtleiKikC8L5ly62NmfgcO7dCgyuy1qlH7nQ"
+root: Final[Path] = Path(__file__).resolve().parents[2]
+repo_root: Final[Path] = root.parent
+
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(repo_root / ".env")
+except Exception:
+    pass
+
+
+def _env(name: str, default: str = "") -> str:
+    return os.getenv(name, default)
+
+
+def _env_first(*names: str, default: str = "") -> str:
+    for name in names:
+        value = os.getenv(name)
+        if value not in (None, ""):
+            return value
+    return default
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_int(name: str, default: int) -> int:
+    value = os.getenv(name)
+    if value in (None, ""):
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        return default
+
+
+def _env_csv_ints(name: str, default: tuple[int, ...] = ()) -> tuple[int, ...]:
+    value = os.getenv(name, "").strip()
+    if not value:
+        return default
+    out: list[int] = []
+    for item in value.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        try:
+            out.append(int(item))
+        except ValueError:
+            continue
+    return tuple(out)
+
+
+def _env_json(name: str, default):
+    value = os.getenv(name, "").strip()
+    if not value:
+        return default
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError:
+        return default
+
+
+token = _env_first("BLEED_TOKEN", "DISCORD_TOKEN", default="")
+
 
 class bot:
-    prefix = ";"
-    owners = (1449456965334859860, 197390603443634177)
-    support = "https://discord.gg/tornbio"
-    status = "online"
-    activity_type = "none"
-    activity_text = ""
-    stream_url = ""
+    prefix = _env("BLEED_PREFIX", ",")
+    owners = _env_csv_ints("BLEED_OWNER_IDS")
+    support = _env("BLEED_SUPPORT_URL", "https://discord.gg/bleed")
+    website = _env("BLEED_WEBSITE_URL", "https://bleed.bot")
+    docs = _env("BLEED_DOCS_URL", "https://docs.bleed.bot")
+    status = _env("BLEED_STATUS", "online")
+    activity_type = _env("BLEED_ACTIVITY_TYPE", "none")
+    activity_text = _env("BLEED_ACTIVITY_TEXT", "")
+    stream_url = _env("BLEED_STREAM_URL", "")
+
 
 class emojis:
-    approve = "<:embeds_approve:1511705992323272745>"
-    warn = "<:embeds_warn:1511705997918343168>"
-    deny = "<:embeds_deny:1511705993283633253>"
-    loading = "<a:embeds_loading:1511705994823077988>"
-    cooldown = "<:embeds_cooldown:1511705992755417129>"
-    add = "<:embeds_add:1511705992469942292>"
-    remove = "<:embeds_remove:1511705995850551357>"
-    lastfm = "<:embeds_lastfm:1511705994458300618>"
-    spotify = "<:embeds_spotify:1511705997130072235>"
-    shazam = "<:embeds_shazam:1511705996555194368>"
-    juul = "<:embeds_juul:1511705993795604490>"
-    no_juul = "<:embeds_no_juul:1511705995653419008>"
+    approve = _env("BLEED_EMOJI_APPROVE", "<:embeds_approve:1511705992323272745>")
+    warn = _env("BLEED_EMOJI_WARN", "<:embeds_warn:1511705997918343168>")
+    deny = _env("BLEED_EMOJI_DENY", "<:embeds_deny:1511705993283633253>")
+    loading = _env("BLEED_EMOJI_LOADING", "<a:embeds_loading:1511705994823077988>")
+    cooldown = _env("BLEED_EMOJI_COOLDOWN", "<:embeds_cooldown:1511705992755417129>")
+    add = _env("BLEED_EMOJI_ADD", "<:embeds_add:1511705992469942292>")
+    remove = _env("BLEED_EMOJI_REMOVE", "<:embeds_remove:1511705995850551357>")
+    lastfm = _env("BLEED_EMOJI_LASTFM", "<:embeds_lastfm:1511705994458300618>")
+    spotify = _env("BLEED_EMOJI_SPOTIFY", "<:embeds_spotify:1511705997130072235>")
+    shazam = _env("BLEED_EMOJI_SHAZAM", "<:embeds_shazam:1511705996555194368>")
+    juul = _env("BLEED_EMOJI_JUUL", "<:embeds_juul:1511705993795604490>")
+    no_juul = _env("BLEED_EMOJI_NO_JUUL", "<:embeds_no_juul:1511705995653419008>")
 
     class paginator:
-        previous = "<:paginator_previous:1511706003836633288>"
-        next = "<:paginator_next:1511706003853279353>"
-        navigate = "<:paginator_navigate:1511706003672928286>"
-        cancel = "<:paginator_cancel:1511706003303825571>"
+        previous = _env("BLEED_EMOJI_PAGINATOR_PREVIOUS", "<:paginator_previous:1511706003836633288>")
+        next = _env("BLEED_EMOJI_PAGINATOR_NEXT", "<:paginator_next:1511706003853279353>")
+        navigate = _env("BLEED_EMOJI_PAGINATOR_NAVIGATE", "<:paginator_navigate:1511706003672928286>")
+        cancel = _env("BLEED_EMOJI_PAGINATOR_CANCEL", "<:paginator_cancel:1511706003303825571>")
 
     class interface:
-        lock = "<:interface_lock:1511706000007106721>"
-        unlock = "<:interface_unlock:1511706000690774097>"
-        ghost = "<:interface_ghost:1511705999264710756>"
-        reveal = "<:interface_reveal:1511706000405692449>"
-        claim = "<:interface_claim:1511705997897633954>"
-        disconnect = "<:interface_disconnect:1511705999264972800>"
-        activity = "<:interface_activity:1511705997889114273>"
-        information = "<:interface_information:1511705999550185646>"
-        increase = "<:interface_increase:1511705999348596767>"
-        decrease = "<:interface_decrease:1511705998434500719>"
+        lock = _env("BLEED_EMOJI_INTERFACE_LOCK", "<:interface_lock:1511706000007106721>")
+        unlock = _env("BLEED_EMOJI_INTERFACE_UNLOCK", "<:interface_unlock:1511706000690774097>")
+        ghost = _env("BLEED_EMOJI_INTERFACE_GHOST", "<:interface_ghost:1511705999264710756>")
+        reveal = _env("BLEED_EMOJI_INTERFACE_REVEAL", "<:interface_reveal:1511706000405692449>")
+        claim = _env("BLEED_EMOJI_INTERFACE_CLAIM", "<:interface_claim:1511705997897633954>")
+        disconnect = _env("BLEED_EMOJI_INTERFACE_DISCONNECT", "<:interface_disconnect:1511705999264972800>")
+        activity = _env("BLEED_EMOJI_INTERFACE_ACTIVITY", "<:interface_activity:1511705997889114273>")
+        information = _env("BLEED_EMOJI_INTERFACE_INFORMATION", "<:interface_information:1511705999550185646>")
+        increase = _env("BLEED_EMOJI_INTERFACE_INCREASE", "<:interface_increase:1511705999348596767>")
+        decrease = _env("BLEED_EMOJI_INTERFACE_DECREASE", "<:interface_decrease:1511705998434500719>")
+
 
 class color:
     neutral = 0xEAEAEA
@@ -63,55 +136,59 @@ class color:
     def update_base(cls, new_color: int):
         cls.base = new_color
 
+
 class database:
-    dsn = ""
+    dsn = _env(
+        "DATABASE_DSN",
+        "postgres://postgres:admin@127.0.0.1:5432/bleed",
+    )
+
 
 class redis:
-    url = "redis://127.0.0.1:6379"
-    enabled = False
+    url = _env("REDIS_URL", "redis://127.0.0.1:6379/0")
+    enabled = _env_bool("REDIS_ENABLED", False)
+
 
 class api:
-    gemini = "AQ.Ab8RN6KgI2bxOLtU7XQFkqJ8Q_XPtlEmExj4LPruvSlOQtP6WA"
-    llm = "gemini-2.5-flash-lite"
-    ocr = "K85711694388957"
-    aiproject = "projects/268591218263"
-    google_perspective = ""
-    weather = ""
-    jeyy = "64P38CPI6SQ36CHJ6GO34CHP6CP3AE8.CDQN4P8.5pFC0ci9fCKDNICIzIzMlA"
-    fnbr = "811d14f2-ad01-4005-bc82-7f660f1ec7b4"
-    cloudconvert = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiIxIiwianRpIjoiOWE3NWNlMzIwY2M4Nzg5NWM3NmE5YzQ4NWYwNTY0MmUwNTg1MmI5OWNlOWYxN2QwMWU1MGEyMDEzMDJmNTAzYjY5NjQ2YTY1ZDI4MThiNzkiLCJpYXQiOjE3NDc0MzgyMDkuNzc0NDgyLCJuYmYiOjE3NDc0MzgyMDkuNzc0NDg0LCJleHAiOjQ5MDMxMTE4MDkuNzcwMzQsInN1YiI6IjcxOTA1ODMzIiwic2NvcGVzIjpbInVzZXIucmVhZCIsInVzZXIud3JpdGUiLCJ0YXNrLnJlYWQiLCJ0YXNrLndyaXRlIiwid2ViaG9vay5yZWFkIiwid2ViaG9vay53cml0ZSIsInByZXNldC5yZWFkIiwicHJlc2V0LndyaXRlIl19.qNeJ_jvIaPq_tIOFq6GYDMkzThlnwxZEsqa_Gk2A_AvuUfmLXgLIbTn8xkgjL6pt_fVi_ImXpDXMR6_EIAzjmWU9xfuOSABdFQ6ULD5RJhz8iyjjxZ1PoQfwblWfYQfDiPmkvfTAGWEtZNb_Drryp5PiEWNC5dbluGCbA9ZJSWZB1AuLotu8hhmvvnQGWnEurKro9ptFpBibLNFT7XRd0KkN_-y-MOdXvGZbNr05tIKoiNvdsl2jdEXR9VADSESpWykUOmDoyW3PUDD-QcVagq-z7zbnliAnSpsJc-G47oOUSRtsnlYvvRyWB5vmqLnwS0F5czqsQI-ULuC_50nAItZRgvyh3bfaMIE8Y245JmO4DRhykG5ZRX9g__hHhi8NSNKi3kiVm0LWZNKdGXVgRi6sGaMsIKEJ8eLwvSsjEIqWEPeseMnlWS4IdT4HBC-qFmox04t5AlV2AaPVSf4ed9DTV3DjVg4ldct7MqMk-jAWGD7kh6QbB9aI596wyYOyCQGIdZ2MVpfHGBJIs7fvbHbE-g2sYOQ2J3v-Qmd93-ilJU__OTDj4uwbifHs6NIfP5JS49KgpwwPskQzCcp6g5Wev_e2OAP4ESWoSMO6B9xPYBicTkjgAC7caUIbVL59_mLqRx0nfWmshONRsoZdTZ_hRaLQgBXPeMFuggeIF8g"
-    clever = ""
-    wolfram = ""
-    osu = ""
-    soundcloud = ""
-    openrouter = "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"
-    serpapi = "a8621740d4458f15ad3348c54454fb711c54df4dab6b2a53d003a3b17778ca45"
-    kraken = ""
-    reshare = "95168cb4fe93ec7d78793cd7b8544b7fc2178149"
-    transcribe_url = "http://127.0.0.1:8789/"
-    soundcloud_client_id = "Fs1xmKNbd3b0EiU1o1MHY4KfC41SVpjS"
-    spotify_client_id = ""
-    spotify_client_secret = ""
-    spotify_redirect_uri = ""
-    twitch_client_id = ""
-    twitch_client_secret = ""
+    google_perspective = _env("GOOGLE_PERSPECTIVE_API_KEY", "")
+    weather = _env("WEATHER_API_KEY", "")
+    fnbr = _env("FNBR_API_KEY", "")
+    cloudconvert = _env("CLOUDCONVERT_API_KEY", "")
+    clever = _env("CLEVER_API_KEY", "")
+    wolfram = _env("WOLFRAM_API_KEY", "")
+    osu = _env("OSU_API_KEY", "")
+    soundcloud = _env("SOUNDCLOUD_API_KEY", "")
+    openrouter = _env("OPENROUTER_API_KEY", "")
+    serpapi = _env("SERPAPI_API_KEY", "")
+    kraken = _env("KRAKEN_API_KEY", "")
+    reshare = _env("RESHARE_API_KEY", "")
+    transcribe_url = _env("BLEED_TRANSCRIBE_URL", "http://127.0.0.1:8789/")
+    soundcloud_client_id = _env("SOUNDCLOUD_CLIENT_ID", "")
+    spotify_client_id = _env("SPOTIFY_CLIENT_ID", "")
+    spotify_client_secret = _env("SPOTIFY_CLIENT_SECRET", "")
+    spotify_redirect_uri = _env("SPOTIFY_REDIRECT_URI", "")
+    twitch_client_id = _env("TWITCH_CLIENT_ID", "")
+    twitch_client_secret = _env("TWITCH_CLIENT_SECRET", "")
+    llm = _env("BLEED_LLM_MODEL", "gemini-2.5-flash-lite")
 
     class lastfm:
-        key = "dcf2076953c014eb54760b3355e1b8dd"
-        secret = "20665e5f1beef54fdd8a635f0e7618f8"
-        keys = ["dcf2076953c014eb54760b3355e1b8dd"]
+        key = _env("LASTFM_API_KEY", "")
+        secret = _env("LASTFM_API_SECRET", "")
+        keys = tuple(
+            entry.strip()
+            for entry in _env("LASTFM_API_KEYS", "").split(",")
+            if entry.strip()
+        ) or ((key,) if key else ())
 
     class instagram:
-        cookies = [
-            {
-                "ds_user_id": "75758144693",
-                "sessionid": "75758144693%3ARn1mzuF9D8twLL%3A21%3AAYgNYUqCZwbQlSxYravzXBo35vJC5V4MHk-KWaZPzA",
-            },
-        ]
-        username = "ybnafim"
-        password = "Nafim@2009"
-        graphql = ["https://www.instagram.com/graphql/query/?query_id=17888483320059182"]
-        post_query_hash = "2c4f4e870eeeee575e7210848365d854"
+        cookies = _env_json("INSTAGRAM_COOKIES_JSON", [])
+        username = _env("INSTAGRAM_USERNAME", "")
+        password = _env("INSTAGRAM_PASSWORD", "")
+        graphql = _env_json(
+            "INSTAGRAM_GRAPHQL_ENDPOINTS_JSON",
+            ["https://www.instagram.com/graphql/query/?query_id=17888483320059182"],
+        )
+        post_query_hash = _env("INSTAGRAM_POST_QUERY_HASH", "2c4f4e870eeeee575e7210848365d854")
 
         @classmethod
         def cookie_header(cls, *, index: int = 0) -> str:
@@ -127,10 +204,9 @@ class api:
                 parts.append(f"sessionid={sessionid}")
             return "; ".join(parts)
 
-class music:
-    enabled = False
-    lavalink_host = "127.0.0.1"
-    lavalink_port = 2333
-    lavalink_password = "youshallnotpass"
 
-root: Final[Path] = Path(__file__).resolve().parents[2]
+class music:
+    enabled = _env_bool("MUSIC_ENABLED", False)
+    lavalink_host = _env("LAVALINK_HOST", "127.0.0.1")
+    lavalink_port = _env_int("LAVALINK_PORT", 2333)
+    lavalink_password = _env("LAVALINK_PASSWORD", "youshallnotpass")
