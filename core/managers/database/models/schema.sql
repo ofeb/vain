@@ -83,16 +83,6 @@ CREATE TABLE IF NOT EXISTS antinuke_actions (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS antinuke_protected_targets (
-    guild_id BIGINT NOT NULL,
-    target_type VARCHAR(16) NOT NULL,
-    target_id BIGINT NOT NULL,
-    punishment VARCHAR(16) NOT NULL DEFAULT 'ban',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (guild_id, target_type, target_id)
-);
-
 CREATE TABLE IF NOT EXISTS antiraid_config (
     guild_id BIGINT PRIMARY KEY,
     raid_active BOOLEAN NOT NULL DEFAULT FALSE,

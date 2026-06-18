@@ -12,7 +12,7 @@ from discord.ext import commands, tasks
 from discord.ext.commands import CommandError, group
 
 from core.discord.package import Package
-from core.tools.convert import MemberConvert, RoleConvert, StatusConvert
+from core.tools.convert import MemberConvert, StatusConvert
 from core.tools.flags import AntiNukeFlags
 from core.tools.permissions import DANGEROUS_PERMISSIONS, normalize_dangerous_permission
 
@@ -42,20 +42,7 @@ PUNISHMENT_ORDER = {
     "ban": 5,
 }
 
-PROTECTED_PUNISHMENTS = {"ban", "kick", "warn", "jail", "stripstaff"}
-RECENT_MEMBER_ROLE_CACHE_SECONDS = 120
-RECENT_PROTECTED_ACTION_SECONDS = 20
 RECENT_COMMAND_ACTION_SECONDS = 20
-
-SETUP_MODULES = (
-    ("channel", {"status": True, "punishment": "ban", "threshold": 1}),
-    ("role", {"status": True, "punishment": "stripstaff", "threshold": 2, "command": True}),
-    ("emoji", {"status": True, "punishment": "kick", "threshold": 1}),
-    ("ban", {"status": True, "punishment": "stripstaff", "threshold": 3, "command": True}),
-    ("kick", {"status": True, "punishment": "stripstaff", "threshold": 1, "command": True}),
-    ("webhook", {"status": True, "punishment": "ban", "threshold": 1}),
-    ("botadd", {"status": True, "punishment": "ban"}),
-)
 
 
 class Antinuke(Package):
@@ -64,25 +51,15 @@ class Antinuke(Package):
     def __init__(self, bot):
         super().__init__(bot)
         self.config: dict[int, AntinukeConfig] = {}
-        self._recent_member_roles: dict[tuple[int, int], tuple[datetime, tuple[int, ...]]] = {}
-        self._protected_role_ids_by_guild: dict[int, set[int]] = {}
-        self._protected_role_members: dict[tuple[int, int], tuple[int, ...]] = {}
-        self._recent_protected_actions: dict[tuple[int, int, int, str], datetime] = {}
         self._recent_command_actions: dict[tuple[int, int, str, int], datetime] = {}
-        self._protected_role_prime_task: asyncio.Task | None = None
 
     async def cog_load(self) -> None:
         if self.bot.db.pool is not None:
             self.revalidate_config.start()
-        self._protected_role_prime_task = asyncio.create_task(
-            self._prime_protected_role_member_cache()
-        )
 
     async def cog_unload(self) -> None:
         if self.revalidate_config.is_running():
             self.revalidate_config.cancel()
-        if self._protected_role_prime_task is not None:
-            self._protected_role_prime_task.cancel()
 
     async def cog_check(self, ctx) -> bool:
         if ctx.guild is None:
@@ -268,55 +245,6 @@ class Antinuke(Package):
             return "kick"
         return ordered[0].punishment
 
-    async def _collect_guild_members(
-        self,
-        guild: discord.Guild,
-    ) -> list[discord.Member]:
-        if guild.members:
-            return list(guild.members)
-        with contextlib.suppress(discord.HTTPException):
-            await guild.chunk(cache=True)
-        if guild.members:
-            return list(guild.members)
-        members: list[discord.Member] = []
-        with contextlib.suppress(discord.Forbidden, discord.HTTPException):
-            async for member in guild.fetch_members(limit=None):
-                members.append(member)
-        return members
-
-    def _prune_recent_member_roles(self) -> None:
-        now = discord.utils.utcnow()
-        expired = [
-            key
-            for key, (expires_at, _) in self._recent_member_roles.items()
-            if expires_at <= now
-        ]
-        for key in expired:
-            self._recent_member_roles.pop(key, None)
-
-    def _remember_member_roles(self, member: discord.Member) -> None:
-        self._prune_recent_member_roles()
-        role_ids = tuple(
-            role.id
-            for role in member.roles
-            if role != member.guild.default_role
-        )
-        key = (member.guild.id, member.id)
-        if not role_ids:
-            self._recent_member_roles.pop(key, None)
-            return
-        self._recent_member_roles[key] = (
-            discord.utils.utcnow() + timedelta(seconds=RECENT_MEMBER_ROLE_CACHE_SECONDS),
-            role_ids,
-        )
-
-    def _recent_role_ids(self, guild_id: int, user_id: int) -> list[int]:
-        self._prune_recent_member_roles()
-        cached = self._recent_member_roles.get((guild_id, user_id))
-        if not cached:
-            return []
-        return list(cached[1])
-
     def _prune_recent_command_actions(self) -> None:
         now = discord.utils.utcnow()
         expired = [
@@ -348,260 +276,6 @@ class Antinuke(Package):
     ) -> bool:
         self._prune_recent_command_actions()
         return (guild_id, actor_id, module_name, subject_id) in self._recent_command_actions
-
-    def _prune_recent_protected_actions(self) -> None:
-        now = discord.utils.utcnow()
-        expired = [
-            key
-            for key, expires_at in self._recent_protected_actions.items()
-            if expires_at <= now
-        ]
-        for key in expired:
-            self._recent_protected_actions.pop(key, None)
-
-    def _remember_recent_protected_action(
-        self,
-        guild_id: int,
-        actor_id: int,
-        target_id: int,
-        action: str,
-    ) -> None:
-        self._prune_recent_protected_actions()
-        self._recent_protected_actions[(guild_id, actor_id, target_id, action)] = (
-            discord.utils.utcnow() + timedelta(seconds=RECENT_PROTECTED_ACTION_SECONDS)
-        )
-
-    def _was_recently_handled_protected_action(
-        self,
-        guild_id: int,
-        actor_id: int,
-        target_id: int,
-        action: str,
-    ) -> bool:
-        self._prune_recent_protected_actions()
-        return (guild_id, actor_id, target_id, action) in self._recent_protected_actions
-
-    async def _fetch_protected_role_ids(self, guild_id: int) -> set[int]:
-        role_ids: set[int] = set()
-        for row in await self.db.fetch_antinuke_protected_targets(guild_id):
-            if str(row["target_type"]) != "role":
-                continue
-            role_ids.add(int(row["target_id"]))
-        return role_ids
-
-    async def refresh_protected_role_member_cache(self, guild: discord.Guild) -> None:
-        role_ids = await self._fetch_protected_role_ids(guild.id)
-        self._protected_role_ids_by_guild[guild.id] = role_ids
-
-        for key in [key for key in self._protected_role_members if key[0] == guild.id]:
-            self._protected_role_members.pop(key, None)
-
-        if not role_ids:
-            return
-
-        for member in await self._collect_guild_members(guild):
-            matched = tuple(
-                role.id
-                for role in member.roles
-                if role != guild.default_role and role.id in role_ids
-            )
-            if matched:
-                self._protected_role_members[(guild.id, member.id)] = matched
-
-    async def _prime_protected_role_member_cache(self) -> None:
-        await self.bot.wait_until_ready()
-        for guild in list(self.bot.guilds):
-            with contextlib.suppress(Exception):
-                await self.refresh_protected_role_member_cache(guild)
-
-    def _remember_protected_role_member(self, member: discord.Member) -> None:
-        role_ids = self._protected_role_ids_by_guild.get(member.guild.id)
-        if not role_ids:
-            self._protected_role_members.pop((member.guild.id, member.id), None)
-            return
-        matched = tuple(
-            role.id
-            for role in member.roles
-            if role != member.guild.default_role and role.id in role_ids
-        )
-        key = (member.guild.id, member.id)
-        if matched:
-            self._protected_role_members[key] = matched
-            return
-        self._protected_role_members.pop(key, None)
-
-    def _protected_role_member_ids(self, guild_id: int, user_id: int) -> list[int]:
-        return list(self._protected_role_members.get((guild_id, user_id), ()))
-
-    async def _get_protected_target(
-        self,
-        guild: discord.Guild,
-        *,
-        user_id: int,
-        role_ids: list[int] | None = None,
-    ) -> dict[str, Any] | None:
-        row = await self.db.find_antinuke_protected_target(
-            guild.id,
-            user_id=user_id,
-            role_ids=role_ids or [],
-        )
-        return dict(row) if row else None
-
-    def _protected_reason(
-        self,
-        guild: discord.Guild,
-        *,
-        action: str,
-        target: discord.abc.User,
-        protection: dict[str, Any],
-        target_display: str | None = None,
-    ) -> str:
-        trigger_label = self._punishment_label(action)
-        display = target_display or str(target)
-        target_label = f"{display} ({target.id})"
-        if protection["target_type"] == "role":
-            role = guild.get_role(int(protection["target_id"]))
-            role_name = role.name if role else str(protection["target_id"])
-            return (
-                f"antinuke protect: {trigger_label} member {target_label} "
-                f"with protected role {role_name} ({protection['target_id']})"
-            )
-        return f"antinuke protect: {trigger_label} protected user {target_label}"
-
-    def _protected_owner_lines(
-        self,
-        guild: discord.Guild,
-        *,
-        actor: discord.Member,
-        action: str,
-        punishment: str,
-        target: discord.abc.User,
-        protection: dict[str, Any],
-        target_display: str | None = None,
-    ) -> list[str]:
-        punishment_label = self._punishment_label(punishment)
-        if protection["target_type"] == "role":
-            role = guild.get_role(int(protection["target_id"]))
-            role_label = f"**{role.name}**" if role else f"`{protection['target_id']}`"
-            return [
-                (
-                    f"A user with a protected role has been **{self._punishment_label(action)}** "
-                    f"from your server by **{actor}** and was **{punishment_label}**."
-                ),
-                f"Protected role: {role_label}.",
-            ]
-        label = target_display or str(target)
-        return [
-            (
-                f"A protected user **{label}** has been **{self._punishment_label(action)}** "
-                f"from your server by **{actor}** and they were **{punishment_label}**."
-            )
-        ]
-
-    async def _handle_protected_target(
-        self,
-        guild: discord.Guild,
-        actor: discord.Member,
-        *,
-        action: str,
-        target: discord.abc.User,
-        role_ids: list[int] | None = None,
-        target_display: str | None = None,
-    ) -> bool:
-        config = await self._get_config(guild.id)
-        if actor.id in self._exempt_ids(guild, config):
-            return False
-
-        protection = await self._get_protected_target(
-            guild,
-            user_id=target.id,
-            role_ids=role_ids or [],
-        )
-        if not protection:
-            return False
-
-        self._remember_recent_protected_action(guild.id, actor.id, target.id, action)
-        punishment = str(protection["punishment"]).lower()
-        reason = self._protected_reason(
-            guild,
-            action=action,
-            target=target,
-            protection=protection,
-            target_display=target_display,
-        )
-        punished = await self._apply_punishment(actor, punishment, reason=reason)
-        if punished:
-            auto_action = f"{punishment} (auto)"
-            case_id = await self._log_case(
-                guild,
-                action=auto_action,
-                target_id=actor.id,
-                moderator=self.bot.user or actor,
-                reason=reason,
-            )
-            asyncio.create_task(
-                self._send_punishment_dm(
-                    actor,
-                    action=auto_action,
-                    guild=guild,
-                    moderator=self.bot.user or actor,
-                    reason=reason,
-                    case_id=case_id,
-                )
-            )
-
-        description = self._protected_owner_lines(
-            guild,
-            actor=actor,
-            action=action,
-            punishment=punishment,
-            target=target,
-            protection=protection,
-            target_display=target_display,
-        )
-        if not punished:
-            description.append("I could not punish them due to missing permissions.")
-        await self._notify_owner(guild, "\n".join(description))
-        return True
-
-    async def _resolve_protect_target(
-        self,
-        ctx,
-        query: str,
-    ) -> discord.Role | discord.abc.User:
-        with contextlib.suppress(CommandError):
-            return await RoleConvert().convert(ctx, query)
-        return await MemberConvert().convert(ctx, query)
-
-    def _protect_label(self, target: discord.Role | discord.abc.User) -> str:
-        if isinstance(target, discord.Role):
-            return target.mention
-        if isinstance(target, discord.Member):
-            return target.mention
-        return f"**{target}**"
-
-    async def _apply_setup(self, guild_id: int) -> None:
-        watchers = [
-            PermissionWatch(
-                type="grant",
-                permission=permission,
-                punishment="ban",
-            ).as_dict()
-            for permission in DANGEROUS_PERMISSIONS
-        ]
-        await self.db.execute(
-            """
-            INSERT INTO antinuke (guild_id, permissions)
-            VALUES ($1, ARRAY(SELECT jsonb_array_elements($2::JSONB)))
-            ON CONFLICT (guild_id) DO UPDATE
-            SET permissions = EXCLUDED.permissions
-            """,
-            guild_id,
-            json.dumps(watchers),
-        )
-        for module, payload in SETUP_MODULES:
-            await self._save_module(guild_id, module, payload)
-        await self._refresh_config(guild_id)
 
     def _exempt_ids(self, guild: discord.Guild, config: AntinukeConfig) -> set[int]:
         ids = set(config.whitelist)
@@ -1076,28 +750,6 @@ class Antinuke(Package):
             return
         if self._was_recently_handled_command_action(guild.id, actor.id, "ban", user.id):
             return
-        if self._was_recently_handled_protected_action(guild.id, actor.id, user.id, "ban"):
-            return
-        target_member = guild.get_member(user.id)
-        if target_member is not None:
-            self._remember_member_roles(target_member)
-            self._remember_protected_role_member(target_member)
-        role_ids = (
-            [role.id for role in target_member.roles if role != guild.default_role]
-            if target_member is not None
-            else self._recent_role_ids(guild.id, user.id)
-        )
-        if not role_ids:
-            role_ids = self._protected_role_member_ids(guild.id, user.id)
-        protected = await self._handle_protected_target(
-            guild,
-            actor,
-            action="ban",
-            target=user,
-            role_ids=role_ids,
-        )
-        if protected:
-            return
         await self._handle_module_action(
             guild,
             actor,
@@ -1110,9 +762,6 @@ class Antinuke(Package):
         guild = self.bot.get_guild(payload.guild_id)
         if guild is None:
             return
-        if isinstance(payload.user, discord.Member):
-            self._remember_member_roles(payload.user)
-            self._remember_protected_role_member(payload.user)
         entry = await self._latest_audit(
             guild,
             discord.AuditLogAction.kick,
@@ -1122,29 +771,6 @@ class Antinuke(Package):
         if actor is None:
             return
         if self._was_recently_handled_command_action(guild.id, actor.id, "kick", payload.user.id):
-            return
-        if self._was_recently_handled_protected_action(
-            guild.id,
-            actor.id,
-            payload.user.id,
-            "kick",
-        ):
-            return
-        role_ids = (
-            [role.id for role in payload.user.roles if role != guild.default_role]
-            if isinstance(payload.user, discord.Member)
-            else self._recent_role_ids(guild.id, payload.user.id)
-        )
-        if not role_ids:
-            role_ids = self._protected_role_member_ids(guild.id, payload.user.id)
-        protected = await self._handle_protected_target(
-            guild,
-            actor,
-            action="kick",
-            target=payload.user,
-            role_ids=role_ids,
-        )
-        if protected:
             return
         await self._handle_module_action(
             guild,
@@ -1286,7 +912,6 @@ class Antinuke(Package):
 
     @Package.listener()
     async def on_member_join(self, member: discord.Member) -> None:
-        self._remember_protected_role_member(member)
         if not member.bot:
             return
         config = await self._get_config(member.guild.id)
@@ -1438,7 +1063,6 @@ class Antinuke(Package):
             if getattr(role.permissions, permission, False)
         }
         if not added_permissions and not removed_permissions:
-            self._remember_protected_role_member(after)
             return
 
         entry = await self._latest_audit(
@@ -1491,7 +1115,6 @@ class Antinuke(Package):
                     reason="antinuke revert: member dangerous role remove",
                 ),
             )
-        self._remember_protected_role_member(after)
 
     @Package.listener()
     async def on_antinuke_action(
@@ -1515,24 +1138,6 @@ class Antinuke(Package):
         module = mapping.get(action)
         if module is None:
             return
-        if action in {"ban", "kick", "tempban", "softban"} and meta and meta.get("target_id"):
-            protected_action = "kick" if action == "kick" else "ban"
-            protected = await self._handle_protected_target(
-                guild,
-                actor,
-                action=protected_action,
-                target=discord.Object(id=int(meta["target_id"])),
-                role_ids=[int(role_id) for role_id in meta.get("role_ids", [])],
-                target_display=str(meta.get("target_display", meta["target_id"])),
-            )
-            if protected:
-                self._remember_command_action(
-                    guild.id,
-                    actor.id,
-                    module,
-                    int(meta["target_id"]),
-                )
-                return
 
         triggered = await self._handle_module_action(
             guild,
@@ -1582,16 +1187,9 @@ class Antinuke(Package):
     async def antinuke_config(self, ctx):
         """View server configuration for Antinuke."""
         config = await self._get_config(ctx.guild.id)
-        protected_targets = await self.db.fetch_antinuke_protected_targets(ctx.guild.id)
         enabled = config.enabled_count()
         whitelisted_bots = 0
         whitelisted_members = 0
-        protected_users = sum(
-            1 for row in protected_targets if str(row["target_type"]) == "user"
-        )
-        protected_roles = sum(
-            1 for row in protected_targets if str(row["target_type"]) == "role"
-        )
 
         for user_id in config.whitelist:
             user = self.bot.get_user(user_id) or ctx.guild.get_member(user_id)
@@ -1628,8 +1226,6 @@ class Antinuke(Package):
                 f"\n**Watch Permission Grant:** {self._permission_rows(config, kind='grant')}/{len(DANGEROUS_PERMISSIONS)} perms"
                 f"\n**Watch Permission Remove:** {self._permission_rows(config, kind='remove')}/{len(DANGEROUS_PERMISSIONS)} perms"
                 f"\n**Deny Bot Joins (bot add):** {self._status_emoji(config.botadd.status)}"
-                f"\n**Protected Users:** {protected_users}"
-                f"\n**Protected Roles:** {protected_roles}"
             ),
             inline=True,
         )
@@ -1708,89 +1304,10 @@ class Antinuke(Package):
             [f"<@{user_id}>" for user_id in config.admins],
         )
 
-    @antinuke.group(
-        name="protect",
-        aliases=["protected"],
-        usage="(user or role) (punishment)",
-        example="@staff ban",
-        invoke_without_command=True,
-    )
-    async def antinuke_protect(self, ctx, target: str = None, punishment: str = "ban"):
-        """Protect a user or role from kicks and bans by non-admins."""
-        if target is None:
-            if ctx.invoked_with == "protected":
-                return await self.antinuke_protect_list(ctx)
-            return await ctx.send_help()
-
-        resolved = await self._resolve_protect_target(ctx, target)
-        if isinstance(resolved, discord.Role) and resolved == ctx.guild.default_role:
-            return await ctx.warn("You can't **protect** the `@everyone` role")
-
-        punishment = punishment.lower().strip()
-        if punishment not in PROTECTED_PUNISHMENTS:
-            raise CommandError(
-                "punishment must be `ban`, `kick`, `jail`, `warn`, or `stripstaff`"
-            )
-
-        target_type = "role" if isinstance(resolved, discord.Role) else "user"
-        current = await self.db.get_antinuke_protected_target(
-            ctx.guild.id,
-            target_type,
-            resolved.id,
-        )
-        label = self._protect_label(resolved)
-
-        if current and str(current["punishment"]).lower() == punishment:
-            await self.db.delete_antinuke_protected_target(
-                ctx.guild.id,
-                target_type,
-                resolved.id,
-            )
-            if isinstance(resolved, discord.Role):
-                await self.refresh_protected_role_member_cache(ctx.guild)
-            return await ctx.success(f"Removed {label} from **antinuke protection**")
-
-        await self.db.upsert_antinuke_protected_target(
-            ctx.guild.id,
-            target_type,
-            resolved.id,
-            punishment,
-        )
-        if isinstance(resolved, discord.Role):
-            await self.refresh_protected_role_member_cache(ctx.guild)
-        return await ctx.success(
-            f"Now **protecting** {label} from kicks and bans.\n"
-            f"Violators will be **{self._punishment_label(punishment)}**"
-        )
-
-    @antinuke_protect.command(name="list", aliases=["view"])
-    async def antinuke_protect_list(self, ctx):
-        """View all protected antinuke users and roles."""
-        rows = await self.db.fetch_antinuke_protected_targets(ctx.guild.id)
-        if not rows:
-            return await ctx.warn("There are no **protected antinuke targets**")
-
-        entries: list[str] = []
-        for row in rows:
-            punishment = str(row["punishment"]).lower()
-            if str(row["target_type"]) == "role":
-                entries.append(
-                    f"<@&{row['target_id']}> **protected** (`{row['target_id']}`) [ROLE] (punishment: {punishment})"
-                )
-            else:
-                entries.append(
-                    f"<@{row['target_id']}> **protected** (`{row['target_id']}`) [USER] (punishment: {punishment})"
-                )
-        return await ctx.paginate(
-            Embed(title="Protected Targets", color=self.color),
-            entries,
-        )
-
     @antinuke.command(name="list")
     async def antinuke_list(self, ctx):
         """View all enabled modules along with whitelisted members and bots."""
         config = await self._get_config(ctx.guild.id)
-        protected_targets = await self.db.fetch_antinuke_protected_targets(ctx.guild.id)
         entries: list[str] = []
 
         for name, module in config.enabled_modules():
@@ -1807,29 +1324,12 @@ class Antinuke(Package):
             kind = "BOT" if user and user.bot else ("UNKNOWN" if user is None else "MEMBER")
             entries.append(f"**{label}** whitelisted (`{user_id}`) [`{kind}`]")
 
-        for row in protected_targets:
-            punishment = str(row["punishment"]).lower()
-            if str(row["target_type"]) == "role":
-                entries.append(
-                    f"<@&{row['target_id']}> **protected** (`{row['target_id']}`) [ROLE] (punishment: {punishment})"
-                )
-            else:
-                entries.append(
-                    f"<@{row['target_id']}> **protected** (`{row['target_id']}`) [USER] (punishment: {punishment})"
-                )
-
         if not entries:
             return await ctx.warn("There are no **antinuke modules** enabled")
         return await ctx.paginate(
             Embed(title="Antinuke modules & whitelist", color=self.color),
             entries,
         )
-
-    @antinuke.command(name="setup")
-    async def antinuke_setup(self, ctx):
-        """Apply the recommended antinuke preset."""
-        await self._apply_setup(ctx.guild.id)
-        return await ctx.success("Set up **recommended antinuke protections**")
 
     @antinuke.command(
         name="vanity",
