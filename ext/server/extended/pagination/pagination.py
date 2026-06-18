@@ -10,6 +10,7 @@ class PaginationCommands(Package):
 
     @group(
         name="pagination",
+        aliases=["pn", "pages"],
         description="Set up multiple embeds on one message",
         invoke_without_command=True,
     )
@@ -59,7 +60,7 @@ class PaginationCommands(Package):
         )
         return await ctx.success("page updated")
 
-    @pagination.command(name="reset", description="Remove every existing pagination in guild")
+    @pagination.command(name="reset", aliases=["clear"], description="Remove every existing pagination in guild")
     @has_permissions(administrator=True)
     async def pagination_reset(self, ctx):
         """wipe server paginators"""
@@ -88,7 +89,7 @@ class PaginationCommands(Package):
             raise CommandError("no paginators set up")
         return await ctx.paginate(embed, rows)
 
-    @pagination.command(name="restorereactions", description="Restore reactions to an existing pagination")
+    @pagination.command(name="restorereactions", aliases=["rr"], description="Restore reactions to an existing pagination")
     @has_permissions(manage_messages=True)
     async def pagination_restorereactions(self, ctx, message: Message):
         """restore paginator reactions"""

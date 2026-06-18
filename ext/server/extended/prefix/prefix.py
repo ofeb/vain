@@ -22,7 +22,7 @@ class PrefixCommands(Package):
 
     @prefix.command(
         name="set",
-        aliases=["setup"],
+        aliases=["add"],
         description="Set command prefix for server",
         example=",prefix set !",
     )
@@ -79,7 +79,7 @@ class PrefixCommands(Package):
 
     @prefix.command(
         name="remove",
-        aliases=["rm"],
+        aliases=["delete", "del", "clear"],
         description="Remove command prefix for server",
     )
     @has_permissions(manage_guild=True)
