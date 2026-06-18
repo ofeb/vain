@@ -41,6 +41,12 @@ def _has_link(s: str) -> bool:
     return len(re.findall(pat, s)) > 0
 
 
+def is_embed_script(raw: str) -> bool:
+    """Return True when a template should be parsed as bleed embed code."""
+    stripped = str(raw).strip()
+    return stripped.startswith("{embed}") or stripped.startswith("$v{")
+
+
 def _over_by(val, limit: int) -> int:
     return limit - (val if isinstance(val, int) else len(val))
 
@@ -492,7 +498,11 @@ class Script:
         return content
 
     async def data(self, sendable: bool = False, **kwargs) -> dict[str, Any]:
-        payload = await parse(self.render(**kwargs), sendable=sendable)
+        rendered = self.render(**kwargs)
+        if is_embed_script(rendered):
+            payload = await parse(rendered, sendable=sendable)
+        else:
+            payload = {"content": rendered}
         for option in ("delete_after", "allowed_mentions", "reference", "ephemeral"):
             if option in kwargs and kwargs[option] is not None:
                 payload[option] = kwargs[option]
