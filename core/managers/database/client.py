@@ -399,6 +399,7 @@ class Database:
     async def add_webhook(
         self,
         guild_id: int,
+        identifier: str,
         name: str,
         channel_id: int,
         webhook_id: int,
@@ -410,14 +411,16 @@ class Database:
             """
             INSERT INTO webhooks (
                 guild_id,
+                identifier,
                 name,
                 channel_id,
                 webhook_id,
                 token,
                 owner_id
             )
-            VALUES ($1, $2, $3, $4, $5, $6)
-            ON CONFLICT (guild_id, name) DO UPDATE SET
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (guild_id, identifier) DO UPDATE SET
+                name = EXCLUDED.name,
                 channel_id = EXCLUDED.channel_id,
                 webhook_id = EXCLUDED.webhook_id,
                 token = EXCLUDED.token,
@@ -425,11 +428,24 @@ class Database:
                 updated_at = CURRENT_TIMESTAMP
             """,
             guild_id,
+            identifier,
             name,
             channel_id,
             webhook_id,
             token,
             owner_id,
+        )
+
+    async def fetch_webhook_by_identifier(
+        self,
+        guild_id: int,
+        identifier: str,
+    ) -> Optional[Row]:
+        """fetch one webhook row by the public bleed identifier"""
+        return await self.fetchrow(
+            "SELECT * FROM webhooks WHERE guild_id = $1 AND identifier = $2",
+            guild_id,
+            identifier,
         )
 
     async def fetch_webhook_by_name(self, guild_id: int, name: str) -> Optional[Row]:
@@ -464,10 +480,10 @@ class Database:
             guild_id,
         )
 
-    async def set_webhook_lock(self, guild_id: int, name: str, locked: bool) -> bool:
+    async def set_webhook_lock(self, guild_id: int, identifier: str, locked: bool) -> bool:
         """toggle lock state for one stored webhook"""
         with contextlib.suppress(Exception):
-            if table := self._write_table("UPDATE webhooks SET locked = $3 WHERE guild_id = $1 AND name = $2"):
+            if table := self._write_table("UPDATE webhooks SET locked = $3 WHERE guild_id = $1 AND identifier = $2"):
                 await self._purge_table(table)
         async with self.pool.acquire() as conn:
             async with conn.transaction():
@@ -475,25 +491,25 @@ class Database:
                     """
                     UPDATE webhooks
                     SET locked = $3, updated_at = CURRENT_TIMESTAMP
-                    WHERE guild_id = $1 AND name = $2
+                    WHERE guild_id = $1 AND identifier = $2
                     """,
                     guild_id,
-                    name,
+                    identifier,
                     locked,
                 )
         return not status.endswith("0")
 
-    async def remove_webhook(self, guild_id: int, name: str) -> bool:
+    async def remove_webhook(self, guild_id: int, identifier: str) -> bool:
         """delete one stored webhook row"""
         with contextlib.suppress(Exception):
-            if table := self._write_table("DELETE FROM webhooks WHERE guild_id = $1 AND name = $2"):
+            if table := self._write_table("DELETE FROM webhooks WHERE guild_id = $1 AND identifier = $2"):
                 await self._purge_table(table)
         async with self.pool.acquire() as conn:
             async with conn.transaction():
                 status = await conn.execute(
-                    "DELETE FROM webhooks WHERE guild_id = $1 AND name = $2",
+                    "DELETE FROM webhooks WHERE guild_id = $1 AND identifier = $2",
                     guild_id,
-                    name,
+                    identifier,
                 )
         return not status.endswith("0")
 

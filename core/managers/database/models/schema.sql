@@ -177,6 +177,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_suggestions_review_message
 
 CREATE TABLE IF NOT EXISTS webhooks (
     guild_id BIGINT NOT NULL,
+    identifier TEXT NOT NULL,
     name TEXT NOT NULL,
     channel_id BIGINT NOT NULL,
     webhook_id BIGINT NOT NULL,
@@ -185,8 +186,21 @@ CREATE TABLE IF NOT EXISTS webhooks (
     locked BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (guild_id, name)
+    PRIMARY KEY (guild_id, identifier)
 );
+
+ALTER TABLE webhooks
+    ADD COLUMN IF NOT EXISTS identifier TEXT;
+
+UPDATE webhooks
+SET identifier = COALESCE(identifier, name)
+WHERE identifier IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_webhooks_guild_identifier
+    ON webhooks(guild_id, identifier);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_webhooks_guild_name
+    ON webhooks(guild_id, name);
 
 CREATE TABLE IF NOT EXISTS server_settings (
     guild_id BIGINT PRIMARY KEY,

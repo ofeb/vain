@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import contextlib
 import re
+import secrets
+import string
 
 import aiohttp
 import discord
@@ -16,6 +18,7 @@ DISCORD_NAME_RE = re.compile("discord", re.IGNORECASE)
 CLYDE_NAME_RE = re.compile("clyde", re.IGNORECASE)
 FORBIDDEN_NAME_RE = re.compile(r"[@#:`]")
 WEBHOOK_NAME_MAX = 80
+IDENTIFIER_ALPHABET = string.ascii_lowercase + string.digits
 
 
 def _sanitize_webhook_name(name: str) -> str:
@@ -35,9 +38,13 @@ class WebhookCommands(Package):
 
     async def _resolve_webhook(self, ctx, identifier: str):
         token = identifier.strip()
-        record = None
+        record = await self.db.fetch_webhook_by_identifier(ctx.guild.id, token)
+        if record is not None:
+            return record
         if token.isdigit():
             record = await self.db.fetch_webhook_by_id(ctx.guild.id, int(token))
+            if record is not None:
+                return record
         if record is None:
             record = await self.db.fetch_webhook_by_name(
                 ctx.guild.id,
@@ -67,11 +74,63 @@ class WebhookCommands(Package):
         session = aiohttp.ClientSession()
         return session, discord.Webhook.from_url(url, session=session)
 
+    async def _next_identifier(self, guild_id: int) -> str:
+        while True:
+            identifier = "".join(secrets.choice(IDENTIFIER_ALPHABET) for _ in range(7))
+            if not await self.db.fetch_webhook_by_identifier(guild_id, identifier):
+                return identifier
+
+    async def _build_payload(self, ctx, raw: str) -> dict:
+        message = raw.strip()
+        if not message:
+            raise CommandError("message cant be empty")
+
+        base, extra = message, None
+        if " --add " in message:
+            base, extra = message.split(" --add ", 1)
+            base = base.strip()
+            extra = extra.strip()
+
+        builder = Script(base, ctx.author)
+        await builder.compile(user=ctx.author, guild=ctx.guild, channel=ctx.channel)
+        payload = await builder.data(
+            True,
+            user=ctx.author,
+            guild=ctx.guild,
+            channel=ctx.channel,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+        if not extra:
+            return payload
+
+        extra_builder = Script(extra, ctx.author)
+        await extra_builder.compile(user=ctx.author, guild=ctx.guild, channel=ctx.channel)
+        extra_payload = await extra_builder.data(
+            True,
+            user=ctx.author,
+            guild=ctx.guild,
+            channel=ctx.channel,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+        extra_embed = extra_payload.get("embed")
+        if not extra_embed:
+            raise CommandError("`--add` expects embed code")
+
+        if "embeds" in payload:
+            payload["embeds"] = [*payload["embeds"], extra_embed]
+        elif "embed" in payload:
+            payload["embeds"] = [payload.pop("embed"), extra_embed]
+        else:
+            payload["embeds"] = [extra_embed]
+        return payload
+
     @group(
         name="webhook",
         description="set up webhooks in your server",
         invoke_without_command=True,
     )
+    @has_permissions(manage_webhooks=True)
     async def webhook(self, ctx):
         """show webhook help"""
         return await ctx.send_help()
@@ -107,8 +166,10 @@ class WebhookCommands(Package):
                 ) from exc
             raise
 
+        identifier = await self._next_identifier(ctx.guild.id)
         await self.db.add_webhook(
             ctx.guild.id,
+            identifier,
             storage_name,
             ctx.channel.id,
             webhook.id,
@@ -120,7 +181,7 @@ class WebhookCommands(Package):
         if storage_name != clean_name:
             note = f" (sanitized from `{clean_name}`)"
         await ctx.success(
-            f"created webhook **{storage_name}** for {ctx.channel.mention}{note}"
+            f"created webhook **{storage_name}** with identifier `{identifier}` for {ctx.channel.mention}{note}"
         )
 
     @webhook.command(
@@ -139,7 +200,7 @@ class WebhookCommands(Package):
             channel_label = channel.mention if channel else f"`{row['channel_id']}`"
             locked = " (locked)" if row["locked"] else ""
             lines.append(
-                f"`{index:02d}` **{row['name']}** - {channel_label} (`{row['webhook_id']}`){locked}"
+                f"`{index:02d}` `{row['identifier']}` **{row['name']}** - {channel_label}{locked}"
             )
 
         embed = discord.Embed(title="Webhooks", color=self.color)
@@ -160,15 +221,7 @@ class WebhookCommands(Package):
         if self._is_locked_for(ctx, record):
             raise CommandError("that webhook is locked")
 
-        builder = Script(message, ctx.author)
-        await builder.compile(user=ctx.author, guild=ctx.guild, channel=ctx.channel)
-        payload = await builder.data(
-            True,
-            user=ctx.author,
-            guild=ctx.guild,
-            channel=ctx.channel,
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
+        payload = await self._build_payload(ctx, message)
 
         session, webhook = await self._webhook_client(record)
         try:
@@ -176,7 +229,7 @@ class WebhookCommands(Package):
         finally:
             await session.close()
 
-        await ctx.success(f"sent webhook **{record['name']}**")
+        await ctx.success(f"sent webhook **{record['identifier']}**")
 
     @webhook.command(
         name="edit",
@@ -218,15 +271,7 @@ class WebhookCommands(Package):
         if self._is_locked_for(ctx, record):
             raise CommandError("that webhook is locked")
 
-        builder = Script(content, ctx.author)
-        await builder.compile(user=ctx.author, guild=ctx.guild, channel=ctx.channel)
-        payload = await builder.data(
-            True,
-            user=ctx.author,
-            guild=ctx.guild,
-            channel=ctx.channel,
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
+        payload = await self._build_payload(ctx, content)
 
         session, webhook = await self._webhook_client(record)
         try:
@@ -234,7 +279,7 @@ class WebhookCommands(Package):
         finally:
             await session.close()
 
-        await ctx.success(f"updated webhook **{record['name']}**")
+        await ctx.success(f"updated webhook **{record['identifier']}**")
 
     @webhook.command(
         name="delete",
@@ -256,8 +301,8 @@ class WebhookCommands(Package):
         finally:
             await session.close()
 
-        await self.db.remove_webhook(ctx.guild.id, record["name"])
-        await ctx.success(f"deleted webhook **{record['name']}**")
+        await self.db.remove_webhook(ctx.guild.id, record["identifier"])
+        await ctx.success(f"deleted webhook **{record['identifier']}**")
 
     @webhook.command(
         name="lock",
@@ -271,8 +316,8 @@ class WebhookCommands(Package):
         if int(record["owner_id"]) != ctx.author.id:
             raise CommandError("only the webhook owner can lock it")
 
-        await self.db.set_webhook_lock(ctx.guild.id, record["name"], True)
-        await ctx.success(f"locked webhook **{record['name']}**")
+        await self.db.set_webhook_lock(ctx.guild.id, record["identifier"], True)
+        await ctx.success(f"locked webhook **{record['identifier']}**")
 
     @webhook.command(
         name="unlock",
@@ -286,5 +331,5 @@ class WebhookCommands(Package):
         if int(record["owner_id"]) != ctx.author.id:
             raise CommandError("only the webhook owner can unlock it")
 
-        await self.db.set_webhook_lock(ctx.guild.id, record["name"], False)
-        await ctx.success(f"unlocked webhook **{record['name']}**")
+        await self.db.set_webhook_lock(ctx.guild.id, record["identifier"], False)
+        await ctx.success(f"unlocked webhook **{record['identifier']}**")
