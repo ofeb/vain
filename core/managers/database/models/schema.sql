@@ -212,6 +212,34 @@ CREATE TABLE IF NOT EXISTS sticky_roles (
     PRIMARY KEY (guild_id, user_id, role_id)
 );
 
+CREATE TABLE IF NOT EXISTS booster_roles (
+    guild_id BIGINT PRIMARY KEY,
+    base_id BIGINT,
+    award_id BIGINT,
+    role_limit INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE booster_roles
+    ADD COLUMN IF NOT EXISTS base_id BIGINT;
+
+ALTER TABLE booster_roles
+    ADD COLUMN IF NOT EXISTS award_id BIGINT;
+
+ALTER TABLE booster_roles
+    ADD COLUMN IF NOT EXISTS role_limit INT;
+
+CREATE TABLE IF NOT EXISTS custom_roles (
+    guild_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    role_id BIGINT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, user_id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_roles_guild_role
+    ON custom_roles(guild_id, role_id);
+
 CREATE TABLE IF NOT EXISTS forced_nicknames (
     guild_id BIGINT,
     user_id BIGINT,
@@ -664,3 +692,4 @@ CREATE INDEX IF NOT EXISTS idx_antiraid_modules_guild ON antiraid_modules(guild_
 CREATE INDEX IF NOT EXISTS idx_antinuke_actions_lookup ON antinuke_actions(guild_id, user_id, action, created_at);
 CREATE INDEX IF NOT EXISTS idx_staff_roles_guild ON staff_roles(guild_id);
 CREATE INDEX IF NOT EXISTS idx_modlog_cases_guild ON modlog_cases(guild_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_custom_roles_guild ON custom_roles(guild_id);

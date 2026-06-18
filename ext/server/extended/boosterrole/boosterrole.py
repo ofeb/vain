@@ -201,7 +201,7 @@ class BoosterroleCommands(Package):
         if limit < 1:
             limit = None
         await self.db.execute(
-            """INSERT INTO booster_roles (guild_id, limit) VALUES($1, $2) ON CONFLICT(guild_id) DO UPDATE SET limit = excluded.limit""",
+            """INSERT INTO booster_roles (guild_id, role_limit) VALUES($1, $2) ON CONFLICT(guild_id) DO UPDATE SET role_limit = excluded.role_limit""",
             ctx.guild.id,
             limit,
         )
@@ -295,10 +295,14 @@ class BoosterroleCommands(Package):
                 raise CommandError("role name needs at least **2** characters")
             extras["name"] = name
         data = await self.db.fetchrow(
-            """SELECT base_id, limit FROM booster_roles WHERE guild_id = $1""",
+            """SELECT base_id, role_limit FROM booster_roles WHERE guild_id = $1""",
             ctx.guild.id,
         )
-        pos = ctx.guild.get_role(data.base_id).position - 1 if data else None
+        pos = None
+        if data and data.base_id:
+            base = ctx.guild.get_role(data.base_id)
+            if base:
+                pos = base.position - 1 if base.position > 1 else 1
         if data and data.role_limit:
             count = await self.db.fetchval(
                 """SELECT COUNT(*) FROM custom_roles WHERE guild_id = $1""",
@@ -315,9 +319,9 @@ class BoosterroleCommands(Package):
         if not role:
             if not name:
                 name = ctx.author.name
-            role = await ctx.guild.create_role(
-                name=name, color=color, position=pos, reason="booster role"
-            )
+            role = await ctx.guild.create_role(name=name, color=color, reason="booster role")
+            if pos:
+                await role.edit(position=pos, reason="booster role")
             await self.db.execute(
                 """INSERT INTO custom_roles (guild_id, user_id, role_id) VALUES($1, $2, $3) ON CONFLICT(guild_id, user_id) DO UPDATE SET role_id = excluded.role_id""",
                 ctx.guild.id,
