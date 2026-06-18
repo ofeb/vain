@@ -116,6 +116,65 @@ CREATE TABLE IF NOT EXISTS antiraid_locked_channels (
     PRIMARY KEY (guild_id, channel_id)
 );
 
+CREATE TABLE IF NOT EXISTS suggest_settings (
+    guild_id BIGINT PRIMARY KEY,
+    enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    channel_id BIGINT,
+    review_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    review_channel_id BIGINT,
+    threads_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    upvote_emoji TEXT NOT NULL DEFAULT chr(9989),
+    downvote_emoji TEXT NOT NULL DEFAULT chr(10060),
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS suggest_counters (
+    guild_id BIGINT PRIMARY KEY,
+    next_id BIGINT NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS suggestions (
+    guild_id BIGINT NOT NULL,
+    suggestion_id BIGINT NOT NULL,
+    author_id BIGINT NOT NULL,
+    content TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    channel_id BIGINT,
+    message_id BIGINT,
+    review_channel_id BIGINT,
+    review_message_id BIGINT,
+    thread_id BIGINT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, suggestion_id)
+);
+
+CREATE TABLE IF NOT EXISTS suggest_ignored (
+    guild_id BIGINT NOT NULL,
+    target_id BIGINT NOT NULL,
+    target_type TEXT NOT NULL,
+    added_by BIGINT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, target_id, target_type)
+);
+
+CREATE TABLE IF NOT EXISTS suggest_votes (
+    guild_id BIGINT NOT NULL,
+    suggestion_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    vote TEXT NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, suggestion_id, user_id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_suggestions_message
+    ON suggestions(guild_id, message_id)
+    WHERE message_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_suggestions_review_message
+    ON suggestions(guild_id, review_message_id)
+    WHERE review_message_id IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS server_settings (
     guild_id BIGINT PRIMARY KEY,
     jail_channel_id BIGINT,
