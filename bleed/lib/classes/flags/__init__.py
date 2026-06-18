@@ -1,0 +1,2 @@
+"""legacy flag converter compatibility."""
+

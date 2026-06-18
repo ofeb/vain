@@ -1,13 +1,22 @@
 from __future__ import annotations
-from discord import Client
-from .commands import Commands
+from discord.ext import commands
+
+from core.discord.mixin import _Meta
+
+from .command.command import CommandDisableCommands
+from .event.event import EventDisableCommands
+from .module.module import ModuleDisableCommands
 
 
-class Disable(Commands):
+class Disable(
+    CommandDisableCommands,
+    EventDisableCommands,
+    ModuleDisableCommands,
+    commands.Cog,
+    metaclass=_Meta,
+):
     """server disable cog"""
-    def __init__(self, bot: Client):
-        Commands.__init__(self, bot)
 
 
-async def setup(bot: Client) -> None:
+async def setup(bot) -> None:
     await bot.add_cog(Disable(bot))

@@ -9,13 +9,20 @@ from discord.ext.commands import Context
 class ConfirmView(discord.ui.View):
     """two button confirm or cancel view"""
 
-    def __init__(self, ctx: Context, timeout: float = 30.0):
+    def __init__(
+        self,
+        ctx: Context,
+        *,
+        member=None,
+        timeout: float = 30.0,
+    ):
         super().__init__(timeout=timeout)
         self.ctx = ctx
+        self.member = member or ctx.author
         self.value: bool = None
 
     async def interaction_check(self, inter: discord.Interaction) -> bool:
-        if inter.user.id != self.ctx.author.id:
+        if inter.user.id != self.member.id:
             await inter.response.send_message("this aint yours", ephemeral=True)
             return False
         return True

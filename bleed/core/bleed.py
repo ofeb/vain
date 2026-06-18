@@ -17,7 +17,7 @@ from .managers.database.client import Database
 from .managers.redis.client import BleedCache
 from .managers.watch import Watcher
 from .managers.guard import Guard
-from .tools.embed import Script, parse
+from .tools.embed import PreparedScript, Script, parse
 from .managers.values import token, bot, color, database, redis, emojis
 
 log = logging.getLogger("bleed")
@@ -434,15 +434,32 @@ class Bleed(commands.AutoShardedBot):
             err = err.original
         return err
 
-    async def send_embed(self, ctx: Context, template: str, **kw) -> discord.Message:
-        """parse embed script and send to ctx channel"""
-        data = await parse(template, sendable=True)
-        return await ctx.send(**{**data, **kw})
+    async def create_embed(self, template: str, **kw) -> PreparedScript:
+        """prepare a reusable embed payload from bleed script text"""
+        user = kw.get("user") or kw.get("member")
+        if user is None and hasattr(kw.get("ctx"), "author"):
+            user = kw["ctx"].author
+        script = Script(template, user)
+        payload = await script.data(True, **kw)
+        return PreparedScript(payload)
+
+    async def send_embed(self, dest, template: str, **kw) -> discord.Message:
+        """parse bleed embed code, resolve variables, and send it"""
+        if "user" not in kw and "member" not in kw and hasattr(dest, "author"):
+            kw["user"] = dest.author
+        if "guild" not in kw and hasattr(dest, "guild"):
+            kw["guild"] = dest.guild
+        if "channel" not in kw:
+            if hasattr(dest, "channel"):
+                kw["channel"] = dest.channel
+            elif isinstance(dest, (discord.TextChannel, discord.Thread)):
+                kw["channel"] = dest
+        builder = await self.create_embed(template, **kw)
+        return await builder.send(dest)
 
     async def send_script(self, dest, template: str, user, **kw) -> discord.Message:
-        """fill script vars then send to dest"""
-        s = Script(template, user)
-        return await s.send(dest, **kw)
+        """legacy helper for sending bleed embed code"""
+        return await self.send_embed(dest, template, user=user, **kw)
 
     async def close(self) -> None:
         """close db redis and bot connections"""

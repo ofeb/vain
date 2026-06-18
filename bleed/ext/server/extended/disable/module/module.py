@@ -16,19 +16,19 @@ class ModuleDisableCommands(Package):
     async def disablemodule(self, ctx, module: ModuleConverter, channel: TextChannel):
         """block a module"""
         row = await self.db.fetchrow(
-            """SELECT * FROM disabled_modules WHERE guild_id = $1 AND event = $2""",
+            """SELECT * FROM disabled_modules WHERE guild_id = $1 AND module = $2""",
             ctx.guild.id, module,
         )
         if row:
             ids = list(row.channel_ids)
             ids.append(channel.id)
             await self.db.execute(
-                """UPDATE disabled_modules SET channel_ids = $1 WHERE guild_id = $2 AND event = $3""",
+                """UPDATE disabled_modules SET channel_ids = $1 WHERE guild_id = $2 AND module = $3""",
                 ids, ctx.guild.id, module,
             )
         else:
             await self.db.execute(
-                """INSERT INTO disabled_modules (guild_id, event, channel_ids) VALUES($1, $2, $3)""",
+                """INSERT INTO disabled_modules (guild_id, module, channel_ids) VALUES($1, $2, $3)""",
                 ctx.guild.id, module, [channel.id],
             )
         label = module.replace("_", " ")

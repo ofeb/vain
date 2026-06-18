@@ -1,4 +1,4 @@
-from typing import Optional, Union, Converter
+from typing import Optional, Union
 from discord.ext.commands import group, has_permissions, CommandError, Boolean
 from discord import (
     Embed, TextChannel,

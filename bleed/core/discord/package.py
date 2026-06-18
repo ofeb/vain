@@ -38,3 +38,6 @@ class Package(Mixin):
     @property
     def color(self) -> int:
         return self.bot.color
+
+    async def create_embed(self, template: str, **kw):
+        return await self.bot.create_embed(template, **kw)

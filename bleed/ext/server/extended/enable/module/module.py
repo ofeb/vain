@@ -16,7 +16,7 @@ class ModuleEnableCommands(Package):
     async def enablemodule(self, ctx, module: ModuleConverter, channel: TextChannel):
         """enable module in channel"""
         stored = await self.db.fetchval(
-            """SELECT channel_ids FROM disabled_modules WHERE guild_id = $1 AND event = $2""",
+            """SELECT channel_ids FROM disabled_modules WHERE guild_id = $1 AND module = $2""",
             ctx.guild.id,
             module,
         )
@@ -26,7 +26,7 @@ class ModuleEnableCommands(Package):
             raise CommandError(f"that module wasnt disabled in {channel.mention}")
         stored.remove(channel.id)
         await self.db.execute(
-            """UPDATE disabled_modules SET channel_ids = $1 WHERE guild_id = $2 AND event = $3""",
+            """UPDATE disabled_modules SET channel_ids = $1 WHERE guild_id = $2 AND module = $3""",
             stored, ctx.guild.id, module,
         )
         label = module.replace("_", " ")

@@ -9,6 +9,7 @@ loguru
 orjson
 Pillow
 psycopg2-binary
+pytz
 python-dateutil
 python-dotenv
 redis

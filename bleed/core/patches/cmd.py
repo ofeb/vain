@@ -22,37 +22,28 @@ class PatchedCommand(Command):
             from core.tools.models import ScriptType
 
             if arg is None or isinstance(arg, (str, ScriptType)):
-                parsed = await FlagConv.convert(ctx, str(arg).replace("—", ""))
+                raw = "" if arg is None else str(arg)
+                parsed = await FlagConv.convert(ctx, raw.replace("—", "--"))
+                cleaned = raw.replace("—", "--")
                 for name, value in parsed:
                     ctx.flags[name] = value
                     names = [name]
                     if aliases := parsed.get_flags()[name].aliases:
                         names.extend(aliases)
                     for n in names:
-                        if isinstance(arg, str):
-                            ctx.kwargs[kwarg] = (
-                                str(ctx.kwargs.get(kwarg))
-                                .replace("—", "--")
-                                .replace(f"--{n} {value}", "")
-                                .replace(f"--{n}", "")
-                                .strip()
-                            ) or (
-                                ctx.command.params.get(kwarg).default
-                                if isinstance(ctx.command.params.get(kwarg).default, str)
-                                else None
-                            )
-                        elif isinstance(arg, ScriptType):
-                            arg.script = (
-                                arg.script.replace("—", "--")
-                                .replace(f"--{n} {value}", "")
-                                .replace(f"--{n}", "")
-                                .strip()
-                            )
-                            ctx.kwargs[kwarg] = arg or (
-                                ctx.command.params.get(kwarg).default
-                                if isinstance(ctx.command.params.get(kwarg).default, str)
-                                else None
-                            )
+                        cleaned = (
+                            cleaned.replace(f"--{n} {value}", "")
+                            .replace(f"--{n}", "")
+                            .strip()
+                        )
+
+                default = ctx.command.params.get(kwarg).default
+                if cleaned:
+                    ctx.kwargs[kwarg] = ScriptType(cleaned)
+                elif isinstance(default, str):
+                    ctx.kwargs[kwarg] = ScriptType(default)
+                else:
+                    ctx.kwargs[kwarg] = None
 
         ctx.invoked_subcommand = None
         ctx.subcommand_passed = None
