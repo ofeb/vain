@@ -31,9 +31,11 @@ MODULE_LABELS = {
 }
 
 PUNISHMENT_ORDER = {
-    "stripstaff": 1,
-    "kick": 2,
-    "ban": 3,
+    "warn": 1,
+    "stripstaff": 2,
+    "jail": 3,
+    "kick": 4,
+    "ban": 5,
 }
 
 
@@ -125,8 +127,10 @@ class Antinuke(Package, commands.Cog):
         flags: dict[str, Any],
     ) -> dict[str, Any]:
         punishment = str(flags.get("punishment") or "kick").lower()
-        if punishment not in {"ban", "kick", "stripstaff"}:
-            raise CommandError("punishment must be `ban`, `kick`, or `stripstaff`")
+        if punishment not in {"ban", "kick", "stripstaff", "warn", "jail"}:
+            raise CommandError(
+                "punishment must be `ban`, `kick`, `jail`, `warn`, or `stripstaff`"
+            )
 
         payload: dict[str, Any] = {
             "status": status,
@@ -201,7 +205,9 @@ class Antinuke(Package, commands.Cog):
         mapping = {
             "ban": "banned",
             "kick": "kicked",
+            "jail": "jailed",
             "stripstaff": "stripped of staff",
+            "warn": "warned",
         }
         return mapping.get((punishment or "kick").lower(), "punished")
 
@@ -280,20 +286,54 @@ class Antinuke(Package, commands.Cog):
         with contextlib.suppress(discord.Forbidden, discord.HTTPException):
             await owner.send(embed=embed)
 
+    async def _jail_actor(
+        self,
+        member: discord.Member,
+        *,
+        reason: str,
+    ) -> bool:
+        settings = await self.db.get_server_settings(member.guild.id)
+        jail_role_id = getattr(settings, "jail_role_id", None) if settings else None
+        if not jail_role_id:
+            return False
+
+        jail_role = member.guild.get_role(int(jail_role_id))
+        if jail_role is None:
+            return False
+
+        remove_roles = not (settings and settings.jail_remove_roles is False)
+        if remove_roles:
+            roles_to_remove = [
+                role
+                for role in member.roles
+                if role not in {member.guild.default_role, jail_role}
+            ]
+            if roles_to_remove:
+                await member.remove_roles(*roles_to_remove, reason=reason)
+
+        if jail_role not in member.roles:
+            await member.add_roles(jail_role, reason=reason)
+        return True
+
     async def _punish_actor(
         self,
         member: discord.Member,
         punishment: str | None,
         *,
         reason: str,
-    ) -> None:
+    ) -> bool:
         action = (punishment or "kick").lower()
         if action == "ban":
             await member.ban(reason=reason)
-            return
+            return True
         if action == "kick":
             await member.kick(reason=reason)
-            return
+            return True
+        if action == "warn":
+            await member.send(f"you were warned in **{member.guild.name}**: {reason}")
+            return True
+        if action == "jail":
+            return await self._jail_actor(member, reason=reason)
 
         dangerous_roles = [
             role
@@ -306,8 +346,9 @@ class Antinuke(Package, commands.Cog):
         ]
         if dangerous_roles:
             await member.remove_roles(*dangerous_roles, reason=reason)
-            return
+            return True
         await member.kick(reason=f"{reason} (no staff roles to strip)")
+        return True
 
     async def _apply_punishment(
         self,
@@ -317,8 +358,7 @@ class Antinuke(Package, commands.Cog):
         reason: str,
     ) -> bool:
         with contextlib.suppress(discord.Forbidden, discord.HTTPException):
-            await self._punish_actor(member, punishment, reason=reason)
-            return True
+            return await self._punish_actor(member, punishment, reason=reason)
         return False
 
     async def _handle_module_action(
@@ -923,6 +963,7 @@ class Antinuke(Package, commands.Cog):
 
     @antinuke.command(
         name="vanity",
+        aliases=["vanityurl"],
         usage="(on or off) --params",
         example="on --do ban",
         flags=AntiNukeFlags,
@@ -988,8 +1029,10 @@ class Antinuke(Package, commands.Cog):
             )
 
         punishment = str(ctx.flags.get("punishment") or "kick").lower()
-        if punishment not in {"ban", "kick", "stripstaff"}:
-            raise CommandError("punishment must be `ban`, `kick`, or `stripstaff`")
+        if punishment not in {"ban", "kick", "stripstaff", "warn", "jail"}:
+            raise CommandError(
+                "punishment must be `ban`, `kick`, `jail`, `warn`, or `stripstaff`"
+            )
 
         candidate = PermissionWatch(
             type=option,
