@@ -9,6 +9,8 @@ from discord import Embed, Interaction, SelectOption, ui
 from discord.ext import commands
 from discord.ext.commands import Command, Group
 
+from core.managers.values import emojis
+
 if TYPE_CHECKING:
     from .ctx import Context
 
@@ -144,17 +146,20 @@ def _visible_subs(grp: Group) -> list[Command]:
         for c in g.commands:
             if c.hidden:
                 continue
+            out.append(c)
             if isinstance(c, Group) and c.commands:
                 _walk(c)
-            else:
-                out.append(c)
 
     _walk(grp)
     return out
 
 
+def _param_items(cmd: Command) -> list[tuple[str, Any]]:
+    return [(name, param) for name, param in cmd.clean_params.items() if name not in _SKIP]
+
+
 def _params(cmd: Command) -> list[str]:
-    return [n.replace("_", ", ") for n in cmd.clean_params if n not in _SKIP]
+    return [name for name, _ in _param_items(cmd)]
 
 
 def _aliases(cmd: Command) -> str:
@@ -162,24 +167,42 @@ def _aliases(cmd: Command) -> str:
     return ", ".join(a) if a else "n/a"
 
 
-def _usage(cmd: Command, prefix: str) -> str:
-    base = f"{prefix}{cmd.qualified_name}"
-    if cmd.usage:
-        base = f"{base} {cmd.usage}"
-    else:
-        p = " ".join(f"({n})" for n in _params(cmd))
-        if p:
-            base = f"{base} {p}"
-    ex = getattr(cmd, "example", None) or ""
-    if ex:
-        if not ex.startswith(prefix):
-            ex = f"{prefix}{ex.lstrip(',')}"
-        return f"```Syntax: {base}\nExample: {ex}```"
-    return f"```Syntax: {base}```"
+def _syntax(cmd: Command, prefix: str) -> str:
+    usage = (cmd.usage or "").strip()
+    if usage:
+        return f"{prefix}{cmd.qualified_name} {usage}".rstrip()
+
+    tokens: list[str] = []
+    for name, param in _param_items(cmd):
+        label = name.replace("_", " ")
+        if getattr(param, "required", False):
+            tokens.append(f"({label})")
+        else:
+            tokens.append(f"[{label}]")
+    suffix = " ".join(tokens)
+    return f"{prefix}{cmd.qualified_name} {suffix}".rstrip()
 
 
-def _perm_info(cmd: Command) -> str:
-    lines: list[str] = []
+def _example(cmd: Command, prefix: str) -> str | None:
+    raw = (getattr(cmd, "example", None) or "").strip()
+    if not raw:
+        return None
+    if raw.startswith(prefix):
+        return raw
+    if raw.startswith(cmd.qualified_name):
+        return f"{prefix}{raw}"
+    return f"{prefix}{cmd.qualified_name} {raw}".rstrip()
+
+
+def _usage_block(cmd: Command, prefix: str) -> str:
+    block = [f"Syntax: {_syntax(cmd, prefix)}"]
+    if example := _example(cmd, prefix):
+        block.append(f"Example: {example}")
+    return "```\n" + "\n".join(block) + "```"
+
+
+def _permission_label(cmd: Command) -> str | None:
+    labels: list[str] = []
     seen: set[str] = set()
     for chk in cmd.checks:
         q = getattr(chk, "__qualname__", "") or ""
@@ -192,12 +215,24 @@ def _perm_info(cmd: Command) -> str:
         elif "has_permissions" in blob:
             try:
                 for cell in (chk.__closure__ or []):
-                    c = cell.cell_contents
-                    if isinstance(c, dict):
-                        for perm, on in c.items():
-                            if on and perm != "send_messages" and perm not in seen:
-                                seen.add(perm)
-                                lines.append(f"> {perm.replace('_', ' ').title()}")
+                    value = cell.cell_contents
+                    if not isinstance(value, dict):
+                        continue
+                    if value.get("server_owner") or value.get("guild_owner"):
+                        label = "Server Owner"
+                        if label not in seen:
+                            seen.add(label)
+                            labels.append(label)
+                    perms = [
+                        perm.replace("_", " ").title()
+                        for perm, enabled in value.items()
+                        if enabled and perm not in {"send_messages", "server_owner", "guild_owner"}
+                    ]
+                    if perms:
+                        label = " & ".join(perms)
+                        if label not in seen:
+                            seen.add(label)
+                            labels.append(label)
             except Exception:
                 pass
             continue
@@ -205,32 +240,85 @@ def _perm_info(cmd: Command) -> str:
             continue
         if label not in seen:
             seen.add(label)
-            lines.append(f"> {label}")
-    return "\n".join(lines) if lines else "n/a"
+            labels.append(label)
+    return labels[0] if labels else None
+
+
+def _cooldown_label(cmd: Command) -> str | None:
+    cooldown = getattr(cmd, "cooldown", None)
+    if cooldown is None:
+        return None
+    per = getattr(cooldown, "per", None)
+    if per is None:
+        return None
+    if float(per).is_integer():
+        return f"{int(per)} seconds"
+    return f"{per:g} seconds"
+
+
+def _information(cmd: Command) -> dict[str, str]:
+    info = {
+        str(key): str(value)
+        for key, value in dict(getattr(cmd, "information", {}) or {}).items()
+    }
+    if cooldown := _cooldown_label(cmd):
+        info["cooldown"] = cooldown
+    if cmd.qualified_name.startswith("antinuke"):
+        info["permissions"] = "Server Owner"
+    elif permissions := _permission_label(cmd):
+        info["permissions"] = permissions
+    return info
+
+
+def _information_value(cmd: Command) -> str:
+    info = _information(cmd)
+    if not info:
+        return "N/A"
+    emoji_map = {
+        "cooldown": emojis.cooldown,
+        "permissions": emojis.interface.information,
+    }
+    return "\n".join(f"{emoji_map.get(key, emojis.interface.information)} {value}" for key, value in info.items())
 
 
 def _module(cmd: Command) -> str:
-    return _category(cmd.cog).lower() if cmd.cog else "other"
+    return cmd.cog_name.lower() if cmd.cog_name else "N/A"
 
 
-def _footer(*, index: int, total: int, module: str) -> str:
-    word = "entry" if total == 1 else "entries"
-    return f"Page {index}/{total} ({total} {word}) · Module: {module}"
-
-
-def _cmd_embed(cmd: Command, ctx: Context, *, index: int, total: int) -> Embed:
+def _detail_embed(cmd: Command, ctx: Context) -> Embed:
     prefix = getattr(ctx, "clean_prefix", None) or ctx.prefix or ";"
     if isinstance(prefix, list):
         prefix = prefix[0] if prefix else ";"
-    title = ("Group: " if isinstance(cmd, Group) else "Command: ") + cmd.qualified_name
-    desc = cmd.description or cmd.help or "no description"
+    title = ("Group Command: " if isinstance(cmd, Group) else "Command: ") + cmd.qualified_name
+    desc = cmd.help or cmd.description or "No description given"
     e = Embed(title=title, description=desc, color=ctx.bot.color)
-    e.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
-    e.add_field(name="**Aliases**", value=_aliases(cmd), inline=True)
-    e.add_field(name="**Parameters**", value=", ".join(_params(cmd)) or "n/a", inline=True)
-    e.add_field(name="**Permissions**", value=_perm_info(cmd), inline=True)
-    e.add_field(name="**Usage**", value=_usage(cmd, str(prefix)), inline=False)
-    e.set_footer(text=_footer(index=index, total=total, module=_module(cmd)))
+    e.add_field(name="Aliases", value=_aliases(cmd) if _aliases(cmd) != "n/a" else "N/A", inline=True)
+    e.add_field(name="Parameters", value=", ".join(_params(cmd)) or "N/A", inline=True)
+    e.add_field(name="Information", value=_information_value(cmd), inline=True)
+    e.add_field(name="Usage", value=_usage_block(cmd, str(prefix)), inline=False)
+    e.set_footer(text="Module: " + _module(cmd))
+    return e
+
+
+def _brief_embed(cmd: Command, ctx: Context) -> Embed:
+    prefix = getattr(ctx, "clean_prefix", None) or ctx.prefix or ";"
+    if isinstance(prefix, list):
+        prefix = prefix[0] if prefix else ";"
+
+    desc = cmd.short_doc or cmd.help or cmd.description or ""
+    usage = _usage_block(cmd, str(prefix))
+    description = f"{desc}\n{usage}" if desc else usage
+
+    e = Embed(
+        color=ctx.bot.color,
+        title="Command: " + cmd.qualified_name,
+        description=description,
+    )
+    if ctx.bot.user:
+        e.set_author(
+            name=f"{ctx.bot.user.display_name} help",
+            icon_url=ctx.bot.user.display_avatar.url,
+        )
     return e
 
 
@@ -414,15 +502,17 @@ class BleedHelp:
         view = HelpView(self.ctx, cats, home)
         view.msg = await self._send(home, view=view)
 
+    async def send_brief(self, ctx: Context, cmd: Command) -> discord.Message:
+        self.ctx = ctx
+        return await self._send(_brief_embed(cmd, ctx))
+
     async def _send_cmd(self, cmd: Command) -> None:
-        e = _cmd_embed(cmd, self.ctx, index=1, total=1)
-        await self._send(e)
+        await self._send(_detail_embed(cmd, self.ctx))
 
     async def _send_group(self, grp: Group) -> None:
         targets = [grp] + _visible_subs(grp)
-        total = len(targets)
-        embeds = [_cmd_embed(t, self.ctx, index=i, total=total) for i, t in enumerate(targets, 1)]
-        if total == 1:
+        embeds = [_detail_embed(target, self.ctx) for target in targets]
+        if len(embeds) == 1:
             await self._send(embeds[0])
         else:
             await self.ctx.paginate(embeds)
@@ -439,5 +529,4 @@ class BleedHelp:
             description=f"no command named **`{query}`**\nuse `{p}help` to browse all commands",
         )
         await self._send(e)
-
 

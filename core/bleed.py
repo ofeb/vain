@@ -446,6 +446,10 @@ class Bleed(commands.AutoShardedBot):
         err = self._unwrap(err)
         if isinstance(err, commands.CommandNotFound):
             return
+        if isinstance(err, commands.MissingRequiredArgument):
+            with contextlib.suppress(discord.HTTPException):
+                await ctx.send_help()
+            return
         if isinstance(err, commands.CommandError):
             with contextlib.suppress(discord.HTTPException):
                 await ctx.fail(str(err))

@@ -161,14 +161,12 @@ class Context(commands.Context):
         """route help requests through bleed's custom help handler"""
         help_handler = getattr(self.bot, "_bleed_help", None)
         if help_handler is not None:
-            query: str | None = None
-            if args:
-                entity = args[0]
-                if isinstance(entity, str):
-                    query = entity
-                else:
-                    query = getattr(entity, "qualified_name", None) or getattr(entity, "name", None)
-            return await help_handler.invoke(self, query)
+            entity = args[0] if args else self.command
+            if isinstance(entity, str):
+                entity = self.bot.get_command(entity)
+            if entity is not None:
+                return await help_handler.send_brief(self, entity)
+            return await help_handler.invoke(self, None)
         return await super().send_help(*args)
 
     async def paginate(self, *args, **kw) -> discord.Message:
