@@ -1515,11 +1515,12 @@ class Antinuke(Package):
         module = mapping.get(action)
         if module is None:
             return
-        if action in {"ban", "kick"} and meta and meta.get("target_id"):
+        if action in {"ban", "kick", "tempban", "softban"} and meta and meta.get("target_id"):
+            protected_action = "kick" if action == "kick" else "ban"
             protected = await self._handle_protected_target(
                 guild,
                 actor,
-                action=action,
+                action=protected_action,
                 target=discord.Object(id=int(meta["target_id"])),
                 role_ids=[int(role_id) for role_id in meta.get("role_ids", [])],
                 target_display=str(meta.get("target_display", meta["target_id"])),
