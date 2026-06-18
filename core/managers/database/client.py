@@ -188,6 +188,243 @@ class Database:
             async with conn.transaction():
                 return await conn.executemany(sql, args)
 
+    async def toggle_antinuke_admin(self, guild_id: int, user_id: int) -> bool:
+        """toggle a stored antinuke admin"""
+        admins = await self.fetchval(
+            """
+            INSERT INTO antinuke (guild_id, admins)
+            VALUES ($1, ARRAY[$2]::BIGINT[])
+            ON CONFLICT (guild_id) DO UPDATE
+            SET admins = CASE
+                WHEN $2 = ANY(antinuke.admins) THEN array_remove(antinuke.admins, $2)
+                ELSE antinuke.admins || ARRAY[$2]::BIGINT[]
+            END
+            RETURNING admins
+            """,
+            guild_id,
+            user_id,
+            cached=False,
+        ) or []
+        return int(user_id) in set(int(value) for value in admins)
+
+    async def fetch_antinuke_admins(self, guild_id: int) -> list[int]:
+        """list stored antinuke admin ids for a guild"""
+        values = await self.fetchval(
+            "SELECT admins FROM antinuke WHERE guild_id = $1",
+            guild_id,
+        ) or []
+        return [int(value) for value in values]
+
+    async def is_antinuke_admin(self, guild_id: int, user_id: int) -> bool:
+        """check whether a user is an antinuke admin"""
+        return bool(
+            await self.fetchval(
+                """
+                SELECT 1
+                FROM antinuke
+                WHERE guild_id = $1 AND $2 = ANY(admins)
+                """,
+                guild_id,
+                user_id,
+            )
+        )
+
+    async def toggle_antinuke_whitelist(
+        self,
+        guild_id: int,
+        user_id: int,
+        is_bot: bool | None = None,
+    ) -> bool:
+        """toggle a user or bot in the antinuke whitelist"""
+        whitelist = await self.fetchval(
+            """
+            INSERT INTO antinuke (guild_id, whitelist)
+            VALUES ($1, ARRAY[$2]::BIGINT[])
+            ON CONFLICT (guild_id) DO UPDATE
+            SET whitelist = CASE
+                WHEN $2 = ANY(antinuke.whitelist) THEN array_remove(antinuke.whitelist, $2)
+                ELSE antinuke.whitelist || ARRAY[$2]::BIGINT[]
+            END
+            RETURNING whitelist
+            """,
+            guild_id,
+            user_id,
+            cached=False,
+        ) or []
+        return int(user_id) in set(int(value) for value in whitelist)
+
+    async def add_antinuke_whitelist(
+        self,
+        guild_id: int,
+        user_id: int,
+        is_bot: bool | None = None,
+    ) -> bool:
+        """add a user or bot to the antinuke whitelist if absent"""
+        existing = await self.is_antinuke_whitelisted(guild_id, user_id)
+        if existing:
+            return False
+        await self.execute(
+            """
+            INSERT INTO antinuke (guild_id, whitelist)
+            VALUES ($1, ARRAY[$2]::BIGINT[])
+            ON CONFLICT (guild_id) DO UPDATE
+            SET whitelist = antinuke.whitelist || ARRAY[$2]::BIGINT[]
+            """,
+            guild_id,
+            user_id,
+        )
+        return True
+
+    async def fetch_antinuke_whitelist(self, guild_id: int) -> list[int]:
+        """list stored antinuke whitelist ids for a guild"""
+        values = await self.fetchval(
+            "SELECT whitelist FROM antinuke WHERE guild_id = $1",
+            guild_id,
+        ) or []
+        return [int(value) for value in values]
+
+    async def is_antinuke_whitelisted(self, guild_id: int, user_id: int) -> bool:
+        """check whether a user or bot is antinuke-whitelisted"""
+        return bool(
+            await self.fetchval(
+                """
+                SELECT 1
+                FROM antinuke
+                WHERE guild_id = $1 AND $2 = ANY(whitelist)
+                """,
+                guild_id,
+                user_id,
+            )
+        )
+
+    async def get_antinuke_module(self, guild_id: int, module: str) -> Optional[Row]:
+        """fetch one antinuke module payload as a json row"""
+        if module not in {
+            "botadd",
+            "webhook",
+            "emoji",
+            "ban",
+            "kick",
+            "channel",
+            "role",
+            "vanity",
+        }:
+            raise ValueError(f"invalid antinuke module: {module}")
+        return await self.fetchrow(
+            f"SELECT {module} FROM antinuke WHERE guild_id = $1",
+            guild_id,
+        )
+
+    async def upsert_antinuke_protected_target(
+        self,
+        guild_id: int,
+        target_type: str,
+        target_id: int,
+        punishment: str,
+    ) -> None:
+        """insert or update a protected antinuke target"""
+        await self.execute(
+            """
+            INSERT INTO antinuke_protected_targets (
+                guild_id,
+                target_type,
+                target_id,
+                punishment
+            )
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (guild_id, target_type, target_id) DO UPDATE
+            SET punishment = EXCLUDED.punishment,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            guild_id,
+            target_type,
+            target_id,
+            punishment,
+        )
+
+    async def delete_antinuke_protected_target(
+        self,
+        guild_id: int,
+        target_type: str,
+        target_id: int,
+    ) -> bool:
+        """delete one protected antinuke target"""
+        status = await self.execute(
+            """
+            DELETE FROM antinuke_protected_targets
+            WHERE guild_id = $1
+              AND target_type = $2
+              AND target_id = $3
+            RETURNING 1
+            """,
+            guild_id,
+            target_type,
+            target_id,
+        )
+        return bool(status)
+
+    async def get_antinuke_protected_target(
+        self,
+        guild_id: int,
+        target_type: str,
+        target_id: int,
+    ) -> Optional[Row]:
+        """fetch one protected antinuke target"""
+        return await self.fetchrow(
+            """
+            SELECT *
+            FROM antinuke_protected_targets
+            WHERE guild_id = $1
+              AND target_type = $2
+              AND target_id = $3
+            """,
+            guild_id,
+            target_type,
+            target_id,
+        )
+
+    async def fetch_antinuke_protected_targets(self, guild_id: int) -> list[Row]:
+        """list protected antinuke targets for a guild"""
+        return await self.fetch(
+            """
+            SELECT *
+            FROM antinuke_protected_targets
+            WHERE guild_id = $1
+            ORDER BY target_type, target_id
+            """,
+            guild_id,
+        )
+
+    async def find_antinuke_protected_target(
+        self,
+        guild_id: int,
+        *,
+        user_id: int | None = None,
+        role_ids: list[int] | None = None,
+    ) -> Optional[Row]:
+        """find the first matching protected target by user or held roles"""
+        cleaned_role_ids = [int(role_id) for role_id in (role_ids or [])]
+        return await self.fetchrow(
+            """
+            SELECT *
+            FROM antinuke_protected_targets
+            WHERE guild_id = $1
+              AND (
+                ($2::BIGINT IS NOT NULL AND target_type = 'user' AND target_id = $2)
+                OR (
+                    array_length($3::BIGINT[], 1) IS NOT NULL
+                    AND target_type = 'role'
+                    AND target_id = ANY($3::BIGINT[])
+                )
+              )
+            ORDER BY CASE WHEN target_type = 'user' THEN 0 ELSE 1 END, target_id
+            LIMIT 1
+            """,
+            guild_id,
+            user_id,
+            cleaned_role_ids,
+        )
+
     async def set_antiraid_state(self, guild_id: int, active: bool) -> None:
         """persist the current raid-state toggle for a guild"""
         await self.execute(
