@@ -157,6 +157,20 @@ class Context(commands.Context):
         """parse embed script and send it"""
         return await self.bot.send_embed(self, code, **kw)
 
+    async def send_help(self, *args: Any):
+        """route help requests through bleed's custom help handler"""
+        help_handler = getattr(self.bot, "_bleed_help", None)
+        if help_handler is not None:
+            query: str | None = None
+            if args:
+                entity = args[0]
+                if isinstance(entity, str):
+                    query = entity
+                else:
+                    query = getattr(entity, "qualified_name", None) or getattr(entity, "name", None)
+            return await help_handler.invoke(self, query)
+        return await super().send_help(*args)
+
     async def paginate(self, *args, **kw) -> discord.Message:
         """send paginated embeds or build pages from lines"""
         from core.tools.pages import Paginator, build_pages

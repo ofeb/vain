@@ -13,6 +13,7 @@ from discord.ext import commands
 from discord.ext.commands import HybridCommand, HybridGroup
 
 from .discord.ctx import Cache, Context
+from .discord.help import BleedHelp
 from .managers.database.client import Database
 from .managers.redis.client import BleedCache
 from .managers.watch import Watcher
@@ -113,6 +114,7 @@ class Bleed(commands.AutoShardedBot):
         self.color: int = color.base
         self.db = Database()
         self.redis: Optional[BleedCache] = None
+        self._bleed_help = BleedHelp()
         self.object_cache = Cache(self)
         self.guard = Guard()
         self.watcher: Optional[Watcher] = None
@@ -145,6 +147,7 @@ class Bleed(commands.AutoShardedBot):
             chunk_guilds_at_startup=False,
             max_messages=1000,
         )
+        self._bleed_help.register(self)
 
     async def _fetch_prefixes(self, guild_id: int, user_id: int) -> dict:
         """pull prefix data from cache or db"""
