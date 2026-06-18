@@ -453,6 +453,35 @@ class Antinuke(Package):
             await member.add_roles(jail_role, reason=reason)
         return True
 
+    async def _strip_staff_roles(
+        self,
+        member: discord.Member,
+        *,
+        reason: str,
+    ) -> bool:
+        role_ids = set(await self.db.list_staff_roles(member.guild.id))
+        if not role_ids:
+            return False
+
+        bot_member = member.guild.me or member.guild.get_member(
+            self.bot.user.id if self.bot.user else 0
+        )
+        if bot_member is None:
+            return False
+
+        roles_to_remove = [
+            role
+            for role in member.roles
+            if role.id in role_ids
+            and role != member.guild.default_role
+            and role < bot_member.top_role
+        ]
+        if not roles_to_remove:
+            return False
+
+        await member.remove_roles(*roles_to_remove, reason=reason)
+        return True
+
     async def _punish_actor(
         self,
         member: discord.Member,
@@ -472,21 +501,7 @@ class Antinuke(Package):
             return True
         if action == "jail":
             return await self._jail_actor(member, reason=reason)
-
-        dangerous_roles = [
-            role
-            for role in member.roles
-            if role != member.guild.default_role
-            and any(
-                getattr(role.permissions, permission, False)
-                for permission in DANGEROUS_PERMISSIONS
-            )
-        ]
-        if dangerous_roles:
-            await member.remove_roles(*dangerous_roles, reason=reason)
-            return True
-        await member.kick(reason=f"{reason} (no staff roles to strip)")
-        return True
+        return await self._strip_staff_roles(member, reason=reason)
 
     async def _apply_punishment(
         self,
@@ -817,27 +832,6 @@ class Antinuke(Package):
             await self._restore_deleted_channel(channel)
 
     @Package.listener()
-    async def on_guild_role_create(self, role: discord.Role) -> None:
-        entry = await self._latest_audit(
-            role.guild,
-            discord.AuditLogAction.role_create,
-            target_id=role.id,
-        )
-        actor = await self._audit_actor(role.guild, entry)
-        if actor is None:
-            return
-        if self._was_recently_handled_command_action(role.guild.id, actor.id, "role", role.id):
-            return
-        if await self._handle_module_action(
-            role.guild,
-            actor,
-            "role",
-            reason="antinuke triggered: role create",
-        ):
-            with contextlib.suppress(discord.Forbidden, discord.HTTPException):
-                await role.delete(reason="antinuke revert: role create")
-
-    @Package.listener()
     async def on_guild_role_delete(self, role: discord.Role) -> None:
         entry = await self._latest_audit(
             role.guild,
@@ -1131,9 +1125,6 @@ class Antinuke(Package):
             "softban": "ban",
             "kick": "kick",
             "role delete": "role",
-            "role remove": "role",
-            "role add": "role",
-            "role create": "role",
         }
         module = mapping.get(action)
         if module is None:
@@ -1154,14 +1145,6 @@ class Antinuke(Package):
                     module,
                     int(meta["target_id"]),
                 )
-            return
-
-        if action == "role create" and meta.get("role_id"):
-            self._remember_command_action(guild.id, actor.id, module, int(meta["role_id"]))
-            role = guild.get_role(int(meta["role_id"]))
-            if role is not None:
-                with contextlib.suppress(discord.Forbidden, discord.HTTPException):
-                    await role.delete(reason="antinuke revert: role create")
             return
 
         if action == "role delete" and meta.get("role"):

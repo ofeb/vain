@@ -68,25 +68,6 @@ class Role(Package):
         if member.top_role >= bot_member.top_role:
             raise CommandError("that member is above or equal to my highest role")
 
-    def _dispatch_antinuke_action(
-        self,
-        ctx,
-        *,
-        action: str,
-        case_id: int | None,
-        meta: dict | None = None,
-    ) -> None:
-        if ctx.guild is None or not isinstance(ctx.author, discord.Member):
-            return
-        ctx.bot.dispatch(
-            "antinuke_action",
-            ctx.guild,
-            ctx.author,
-            action,
-            case_id or 0,
-            meta,
-        )
-
     async def _create_case(
         self,
         ctx,
@@ -193,12 +174,6 @@ class Role(Package):
             case_id=case_id,
             reason=reason,
         )
-        self._dispatch_antinuke_action(
-            ctx,
-            action="role remove",
-            case_id=case_id,
-            meta={"target_id": member.id, "role_id": role.id},
-        )
         return await ctx.success(
             f"Removed **{role.name}** from **{member}** - {self._default_reason(reason)}"
         )
@@ -259,12 +234,6 @@ class Role(Package):
             target_name=f"{member} -> {role.name}",
             case_id=case_id,
             reason=reason,
-        )
-        self._dispatch_antinuke_action(
-            ctx,
-            action="role add",
-            case_id=case_id,
-            meta={"target_id": member.id, "role_id": role.id},
         )
         return await ctx.success(
             f"Added **{role.name}** to **{member}** - {self._default_reason(reason)}"
@@ -448,11 +417,5 @@ class Role(Package):
             target_name=role.name,
             case_id=case_id,
             reason=None,
-        )
-        self._dispatch_antinuke_action(
-            ctx,
-            action="role create",
-            case_id=case_id,
-            meta={"role_id": role.id},
         )
         return await ctx.success(f"Created role **{role.name}**")
