@@ -13,6 +13,69 @@ CREATE TABLE IF NOT EXISTS guilds (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS config (
+    guild_id BIGINT PRIMARY KEY,
+    prefixes TEXT[] NOT NULL DEFAULT ARRAY[',']::TEXT[],
+    colorme BOOLEAN DEFAULT FALSE,
+    colorme_base BIGINT,
+    lastfm_reactions TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS self_prefix (
+    user_id BIGINT PRIMARY KEY,
+    prefix VARCHAR(10) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS blacklist (
+    id SERIAL PRIMARY KEY,
+    user_id BIGINT,
+    guild_id BIGINT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS disabled_commands (
+    guild_id BIGINT,
+    command VARCHAR(100),
+    object_ids BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    object_types TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, command)
+);
+
+CREATE TABLE IF NOT EXISTS disabled_events (
+    guild_id BIGINT,
+    event VARCHAR(100),
+    channel_ids BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, event)
+);
+
+CREATE TABLE IF NOT EXISTS disabled_modules (
+    guild_id BIGINT,
+    module VARCHAR(100),
+    channel_ids BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, module)
+);
+
+CREATE TABLE IF NOT EXISTS antinuke (
+    guild_id BIGINT PRIMARY KEY,
+    whitelist BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    admins BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    botadd JSONB NOT NULL DEFAULT '{}'::JSONB,
+    webhook JSONB NOT NULL DEFAULT '{}'::JSONB,
+    emoji JSONB NOT NULL DEFAULT '{}'::JSONB,
+    ban JSONB NOT NULL DEFAULT '{}'::JSONB,
+    kick JSONB NOT NULL DEFAULT '{}'::JSONB,
+    channel JSONB NOT NULL DEFAULT '{}'::JSONB,
+    role JSONB NOT NULL DEFAULT '{}'::JSONB,
+    vanity JSONB NOT NULL DEFAULT '{}'::JSONB,
+    permissions JSONB[] NOT NULL DEFAULT ARRAY[]::JSONB[],
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS users (
     user_id BIGINT,
     guild_id BIGINT,
@@ -72,12 +135,18 @@ CREATE TABLE IF NOT EXISTS forced_nicknames (
     PRIMARY KEY (guild_id, user_id)
 );
 
-CREATE TABLE IF NOT EXISTS restricted_commands (
+CREATE TABLE IF NOT EXISTS command_restrictions (
     guild_id BIGINT,
-    command_name VARCHAR(50),
+    command VARCHAR(50),
     role_id BIGINT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (guild_id, command_name, role_id)
+    PRIMARY KEY (guild_id, command, role_id)
+);
+
+CREATE TABLE IF NOT EXISTS color_roles (
+    guild_id BIGINT PRIMARY KEY,
+    roles TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS roblox_links (
@@ -366,6 +435,8 @@ CREATE TABLE IF NOT EXISTS invocation (
 );
 
 CREATE INDEX IF NOT EXISTS idx_moderation_guild_user ON moderation(guild_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_blacklist_user ON blacklist(user_id);
+CREATE INDEX IF NOT EXISTS idx_blacklist_guild ON blacklist(guild_id);
 CREATE INDEX IF NOT EXISTS idx_highlights_guild ON highlights(guild_id);
 CREATE INDEX IF NOT EXISTS idx_highlight_ignores_guild ON highlight_ignores(guild_id);
 CREATE INDEX IF NOT EXISTS idx_reminders_time ON reminders(time);

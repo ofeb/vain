@@ -3,7 +3,7 @@ wraps asyncpg with basic caching built in.
 use fetch fetchrow fetchval or execute"""
 
 from __future__ import annotations
-import asyncio, glob, json
+import asyncio, glob, json, re
 from logging import getLogger
 from types import TracebackType
 from typing import Any, Iterable, Optional, Protocol, Sequence, Union
@@ -58,12 +58,13 @@ class Database:
         return ujson.loads(data[1])
 
     async def _init_conn(self, conn: Connection) -> None:
-        await conn.set_type_codec(
-            "json",
-            encoder=self._encode,
-            decoder=self._decode,
-            schema="pg_catalog",
-        )
+        for name in ("json", "jsonb"):
+            await conn.set_type_codec(
+                name,
+                encoder=self._encode,
+                decoder=self._decode,
+                schema="pg_catalog",
+            )
 
     async def _make_pool(self) -> Pool:
         pool = await create_pool(dsn=self.uri, init=self._init_conn, record_class=Row)
@@ -119,6 +120,19 @@ class Database:
         for k in keys:
             self.cache.pop(k, None)
 
+    @staticmethod
+    def _write_table(sql: str) -> Optional[str]:
+        """extract the target table from a simple write statement"""
+        normalized = " ".join(sql.lower().split())
+        for pattern in (
+            r"^insert into ([a-z0-9_.]+)",
+            r"^update ([a-z0-9_.]+)",
+            r"^delete from ([a-z0-9_.]+)",
+        ):
+            if match := re.match(pattern, normalized):
+                return match.group(1)
+        return None
+
     async def fetch(self, sql: str, *args, **kw) -> list:
         """fetch all rows"""
         key = f"fetch {sql} {args}"
@@ -160,17 +174,8 @@ class Database:
     async def execute(self, sql: str, *args, **kw) -> Any:
         """run a write query"""
         args = [json.dumps(a) if isinstance(a, dict) else a for a in args]
-        try:
-            table = sql.lower().split("from")[1].split("where")[0].strip()
+        if table := self._write_table(sql):
             await self._purge_table(table)
-        except Exception:
-            pass
-        try:
-            if sql.lower().startswith("update"):
-                table = sql.lower().split("update")[1].split("set")[0].strip()
-                await self._purge_table(table)
-        except Exception:
-            pass
         async with self.pool.acquire() as conn:
             async with conn.transaction():
                 return await conn.fetchval(sql, *args)

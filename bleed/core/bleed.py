@@ -135,13 +135,14 @@ class Bleed(commands.AutoShardedBot):
         if self.redis and (hit := await self.redis.get(key)):
             return hit
 
-        user_pfx, guild_pfxs = await asyncio.gather(
+        user_pfx, guild_pfxs, legacy_prefix = await asyncio.gather(
             self.db.fetchval("SELECT prefix FROM self_prefix WHERE user_id = $1", user_id),
-            self.db.fetchval("SELECT prefixes FROM guild_config WHERE guild_id = $1", guild_id),
+            self.db.fetchval("SELECT prefixes FROM config WHERE guild_id = $1", guild_id),
+            self.db.fetchval("SELECT prefix FROM guilds WHERE guild_id = $1", guild_id),
         )
         data = {
             "user": user_pfx,
-            "guild": list(guild_pfxs) if guild_pfxs else [bot.prefix],
+            "guild": list(guild_pfxs) if guild_pfxs else ([legacy_prefix] if legacy_prefix else [bot.prefix]),
         }
         if self.redis:
             await self.redis.set(key, data, ex=_PREFIX_TTL)

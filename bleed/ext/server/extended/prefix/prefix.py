@@ -1,5 +1,6 @@
 from discord.ext.commands import group, has_permissions, CommandError
 from core.discord.package import Package
+from core.managers.values import bot as bot_config
 
 
 class PrefixCommands(Package):
@@ -14,7 +15,7 @@ class PrefixCommands(Package):
         """show current prefix"""
         stored = await self.db.fetchval(
             """SELECT prefixes FROM config WHERE guild_id = $1""", ctx.guild.id
-        ) or [","]
+        ) or [bot_config.prefix]
         await ctx.pin(
             f"**{ctx.guild.name}** uses {', '.join(f'`{p}`' for p in stored)} as prefix"
         )
@@ -48,10 +49,16 @@ class PrefixCommands(Package):
         """append a guild prefix"""
         if len(prefix) > 3:
             raise CommandError("prefix cant be longer than **3** characters")
+        existing = await self.db.fetchval(
+            """SELECT prefixes FROM config WHERE guild_id = $1""", ctx.guild.id
+        ) or [bot_config.prefix]
+        if prefix in existing:
+            raise CommandError("that prefix is already set for this server")
+        existing.append(prefix)
         await self.db.execute(
-            """INSERT INTO config (guild_id, prefixes) VALUES($1, $2) ON CONFLICT(guild_id) DO UPDATE SET prefixes = ARRAY(SELECT 'prefix_' || unnest(EXCLUDED.prefixes));""",
+            """INSERT INTO config (guild_id, prefixes) VALUES($1, $2) ON CONFLICT(guild_id) DO UPDATE SET prefixes = excluded.prefixes""",
             ctx.guild.id,
-            prefix,
+            existing,
         )
         return await ctx.success(f"`{prefix}` added as a guild prefix")
 
@@ -63,15 +70,12 @@ class PrefixCommands(Package):
     @has_permissions(manage_guild=True)
     async def prefix_reset(self, ctx):
         """wipe custom prefixes"""
-        try:
-            await self.db.execute(
-                """UPDATE config SET prefixes = $1 WHERE guild_id = $2""",
-                [","],
-                ctx.guild.id,
-            )
-        except Exception:
-            pass
-        return await ctx.success("server prefixes reset to `,`")
+        await self.db.execute(
+            """INSERT INTO config (guild_id, prefixes) VALUES($1, $2) ON CONFLICT(guild_id) DO UPDATE SET prefixes = excluded.prefixes""",
+            ctx.guild.id,
+            [bot_config.prefix],
+        )
+        return await ctx.success(f"server prefixes reset to `{bot_config.prefix}`")
 
     @prefix.command(
         name="remove",
@@ -83,13 +87,13 @@ class PrefixCommands(Package):
         """drop a single prefix"""
         existing = await self.db.fetchval(
             """SELECT prefixes FROM config WHERE guild_id = $1""", ctx.guild.id
-        )
+        ) or [bot_config.prefix]
         if prefix not in existing:
             raise CommandError("that prefix isn't set for this server")
-        if existing != [","]:
+        if existing != [bot_config.prefix]:
             existing.remove(prefix)
             if len(existing) == 0:
-                existing = [","]
+                existing = [bot_config.prefix]
             await self.db.execute(
                 """UPDATE config SET prefixes = $1 WHERE guild_id = $2""",
                 existing,
