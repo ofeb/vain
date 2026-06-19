@@ -1,10 +1,12 @@
-from discord.ext.commands import group, has_permissions, CommandError, EmbedConverter
+from discord.ext.commands import group, CommandError
 from discord import Embed, Message, RawReactionActionEvent
 from core.discord.package import Package
 from lib.classes.embed import Script
 from lib.classes.embed import embed_to_code
 
 
+from core.managers.converters import EmbedConverter
+from core.managers.permissions import has_permissions
 class PaginationCommands(Package):
     """embed pagination commands"""
 

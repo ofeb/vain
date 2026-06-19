@@ -9,3 +9,5 @@ venv/
 .env.*
 !.env.example
 myenv/
+inspiration for bot/*
+.gitignore

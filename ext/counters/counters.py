@@ -10,6 +10,7 @@ from discord.ext import commands
 from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe, group
 from core.managers.values import color
+from core.managers.permissions import has_permissions
 
 if TYPE_CHECKING:
     from .events import CountersEvents
@@ -77,7 +78,7 @@ class Counters(commands.Cog):
         description="Create counters for everybody to see",
         guild_only=True,
     )
-    @commands.has_permissions(manage_channels=True)
+    @has_permissions(manage_channels=True)
     async def counter(self, ctx: Context) -> None:
         """Counter management group."""
         if ctx.invoked_subcommand is None:
@@ -89,7 +90,7 @@ class Counters(commands.Cog):
         guild_only=True,
     )
     @describe(option="Counter type", channel_type="Channel type")
-    @commands.has_permissions(manage_channels=True)
+    @has_permissions(manage_channels=True)
     async def counter_add(
         self,
         ctx: Context,
@@ -144,7 +145,7 @@ class Counters(commands.Cog):
         guild_only=True,
     )
     @describe(channel="Channel to remove counter from", action="Action to perform")
-    @commands.has_permissions(manage_channels=True)
+    @has_permissions(manage_channels=True)
     async def counter_remove(
         self,
         ctx: Context,
@@ -178,7 +179,7 @@ class Counters(commands.Cog):
         description="List every category or channel keeping track of members or boosters in this server",
         guild_only=True,
     )
-    @commands.has_permissions(manage_channels=True)
+    @has_permissions(manage_channels=True)
     async def counter_list(self, ctx: Context) -> None:
         """List every category or channel keeping track of members or boosters."""
         counters = await self.bot.db.fetch(

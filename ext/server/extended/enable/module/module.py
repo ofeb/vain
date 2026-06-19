@@ -1,8 +1,10 @@
-from discord.ext.commands import group, has_permissions, CommandError, ModuleConverter
+from discord.ext.commands import group, CommandError
 from discord import TextChannel
 from core.discord.package import Package
 
 
+from core.managers.converters import ModuleConverter
+from core.managers.permissions import has_permissions
 class ModuleEnableCommands(Package):
     """re-enable modules per channel"""
 

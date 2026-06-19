@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 import discord
 from discord import Embed
 from discord.ext import commands
-from discord.ext.commands import CommandError, group, has_permissions
+from discord.ext.commands import CommandError, group
 
 from core.discord.package import Package
 from core.tools.convert import MemberConvert, StatusConvert
@@ -15,7 +15,8 @@ from core.tools.flags import AntiRaidFlags
 
 from .models import AntiraidConfig, ModuleConfig
 
-MASSJOIN_WINDOW_SECONDS = 10
+from core.managers.permissions import has_permissions
+MASSJOIN_WINDOW = 10
 
 
 class Antiraid(Package):
@@ -24,42 +25,43 @@ class Antiraid(Package):
     def __init__(self, bot):
         super().__init__(bot)
         self.config: dict[int, AntiraidConfig] = {}
-        self.joins: dict[int, deque[tuple[datetime, int]]] = defaultdict(deque)
+        self.join_log: dict[int, deque[tuple[datetime, int]]] = defaultdict(deque)
 
-    async def _refresh_config(self, guild_id: int) -> AntiraidConfig:
-        config_row, module_rows = await self.db.fetchrow(
+    async def _pull_config(self, guild_id: int) -> AntiraidConfig:
+        cr = await self.db.fetchrow(
             "SELECT raid_active, punish_until FROM antiraid_config WHERE guild_id = $1",
             guild_id,
             cached=False,
-        ), await self.db.fetch_antiraid_modules(guild_id)
-        config = AntiraidConfig.from_records(config_row, module_rows)
-        self.config[guild_id] = config
-        return config
+        )
+        mr = await self.db.fetch_antiraid_modules(guild_id)
+        cfg = AntiraidConfig.from_records(cr, mr)
+        self.config[guild_id] = cfg
+        return cfg
 
-    async def _get_config(self, guild_id: int) -> AntiraidConfig:
-        if config := self.config.get(guild_id):
-            return config
-        return await self._refresh_config(guild_id)
+    async def _cached_config(self, guild_id: int) -> AntiraidConfig:
+        if cfg := self.config.get(guild_id):
+            return cfg
+        return await self._pull_config(guild_id)
 
-    async def _set_raid_state(self, guild_id: int, active: bool) -> AntiraidConfig:
+    async def _toggle_raid(self, guild_id: int, active: bool) -> AntiraidConfig:
         await self.db.set_antiraid_state(guild_id, active)
-        config = await self._get_config(guild_id)
-        config.raid_active = active
-        self.config[guild_id] = config
-        return config
+        cfg = await self._cached_config(guild_id)
+        cfg.raid_active = active
+        self.config[guild_id] = cfg
+        return cfg
 
-    async def _set_punish_until(
+    async def _set_punish_window(
         self,
         guild_id: int,
         until: datetime | None,
     ) -> AntiraidConfig:
         await self.db.set_antiraid_punish_until(guild_id, until)
-        config = await self._get_config(guild_id)
-        config.punish_until = until
-        self.config[guild_id] = config
-        return config
+        cfg = await self._cached_config(guild_id)
+        cfg.punish_until = until
+        self.config[guild_id] = cfg
+        return cfg
 
-    async def _save_module(
+    async def _store_module(
         self,
         guild_id: int,
         module: str,
@@ -79,40 +81,39 @@ class Antiraid(Package):
             lock_channels=lock_channels,
             punish_new=punish_new,
         )
-        return await self._refresh_config(guild_id)
+        return await self._pull_config(guild_id)
 
-    def _emoji(self, enabled: bool) -> str:
-        if enabled:
-            return self.bot.config.get("emojis", {}).get("success", "✅")
-        return self.bot.config.get("emojis", {}).get("fail", "❌")
+    def _indicator(self, active: bool) -> str:
+        emojis = self.bot.config.get("emojis", {})
+        return emojis.get("success", "✅") if active else emojis.get("fail", "❌")
 
-    def _module_summary(self, module: str, config: ModuleConfig) -> str:
-        if not config.enabled:
-            return f"{self._emoji(False)} disabled"
+    def _describe(self, module: str, cfg: ModuleConfig) -> str:
+        if not cfg.enabled:
+            return f"{self._indicator(False)} off"
 
         if module == "massjoin":
             return (
-                f"{self._emoji(True)} do: **{config.action or 'ban'}**"
-                f" | threshold: **{config.threshold}**"
-                f" | lock: **{'true' if config.lock_channels else 'false'}**"
-                f" | punish: **{'true' if config.punish_new else 'false'}**"
+                f"{self._indicator(True)} action: **{cfg.action or 'ban'}**"
+                f" | limit: **{cfg.threshold}**"
+                f" | lock: **{'yes' if cfg.lock_channels else 'no'}**"
+                f" | punish: **{'yes' if cfg.punish_new else 'no'}**"
             )
 
         if module == "newaccounts":
             return (
-                f"{self._emoji(True)} do: **{config.action or 'ban'}**"
-                f" | threshold: **{config.threshold}** days"
+                f"{self._indicator(True)} action: **{cfg.action or 'ban'}**"
+                f" | limit: **{cfg.threshold}** days"
             )
 
-        return f"{self._emoji(True)} do: **{config.action or 'kick'}**"
+        return f"{self._indicator(True)} action: **{cfg.action or 'kick'}**"
 
-    def _coerce_action(self, action: str | None, *, default: str) -> str:
-        value = (action or default).lower()
+    def _validate_action(self, action: str | None, *, fallback: str) -> str:
+        value = (action or fallback).lower()
         if value not in {"ban", "kick"}:
-            raise CommandError("punishment must be `ban` or `kick`")
+            raise CommandError("action must be `ban` or `kick`")
         return value
 
-    async def _punish_member(
+    async def _sanction_member(
         self,
         member: discord.Member,
         action: str,
@@ -127,79 +128,75 @@ class Antiraid(Package):
         with contextlib.suppress(discord.Forbidden, discord.HTTPException):
             await member.kick(reason=reason)
 
-    async def _resolve_member(
+    async def _locate_member(
         self,
         guild: discord.Guild,
-        user_id: int,
+        uid: int,
     ) -> discord.Member | None:
-        if member := guild.get_member(user_id):
+        if member := guild.get_member(uid):
             return member
         with contextlib.suppress(discord.HTTPException):
-            return await guild.fetch_member(user_id)
+            return await guild.fetch_member(uid)
         return None
 
-    async def _lock_channels(self, guild: discord.Guild) -> int:
-        default_role = guild.default_role
-        locked = 0
-        for channel in guild.text_channels:
-            overwrite = channel.overwrites_for(default_role)
+    async def _disable_chat(self, guild: discord.Guild) -> int:
+        everyone = guild.default_role
+        count = 0
+        for ch in guild.text_channels:
+            overwrite = ch.overwrites_for(everyone)
             if overwrite.send_messages is False:
                 continue
 
             overwrite.send_messages = False
             try:
-                await channel.set_permissions(
-                    default_role,
+                await ch.set_permissions(
+                    everyone,
                     overwrite=overwrite,
-                    reason="antiraid: raid state enabled",
+                    reason="antiraid: raid active",
                 )
-            except discord.Forbidden:
-                continue
-            except discord.HTTPException:
+            except (discord.Forbidden, discord.HTTPException):
                 continue
 
-            await self.db.add_antiraid_locked_channel(guild.id, channel.id)
-            locked += 1
+            await self.db.add_antiraid_locked_channel(guild.id, ch.id)
+            count += 1
 
-        return locked
+        return count
 
-    async def _unlock_channels(self, guild: discord.Guild) -> int:
-        default_role = guild.default_role
-        unlocked = 0
-        for channel_id in await self.db.fetch_antiraid_locked_channels(guild.id):
-            channel = guild.get_channel(channel_id)
-            if not isinstance(channel, discord.TextChannel):
+    async def _enable_chat(self, guild: discord.Guild) -> int:
+        everyone = guild.default_role
+        count = 0
+        for ch_id in await self.db.fetch_antiraid_locked_channels(guild.id):
+            ch = guild.get_channel(ch_id)
+            if not isinstance(ch, discord.TextChannel):
                 continue
 
-            overwrite = channel.overwrites_for(default_role)
+            overwrite = ch.overwrites_for(everyone)
             if overwrite.send_messages is not False:
                 continue
 
             overwrite.send_messages = None
             try:
-                await channel.set_permissions(
-                    default_role,
+                await ch.set_permissions(
+                    everyone,
                     overwrite=overwrite,
-                    reason="antiraid: raid state disabled",
+                    reason="antiraid: raid over",
                 )
-            except discord.Forbidden:
-                continue
-            except discord.HTTPException:
+            except (discord.Forbidden, discord.HTTPException):
                 continue
 
-            unlocked += 1
+            count += 1
 
         await self.db.clear_antiraid_locked_channels(guild.id)
-        return unlocked
+        return count
 
-    async def _massjoin_members(
+    async def _build_member_list(
         self,
         guild: discord.Guild,
         queue: deque[tuple[datetime, int]],
     ) -> list[discord.Member]:
         members: list[discord.Member] = []
-        for _, user_id in list(queue):
-            if member := await self._resolve_member(guild, user_id):
+        for _, uid in list(queue):
+            if member := await self._locate_member(guild, uid):
                 members.append(member)
         return members
 
@@ -221,33 +218,33 @@ class Antiraid(Package):
     @has_permissions(manage_guild=True)
     async def antiraid_config(self, ctx):
         """View the current antiraid configuration."""
-        config = await self._get_config(ctx.guild.id)
-        whitelist = await self.db.fetch_antiraid_whitelist(ctx.guild.id)
+        cfg = await self._cached_config(ctx.guild.id)
+        wl = await self.db.fetch_antiraid_whitelist(ctx.guild.id)
         locked = await self.db.fetch_antiraid_locked_channels(ctx.guild.id)
 
-        punish_window = "inactive"
-        if config.punish_until and config.punish_until > datetime.now(timezone.utc):
-            punish_window = f"<t:{int(config.punish_until.timestamp())}:R>"
+        pwin = "inactive"
+        if cfg.punish_until and cfg.punish_until > datetime.now(timezone.utc):
+            pwin = f"<t:{int(cfg.punish_until.timestamp())}:R>"
 
         embed = Embed(
             color=self.color,
             title="Antiraid settings",
-            description=f"Current raid state: **{'active' if config.raid_active else 'safe'}**",
+            description=f"Raid state: **{'active' if cfg.raid_active else 'safe'}**",
         )
         embed.add_field(
             name="Modules",
             value=(
-                f"**Mass Joins:** {self._module_summary('massjoin', config.massjoin)}"
-                f"\n**Avatar:** {self._module_summary('avatar', config.avatar)}"
-                f"\n**New Accounts:** {self._module_summary('newaccounts', config.newaccounts)}"
+                f"**Mass Joins:** {self._describe('massjoin', cfg.massjoin)}"
+                f"\n**Avatar:** {self._describe('avatar', cfg.avatar)}"
+                f"\n**New Accounts:** {self._describe('newaccounts', cfg.newaccounts)}"
             ),
             inline=False,
         )
         embed.add_field(
             name="General",
             value=(
-                f"**Punish Window:** {punish_window}"
-                f"\n**Whitelisted Users:** {len(whitelist)}"
+                f"**Punish Window:** {pwin}"
+                f"\n**Whitelisted Users:** {len(wl)}"
                 f"\n**Locked Channels:** {len(locked)}"
             ),
             inline=False,
@@ -261,16 +258,16 @@ class Antiraid(Package):
     @has_permissions(manage_guild=True)
     async def antiraid_state(self, ctx):
         """Disable the current raid state and unlock any antiraid-locked channels."""
-        unlocked = await self._unlock_channels(ctx.guild)
-        await self._set_raid_state(ctx.guild.id, False)
-        await self._set_punish_until(ctx.guild.id, None)
-        self.joins.pop(ctx.guild.id, None)
+        unlocked = await self._enable_chat(ctx.guild)
+        await self._toggle_raid(ctx.guild.id, False)
+        await self._set_punish_window(ctx.guild.id, None)
+        self.join_log.pop(ctx.guild.id, None)
 
         if unlocked:
             return await ctx.success(
-                f"Disabled **raid state** and unlocked **{unlocked}** channel{'s' if unlocked != 1 else ''}"
+                f"Raid state **ended** and **{unlocked}** channel{'s' if unlocked != 1 else ''} unlocked"
             )
-        return await ctx.success("Disabled **raid state**")
+        return await ctx.success("Raid state **ended**")
 
     @antiraid.group(
         name="whitelist",
@@ -286,8 +283,8 @@ class Antiraid(Package):
 
         added = await self.db.toggle_antiraid_whitelist(ctx.guild.id, member.id)
         if added:
-            return await ctx.success(f"**{member}** can now bypass **antiraid** once")
-        return await ctx.success(f"Removed **{member}** from the **antiraid** whitelist")
+            return await ctx.success(f"**{member}** added to **antiraid** bypass")
+        return await ctx.success(f"**{member}** removed from **antiraid** bypass")
 
     @antiraid_whitelist.command(name="view", aliases=["list"])
     @has_permissions(manage_guild=True)
@@ -295,7 +292,7 @@ class Antiraid(Package):
         """View all current one-time antiraid whitelist entries."""
         rows = await self.db.fetch_antiraid_whitelist(ctx.guild.id)
         if not rows:
-            return await ctx.warn("There are no **antiraid whitelist** entries")
+            return await ctx.warn("No **antiraid whitelist** entries exist")
 
         lines = [f"<@{row.user_id}> (`{row.user_id}`)" for row in rows]
         return await ctx.paginate(
@@ -313,10 +310,10 @@ class Antiraid(Package):
     async def antiraid_massjoin(self, ctx, status: StatusConvert, *, flags: str = None):
         """Protect the server against mass joins."""
         if not status:
-            await self._save_module(ctx.guild.id, "massjoin", enabled=False)
-            return await ctx.success("Disabled **massjoin** antiraid")
+            await self._store_module(ctx.guild.id, "massjoin", enabled=False)
+            return await ctx.success("**massjoin** antiraid turned off")
 
-        current = (await self._get_config(ctx.guild.id)).massjoin
+        current = (await self._cached_config(ctx.guild.id)).massjoin
         threshold = ctx.flags.get("threshold")
         if threshold is None:
             threshold = current.threshold or 5
@@ -324,14 +321,14 @@ class Antiraid(Package):
         if threshold < 1 or threshold > 100:
             raise CommandError("threshold must be between **1** and **100**")
 
-        action = self._coerce_action(
+        action = self._validate_action(
             ctx.flags.get("punishment") or current.action,
-            default="ban",
+            fallback="ban",
         )
         lock_channels = current.lock_channels if ctx.flags.get("lock") is None else bool(ctx.flags.get("lock"))
         punish_new = current.punish_new if ctx.flags.get("punish") is None else bool(ctx.flags.get("punish"))
 
-        await self._save_module(
+        await self._store_module(
             ctx.guild.id,
             "massjoin",
             enabled=True,
@@ -341,9 +338,9 @@ class Antiraid(Package):
             punish_new=punish_new,
         )
         return await ctx.success(
-            "Updated **massjoin** antiraid.\n"
-            f"Punishment is set to **{action}**, threshold is set to **{threshold}**, "
-            f"lock channels is **{'on' if lock_channels else 'off'}**, and punish new joins is **{'on' if punish_new else 'off'}**"
+            "**massjoin** protection active.\n"
+            f"Action: **{action}**, limit: **{threshold}**, "
+            f"lock: **{'yes' if lock_channels else 'no'}**, punish: **{'yes' if punish_new else 'no'}**"
         )
 
     @antiraid.command(
@@ -357,22 +354,22 @@ class Antiraid(Package):
     async def antiraid_avatar(self, ctx, status: StatusConvert, *, flags: str = None):
         """Punish accounts that join without a profile picture."""
         if not status:
-            await self._save_module(ctx.guild.id, "avatar", enabled=False)
-            return await ctx.success("Disabled **avatar** antiraid")
+            await self._store_module(ctx.guild.id, "avatar", enabled=False)
+            return await ctx.success("**avatar** antiraid turned off")
 
-        current = (await self._get_config(ctx.guild.id)).avatar
-        action = self._coerce_action(
+        current = (await self._cached_config(ctx.guild.id)).avatar
+        action = self._validate_action(
             ctx.flags.get("punishment") or current.action,
-            default="kick",
+            fallback="kick",
         )
-        await self._save_module(
+        await self._store_module(
             ctx.guild.id,
             "avatar",
             enabled=True,
             action=action,
         )
         return await ctx.success(
-            f"Updated **avatar** antiraid.\nPunishment is set to **{action}**"
+            f"**avatar** protection active.\nAction: **{action}**"
         )
 
     @antiraid.command(
@@ -386,10 +383,10 @@ class Antiraid(Package):
     async def antiraid_newaccounts(self, ctx, status: StatusConvert, *, flags: str = None):
         """Punish newly registered accounts that join the server."""
         if not status:
-            await self._save_module(ctx.guild.id, "newaccounts", enabled=False)
-            return await ctx.success("Disabled **new accounts** antiraid")
+            await self._store_module(ctx.guild.id, "newaccounts", enabled=False)
+            return await ctx.success("**new accounts** antiraid turned off")
 
-        current = (await self._get_config(ctx.guild.id)).newaccounts
+        current = (await self._cached_config(ctx.guild.id)).newaccounts
         threshold = ctx.flags.get("threshold")
         if threshold is None:
             threshold = current.threshold or 7
@@ -397,11 +394,11 @@ class Antiraid(Package):
         if threshold < 1 or threshold > 365:
             raise CommandError("threshold must be between **1** and **365** days")
 
-        action = self._coerce_action(
+        action = self._validate_action(
             ctx.flags.get("punishment") or current.action,
-            default="ban",
+            fallback="ban",
         )
-        await self._save_module(
+        await self._store_module(
             ctx.guild.id,
             "newaccounts",
             enabled=True,
@@ -409,8 +406,8 @@ class Antiraid(Package):
             action=action,
         )
         return await ctx.success(
-            "Updated **new accounts** antiraid.\n"
-            f"Punishment is set to **{action}** and the minimum account age is **{threshold}** days"
+            "**new accounts** protection active.\n"
+            f"Action: **{action}**, min age: **{threshold}** days"
         )
 
     @Package.listener()
@@ -422,67 +419,67 @@ class Antiraid(Package):
             return
 
         now = datetime.now(timezone.utc)
-        config = await self._get_config(member.guild.id)
-        queue = self.joins[member.guild.id]
-        queue.append((now, member.id))
-        cutoff = now - timedelta(seconds=MASSJOIN_WINDOW_SECONDS)
-        while queue and queue[0][0] < cutoff:
-            queue.popleft()
+        cfg = await self._cached_config(member.guild.id)
+        log = self.join_log[member.guild.id]
+        log.append((now, member.id))
+        cutoff = now - timedelta(seconds=MASSJOIN_WINDOW)
+        while log and log[0][0] < cutoff:
+            log.popleft()
 
-        if config.punish_until and config.punish_until <= now:
-            config = await self._set_punish_until(member.guild.id, None)
+        if cfg.punish_until and cfg.punish_until <= now:
+            cfg = await self._set_punish_window(member.guild.id, None)
 
         if (
-            config.raid_active
-            and config.massjoin.enabled
-            and config.massjoin.punish_new
-            and config.punish_until
-            and config.punish_until > now
+            cfg.raid_active
+            and cfg.massjoin.enabled
+            and cfg.massjoin.punish_new
+            and cfg.punish_until
+            and cfg.punish_until > now
         ):
-            await self._punish_member(
+            await self._sanction_member(
                 member,
-                config.massjoin.action or "ban",
-                reason="antiraid: massjoin punish window",
+                cfg.massjoin.action or "ban",
+                reason="antiraid: massjoin window active",
             )
             return
 
-        if config.massjoin.enabled and len(queue) >= config.massjoin.threshold and not config.raid_active:
-            await self._set_raid_state(member.guild.id, True)
-            if config.massjoin.lock_channels:
-                await self._lock_channels(member.guild)
-            if config.massjoin.punish_new:
-                await self._set_punish_until(
+        if cfg.massjoin.enabled and len(log) >= cfg.massjoin.threshold and not cfg.raid_active:
+            await self._toggle_raid(member.guild.id, True)
+            if cfg.massjoin.lock_channels:
+                await self._disable_chat(member.guild)
+            if cfg.massjoin.punish_new:
+                await self._set_punish_window(
                     member.guild.id,
                     now + timedelta(minutes=10),
                 )
 
-            for target in await self._massjoin_members(member.guild, queue):
-                await self._punish_member(
+            for target in await self._build_member_list(member.guild, log):
+                await self._sanction_member(
                     target,
-                    config.massjoin.action or "ban",
-                    reason="antiraid: massjoin threshold reached",
+                    cfg.massjoin.action or "ban",
+                    reason="antiraid: massjoin limit hit",
                 )
-            queue.clear()
+            log.clear()
 
         if member.bot:
             return
 
-        config = await self._get_config(member.guild.id)
-        if config.avatar.enabled and member.avatar is None:
-            await self._punish_member(
+        cfg = await self._cached_config(member.guild.id)
+        if cfg.avatar.enabled and member.avatar is None:
+            await self._sanction_member(
                 member,
-                config.avatar.action or "kick",
-                reason="antiraid: avatar required",
+                cfg.avatar.action or "kick",
+                reason="antiraid: no avatar",
             )
             return
 
-        if config.newaccounts.enabled:
+        if cfg.newaccounts.enabled:
             age = now - member.created_at
-            if age < timedelta(days=config.newaccounts.threshold):
-                await self._punish_member(
+            if age < timedelta(days=cfg.newaccounts.threshold):
+                await self._sanction_member(
                     member,
-                    config.newaccounts.action or "ban",
-                    reason="antiraid: account is too new",
+                    cfg.newaccounts.action or "ban",
+                    reason="antiraid: account too new",
                 )
 
 

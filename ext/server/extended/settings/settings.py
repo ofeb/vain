@@ -5,11 +5,12 @@ from typing import Union
 
 import discord
 from discord import Embed, Guild, Role, TextChannel, Thread
-from discord.ext.commands import CommandError, Converter, group, has_permissions
+from discord.ext.commands import CommandError, Converter, group
 
 from core.discord.package import Package
 from core.tools.convert import ChannelConvert, RoleConvert
 
+from core.managers.permissions import has_permissions
 CLEAR_WORDS = {"clear", "none", "off", "remove", "reset"}
 
 

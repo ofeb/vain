@@ -9,6 +9,7 @@ from discord.ext import commands
 from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe
 from core.managers.values import color
+from core.managers.permissions import has_permissions
 
 if TYPE_CHECKING:
     from .events import SnipeEvents
@@ -144,7 +145,7 @@ class Snipe(commands.Cog):
         description="Clear all results for reactions, edits and messages",
         guild_only=True,
     )
-    @commands.has_permissions(manage_messages=True)
+    @has_permissions(manage_messages=True)
     async def clearsnipe(self, ctx: Context) -> None:
         """Clear all deleted messages from snipe."""
         await self.bot.snipes.clear_entries(ctx.channel)
@@ -199,7 +200,7 @@ class Snipe(commands.Cog):
         guild_only=True,
     )
     @describe(index="Index of the snipe to remove")
-    @commands.has_permissions(manage_messages=True)
+    @has_permissions(manage_messages=True)
     async def removesnipe(self, ctx: Context, index: int = 1) -> None:
         """Remove a snipe from the snipe index."""
         try:

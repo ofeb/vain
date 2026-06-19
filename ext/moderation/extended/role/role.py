@@ -1,9 +1,10 @@
 import discord
-from discord.ext.commands import CommandError, group, has_permissions
+from discord.ext.commands import CommandError, group
 
 from core.discord.package import Package
 
 
+from core.managers.permissions import has_permissions
 def _parse_color(value: str | None) -> discord.Color | None:
     if not value:
         return None

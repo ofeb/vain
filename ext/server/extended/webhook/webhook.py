@@ -8,11 +8,12 @@ import string
 import aiohttp
 import discord
 from discord.ext import commands
-from discord.ext.commands import CommandError, group, has_permissions
+from discord.ext.commands import CommandError, group
 
 from core.discord.package import Package
 from lib.classes.embed import Script
 
+from core.managers.permissions import has_permissions
 SPACE_RE = re.compile(r"\s+")
 DISCORD_NAME_RE = re.compile("discord", re.IGNORECASE)
 CLYDE_NAME_RE = re.compile("clyde", re.IGNORECASE)

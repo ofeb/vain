@@ -10,6 +10,7 @@ from discord.ext import commands
 from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe, group
 from core.managers.values import color
+from core.managers.permissions import has_permissions
 
 if TYPE_CHECKING:
     from typing import List
@@ -41,7 +42,7 @@ class Giveaway(commands.Cog):
         description="Start a giveaway quickly and easily",
         guild_only=True,
     )
-    @commands.has_permissions(manage_channels=True)
+    @has_permissions(manage_channels=True)
     async def giveaway(self, ctx: Context) -> None:
         """Giveaway management group."""
         if ctx.invoked_subcommand is None:
@@ -53,7 +54,7 @@ class Giveaway(commands.Cog):
         guild_only=True,
     )
     @describe(message="Giveaway message to reroll", winners="Number of winners to pick")
-    @commands.has_permissions(manage_channels=True)
+    @has_permissions(manage_channels=True)
     async def reroll(
         self,
         ctx: Context,
@@ -102,7 +103,7 @@ class Giveaway(commands.Cog):
         guild_only=True,
     )
     @describe(message="Giveaway message to end")
-    @commands.has_permissions(manage_channels=True)
+    @has_permissions(manage_channels=True)
     async def end(self, ctx: Context, message: discord.Message = None) -> None:
         """End an active giveaway early."""
         if not message:
@@ -128,7 +129,7 @@ class Giveaway(commands.Cog):
         description="Edit options and limits for a specific giveaway",
         guild_only=True,
     )
-    @commands.has_permissions(manage_channels=True)
+    @has_permissions(manage_channels=True)
     async def giveaway_edit(self, ctx: Context) -> None:
         """Giveaway edit management group."""
         if ctx.invoked_subcommand is None:
@@ -140,7 +141,7 @@ class Giveaway(commands.Cog):
         guild_only=True,
     )
     @describe(message="Giveaway message to edit", level="Maximum level required")
-    @commands.has_permissions(manage_channels=True)
+    @has_permissions(manage_channels=True)
     async def giveaway_edit_maxlevel(
         self,
         ctx: Context,
@@ -196,7 +197,7 @@ class Giveaway(commands.Cog):
         guild_only=True,
     )
     @describe(message="Giveaway message to edit", prize="New prize name")
-    @commands.has_permissions(manage_channels=True)
+    @has_permissions(manage_channels=True)
     async def giveaway_edit_prize(
         self,
         ctx: Context,
@@ -239,7 +240,7 @@ class Giveaway(commands.Cog):
         guild_only=True,
     )
     @describe(message="Giveaway message to edit", duration="Duration in seconds")
-    @commands.has_permissions(manage_channels=True)
+    @has_permissions(manage_channels=True)
     async def giveaway_edit_duration(
         self,
         ctx: Context,
@@ -300,7 +301,7 @@ class Giveaway(commands.Cog):
         guild_only=True,
     )
     @describe(channel="Channel to start giveaway in", duration="Duration in seconds", winners="Number of winners", prize="Prize name")
-    @commands.has_permissions(manage_channels=True)
+    @has_permissions(manage_channels=True)
     async def start(
         self,
         ctx: Context,

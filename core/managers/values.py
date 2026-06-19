@@ -188,6 +188,19 @@ class api:
             if entry.strip()
         ) or ((key,) if key else ())
 
+    class twitter:
+        bearer = _env("TWITTER_BEARER_TOKEN", "")
+        api_key = _env("TWITTER_API_KEY", "")
+        api_secret = _env("TWITTER_API_SECRET", "")
+        access_token = _env("TWITTER_ACCESS_TOKEN", "")
+        access_secret = _env("TWITTER_ACCESS_SECRET", "")
+
+    class tiktok:
+        session_id = _env("TIKTOK_SESSION_ID", "")
+
+    class youtube:
+        api_key = _env("YOUTUBE_API_KEY", "")
+
     class instagram:
         cookies = _env_json("INSTAGRAM_COOKIES_JSON", [])
         username = _env("INSTAGRAM_USERNAME", "")

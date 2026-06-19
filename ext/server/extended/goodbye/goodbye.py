@@ -1,4 +1,4 @@
-from discord.ext.commands import group, has_permissions
+from discord.ext.commands import group
 from discord import Embed, TextChannel, Message, Member
 from asyncpg import UniqueViolationError
 from asyncio import sleep, Lock
@@ -7,6 +7,7 @@ from core.discord.package import Package
 from lib.classes.flags.servers import Parameters
 
 
+from core.managers.permissions import has_permissions
 class GoodbyeCommands(Package):
     """goodbye message setup commands"""
 

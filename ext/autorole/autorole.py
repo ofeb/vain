@@ -10,6 +10,7 @@ from discord.ext import commands
 from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe, group
 from core.managers.values import color, emojis
+from core.managers.permissions import has_permissions
 
 if TYPE_CHECKING:
     from .events import AutoroleEvents
@@ -34,7 +35,7 @@ class Autorole(commands.Cog):
         description="Set up automatic role assign on member join",
         guild_only=True,
     )
-    @commands.has_permissions(manage_guild=True, manage_roles=True)
+    @has_permissions(manage_guild=True, manage_roles=True)
     async def autorole(self, ctx: Context) -> None:
         """Autorole management group."""
         if ctx.invoked_subcommand is None:
@@ -45,7 +46,7 @@ class Autorole(commands.Cog):
         description="View a list of every auto role",
         guild_only=True,
     )
-    @commands.has_permissions(manage_guild=True, manage_roles=True)
+    @has_permissions(manage_guild=True, manage_roles=True)
     async def autorole_list(self, ctx: Context) -> None:
         """View a list of every auto role."""
         role_ids = await self.bot.db.fetch(
@@ -71,7 +72,7 @@ class Autorole(commands.Cog):
         guild_only=True,
     )
     @describe(role="Role to remove from auto role")
-    @commands.has_permissions(manage_guild=True, manage_roles=True)
+    @has_permissions(manage_guild=True, manage_roles=True)
     async def autorole_remove(self, ctx: Context, role: discord.Role) -> None:
         """Removes a autorole and stops assigning on join."""
         await self.bot.db.execute(
@@ -86,7 +87,7 @@ class Autorole(commands.Cog):
         description="Clears every autorole for guild",
         guild_only=True,
     )
-    @commands.has_permissions(manage_guild=True, manage_roles=True)
+    @has_permissions(manage_guild=True, manage_roles=True)
     async def autorole_reset(self, ctx: Context) -> None:
         """Clears every autorole for guild."""
         await self.bot.db.execute(
@@ -101,7 +102,7 @@ class Autorole(commands.Cog):
         guild_only=True,
     )
     @describe(role="Role to add as auto role")
-    @commands.has_permissions(manage_guild=True, manage_roles=True)
+    @has_permissions(manage_guild=True, manage_roles=True)
     async def autorole_add(self, ctx: Context, role: discord.Role) -> None:
         """Adds a autorole and assigns on join to member."""
         await self.bot.db.execute(
@@ -116,7 +117,7 @@ class Autorole(commands.Cog):
         description="Button role management",
         guild_only=True,
     )
-    @commands.has_permissions(manage_guild=True, manage_roles=True)
+    @has_permissions(manage_guild=True, manage_roles=True)
     async def buttonrole(self, ctx: Context) -> None:
         """Button role management group."""
         if ctx.invoked_subcommand is None:
@@ -128,7 +129,7 @@ class Autorole(commands.Cog):
         guild_only=True,
     )
     @describe(message="Message to remove button role from", index="Index of button to remove")
-    @commands.has_permissions(manage_guild=True, manage_roles=True)
+    @has_permissions(manage_guild=True, manage_roles=True)
     async def buttonrole_remove(self, ctx: Context, message: discord.Message, index: int) -> None:
         """Remove a button role from a message."""
         entries = await self.bot.db.fetch(
@@ -152,7 +153,7 @@ class Autorole(commands.Cog):
         description="Clears every button role from guild",
         guild_only=True,
     )
-    @commands.has_permissions(manage_guild=True, manage_roles=True)
+    @has_permissions(manage_guild=True, manage_roles=True)
     async def buttonrole_reset(self, ctx: Context) -> None:
         """Clears every button role from guild."""
         for row in await self.bot.db.fetch(
@@ -180,7 +181,7 @@ class Autorole(commands.Cog):
         guild_only=True,
     )
     @describe(message="Message to remove all button roles from")
-    @commands.has_permissions(manage_guild=True, manage_roles=True)
+    @has_permissions(manage_guild=True, manage_roles=True)
     async def buttonrole_removeall(self, ctx: Context, message: discord.Message) -> None:
         """Removes all button roles from a message."""
         await message.edit(view=None)
@@ -195,7 +196,7 @@ class Autorole(commands.Cog):
         description="View a list of every button role",
         guild_only=True,
     )
-    @commands.has_permissions(manage_guild=True, manage_roles=True)
+    @has_permissions(manage_guild=True, manage_roles=True)
     async def buttonrole_list(self, ctx: Context) -> None:
         """View a list of every button role."""
         rows = []
@@ -247,7 +248,7 @@ class Autorole(commands.Cog):
         guild_only=True,
     )
     @describe(message="Message to add button to", role="Role to assign", style="Button style", emoji="Button emoji", label="Button label")
-    @commands.has_permissions(manage_guild=True, manage_roles=True)
+    @has_permissions(manage_guild=True, manage_roles=True)
     async def buttonrole_add(
         self,
         ctx: Context,
@@ -296,7 +297,7 @@ class Autorole(commands.Cog):
         description="Set up self-assignable roles with reactions",
         guild_only=True,
     )
-    @commands.has_permissions(manage_guild=True, manage_roles=True)
+    @has_permissions(manage_guild=True, manage_roles=True)
     async def reactionrole(self, ctx: Context) -> None:
         """Reaction role management group."""
         if ctx.invoked_subcommand is None:
@@ -308,7 +309,7 @@ class Autorole(commands.Cog):
         guild_only=True,
     )
     @describe(message="Message to remove all reaction roles from")
-    @commands.has_permissions(manage_guild=True, manage_roles=True)
+    @has_permissions(manage_guild=True, manage_roles=True)
     async def reactionrole_removeall(self, ctx: Context, message: discord.Message) -> None:
         """Removes all reaction roles from a message."""
         await self.bot.db.execute(
@@ -323,7 +324,7 @@ class Autorole(commands.Cog):
         description="Clears every reaction role from guild",
         guild_only=True,
     )
-    @commands.has_permissions(manage_guild=True, manage_roles=True)
+    @has_permissions(manage_guild=True, manage_roles=True)
     async def reactionrole_reset(self, ctx: Context) -> None:
         """Clears every reaction role from guild."""
         await self.bot.db.execute(
@@ -338,7 +339,7 @@ class Autorole(commands.Cog):
         guild_only=True,
     )
     @describe(message="Message to remove reaction role from", emoji="Emoji to remove")
-    @commands.has_permissions(manage_guild=True, manage_roles=True)
+    @has_permissions(manage_guild=True, manage_roles=True)
     async def reactionrole_remove(self, ctx: Context, message: discord.Message, emoji: str) -> None:
         """Removes a reaction role from a message."""
         await self.bot.db.execute(
@@ -354,7 +355,7 @@ class Autorole(commands.Cog):
         description="View a list of every reaction role",
         guild_only=True,
     )
-    @commands.has_permissions(manage_guild=True, manage_roles=True)
+    @has_permissions(manage_guild=True, manage_roles=True)
     async def reactionrole_list(self, ctx: Context) -> None:
         """View a list of every reaction role."""
         def get_message_link(row):
@@ -386,7 +387,7 @@ class Autorole(commands.Cog):
         guild_only=True,
     )
     @describe(message="Message to add reaction role to", emoji="Emoji to react with", role="Role to assign")
-    @commands.has_permissions(manage_guild=True, manage_roles=True)
+    @has_permissions(manage_guild=True, manage_roles=True)
     async def reactionrole_add(
         self,
         ctx: Context,

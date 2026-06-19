@@ -24,6 +24,7 @@ _COG_MAP: dict[str, str] = {
     "Clownboard":    "Server",
     "Autorole":      "Server",
     "Bump":          "Server",
+    "BumpReminder":  "Server",
     "Reaction":      "Server",
     "Timers":        "Server",
     "Logs":          "Server",
@@ -61,38 +62,43 @@ _COG_MAP: dict[str, str] = {
     "Roleplay":    "Fun",
     "Manipulation":"Fun",
     "Misc":        "Fun",
+    "Miscellaneous": "Miscellaneous",
     "Music":       "Music",
     "Soundcloud":  "Music",
     "Spotify":     "Music",
     "Socials":     "Social",
     "Levels":      "Rewards",
+    "Levels":      "Rewards",
+    "Level":       "Rewards",
     "Giveaway":    "Rewards",
-    "Crypto":      "Rewards",
+    "Crypto":      "Crypto",
     "Lastfm":      "Last.fm",
     "Owner":       "Owner",
     "Jishaku":     "Owner",
 }
 
-_OWNER_COGS = frozenset({"Developer", "Jishaku"})
+_OWNER_COGS = frozenset({"Developer", "Jishaku", "Owner"})
 
 _BLURBS: dict[str, str] = {
-    "Server": "prefixes starboard autorole reactions timers logs and server setup",
-    "Security": "antinuke antiraid and automod protection modules",
-    "Moderation": "tools that help you moderate your server",
-    "Information": "user guild bot lookups avatars banners and stats",
-    "Utility": "snipes reminders afk quotes and voicemaster utilities",
-    "Fun": "games memes roleplay images quotes and fun commands",
-    "Music": "queue playback spotify soundcloud and lavalink controls",
-    "Social": "twitch youtube tiktok instagram and feed notifications",
-    "Rewards": "xp levels giveaways crypto tickers and reward systems",
-    "Last.fm": "scrobble charts covers whoknows and now playing",
-    "Owner": "owner tools reload jishaku and bot management",
+    "Server": "Prefixes, starboard, autorole, reactions, logs, and server setup",
+    "Security": "Antinuke, antiraid, and automod protection modules",
+    "Moderation": "Tools that help you moderate your server",
+    "Information": "User, guild, and bot lookups — avatars, banners, and stats",
+    "Utility": "Snipes, reminders, AFK, quotes, and voicemaster utilities",
+    "Fun": "Games, memes, roleplay, images, quotes, and fun commands",
+    "Miscellaneous": "Various useful commands that don't fit elsewhere",
+    "Music": "Queue, playback, Spotify, SoundCloud, and Lavalink controls",
+    "Social": "Twitch, YouTube, TikTok, Instagram, and feed notifications",
+    "Rewards": "XP, levels, giveaways, and reward systems",
+    "Crypto": "Cryptocurrency prices, charts, and market data",
+    "Last.fm": "Scrobbles, charts, covers, whoknows, and now playing",
+    "Owner": "Owner tools, reload, jishaku, and bot management",
 }
 
 _ORDER: tuple[str, ...] = (
     "Server", "Security", "Moderation",
-    "Information", "Utility", "Fun",
-    "Music", "Social", "Rewards", "Last.fm", "Owner",
+    "Information", "Utility", "Fun", "Miscellaneous",
+    "Music", "Social", "Rewards", "Crypto", "Last.fm", "Owner",
 )
 
 
@@ -322,36 +328,52 @@ def _brief_embed(cmd: Command, ctx: Context) -> Embed:
     return e
 
 
-class _Select(ui.Select):
+class _CategorySelect(ui.Select):
     def __init__(self, view: HelpView) -> None:
-        opts: list[SelectOption] = [
-            SelectOption(label="Overview", value=_HOME, description="back to the main page"),
-        ]
+        opts: list[SelectOption] = []
         labels = [l for l in _ORDER if l in view.cats]
         labels += sorted(set(view.cats) - set(labels))
+
+        opts.append(SelectOption(
+            label="Home",
+            value=_HOME,
+            description="Return to the main help menu.",
+            emoji="🏠",
+        ))
+
         for label in labels[:24]:
             opts.append(SelectOption(
-                label=label, value=label,
-                description=_BLURBS.get(label, f"{label} commands")[:100],
+                label=label,
+                value=label,
+                description=_BLURBS.get(label, f"{label} commands"),
             ))
-        super().__init__(placeholder="pick a category ...", min_values=1, max_values=1, options=opts)
+
+        super().__init__(
+            placeholder="Select a category...",
+            min_values=1,
+            max_values=1,
+            options=opts,
+        )
         self._v = view
 
     async def callback(self, inter: Interaction) -> None:
-        e = self._v.home if self.values[0] == _HOME else self._v.cat_embed(self.values[0])
-        await inter.response.edit_message(embed=e, view=self._v)
+        if self.values[0] == _HOME:
+            embed = self._v.home
+        else:
+            embed = self._v.cat_embed(self.values[0])
+        await inter.response.edit_message(embed=embed, view=self._v)
 
 
 class HelpView(ui.View):
-    """interactive category select help view"""
+    """interactive category select help view with Wraith-style dropdown"""
 
-    def __init__(self, ctx: Context, cats: dict[str, list[Command]], home: Embed) -> None:
+    def __init__(self, ctx: Context, cats: dict[str, list[Command]]) -> None:
         super().__init__(timeout=180)
         self.ctx = ctx
         self.cats = cats
-        self.home = home
+        self.home = self._home_embed()
         self.msg: discord.Message | None = None
-        self.add_item(_Select(self))
+        self.add_item(_CategorySelect(self))
 
     async def interaction_check(self, inter: Interaction) -> bool:
         if inter.user.id == self.ctx.author.id:
@@ -360,14 +382,31 @@ class HelpView(ui.View):
         return False
 
     def cat_embed(self, label: str) -> Embed:
+        prefix = getattr(self.ctx, "clean_prefix", None) or self.ctx.prefix or ";"
+        if isinstance(prefix, list):
+            prefix = prefix[0] if prefix else ";"
         e = Embed(
             title=f"**{label} Commands**",
             description=_fmt_commands(self.cats[label]),
             color=self.ctx.bot.color,
         )
-        e.set_author(name=self.ctx.author.display_name, icon_url=self.ctx.author.display_avatar.url)
         if self.ctx.bot.user:
-            e.set_thumbnail(url=self.ctx.bot.user.display_avatar.url)
+            e.set_author(name=self.ctx.bot.user.display_name, icon_url=self.ctx.bot.user.display_avatar.url)
+        return e
+
+    def _home_embed(self) -> Embed:
+        p = getattr(self.ctx, "clean_prefix", None) or self.ctx.prefix or ";"
+        if isinstance(p, list):
+            p = p[0] if p else ";"
+        e = Embed(
+            color=self.ctx.bot.color,
+            description=(
+                f"> Use `{p}help <command>` for help on a specific command.\n"
+                f"> Parameters in `(...)` are required, `[...]` are optional."
+            ),
+        )
+        if self.ctx.bot.user:
+            e.set_author(name=self.ctx.bot.user.display_name, icon_url=self.ctx.bot.user.display_avatar.url)
         return e
 
     async def on_timeout(self) -> None:
@@ -454,18 +493,8 @@ class BleedHelp:
 
     def _base_embed(self, *, title: str | None = None, description: str | None = None) -> Embed:
         e = Embed(title=title, description=description, color=self.ctx.bot.color)
-        e.set_author(name=self.ctx.author.display_name, icon_url=self.ctx.author.display_avatar.url)
         if self.ctx.bot.user:
-            e.set_thumbnail(url=self.ctx.bot.user.display_avatar.url)
-        return e
-
-    def _home_embed(self) -> Embed:
-        p = self._prefix()
-        e = self._base_embed()
-        e.add_field(name=_BLANK, value=(
-            f"> Use `{p}help <command>` for help on a specific command.\n"
-            f"> Parameters in `(...)` are required, `[...]` are optional."
-        ), inline=False)
+            e.set_author(name=self.ctx.bot.user.display_name, icon_url=self.ctx.bot.user.display_avatar.url)
         return e
 
     def _build_cats(self, bot: commands.Bot, owner: bool) -> dict[str, list[Command]]:
@@ -502,9 +531,8 @@ class BleedHelp:
         if self._dedup():
             return
         cats = self._build_cats(bot, owner)
-        home = self._home_embed()
-        view = HelpView(self.ctx, cats, home)
-        view.msg = await self._send(home, view=view)
+        view = HelpView(self.ctx, cats)
+        view.msg = await self._send(view.home, view=view)
 
     async def send_brief(self, ctx: Context, cmd: Command) -> discord.Message:
         self.ctx = ctx

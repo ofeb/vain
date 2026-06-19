@@ -8,6 +8,7 @@ from discord.ext import commands
 from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe, group
 from core.managers.values import color, emojis
+from core.managers.permissions import has_permissions
 
 if TYPE_CHECKING:
     from .events import ReactionEvents
@@ -25,7 +26,7 @@ class Reaction(commands.Cog):
         guild_only=True,
     )
     @describe(message="Message to react to", emoji="Emoji to react with")
-    @commands.has_permissions(manage_messages=True)
+    @has_permissions(manage_messages=True)
     async def react(
         self,
         ctx: Context,
@@ -44,7 +45,7 @@ class Reaction(commands.Cog):
         description="Auto-reaction management",
         guild_only=True,
     )
-    @commands.has_permissions(manage_expressions=True)
+    @has_permissions(manage_expressions=True)
     async def reaction_group(self, ctx: Context) -> None:
         """Auto-reaction management group."""
         if ctx.invoked_subcommand is None:
@@ -54,7 +55,7 @@ class Reaction(commands.Cog):
         name="clear",
         description="Removes every reaction trigger in guild",
     )
-    @commands.has_permissions(manage_expressions=True)
+    @has_permissions(manage_expressions=True)
     async def reaction_clear(self, ctx: Context) -> None:
         """Removes every reaction trigger in guild."""
         await self.bot.db.execute(
@@ -68,7 +69,7 @@ class Reaction(commands.Cog):
         description="Adds a reaction trigger to guild",
     )
     @describe(emoji="Emoji to react with", trigger="Word to trigger reaction")
-    @commands.has_permissions(manage_expressions=True)
+    @has_permissions(manage_expressions=True)
     async def reaction_add(self, ctx: Context, emoji: str, trigger: str) -> None:
         """Adds a reaction trigger to guild."""
         await ctx.message.add_reaction(emoji)
@@ -92,7 +93,7 @@ class Reaction(commands.Cog):
         description="Removes a reaction trigger in guild",
     )
     @describe(emoji="Emoji to remove", trigger="Trigger word to remove")
-    @commands.has_permissions(manage_expressions=True)
+    @has_permissions(manage_expressions=True)
     async def reaction_delete(self, ctx: Context, emoji: str, trigger: str) -> None:
         """Removes a reaction trigger in guild."""
         await self.bot.db.execute(
@@ -108,7 +109,7 @@ class Reaction(commands.Cog):
         description="Add or remove auto reaction on messages",
         guild_only=True,
     )
-    @commands.has_permissions(manage_expressions=True)
+    @has_permissions(manage_expressions=True)
     async def reaction_messages(self, ctx: Context) -> None:
         """Auto reaction on messages group."""
         if ctx.invoked_subcommand is None:
@@ -118,7 +119,7 @@ class Reaction(commands.Cog):
         name="list",
         description="List auto reactions for all channels",
     )
-    @commands.has_permissions(manage_expressions=True)
+    @has_permissions(manage_expressions=True)
     async def reaction_messages_list(self, ctx: Context) -> None:
         """List auto reactions for all channels."""
         reactions = await self.bot.db.fetch(
@@ -143,7 +144,7 @@ class Reaction(commands.Cog):
         description="Removes every reaction trigger for a specific word",
     )
     @describe(trigger_word="Word to delete all triggers for")
-    @commands.has_permissions(manage_expressions=True)
+    @has_permissions(manage_expressions=True)
     async def reaction_deleteall(self, ctx: Context, trigger_word: str) -> None:
         """Removes every reaction trigger for a specific word."""
         await self.bot.db.execute(
@@ -157,7 +158,7 @@ class Reaction(commands.Cog):
         name="list",
         description="View a list of every reaction trigger in guild",
     )
-    @commands.has_permissions(manage_expressions=True)
+    @has_permissions(manage_expressions=True)
     async def reaction_list(self, ctx: Context) -> None:
         """View a list of every reaction trigger in guild."""
         reactions = await self.bot.db.fetch(
@@ -180,7 +181,7 @@ class Reaction(commands.Cog):
         description="Gets the author of a trigger word",
     )
     @describe(trigger_word="Trigger word to get owner of")
-    @commands.has_permissions(manage_expressions=True)
+    @has_permissions(manage_expressions=True)
     async def reaction_owner(self, ctx: Context, trigger_word: str) -> None:
         """Gets the author of a trigger word."""
         owner_id = await self.bot.db.fetchval(

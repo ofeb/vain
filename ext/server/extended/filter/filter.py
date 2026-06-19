@@ -1,6 +1,7 @@
 from typing import Optional, Union
-from discord.ext.commands import group, has_permissions, CommandError, Boolean
+from discord.ext.commands import group, CommandError
 from discord import (
+from core.managers.permissions import has_permissions
     Embed, TextChannel,
     AutoModTrigger, AutoModRuleTriggerType, AutoModRuleEventType, AutoModRuleAction,
 )
@@ -82,7 +83,7 @@ class FilterCommands(Package):
         self,
         ctx,
         channel: Optional[Union[TextChannel, str]] = None,
-        setting: Optional[Boolean] = False,
+        setting: Optional[bool] = False,
         *,
         flags: FilterFlags,
     ):
@@ -159,7 +160,7 @@ class FilterCommands(Package):
         self,
         ctx,
         channel: Optional[Union[TextChannel, str]] = "all",
-        setting: Optional[Boolean] = True,
+        setting: Optional[bool] = True,
         *,
         flags: SpamFilterFlags,
     ):
@@ -287,7 +288,7 @@ class FilterCommands(Package):
         self,
         ctx,
         channel: Optional[Union[TextChannel, str]] = "all",
-        setting: Optional[Boolean] = True,
+        setting: Optional[bool] = True,
         *,
         flags: FilterFlags,
     ):
@@ -385,7 +386,7 @@ class FilterCommands(Package):
         self,
         ctx,
         channel: Optional[Union[TextChannel, str]] = "all",
-        setting: Optional[Boolean] = True,
+        setting: Optional[bool] = True,
         *,
         flags: FilterFlags,
     ):
@@ -531,7 +532,7 @@ class FilterCommands(Package):
         self,
         ctx,
         channel: Optional[Union[TextChannel, str]] = "all",
-        setting: Optional[Boolean] = True,
+        setting: Optional[bool] = True,
         *,
         flags: SpamFilterFlags,
     ):
@@ -596,7 +597,7 @@ class FilterCommands(Package):
         self,
         ctx,
         channel: Optional[Union[TextChannel, str]] = "all",
-        setting: Optional[Boolean] = True,
+        setting: Optional[bool] = True,
         *,
         flags: SpamFilterFlags,
     ):
@@ -663,7 +664,7 @@ class FilterCommands(Package):
         self,
         ctx,
         channel: Optional[Union[TextChannel, str]] = "all",
-        setting: Optional[Boolean] = True,
+        setting: Optional[bool] = True,
         *,
         flags: SpamFilterFlags,
     ):
@@ -730,7 +731,7 @@ class FilterCommands(Package):
         self,
         ctx,
         channel: Optional[Union[TextChannel, str]] = "all",
-        setting: Optional[Boolean] = True,
+        setting: Optional[bool] = True,
         *,
         flags: SpamFilterFlags,
     ):

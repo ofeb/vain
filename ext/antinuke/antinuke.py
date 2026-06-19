@@ -18,12 +18,12 @@ from core.tools.permissions import DANGEROUS_PERMISSIONS, normalize_dangerous_pe
 
 from .models import AntinukeConfig, PermissionWatch
 
-SHORT_WINDOW_SECONDS = 60
-LONG_WINDOW_SECONDS = 20 * 60
-LONG_THRESHOLD_MULTIPLIER = 2
-AUDIT_LOOKBACK_SECONDS = 15
+SHORT_WINDOW = 60
+LONG_WINDOW = 20 * 60
+LONG_THRESHOLD_FACTOR = 2
+AUDIT_LOOKBACK = 15
 
-MODULE_LABELS = {
+MODULE_NAMES = {
     "botadd": "bot add",
     "webhook": "webhook",
     "emoji": "emoji",
@@ -34,7 +34,7 @@ MODULE_LABELS = {
     "vanity": "vanity",
 }
 
-PUNISHMENT_ORDER = {
+SEVERITY_RANK = {
     "warn": 1,
     "stripstaff": 2,
     "jail": 3,
@@ -42,7 +42,7 @@ PUNISHMENT_ORDER = {
     "ban": 5,
 }
 
-RECENT_COMMAND_ACTION_SECONDS = 20
+RECENT_CMD_WINDOW = 20
 
 
 class Antinuke(Package):
@@ -51,15 +51,15 @@ class Antinuke(Package):
     def __init__(self, bot):
         super().__init__(bot)
         self.config: dict[int, AntinukeConfig] = {}
-        self._recent_command_actions: dict[tuple[int, int, str, int], datetime] = {}
+        self._stale_cmd_actions: dict[tuple[int, int, str, int], datetime] = {}
 
     async def cog_load(self) -> None:
         if self.bot.db.pool is not None:
-            self.revalidate_config.start()
+            self.config_sync.start()
 
     async def cog_unload(self) -> None:
-        if self.revalidate_config.is_running():
-            self.revalidate_config.cancel()
+        if self.config_sync.is_running():
+            self.config_sync.cancel()
 
     async def cog_check(self, ctx) -> bool:
         if ctx.guild is None:
@@ -84,72 +84,70 @@ class Antinuke(Package):
         return True
 
     @tasks.loop(seconds=30)
-    async def revalidate_config(self) -> None:
+    async def config_sync(self) -> None:
         rows = await self.db.fetch("SELECT * FROM antinuke", cached=False)
         self.config = {
             row.guild_id: AntinukeConfig.from_record(row)
             for row in rows
         }
 
-    async def _refresh_config(self, guild_id: int) -> AntinukeConfig:
+    async def _load_config(self, guild_id: int) -> AntinukeConfig:
         row = await self.db.fetchrow(
             "SELECT * FROM antinuke WHERE guild_id = $1",
             guild_id,
             cached=False,
         )
-        config = AntinukeConfig.from_record(row)
+        cfg = AntinukeConfig.from_record(row)
         if row:
-            self.config[guild_id] = config
+            self.config[guild_id] = cfg
         else:
             self.config.pop(guild_id, None)
-        return config
+        return cfg
 
-    async def _get_config(self, guild_id: int) -> AntinukeConfig:
-        if config := self.config.get(guild_id):
-            return config
-        return await self._refresh_config(guild_id)
+    async def _guild_config(self, guild_id: int) -> AntinukeConfig:
+        if cfg := self.config.get(guild_id):
+            return cfg
+        return await self._load_config(guild_id)
 
-    def _status_emoji(self, enabled: bool) -> str:
+    def _toggle_icon(self, active: bool) -> str:
         emojis = self.bot.config.get("emojis", {})
-        if enabled:
-            return emojis.get("success", "✅")
-        return emojis.get("fail", "❌")
+        return emojis.get("success", "✅") if active else emojis.get("fail", "❌")
 
-    def _format_details(self, details: list[str]) -> str:
-        if not details:
+    def _concatenate(self, parts: list[str]) -> str:
+        if not parts:
             return ""
-        if len(details) == 1:
-            return details[0]
-        return f"{', '.join(details[:-1])} and {details[-1]}"
+        if len(parts) == 1:
+            return parts[0]
+        return f"{', '.join(parts[:-1])} and {parts[-1]}"
 
-    def _module_payload(
+    def _build_module_payload(
         self,
         *,
         status: bool,
-        include_threshold: bool,
-        include_command: bool,
+        with_threshold: bool,
+        with_command: bool,
         flags: dict[str, Any],
     ) -> dict[str, Any]:
-        punishment = str(flags.get("punishment") or "kick").lower()
-        if punishment not in {"ban", "kick", "stripstaff", "warn", "jail"}:
+        penalty = str(flags.get("punishment") or "kick").lower()
+        if penalty not in {"ban", "kick", "stripstaff", "warn", "jail"}:
             raise CommandError(
                 "punishment must be `ban`, `kick`, `jail`, `warn`, or `stripstaff`"
             )
 
         payload: dict[str, Any] = {
             "status": status,
-            "punishment": punishment,
+            "punishment": penalty,
         }
-        if include_threshold:
-            threshold = int(flags.get("threshold") or 3)
-            if threshold < 1 or threshold > 6:
+        if with_threshold:
+            limit = int(flags.get("threshold") or 3)
+            if limit < 1 or limit > 6:
                 raise CommandError("threshold must be between **1** and **6**")
-            payload["threshold"] = threshold
-        if include_command:
+            payload["threshold"] = limit
+        if with_command:
             payload["command"] = bool(flags.get("command"))
         return payload
 
-    async def _save_module(self, guild_id: int, name: str, payload: dict[str, Any]) -> None:
+    async def _commit_module(self, guild_id: int, name: str, payload: dict[str, Any]) -> None:
         await self.db.execute(
             f"""
             INSERT INTO antinuke (guild_id, {name})
@@ -160,52 +158,51 @@ class Antinuke(Package):
             guild_id,
             payload,
         )
-        await self._refresh_config(guild_id)
+        await self._load_config(guild_id)
 
-    async def _update_module(
+    async def _adjust_module(
         self,
         ctx,
         name: str,
         status: bool,
         *,
-        include_threshold: bool = False,
-        include_command: bool = False,
+        with_threshold: bool = False,
+        with_command: bool = False,
     ):
-        payload = self._module_payload(
+        payload = self._build_module_payload(
             status=status,
-            include_threshold=include_threshold,
-            include_command=include_command,
+            with_threshold=with_threshold,
+            with_command=with_command,
             flags=ctx.flags,
         )
-        await self._save_module(ctx.guild.id, name, payload)
+        await self._commit_module(ctx.guild.id, name, payload)
 
-        label = MODULE_LABELS[name]
+        label = MODULE_NAMES[name]
         if not status:
-            return await ctx.success(f"Disabled **{label}** antinuke module")
+            return await ctx.success(f"Turned **{label}** antinuke protection off")
 
-        details = [f"Punishment is set to **{payload['punishment']}**"]
-        if include_threshold:
-            details.append(f"threshold is set to **{payload['threshold']}**")
-        if include_command:
-            details.append(
-                f"command detection is **{'on' if payload['command'] else 'off'}**"
+        summary = [f"action: **{payload['punishment']}**"]
+        if with_threshold:
+            summary.append(f"limit: **{payload['threshold']}**")
+        if with_command:
+            summary.append(
+                f"cmd: **{'yes' if payload['command'] else 'no'}**"
             )
         return await ctx.success(
-            f"Updated **{label}** antinuke module.\n{self._format_details(details)}"
+            f"**{label}** antinuke is now active ({self._concatenate(summary)})"
         )
 
-    def _permission_rows(self, config: AntinukeConfig, *, kind: str) -> int:
+    def _count_perms(self, config: AntinukeConfig, *, kind: str) -> int:
         return config.permission_count(kind)
 
-    def _module_reason(self, module_name: str, threshold: int | None = None) -> str:
-        if threshold:
+    def _build_reason(self, module: str, limit: int | None = None) -> str:
+        if limit:
             return (
-                f"antinuke: triggered {module_name} "
-                f"X/{threshold} in {SHORT_WINDOW_SECONDS} seconds"
+                f"antinuke: {module} exceeded {limit} in {SHORT_WINDOW}s"
             )
-        return f"antinuke: triggered {module_name}"
+        return f"antinuke: {module} violation"
 
-    def _action_label(self, action: str | None) -> str:
+    def _verb_for(self, action: str | None) -> str:
         mapping = {
             "ban": "banned",
             "kick": "kicked",
@@ -217,12 +214,12 @@ class Antinuke(Package):
         }
         return mapping.get((action or "action").lower(), action or "action")
 
-    def _owner_punishment_label(self, punishment: str | None) -> str:
-        if (punishment or "").lower() == "stripstaff":
+    def _owner_verb(self, penalty: str | None) -> str:
+        if (penalty or "").lower() == "stripstaff":
             return "stripped of staff"
-        return self._action_label(punishment)
+        return self._verb_for(penalty)
 
-    def _punishment_label(self, punishment: str | None) -> str:
+    def _penalty_verb(self, penalty: str | None) -> str:
         mapping = {
             "ban": "banned",
             "kick": "kicked",
@@ -230,51 +227,51 @@ class Antinuke(Package):
             "stripstaff": "stripped of staff",
             "warn": "warned",
         }
-        return mapping.get((punishment or "kick").lower(), "punished")
+        return mapping.get((penalty or "kick").lower(), "punished")
 
-    def _pick_permission_punishment(self, matches: Iterable[PermissionWatch]) -> str:
+    def _strongest_penalty(self, candidates: Iterable[PermissionWatch]) -> str:
         ordered = sorted(
-            matches,
-            key=lambda item: PUNISHMENT_ORDER.get(item.punishment, 0),
+            candidates,
+            key=lambda item: SEVERITY_RANK.get(item.punishment, 0),
             reverse=True,
         )
         if not ordered:
             return "kick"
         return ordered[0].punishment
 
-    def _prune_recent_command_actions(self) -> None:
+    def _purge_stale_actions(self) -> None:
         now = discord.utils.utcnow()
-        expired = [
+        dead = [
             key
-            for key, expires_at in self._recent_command_actions.items()
-            if expires_at <= now
+            for key, expiry in self._stale_cmd_actions.items()
+            if expiry <= now
         ]
-        for key in expired:
-            self._recent_command_actions.pop(key, None)
+        for key in dead:
+            self._stale_cmd_actions.pop(key, None)
 
-    def _remember_command_action(
+    def _note_cmd_action(
         self,
         guild_id: int,
         actor_id: int,
         module_name: str,
         subject_id: int,
     ) -> None:
-        self._prune_recent_command_actions()
-        self._recent_command_actions[(guild_id, actor_id, module_name, subject_id)] = (
-            discord.utils.utcnow() + timedelta(seconds=RECENT_COMMAND_ACTION_SECONDS)
+        self._purge_stale_actions()
+        self._stale_cmd_actions[(guild_id, actor_id, module_name, subject_id)] = (
+            discord.utils.utcnow() + timedelta(seconds=RECENT_CMD_WINDOW)
         )
 
-    def _was_recently_handled_command_action(
+    def _is_recent_cmd_action(
         self,
         guild_id: int,
         actor_id: int,
         module_name: str,
         subject_id: int,
     ) -> bool:
-        self._prune_recent_command_actions()
-        return (guild_id, actor_id, module_name, subject_id) in self._recent_command_actions
+        self._purge_stale_actions()
+        return (guild_id, actor_id, module_name, subject_id) in self._stale_cmd_actions
 
-    def _exempt_ids(self, guild: discord.Guild, config: AntinukeConfig) -> set[int]:
+    def _bypass_set(self, guild: discord.Guild, config: AntinukeConfig) -> set[int]:
         ids = set(config.whitelist)
         ids.update(config.admins)
         ids.add(guild.owner_id)
@@ -285,14 +282,14 @@ class Antinuke(Package):
             ids.add(me.id)
         return ids
 
-    async def _resolve_actor(self, guild: discord.Guild, user_id: int) -> discord.Member | None:
-        if member := guild.get_member(user_id):
+    async def _find_member(self, guild: discord.Guild, uid: int) -> discord.Member | None:
+        if member := guild.get_member(uid):
             return member
         with contextlib.suppress(discord.HTTPException):
-            return await guild.fetch_member(user_id)
+            return await guild.fetch_member(uid)
         return None
 
-    async def _audit_actor(
+    async def _entry_user(
         self,
         guild: discord.Guild,
         entry: discord.AuditLogEntry | None,
@@ -301,9 +298,9 @@ class Antinuke(Package):
             return None
         if isinstance(entry.user, discord.Member):
             return entry.user
-        return await self._resolve_actor(guild, entry.user.id)
+        return await self._find_member(guild, entry.user.id)
 
-    async def _latest_audit(
+    async def _fetch_latest_log(
         self,
         guild: discord.Guild,
         action: discord.AuditLogAction,
@@ -318,14 +315,14 @@ class Antinuke(Package):
         ):
             async for entry in guild.audit_logs(limit=limit, action=action):
                 age = (discord.utils.utcnow() - entry.created_at).total_seconds()
-                if age > AUDIT_LOOKBACK_SECONDS:
+                if age > AUDIT_LOOKBACK:
                     continue
                 if target_id is not None and getattr(entry.target, "id", None) != target_id:
                     continue
                 return entry
         return None
 
-    async def _notify_owner(self, guild: discord.Guild, description: str) -> None:
+    async def _alert_guild_owner(self, guild: discord.Guild, body: str) -> None:
         owner = guild.owner
         if owner is None:
             with contextlib.suppress(discord.HTTPException):
@@ -335,15 +332,15 @@ class Antinuke(Package):
                 owner = await self.bot.fetch_user(guild.owner_id)
         if owner is None:
             return
-        embed = Embed(color=self.color, description=description)
+        embed = Embed(color=self.color, description=body)
         with contextlib.suppress(discord.Forbidden, discord.HTTPException):
             await owner.send(embed=embed)
 
-    def _punishment_view(self, guild: discord.Guild) -> discord.ui.View:
+    def _server_link_view(self, guild: discord.Guild) -> discord.ui.View:
         view = discord.ui.View()
-        label = f"Sent from {guild.name}"
+        label = f"From {guild.name}"
         if len(label) > 80:
-            label = f"Sent from {guild.name[:70]}..."
+            label = f"From {guild.name[:70]}..."
         view.add_item(
             discord.ui.Button(
                 style=discord.ButtonStyle.link,
@@ -353,7 +350,7 @@ class Antinuke(Package):
         )
         return view
 
-    async def _send_punishment_dm(
+    async def _dispatch_dm(
         self,
         user: discord.abc.User,
         *,
@@ -364,23 +361,23 @@ class Antinuke(Package):
         case_id: int | None = None,
     ) -> None:
         embed = Embed(color=self.color)
-        title = f"You got {self._action_label(action.replace(' (auto)', ''))}"
+        title = f"You were {self._verb_for(action.replace(' (auto)', ''))}"
         if case_id is not None:
-            title += f" - Case `#{case_id}`"
+            title += f" [#{case_id}]"
         embed.add_field(
             name=title,
             value=(
-                f"> **Moderator:** @{getattr(moderator, 'name', str(moderator))}\n"
-                f"> **Reason:** {reason or 'no reason provided'}"
+                f"> **Staff:** @{getattr(moderator, 'name', str(moderator))}\n"
+                f"> **Cause:** {reason or 'no reason provided'}"
             ),
             inline=False,
         )
-        embed.set_footer(text="Think this is a mistake? Reach out to a staff member.")
+        embed.set_footer(text="Contact staff if you believe this was an error.")
         embed.timestamp = discord.utils.utcnow()
         with contextlib.suppress(discord.Forbidden, discord.HTTPException):
-            await user.send(embed=embed, view=self._punishment_view(guild))
+            await user.send(embed=embed, view=self._server_link_view(guild))
 
-    async def _log_case(
+    async def _record_case(
         self,
         guild: discord.Guild,
         *,
@@ -412,8 +409,8 @@ class Antinuke(Package):
             description=(
                 f"**Action:** {action}\n"
                 f"**User:** <@{target_id}> (`{target_id}`)\n"
-                f"**Moderator:** {getattr(moderator, 'mention', str(moderator))} (`{moderator.id}`)\n"
-                f"> **Reason:** {reason or 'no reason provided'}"
+                f"**Staff:** {getattr(moderator, 'mention', str(moderator))} (`{moderator.id}`)\n"
+                f"> **Cause:** {reason or 'no reason provided'}"
             ),
             timestamp=discord.utils.utcnow(),
         )
@@ -421,7 +418,7 @@ class Antinuke(Package):
             await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
         return case_id
 
-    async def _jail_actor(
+    async def _confine_member(
         self,
         member: discord.Member,
         *,
@@ -450,7 +447,7 @@ class Antinuke(Package):
             await member.add_roles(jail_role, reason=reason)
         return True
 
-    async def _strip_staff_roles(
+    async def _demote_staff(
         self,
         member: discord.Member,
         *,
@@ -479,14 +476,14 @@ class Antinuke(Package):
         await member.remove_roles(*roles_to_remove, reason=reason)
         return True
 
-    async def _punish_actor(
+    async def _execute_penalty(
         self,
         member: discord.Member,
-        punishment: str | None,
+        penalty: str | None,
         *,
         reason: str,
     ) -> bool:
-        action = (punishment or "kick").lower()
+        action = (penalty or "kick").lower()
         if action == "ban":
             await member.ban(reason=reason)
             return True
@@ -497,81 +494,81 @@ class Antinuke(Package):
             await member.send(f"you were warned in **{member.guild.name}**: {reason}")
             return True
         if action == "jail":
-            return await self._jail_actor(member, reason=reason)
-        return await self._strip_staff_roles(member, reason=reason)
+            return await self._confine_member(member, reason=reason)
+        return await self._demote_staff(member, reason=reason)
 
-    async def _apply_punishment(
+    async def _apply_sanction(
         self,
         member: discord.Member,
-        punishment: str | None,
+        penalty: str | None,
         *,
         reason: str,
     ) -> bool:
         with contextlib.suppress(discord.Forbidden, discord.HTTPException):
-            return await self._punish_actor(member, punishment, reason=reason)
+            return await self._execute_penalty(member, penalty, reason=reason)
         return False
 
-    async def _handle_module_action(
+    async def _evaluate_module_trigger(
         self,
         guild: discord.Guild,
         actor: discord.Member,
         module_name: str,
         *,
-        immediate: bool = False,
-        command_detected: bool = False,
+        instant: bool = False,
+        cmd_detected: bool = False,
         reason: str | None = None,
     ) -> bool:
-        config = await self._get_config(guild.id)
+        config = await self._guild_config(guild.id)
         module = getattr(config, module_name)
         if not module.status:
             return False
-        if actor.id in self._exempt_ids(guild, config):
+        if actor.id in self._bypass_set(guild, config):
             return False
-        if command_detected and not module.command:
+        if cmd_detected and not module.command:
             return False
 
-        threshold = None
+        limit = None
         used_count: int | None = None
-        used_threshold: int | None = None
-        window_label: str | None = None
-        if not immediate:
+        used_limit: int | None = None
+        window_tag: str | None = None
+        if not instant:
             await self.db.log_antinuke_action(guild.id, actor.id, module_name)
             short_count = await self.db.get_antinuke_action_count(
                 guild.id,
                 actor.id,
                 module_name,
-                SHORT_WINDOW_SECONDS,
+                SHORT_WINDOW,
             )
             long_count = await self.db.get_antinuke_action_count(
                 guild.id,
                 actor.id,
                 module_name,
-                LONG_WINDOW_SECONDS,
+                LONG_WINDOW,
             )
-            threshold = module.threshold
-            long_threshold = max(threshold * LONG_THRESHOLD_MULTIPLIER, threshold + 1)
-            if short_count < threshold and long_count < long_threshold:
+            limit = module.threshold
+            long_limit = max(limit * LONG_THRESHOLD_FACTOR, limit + 1)
+            if short_count < limit and long_count < long_limit:
                 return False
-            used_count = short_count if short_count >= threshold else long_count
-            used_threshold = threshold if short_count >= threshold else long_threshold
-            window_label = "short" if short_count >= threshold else "long"
+            used_count = short_count if short_count >= limit else long_count
+            used_limit = limit if short_count >= limit else long_limit
+            window_tag = "short" if short_count >= limit else "long"
 
-        base_reason = reason or self._module_reason(module_name, threshold)
+        base_reason = reason or self._build_reason(module_name, limit)
         auto_reason = base_reason
-        if used_count is not None and used_threshold is not None and window_label is not None:
+        if used_count is not None and used_limit is not None and window_tag is not None:
             auto_reason = (
                 f"antinuke {module_name}: {base_reason} "
-                f"({window_label} window {used_count}/{used_threshold})"
+                f"({window_tag} {used_count}/{used_limit})"
             )
 
-        punished = await self._apply_punishment(
+        sanctioned = await self._apply_sanction(
             actor,
             module.punishment,
             reason=base_reason,
         )
-        if punished:
+        if sanctioned:
             auto_action = f"{module.punishment} (auto)"
-            case_id = await self._log_case(
+            case_id = await self._record_case(
                 guild,
                 action=auto_action,
                 target_id=actor.id,
@@ -579,7 +576,7 @@ class Antinuke(Package):
                 reason=auto_reason,
             )
             asyncio.create_task(
-                self._send_punishment_dm(
+                self._dispatch_dm(
                     actor,
                     action=auto_action,
                     guild=guild,
@@ -589,40 +586,40 @@ class Antinuke(Package):
                 )
             )
 
-        description = [
+        lines = [
             "A potential nuke has been detected in your server.",
             (
-                f"**{actor}** triggered **{MODULE_LABELS[module_name]}** "
-                f"antinuke and was **{self._owner_punishment_label(module.punishment)}**."
+                f"**{actor}** tripped **{MODULE_NAMES[module_name]}** "
+                f"protection and was **{self._owner_verb(module.punishment)}**."
             ),
         ]
-        if used_count is not None and used_threshold is not None and window_label is not None:
-            description.append(
-                f"Threshold: **{used_count}/{used_threshold}** ({window_label})."
+        if used_count is not None and used_limit is not None and window_tag is not None:
+            lines.append(
+                f"Rate: **{used_count}/{used_limit}** ({window_tag})."
             )
-        if not punished:
-            description.append("I could not punish them due to missing permissions.")
-        await self._notify_owner(guild, "\n".join(description))
+        if not sanctioned:
+            lines.append("I could not take action due to insufficient permissions.")
+        await self._alert_guild_owner(guild, "\n".join(lines))
         return True
 
-    async def _handle_permission_change(
+    async def _audit_perm_change(
         self,
         guild: discord.Guild,
         actor: discord.Member,
         *,
         change_type: str,
-        changed_permissions: set[str],
+        permissions_changed: set[str],
         label: str,
         revert=None,
     ) -> bool:
-        config = await self._get_config(guild.id)
-        if actor.id in self._exempt_ids(guild, config):
+        config = await self._guild_config(guild.id)
+        if actor.id in self._bypass_set(guild, config):
             return False
 
         matches = [
             watch
             for watch in config.permissions
-            if watch.type == change_type and watch.permission in changed_permissions
+            if watch.type == change_type and watch.permission in permissions_changed
         ]
         if not matches:
             return False
@@ -633,16 +630,16 @@ class Antinuke(Package):
                 await revert()
                 reverted = True
 
-        punishment = self._pick_permission_punishment(matches)
+        penalty = self._strongest_penalty(matches)
         reason = f"antinuke permissions: {label}"
-        punished = await self._apply_punishment(
+        sanctioned = await self._apply_sanction(
             actor,
-            punishment,
+            penalty,
             reason=reason,
         )
-        if punished:
-            auto_action = f"{punishment} (auto)"
-            case_id = await self._log_case(
+        if sanctioned:
+            auto_action = f"{penalty} (auto)"
+            case_id = await self._record_case(
                 guild,
                 action=auto_action,
                 target_id=actor.id,
@@ -650,7 +647,7 @@ class Antinuke(Package):
                 reason=reason,
             )
             asyncio.create_task(
-                self._send_punishment_dm(
+                self._dispatch_dm(
                     actor,
                     action=auto_action,
                     guild=guild,
@@ -660,23 +657,23 @@ class Antinuke(Package):
                 )
             )
 
-        description = [
+        lines = [
             "A dangerous permission change was detected in your server.",
             f"**{actor}** {label}.",
-            f"They were **{self._owner_punishment_label(punishment)}**.",
+            f"They were **{self._owner_verb(penalty)}**.",
         ]
         if revert is not None:
-            description.append(
-                "I reverted the permission change."
+            lines.append(
+                "The permission change has been rolled back."
                 if reverted
-                else "I could not revert the permission change."
+                else "I could not roll back the permission change."
             )
-        if not punished:
-            description.append("I could not punish them due to missing permissions.")
-        await self._notify_owner(guild, "\n".join(description))
+        if not sanctioned:
+            lines.append("I could not take action due to insufficient permissions.")
+        await self._alert_guild_owner(guild, "\n".join(lines))
         return True
 
-    async def _remove_created_webhook(
+    async def _delete_webhook(
         self,
         channel: discord.abc.GuildChannel,
         target_id: int | None,
@@ -692,7 +689,7 @@ class Antinuke(Package):
                     await webhook.delete(reason="antinuke revert: webhook create")
                     return
 
-    async def _restore_deleted_channel(self, channel: discord.abc.GuildChannel) -> None:
+    async def _clone_channel(self, channel: discord.abc.GuildChannel) -> None:
         with contextlib.suppress(discord.Forbidden, discord.HTTPException):
             restored = await channel.clone(reason="antinuke revert: channel delete")
             with contextlib.suppress(discord.HTTPException):
@@ -702,7 +699,7 @@ class Antinuke(Package):
                     reason="antinuke revert: channel delete",
                 )
 
-    async def _restore_deleted_role(self, role: discord.Role) -> None:
+    async def _recreate_role(self, role: discord.Role) -> None:
         if role.managed:
             return
         with contextlib.suppress(discord.Forbidden, discord.HTTPException):
@@ -720,7 +717,7 @@ class Antinuke(Package):
                     reason="antinuke revert: role delete",
                 )
 
-    async def _restore_role_snapshot(
+    async def _rebuild_role(
         self,
         guild: discord.Guild,
         data: dict[str, Any],
@@ -740,8 +737,8 @@ class Antinuke(Package):
                     reason="antinuke revert: role delete",
                 )
 
-    async def _remove_joined_bot(self, member: discord.Member, punishment: str) -> bool:
-        action = "ban" if punishment == "ban" else "kick"
+    async def _eject_bot(self, member: discord.Member, penalty: str) -> bool:
+        action = "ban" if penalty == "ban" else "kick"
         with contextlib.suppress(discord.Forbidden, discord.HTTPException):
             if action == "ban":
                 await member.ban(reason="antinuke: bot add")
@@ -752,17 +749,17 @@ class Antinuke(Package):
 
     @Package.listener()
     async def on_member_ban(self, guild: discord.Guild, user: discord.User) -> None:
-        entry = await self._latest_audit(
+        entry = await self._fetch_latest_log(
             guild,
             discord.AuditLogAction.ban,
             target_id=user.id,
         )
-        actor = await self._audit_actor(guild, entry)
+        actor = await self._entry_user(guild, entry)
         if actor is None:
             return
-        if self._was_recently_handled_command_action(guild.id, actor.id, "ban", user.id):
+        if self._is_recent_cmd_action(guild.id, actor.id, "ban", user.id):
             return
-        await self._handle_module_action(
+        await self._evaluate_module_trigger(
             guild,
             actor,
             "ban",
@@ -774,17 +771,17 @@ class Antinuke(Package):
         guild = self.bot.get_guild(payload.guild_id)
         if guild is None:
             return
-        entry = await self._latest_audit(
+        entry = await self._fetch_latest_log(
             guild,
             discord.AuditLogAction.kick,
             target_id=payload.user.id,
         )
-        actor = await self._audit_actor(guild, entry)
+        actor = await self._entry_user(guild, entry)
         if actor is None:
             return
-        if self._was_recently_handled_command_action(guild.id, actor.id, "kick", payload.user.id):
+        if self._is_recent_cmd_action(guild.id, actor.id, "kick", payload.user.id):
             return
-        await self._handle_module_action(
+        await self._evaluate_module_trigger(
             guild,
             actor,
             "kick",
@@ -793,15 +790,15 @@ class Antinuke(Package):
 
     @Package.listener()
     async def on_guild_channel_create(self, channel: discord.abc.GuildChannel) -> None:
-        entry = await self._latest_audit(
+        entry = await self._fetch_latest_log(
             channel.guild,
             discord.AuditLogAction.channel_create,
             target_id=channel.id,
         )
-        actor = await self._audit_actor(channel.guild, entry)
+        actor = await self._entry_user(channel.guild, entry)
         if actor is None:
             return
-        if await self._handle_module_action(
+        if await self._evaluate_module_trigger(
             channel.guild,
             actor,
             "channel",
@@ -812,41 +809,41 @@ class Antinuke(Package):
 
     @Package.listener()
     async def on_guild_channel_delete(self, channel: discord.abc.GuildChannel) -> None:
-        entry = await self._latest_audit(
+        entry = await self._fetch_latest_log(
             channel.guild,
             discord.AuditLogAction.channel_delete,
             target_id=channel.id,
         )
-        actor = await self._audit_actor(channel.guild, entry)
+        actor = await self._entry_user(channel.guild, entry)
         if actor is None:
             return
-        if await self._handle_module_action(
+        if await self._evaluate_module_trigger(
             channel.guild,
             actor,
             "channel",
             reason="antinuke triggered: channel delete",
         ):
-            await self._restore_deleted_channel(channel)
+            await self._clone_channel(channel)
 
     @Package.listener()
     async def on_guild_role_delete(self, role: discord.Role) -> None:
-        entry = await self._latest_audit(
+        entry = await self._fetch_latest_log(
             role.guild,
             discord.AuditLogAction.role_delete,
             target_id=role.id,
         )
-        actor = await self._audit_actor(role.guild, entry)
+        actor = await self._entry_user(role.guild, entry)
         if actor is None:
             return
-        if self._was_recently_handled_command_action(role.guild.id, actor.id, "role", role.id):
+        if self._is_recent_cmd_action(role.guild.id, actor.id, "role", role.id):
             return
-        if await self._handle_module_action(
+        if await self._evaluate_module_trigger(
             role.guild,
             actor,
             "role",
             reason="antinuke triggered: role delete",
         ):
-            await self._restore_deleted_role(role)
+            await self._recreate_role(role)
 
     @Package.listener()
     async def on_guild_emojis_update(
@@ -857,11 +854,11 @@ class Antinuke(Package):
     ) -> None:
         if len(before) <= len(after):
             return
-        entry = await self._latest_audit(guild, discord.AuditLogAction.emoji_delete)
-        actor = await self._audit_actor(guild, entry)
+        entry = await self._fetch_latest_log(guild, discord.AuditLogAction.emoji_delete)
+        actor = await self._entry_user(guild, entry)
         if actor is None:
             return
-        await self._handle_module_action(
+        await self._evaluate_module_trigger(
             guild,
             actor,
             "emoji",
@@ -870,34 +867,34 @@ class Antinuke(Package):
 
     @Package.listener()
     async def on_webhooks_update(self, channel: discord.abc.GuildChannel) -> None:
-        entry = await self._latest_audit(
+        entry = await self._fetch_latest_log(
             channel.guild,
             discord.AuditLogAction.webhook_create,
         )
-        actor = await self._audit_actor(channel.guild, entry)
+        actor = await self._entry_user(channel.guild, entry)
         if actor is None:
             return
-        if await self._handle_module_action(
+        if await self._evaluate_module_trigger(
             channel.guild,
             actor,
             "webhook",
             reason="antinuke triggered: webhook create",
         ):
-            await self._remove_created_webhook(channel, getattr(entry.target, "id", None))
+            await self._delete_webhook(channel, getattr(entry.target, "id", None))
 
     @Package.listener()
     async def on_guild_update(self, before: discord.Guild, after: discord.Guild) -> None:
         if before.vanity_url_code == after.vanity_url_code:
             return
-        entry = await self._latest_audit(after, discord.AuditLogAction.guild_update)
-        actor = await self._audit_actor(after, entry)
+        entry = await self._fetch_latest_log(after, discord.AuditLogAction.guild_update)
+        actor = await self._entry_user(after, entry)
         if actor is None:
             return
-        await self._handle_module_action(
+        await self._evaluate_module_trigger(
             after,
             actor,
             "vanity",
-            immediate=True,
+            instant=True,
             reason="antinuke triggered: vanity update",
         )
 
@@ -905,30 +902,30 @@ class Antinuke(Package):
     async def on_member_join(self, member: discord.Member) -> None:
         if not member.bot:
             return
-        config = await self._get_config(member.guild.id)
+        config = await self._guild_config(member.guild.id)
         if not config.botadd.status:
             return
         if member.id in set(config.whitelist):
             return
 
-        entry = await self._latest_audit(
+        entry = await self._fetch_latest_log(
             member.guild,
             discord.AuditLogAction.bot_add,
             target_id=member.id,
         )
-        actor = await self._audit_actor(member.guild, entry)
+        actor = await self._entry_user(member.guild, entry)
 
         bot_action = "ban" if config.botadd.punishment == "ban" else "kick"
-        removed = await self._remove_joined_bot(member, bot_action)
-        actor_punished = False
+        removed = await self._eject_bot(member, bot_action)
+        actor_sanctioned = False
         bot_reason = (
-            f"antinuke botadd: added bot {member} ({member.id})"
+            f"antinuke botadd: {member} ({member.id}) added"
             if actor is not None
-            else f"antinuke botadd: added bot {member.id}"
+            else f"antinuke botadd: bot {member.id} added"
         )
 
         if removed:
-            await self._log_case(
+            await self._record_case(
                 member.guild,
                 action=f"{bot_action} (auto)",
                 target_id=member.id,
@@ -936,15 +933,15 @@ class Antinuke(Package):
                 reason=bot_reason,
             )
 
-        if actor is not None and actor.id not in self._exempt_ids(member.guild, config):
-            actor_punished = await self._apply_punishment(
+        if actor is not None and actor.id not in self._bypass_set(member.guild, config):
+            actor_sanctioned = await self._apply_sanction(
                 actor,
                 config.botadd.punishment,
                 reason="antinuke: bot add",
             )
-            if actor_punished:
+            if actor_sanctioned:
                 actor_action = f"{config.botadd.punishment} (auto)"
-                actor_case_id = await self._log_case(
+                actor_case_id = await self._record_case(
                     member.guild,
                     action=actor_action,
                     target_id=actor.id,
@@ -952,7 +949,7 @@ class Antinuke(Package):
                     reason=bot_reason,
                 )
                 asyncio.create_task(
-                    self._send_punishment_dm(
+                    self._dispatch_dm(
                         actor,
                         action=actor_action,
                         guild=member.guild,
@@ -962,22 +959,22 @@ class Antinuke(Package):
                     )
                 )
 
-        description = [
+        lines = [
             "A potential nuke has been detected in your server.",
             f"**{actor or 'Unknown user'}** added **{member}**.",
         ]
         if removed:
-            description.append(f"The bot was **{self._punishment_label(bot_action)}**.")
+            lines.append(f"The bot was **{self._penalty_verb(bot_action)}**.")
         else:
-            description.append("I could not remove the new bot due to missing permissions.")
-        if actor is not None and actor.id not in self._exempt_ids(member.guild, config):
-            if actor_punished:
-                description.append(
-                    f"The inviter was **{self._punishment_label(config.botadd.punishment)}**."
+            lines.append("I could not remove the new bot due to missing permissions.")
+        if actor is not None and actor.id not in self._bypass_set(member.guild, config):
+            if actor_sanctioned:
+                lines.append(
+                    f"The inviter was **{self._penalty_verb(config.botadd.punishment)}**."
                 )
             else:
-                description.append("I could not punish the inviter due to missing permissions.")
-        await self._notify_owner(member.guild, "\n".join(description))
+                lines.append("I could not punish the inviter due to missing permissions.")
+        await self._alert_guild_owner(member.guild, "\n".join(lines))
 
     @Package.listener()
     async def on_guild_role_update(self, before: discord.Role, after: discord.Role) -> None:
@@ -999,21 +996,21 @@ class Antinuke(Package):
         if not added_permissions and not removed_permissions:
             return
 
-        entry = await self._latest_audit(
+        entry = await self._fetch_latest_log(
             after.guild,
             discord.AuditLogAction.role_update,
             target_id=after.id,
         )
-        actor = await self._audit_actor(after.guild, entry)
+        actor = await self._entry_user(after.guild, entry)
         if actor is None:
             return
 
         if added_permissions:
-            await self._handle_permission_change(
+            await self._audit_perm_change(
                 after.guild,
                 actor,
                 change_type="grant",
-                changed_permissions=added_permissions,
+                permissions_changed=added_permissions,
                 label=f"granted dangerous permissions to role **{after.name}**",
                 revert=lambda: after.edit(
                     permissions=before.permissions,
@@ -1021,11 +1018,11 @@ class Antinuke(Package):
                 ),
             )
         if removed_permissions:
-            await self._handle_permission_change(
+            await self._audit_perm_change(
                 after.guild,
                 actor,
                 change_type="remove",
-                changed_permissions=removed_permissions,
+                permissions_changed=removed_permissions,
                 label=f"removed dangerous permissions from role **{after.name}**",
                 revert=lambda: after.edit(
                     permissions=before.permissions,
@@ -1056,12 +1053,12 @@ class Antinuke(Package):
         if not added_permissions and not removed_permissions:
             return
 
-        entry = await self._latest_audit(
+        entry = await self._fetch_latest_log(
             after.guild,
             discord.AuditLogAction.member_role_update,
             target_id=after.id,
         )
-        actor = await self._audit_actor(after.guild, entry)
+        actor = await self._entry_user(after.guild, entry)
         if actor is None:
             return
 
@@ -1074,11 +1071,11 @@ class Antinuke(Package):
                     for permission in DANGEROUS_PERMISSIONS
                 )
             ]
-            await self._handle_permission_change(
+            await self._audit_perm_change(
                 after.guild,
                 actor,
                 change_type="grant",
-                changed_permissions=added_permissions,
+                permissions_changed=added_permissions,
                 label=f"granted dangerous roles to **{after}**",
                 revert=lambda: after.remove_roles(
                     *dangerous_added_roles,
@@ -1095,11 +1092,11 @@ class Antinuke(Package):
                     for permission in DANGEROUS_PERMISSIONS
                 )
             ]
-            await self._handle_permission_change(
+            await self._audit_perm_change(
                 after.guild,
                 actor,
                 change_type="remove",
-                changed_permissions=removed_permissions,
+                permissions_changed=removed_permissions,
                 label=f"removed dangerous roles from **{after}**",
                 revert=lambda: after.add_roles(
                     *dangerous_removed_roles,
@@ -1127,16 +1124,16 @@ class Antinuke(Package):
         if module is None:
             return
 
-        triggered = await self._handle_module_action(
+        triggered = await self._evaluate_module_trigger(
             guild,
             actor,
             module,
-            command_detected=True,
+            cmd_detected=True,
             reason=f"antinuke triggered: {action}",
         )
         if not triggered or module != "role" or not meta:
             if triggered and meta and meta.get("target_id") and module in {"ban", "kick"}:
-                self._remember_command_action(
+                self._note_cmd_action(
                     guild.id,
                     actor.id,
                     module,
@@ -1146,8 +1143,8 @@ class Antinuke(Package):
 
         if action == "role delete" and meta.get("role"):
             if meta.get("role_id"):
-                self._remember_command_action(guild.id, actor.id, module, int(meta["role_id"]))
-            await self._restore_role_snapshot(guild, dict(meta["role"]))
+                self._note_cmd_action(guild.id, actor.id, module, int(meta["role_id"]))
+            await self._rebuild_role(guild, dict(meta["role"]))
 
     @group(
         name="antinuke",
@@ -1166,47 +1163,47 @@ class Antinuke(Package):
     )
     async def antinuke_config(self, ctx):
         """View server configuration for Antinuke."""
-        config = await self._get_config(ctx.guild.id)
-        enabled = config.enabled_count()
-        whitelisted_bots = 0
-        whitelisted_members = 0
-        super_admins = {ctx.guild.owner_id, *config.admins}
+        config = await self._guild_config(ctx.guild.id)
+        active = config.enabled_count()
+        bot_count = 0
+        member_count = 0
+        all_admins = {ctx.guild.owner_id, *config.admins}
 
-        for user_id in config.whitelist:
-            user = self.bot.get_user(user_id) or ctx.guild.get_member(user_id)
-            if user and user.bot:
-                whitelisted_bots += 1
+        for uid in config.whitelist:
+            obj = self.bot.get_user(uid) or ctx.guild.get_member(uid)
+            if obj and obj.bot:
+                bot_count += 1
             else:
-                whitelisted_members += 1
+                member_count += 1
 
         embed = Embed(
             color=self.color,
             title="Settings",
-            description=f"Antinuke is **{'enabled' if enabled else 'disabled'}** in this server",
+            description=f"Antinuke is **{'active' if active else 'inactive'}** in this server",
         )
         embed.add_field(
             name="Modules",
             value=(
-                f"**Role Deletion:** {self._status_emoji(config.role.status)}"
-                f"\n**Emoji Deletion:** {self._status_emoji(config.emoji.status)}"
-                f"\n**Mass Member Ban:** {self._status_emoji(config.ban.status)}"
-                f"\n**Mass Member Kick:** {self._status_emoji(config.kick.status)}"
-                f"\n**Webhook Creation:** {self._status_emoji(config.webhook.status)}"
-                f"\n**Channel Creation/Deletion:** {self._status_emoji(config.channel.status)}"
-                f"\n**Vanity Change:** {self._status_emoji(config.vanity.status)}"
+                f"**Role Deletion:** {self._toggle_icon(config.role.status)}"
+                f"\n**Emoji Deletion:** {self._toggle_icon(config.emoji.status)}"
+                f"\n**Mass Member Ban:** {self._toggle_icon(config.ban.status)}"
+                f"\n**Mass Member Kick:** {self._toggle_icon(config.kick.status)}"
+                f"\n**Webhook Creation:** {self._toggle_icon(config.webhook.status)}"
+                f"\n**Channel Creation/Deletion:** {self._toggle_icon(config.channel.status)}"
+                f"\n**Vanity Change:** {self._toggle_icon(config.vanity.status)}"
             ),
             inline=True,
         )
         embed.add_field(
             name="General",
             value=(
-                f"**Super Admins:** {len(super_admins)}"
-                f"\n**Whitelisted Bots:** {whitelisted_bots}"
-                f"\n**Whitelisted Members:** {whitelisted_members}"
-                f"\n**Protection Modules:** {enabled} enabled"
-                f"\n**Watch Permission Grant:** {self._permission_rows(config, kind='grant')}/{len(DANGEROUS_PERMISSIONS)} perms"
-                f"\n**Watch Permission Remove:** {self._permission_rows(config, kind='remove')}/{len(DANGEROUS_PERMISSIONS)} perms"
-                f"\n**Deny Bot Joins (bot add):** {self._status_emoji(config.botadd.status)}"
+                f"**Super Admins:** {len(all_admins)}"
+                f"\n**Whitelisted Bots:** {bot_count}"
+                f"\n**Whitelisted Members:** {member_count}"
+                f"\n**Protection Modules:** {active} active"
+                f"\n**Watch Permission Grant:** {self._count_perms(config, kind='grant')}/{len(DANGEROUS_PERMISSIONS)} perms"
+                f"\n**Watch Permission Remove:** {self._count_perms(config, kind='remove')}/{len(DANGEROUS_PERMISSIONS)} perms"
+                f"\n**Deny Bot Joins (bot add):** {self._toggle_icon(config.botadd.status)}"
             ),
             inline=True,
         )
@@ -1233,12 +1230,12 @@ class Antinuke(Package):
             ctx.guild.id,
             member.id,
         )
-        await self._refresh_config(ctx.guild.id)
+        await self._load_config(ctx.guild.id)
 
         if member.id in (whitelist or []):
-            action = "can join" if getattr(member, "bot", False) else "will not trigger **antinuke**"
-            return await ctx.success(f"**{member}** is now whitelisted and {action}")
-        return await ctx.success(f"**{member}** is no longer whitelisted")
+            note = "can join" if getattr(member, "bot", False) else "bypasses **antinuke**"
+            return await ctx.success(f"**{member}** added to whitelist ({note})")
+        return await ctx.success(f"**{member}** removed from whitelist")
 
     @antinuke.command(
         name="admin",
@@ -1248,10 +1245,10 @@ class Antinuke(Package):
     async def antinuke_admin(self, ctx, *, member: MemberConvert):
         """Give a member permissions to edit antinuke settings."""
         if getattr(member, "bot", False):
-            return await ctx.warn("You cannot make a bot an **antinuke admin**")
+            return await ctx.warn("Bots cannot be **antinuke admins**")
         if member.id == ctx.guild.owner_id:
             return await ctx.warn(
-                "The **server owner** is already an **antinuke admin** by default"
+                "The **server owner** already has admin access by default"
             )
 
         admins = await self.db.fetchval(
@@ -1268,59 +1265,59 @@ class Antinuke(Package):
             ctx.guild.id,
             member.id,
         )
-        await self._refresh_config(ctx.guild.id)
+        await self._load_config(ctx.guild.id)
 
         if member.id in (admins or []):
             return await ctx.success(
-                f"**{member}** is now an **antinuke admin** and can edit **antinuke settings**"
+                f"**{member}** promoted to **antinuke admin**"
             )
         return await ctx.success(
-            f"**{member}** is no longer an **antinuke admin** and can no longer edit **antinuke settings**"
+            f"**{member}** demoted from **antinuke admin**"
         )
 
     @antinuke.command(name="admins")
     async def antinuke_admins(self, ctx):
         """View all antinuke admins."""
-        config = await self._get_config(ctx.guild.id)
+        config = await self._guild_config(ctx.guild.id)
         admin_ids = [ctx.guild.owner_id, *config.admins]
         seen: set[int] = set()
-        deduped_admin_ids = [
-            user_id for user_id in admin_ids if not (user_id in seen or seen.add(user_id))
+        deduped = [
+            uid for uid in admin_ids if not (uid in seen or seen.add(uid))
         ]
-        if not deduped_admin_ids:
-            return await ctx.warn("There are no **antinuke admins**")
+        if not deduped:
+            return await ctx.warn("No **antinuke admins** configured")
         return await ctx.paginate(
             Embed(title="Antinuke Admins", color=self.color),
-            [f"<@{user_id}>" for user_id in deduped_admin_ids],
+            [f"<@{uid}>" for uid in deduped],
         )
 
     @antinuke.command(name="list")
     async def antinuke_list(self, ctx):
         """View all enabled modules along with whitelisted members and bots."""
-        config = await self._get_config(ctx.guild.id)
+        config = await self._guild_config(ctx.guild.id)
         entries: list[str] = []
 
-        for name, module in config.enabled_modules():
-            details = [f"do: {module.punishment or 'kick'}"]
-            if name in {"botadd", "vanity"}:
-                details.append("threshold: N/A")
+        for tag, mod in config.enabled_modules():
+            parts = [f"action: {mod.punishment or 'kick'}"]
+            if tag in {"botadd", "vanity"}:
+                parts.append("limit: N/A")
             else:
-                details.append(f"threshold: {module.threshold}")
-            if name in {"ban", "kick", "role"}:
-                details.append(f"cmd: {'on' if module.command else 'off'}")
-            entries.append(f"{name} ({', '.join(details)})")
+                parts.append(f"limit: {mod.threshold}")
+            if tag in {"ban", "kick", "role"}:
+                parts.append(f"cmd: {'yes' if mod.command else 'no'}")
+            entries.append(f"{tag} ({', '.join(parts)})")
 
-        for user_id in config.whitelist:
-            user = self.bot.get_user(user_id) or ctx.guild.get_member(user_id)
-            label = str(user) if user else "Unknown User"
-            kind = "BOT" if user and user.bot else ("UNKNOWN" if user is None else "MEMBER")
-            entries.append(f"{label} whitelisted ({user_id}) [{kind}]")
+        for uid in config.whitelist:
+            obj = self.bot.get_user(uid) or ctx.guild.get_member(uid)
+            label = str(obj) if obj else "Unknown User"
+            tag = "BOT" if obj and obj.bot else ("UNKNOWN" if obj is None else "MEMBER")
+            entries.append(f"{label} ({uid}) [{tag}]")
 
         if not entries:
-            return await ctx.warn("There are no **antinuke modules** enabled")
+            return await ctx.warn("No **antinuke modules** are currently active")
         width = max(2, len(str(len(entries))))
         numbered = [
-            f"{index:0{width}d} {entry}" for index, entry in enumerate(entries, start=1)
+            f"{idx:0{width}d} {entry}" for idx, entry in enumerate(entries, start=1)
         ]
         embed = Embed(title="Antinuke modules & whitelist", color=self.color).set_author(
             name=str(ctx.author),
@@ -1340,7 +1337,7 @@ class Antinuke(Package):
     )
     async def antinuke_vanity(self, ctx, status: StatusConvert, *, flags: str = None):
         """Prevent vanity URL changes."""
-        return await self._update_module(ctx, "vanity", status)
+        return await self._adjust_module(ctx, "vanity", status)
 
     @antinuke.command(
         name="botadd",
@@ -1350,7 +1347,7 @@ class Antinuke(Package):
     )
     async def antinuke_botadd(self, ctx, status: StatusConvert, *, flags: str = None):
         """Prevent new bot additions."""
-        return await self._update_module(ctx, "botadd", status)
+        return await self._adjust_module(ctx, "botadd", status)
 
     @antinuke.command(
         name="webhook",
@@ -1360,7 +1357,7 @@ class Antinuke(Package):
     )
     async def antinuke_webhook(self, ctx, status: StatusConvert, *, flags: str = None):
         """Prevent mass webhook creation."""
-        return await self._update_module(ctx, "webhook", status, include_threshold=True)
+        return await self._adjust_module(ctx, "webhook", status, with_threshold=True)
 
     @antinuke.command(
         name="emoji",
@@ -1370,7 +1367,7 @@ class Antinuke(Package):
     )
     async def antinuke_emoji(self, ctx, status: StatusConvert, *, flags: str = None):
         """Prevent mass emoji delete."""
-        return await self._update_module(ctx, "emoji", status, include_threshold=True)
+        return await self._adjust_module(ctx, "emoji", status, with_threshold=True)
 
     @antinuke.command(
         name="permissions",
@@ -1398,32 +1395,32 @@ class Antinuke(Package):
                 "You passed an **invalid permission name**, please visit the documentation [here](https://docs.bleed.bot/help/commands/antinuke/antinuke-permissions)"
             )
 
-        punishment = str(ctx.flags.get("punishment") or "kick").lower()
-        if punishment not in {"ban", "kick", "stripstaff", "warn", "jail"}:
+        penalty = str(ctx.flags.get("punishment") or "kick").lower()
+        if penalty not in {"ban", "kick", "stripstaff", "warn", "jail"}:
             raise CommandError(
                 "punishment must be `ban`, `kick`, `jail`, `warn`, or `stripstaff`"
             )
 
-        candidate = PermissionWatch(
+        entry = PermissionWatch(
             type=option,
             permission=normalized,
-            punishment=punishment,
+            punishment=penalty,
         )
-        config = await self._get_config(ctx.guild.id)
-        permissions = list(config.permissions)
+        config = await self._guild_config(ctx.guild.id)
+        perms = list(config.permissions)
 
-        removed = False
-        for existing in list(permissions):
-            if existing.as_dict() == candidate.as_dict():
-                permissions.remove(existing)
-                removed = True
+        toggled_off = False
+        for existing in list(perms):
+            if existing.as_dict() == entry.as_dict():
+                perms.remove(existing)
+                toggled_off = True
                 break
-            if existing.type == candidate.type and existing.permission == candidate.permission:
-                permissions.remove(existing)
+            if existing.type == entry.type and existing.permission == entry.permission:
+                perms.remove(existing)
 
-        payload = [item.as_dict() for item in permissions]
-        if not removed:
-            payload.append(candidate.as_dict())
+        payload = [item.as_dict() for item in perms]
+        if not toggled_off:
+            payload.append(entry.as_dict())
 
         await self.db.execute(
             """
@@ -1435,17 +1432,17 @@ class Antinuke(Package):
             ctx.guild.id,
             json.dumps(payload),
         )
-        await self._refresh_config(ctx.guild.id)
+        await self._load_config(ctx.guild.id)
 
-        if removed:
-            action = "granting" if option == "grant" else "removal"
+        if toggled_off:
+            direction = "granting" if option == "grant" else "removal"
             return await ctx.success(
-                f"No longer monitoring **{action} of** permission `{candidate.permission}`"
+                f"Stopped watching for **{direction} of** `{entry.permission}`"
             )
 
-        action = "granting" if option == "grant" else "removal"
+        direction = "granting" if option == "grant" else "removal"
         return await ctx.success(
-            f"Now monitoring **{action} of** permission `{candidate.permission}`. Members **manually** giving out roles to others will be punished with `{candidate.punishment}`"
+            f"Now watching for **{direction} of** `{entry.permission}`. Offenders will be **{entry.punishment}**"
         )
 
     @antinuke.command(
@@ -1456,12 +1453,12 @@ class Antinuke(Package):
     )
     async def antinuke_ban(self, ctx, status: StatusConvert, *, flags: str = None):
         """Prevent mass member ban."""
-        return await self._update_module(
+        return await self._adjust_module(
             ctx,
             "ban",
             status,
-            include_threshold=True,
-            include_command=True,
+            with_threshold=True,
+            with_command=True,
         )
 
     @antinuke.command(
@@ -1472,12 +1469,12 @@ class Antinuke(Package):
     )
     async def antinuke_kick(self, ctx, status: StatusConvert, *, flags: str = None):
         """Prevent mass member kick."""
-        return await self._update_module(
+        return await self._adjust_module(
             ctx,
             "kick",
             status,
-            include_threshold=True,
-            include_command=True,
+            with_threshold=True,
+            with_command=True,
         )
 
     @antinuke.command(
@@ -1488,7 +1485,7 @@ class Antinuke(Package):
     )
     async def antinuke_channel(self, ctx, status: StatusConvert, *, flags: str = None):
         """Prevent mass channel create and delete."""
-        return await self._update_module(ctx, "channel", status, include_threshold=True)
+        return await self._adjust_module(ctx, "channel", status, with_threshold=True)
 
     @antinuke.command(
         name="role",
@@ -1498,12 +1495,12 @@ class Antinuke(Package):
     )
     async def antinuke_role(self, ctx, status: StatusConvert, *, flags: str = None):
         """Prevent mass role delete."""
-        return await self._update_module(
+        return await self._adjust_module(
             ctx,
             "role",
             status,
-            include_threshold=True,
-            include_command=True,
+            with_threshold=True,
+            with_command=True,
         )
 
 

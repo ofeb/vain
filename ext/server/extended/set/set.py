@@ -1,9 +1,11 @@
 from typing import Optional
-from discord.ext.commands import group, has_permissions, CommandError, FakePermissionConverter
+from discord.ext.commands import group, CommandError
 from discord import Embed, Role
 from core.discord.package import Package
 
 
+from core.managers.converters import FakePermissionConverter
+from core.managers.permissions import has_permissions
 class SetCommands(Package):
     """fake permissions management"""
 

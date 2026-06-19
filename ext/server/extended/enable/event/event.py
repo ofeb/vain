@@ -1,9 +1,11 @@
-from discord.ext.commands import group, has_permissions, CommandError, EventConverter
+from discord.ext.commands import group, CommandError
 from discord import TextChannel
 from core.discord.package import Package
 from lib.classes.converters import EVENT_MAPPING
 
 
+from core.managers.converters import EventConverter
+from core.managers.permissions import has_permissions
 class EventEnableCommands(Package):
     """re-enable bot events per channel"""
 

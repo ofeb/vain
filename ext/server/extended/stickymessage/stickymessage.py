@@ -1,10 +1,11 @@
-from discord.ext.commands import group, has_permissions, CommandError
+from discord.ext.commands import group, CommandError
 from discord import Embed, TextChannel
 from asyncio import Lock
 from collections import defaultdict
 from core.discord.package import Package
 
 
+from core.managers.permissions import has_permissions
 class StickymessageCommands(Package):
     """sticky message commands"""
 

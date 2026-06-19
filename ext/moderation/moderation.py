@@ -4,12 +4,13 @@ import contextlib
 import discord
 from datetime import timedelta
 from discord.ext import tasks
-from discord.ext.commands import command, group, has_permissions
+from discord.ext.commands import command, group
 from discord.ext.commands import CommandError
 
 from core.discord.package import Package
 
 
+from core.managers.permissions import has_permissions
 class ModerationCommands(Package):
     """standalone moderation commands"""
 

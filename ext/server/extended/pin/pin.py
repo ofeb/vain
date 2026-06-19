@@ -1,8 +1,9 @@
-from discord.ext.commands import group, has_permissions, CommandError, Boolean
+from discord.ext.commands import group, CommandError
 from discord import Embed, TextChannel
 from core.discord.package import Package
 
 
+from core.managers.permissions import has_permissions
 class PinCommands(Package):
     """pin archival management"""
 
@@ -82,7 +83,7 @@ class PinCommands(Package):
         description="Enable or disable the unpinning of messages during archival",
     )
     @has_permissions(manage_guild=True)
-    async def pins_unpin(self, ctx, option: Boolean):
+    async def pins_unpin(self, ctx, option: bool):
         """toggle auto-unpin"""
         await self.db.execute(
             """INSERT INTO pin_config (guild_id, unpinning) VALUES($1, $2) ON CONFLICT(guild_id) DO UPDATE SET unpinning = excluded.unpinning""",
@@ -93,7 +94,7 @@ class PinCommands(Package):
 
     @pins.command(name="set", description="Enable or disable the pin archival system")
     @has_permissions(manage_guild=True)
-    async def pins_set(self, ctx, option: Boolean):
+    async def pins_set(self, ctx, option: bool):
         """toggle pin archival"""
         await self.db.execute(
             """INSERT INTO pin_config (guild_id, enabled) VALUES($1, $2) ON CONFLICT(guild_id) DO UPDATE SET enabled = excluded.enabled""",

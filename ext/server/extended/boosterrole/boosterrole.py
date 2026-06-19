@@ -1,5 +1,5 @@
 from typing import Optional, Union, List
-from discord.ext.commands import group, has_permissions, CommandError, ColourConverter as ColorConverter
+from discord.ext.commands import group, CommandError, ColourConverter as ColorConverter
 from discord import Embed, Role, Emoji, PartialEmoji, Color, Member
 from core.discord.package import Package
 from lib.classes.color import get_dominant_color
@@ -9,6 +9,7 @@ import asyncio
 import random
 
 
+from core.managers.permissions import has_permissions
 class BoosterroleCommands(Package):
     """booster role management commands"""
 

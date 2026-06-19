@@ -13,7 +13,7 @@ from urllib.request import Request, urlopen
 
 try:
     from dotenv import load_dotenv
-except Exception:  # pragma: no cover - local tooling fallback
+except Exception:  # not needed it hink
     load_dotenv = None
 
 

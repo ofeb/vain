@@ -1,8 +1,9 @@
-from discord.ext.commands import group, has_permissions, CommandError
+from discord.ext.commands import group, CommandError
 from core.discord.package import Package
 from core.managers.values import bot as bot_config
 
 
+from core.managers.permissions import has_permissions
 class PrefixCommands(Package):
     """server prefix management commands"""
 

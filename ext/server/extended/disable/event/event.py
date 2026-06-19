@@ -1,9 +1,11 @@
-from discord.ext.commands import group, has_permissions, CommandError, EventConverter
+from discord.ext.commands import group, CommandError
 from discord import Embed, TextChannel
 from core.discord.package import Package
 from lib.classes.converters import EVENT_MAPPING
 
 
+from core.managers.converters import EventConverter
+from core.managers.permissions import has_permissions
 class EventDisableCommands(Package):
     """disable bot events per channel"""
 

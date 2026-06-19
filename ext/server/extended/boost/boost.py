@@ -5,12 +5,13 @@ from collections import defaultdict
 
 from asyncpg import UniqueViolationError
 from discord import Embed, Member, Message, TextChannel
-from discord.ext.commands import group, has_permissions
+from discord.ext.commands import group
 
 from core.discord.package import Package
 from lib.classes.flags.servers import Parameters
 
 
+from core.managers.permissions import has_permissions
 class BoostCommands(Package):
     """boost message setup commands"""
 

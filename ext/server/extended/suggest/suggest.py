@@ -5,11 +5,12 @@ import re
 
 import discord
 from discord.ext import commands
-from discord.ext.commands import CommandError, cooldown, group, has_permissions
+from discord.ext.commands import CommandError, cooldown, group
 
 from core.discord.package import Package
 from core.tools.convert import MemberConvert, RoleConvert, StatusConvert
 
+from core.managers.permissions import has_permissions
 DEFAULT_UPVOTE = "\u2705"
 DEFAULT_DOWNVOTE = "\u274c"
 SUGGEST_SEPARATOR = " • "

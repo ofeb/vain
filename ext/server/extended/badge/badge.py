@@ -1,10 +1,11 @@
-from discord.ext.commands import group, has_permissions, CommandError, ColourConverter as ColorConverter
+from discord.ext.commands import group, CommandError, ColourConverter as ColorConverter
 from discord import Embed, Role
 from core.discord.package import Package
 import humanize
 from discord.utils import utcnow
 
 
+from core.managers.permissions import has_permissions
 class BadgeCommands(Package):
     """colorme custom color role commands"""
 

@@ -1,9 +1,11 @@
 from typing import Union
-from discord.ext.commands import group, has_permissions, CommandError, CommandConverter
+from discord.ext.commands import group, CommandError
 from discord import Embed, TextChannel, Member
 from core.discord.package import Package
 
 
+from core.managers.converters import CommandConverter
+from core.managers.permissions import has_permissions
 class CommandDisableCommands(Package):
     """disable commands per channel"""
 

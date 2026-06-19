@@ -12,6 +12,7 @@ from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe, group
 from core.managers.values import bot as bot_config, color, emojis
 from .views import VoiceInterface
+from core.managers.permissions import has_permissions
 
 
 class VoiceControl(commands.Cog):
@@ -283,7 +284,7 @@ class VoiceControl(commands.Cog):
             await ctx.send_help(ctx.command)
 
     @voicemaster.command(name="setup")
-    @commands.has_permissions(manage_guild=True)
+    @has_permissions(manage_guild=True)
     @commands.cooldown(1, 30, commands.BucketType.guild)
     async def voicemaster_setup(self, ctx: Context) -> None:
         """Begin VoiceMaster server configuration setup."""
@@ -325,7 +326,7 @@ class VoiceControl(commands.Cog):
         await ctx.success("VoiceMaster setup complete!")
 
     @voicemaster.command(name="reset")
-    @commands.has_permissions(manage_guild=True)
+    @has_permissions(manage_guild=True)
     @commands.cooldown(1, 60, commands.BucketType.guild)
     async def voicemaster_reset(self, ctx: Context) -> None:
         """Reset server configuration for VoiceMaster."""
@@ -347,7 +348,7 @@ class VoiceControl(commands.Cog):
             await ctx.fail("Server is not configured")
 
     @voicemaster.command(name="category")
-    @commands.has_permissions(manage_guild=True)
+    @has_permissions(manage_guild=True)
     @describe(channel="Voice channel category")
     async def voicemaster_category(self, ctx: Context, channel: discord.CategoryChannel) -> None:
         """Redirect voice channels to custom category."""
@@ -361,7 +362,7 @@ class VoiceControl(commands.Cog):
             await ctx.fail("Server is not configured")
 
     @voicemaster.command(name="category private", slash=False)
-    @commands.has_permissions(manage_guild=True)
+    @has_permissions(manage_guild=True)
     @describe(channel="Private voice channel category")
     async def voicemaster_category_private(self, ctx: Context, channel: discord.CategoryChannel) -> None:
         """Set the private category for VoiceMaster channels."""
@@ -405,7 +406,7 @@ class VoiceControl(commands.Cog):
             await ctx.fail("Server is not configured")
 
     @voicemaster.command(name="default role", slash=False)
-    @commands.has_permissions(manage_guild=True, manage_roles=True)
+    @has_permissions(manage_guild=True, manage_roles=True)
     @describe(role="Default role for voice channels")
     async def voicemaster_default_role(self, ctx: Context, role: discord.Role) -> None:
         """Set the default role for VoiceMaster."""
@@ -419,7 +420,7 @@ class VoiceControl(commands.Cog):
             await ctx.fail("Server is not configured")
 
     @voicemaster.command(name="default bitrate", slash=False)
-    @commands.has_permissions(manage_guild=True)
+    @has_permissions(manage_guild=True)
     @describe(bitrate="Default bitrate in kbps")
     async def voicemaster_default_bitrate(self, ctx: Context, bitrate: int) -> None:
         """Edit default bitrate for new Voice Channels."""
@@ -433,7 +434,7 @@ class VoiceControl(commands.Cog):
             await ctx.fail("Server is not configured")
 
     @voicemaster.command(name="default name", slash=False)
-    @commands.has_permissions(manage_guild=True)
+    @has_permissions(manage_guild=True)
     @describe(name="Default name for new channels")
     async def voicemaster_default_name(self, ctx: Context, name: str) -> None:
         """Set default name for new Voice Channels."""
@@ -447,7 +448,7 @@ class VoiceControl(commands.Cog):
             await ctx.fail("Server is not configured")
 
     @voicemaster.command(name="default region", slash=False)
-    @commands.has_permissions(manage_guild=True)
+    @has_permissions(manage_guild=True)
     @describe(region="Voice region")
     async def voicemaster_default_region(self, ctx: Context, region: str) -> None:
         """Edit default region for new Voice Channels."""

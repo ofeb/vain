@@ -1,0 +1,147 @@
+from __future__ import annotations
+
+import asyncio
+import datetime
+from typing import TYPE_CHECKING, Optional
+
+import discord
+from discord.ext import commands, tasks
+
+from core.discord.ctx import Context
+from core.discord.hybrid import describe, hybrid, group
+from core.managers.permissions import has_permissions
+from core.managers.values import color
+
+if TYPE_CHECKING:
+    pass
+
+DISBOARD_ID = 302050872383242240
+BUMP_COOLDOWN = 7200
+
+
+class BumpReminder(commands.Cog):
+    """Bump reminder commands to keep your server promoted."""
+
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
+        self._cache: dict[int, dict] = {}
+
+    async def cog_load(self):
+        self._bump_watcher.start()
+
+    async def cog_unload(self):
+        self._bump_watcher.stop()
+
+    @tasks.loop(minutes=5)
+    async def _bump_watcher(self) -> None:
+        now = datetime.datetime.now(datetime.timezone.utc)
+        for guild_id, data in list(self._cache.items()):
+            next_bump = data.get("next_bump")
+            if not next_bump:
+                continue
+            if now >= next_bump:
+                guild = self.bot.get_guild(guild_id)
+                if not guild:
+                    continue
+                channel = guild.get_channel(data["channel_id"])
+                if channel:
+                    embed = discord.Embed(
+                        title="Bump Ready!",
+                        description="It's time to bump your server on DISBOARD!\nUse `;bump` in <#{}>".format(
+                            data.get("bump_channel_id", "")
+                        ),
+                        color=color.base,
+                    )
+                    try:
+                        await channel.send(embed=embed)
+                    except Exception:
+                        pass
+                self._cache[guild_id]["next_bump"] = now + datetime.timedelta(seconds=BUMP_COOLDOWN)
+
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message) -> None:
+        if message.author.id != DISBOARD_ID or not message.guild:
+            return
+
+        guild_id = message.guild.id
+        if guild_id not in self._cache:
+            return
+
+        if "Bump done" in message.content or "bump done" in message.content:
+            self._cache[guild_id]["last_bump"] = discord.utils.utcnow()
+            self._cache[guild_id]["next_bump"] = discord.utils.utcnow() + datetime.timedelta(seconds=BUMP_COOLDOWN)
+            self._cache[guild_id]["bump_channel_id"] = message.channel.id
+
+            channel = self.bot.get_channel(self._cache[guild_id]["channel_id"])
+            if channel:
+                await channel.send("Bump successful! Next bump available in 2 hours.")
+
+    @group(
+        name="bumpreminder",
+        description="Configure the bump reminder system",
+        guild_only=True,
+        invoke_without_command=True,
+    )
+    @has_permissions(manage_channels=True)
+    async def bumpreminder(self, ctx: Context) -> None:
+        await ctx.send_help(ctx.command)
+
+    @bumpreminder.command(
+        name="channel",
+        description="Set the reminder notification channel",
+        guild_only=True,
+    )
+    @describe(channel="Channel to send reminders to")
+    @has_permissions(manage_channels=True)
+    async def bumpreminder_channel(self, ctx: Context, channel: discord.TextChannel) -> None:
+        self._cache[ctx.guild.id] = {
+            "channel_id": channel.id,
+            "bump_channel_id": None,
+            "last_bump": None,
+            "next_bump": discord.utils.utcnow() + datetime.timedelta(seconds=BUMP_COOLDOWN),
+        }
+        embed = discord.Embed(
+            title="Bump Reminder",
+            description=f"Reminders will be sent to {channel.mention}",
+            color=color.base,
+        )
+        await ctx.send(embed=embed)
+
+    @bumpreminder.command(
+        name="config",
+        description="View bump reminder configuration",
+        guild_only=True,
+        aliases=["settings", "cfg"],
+    )
+    @has_permissions(manage_channels=True)
+    async def bumpreminder_config(self, ctx: Context) -> None:
+        data = self._cache.get(ctx.guild.id)
+        if not data:
+            await ctx.fail("Bump reminder is not configured.")
+            return
+
+        channel = ctx.guild.get_channel(data["channel_id"])
+        last = data.get("last_bump")
+        last_str = discord.utils.format_dt(last, style="R") if last else "Never"
+
+        embed = discord.Embed(
+            title="Bump Reminder Config",
+            color=color.base,
+        )
+        embed.add_field(name="Reminder Channel", value=channel.mention if channel else "Not set", inline=True)
+        embed.add_field(name="Last Bump", value=last_str, inline=True)
+        await ctx.send(embed=embed)
+
+    @bumpreminder.command(
+        name="remove",
+        description="Remove the bump reminder configuration",
+        guild_only=True,
+    )
+    @has_permissions(manage_channels=True)
+    async def bumpreminder_remove(self, ctx: Context) -> None:
+        self._cache.pop(ctx.guild.id, None)
+        await ctx.success("Bump reminder removed.")
+
+
+async def setup(bot: commands.Bot):
+    await bot.add_cog(BumpReminder(bot))

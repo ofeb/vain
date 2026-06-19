@@ -8,11 +8,12 @@ from typing import Union
 
 import discord
 from discord import Embed, Role, TextChannel
-from discord.ext.commands import CommandError, group, has_permissions
+from discord.ext.commands import CommandError, group
 
 from core.discord.package import Package
 from core.tools.embed import Script
 
+from core.managers.permissions import has_permissions
 _ANGLE_URL_RE = re.compile(r"<(https?://[^>\s]+)>", re.IGNORECASE)
 
 

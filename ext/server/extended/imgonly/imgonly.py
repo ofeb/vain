@@ -1,8 +1,9 @@
-from discord.ext.commands import group, has_permissions
+from discord.ext.commands import group
 from discord import Embed, TextChannel
 from core.discord.package import Package
 
 
+from core.managers.permissions import has_permissions
 class ImgonlyCommands(Package):
     """image-only channel management"""
 
