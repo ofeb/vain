@@ -4,12 +4,12 @@ import asyncio
 import contextlib
 import json
 from datetime import datetime, timedelta
-from typing import Any, Iterable
+from typing import Any, Iterable, Optional
 
 import discord
 from discord import Embed
 from discord.ext import commands, tasks
-from discord.ext.commands import CommandError, group
+from discord.ext.commands import CommandError, FlagConverter, flag, group
 
 from core.discord.package import Package
 from core.tools.convert import MemberConvert, StatusConvert
@@ -43,6 +43,10 @@ SEVERITY_RANK = {
 }
 
 RECENT_CMD_WINDOW = 20
+
+
+class EnableFlags(FlagConverter, prefix="--", delimiter=" ", case_insensitive=True):
+    recommended: Optional[bool] = flag(default=None)
 
 
 class Antinuke(Package):
@@ -1502,6 +1506,62 @@ class Antinuke(Package):
             with_threshold=True,
             with_command=True,
         )
+
+    @antinuke.command(
+        name="enable",
+        usage="[--recommended]",
+        example="--recommended",
+        flags=EnableFlags,
+    )
+    async def antinuke_enable(self, ctx, *, flags: str = None):
+        """Enable all antinuke modules."""
+        recommended = ctx.flags.get("recommended")
+
+        if recommended:
+            defaults = {
+                "ban":     {"punishment": "ban", "threshold": 3, "command": True},
+                "kick":    {"punishment": "kick", "threshold": 3, "command": True},
+                "channel": {"punishment": "ban", "threshold": 3},
+                "role":    {"punishment": "ban", "threshold": 3, "command": True},
+                "webhook": {"punishment": "ban", "threshold": 3},
+                "emoji":   {"punishment": "kick", "threshold": 3},
+                "vanity":  {"punishment": "ban"},
+                "botadd":  {"punishment": "ban"},
+            }
+            for module, payload in defaults.items():
+                await self._commit_module(ctx.guild.id, module, {**payload, "status": True})
+            await self._load_config(ctx.guild.id)
+            return await ctx.success(
+                "Antinuke is now **fully enabled** with **recommended settings**.\n"
+                "All modules active with balanced punishments and thresholds."
+            )
+
+        modules = ["ban", "kick", "channel", "role", "webhook", "emoji", "vanity", "botadd"]
+        config = await self._guild_config(ctx.guild.id)
+        for module in modules:
+            cfg = getattr(config, module)
+            if not cfg.status:
+                payload = {
+                    "status": True,
+                    "punishment": getattr(cfg, "punishment", "kick"),
+                    "threshold": getattr(cfg, "threshold", 3),
+                    "command": getattr(cfg, "command", False),
+                }
+                await self._commit_module(ctx.guild.id, module, payload)
+        await self._load_config(ctx.guild.id)
+        return await ctx.success("All **antinuke modules** are now **enabled**.")
+
+    @antinuke.command(
+        name="disable",
+        usage="",
+    )
+    async def antinuke_disable(self, ctx):
+        """Disable all antinuke modules."""
+        modules = ["ban", "kick", "channel", "role", "webhook", "emoji", "vanity", "botadd"]
+        for module in modules:
+            await self._commit_module(ctx.guild.id, module, {"status": False, "punishment": "kick"})
+        await self._load_config(ctx.guild.id)
+        return await ctx.success("All **antinuke modules** are now **disabled**.")
 
 
 async def setup(bot) -> None:

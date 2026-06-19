@@ -14,8 +14,8 @@ if TYPE_CHECKING:
     from .server import Server
 
 
-class Events(Cog):
-    def __init__(self: "Events", bot: discord.Client):
+class ServerEvents(Cog):
+    def __init__(self: "ServerEvents", bot: discord.Client):
         self.bot = bot
         self.locks = defaultdict(Lock)
         self.join_cache = {}
@@ -139,4 +139,4 @@ class Events(Cog):
 
 
 async def setup(bot: discord.Client):
-    await bot.add_cog(Events(bot))
+    await bot.add_cog(ServerEvents(bot))

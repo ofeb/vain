@@ -14,8 +14,8 @@ if TYPE_CHECKING:
     from .moderation import Moderation
 
 
-class Events(Cog):
-    def __init__(self: "Events", bot: discord.Client):
+class ModerationEvents(Cog):
+    def __init__(self: "ModerationEvents", bot: discord.Client):
         self.bot = bot
         self.locks = defaultdict(Lock)
         self.mute_cache = {}
@@ -169,4 +169,4 @@ class Events(Cog):
 
 
 async def setup(bot: discord.Client):
-    await bot.add_cog(Events(bot))
+    await bot.add_cog(ModerationEvents(bot))

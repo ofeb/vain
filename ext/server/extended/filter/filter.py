@@ -1,10 +1,10 @@
 from typing import Optional, Union
 from discord.ext.commands import group, CommandError
 from discord import (
-from core.managers.permissions import has_permissions
     Embed, TextChannel,
     AutoModTrigger, AutoModRuleTriggerType, AutoModRuleEventType, AutoModRuleAction,
 )
+from core.managers.permissions import has_permissions
 from core.discord.package import Package
 from lib.classes.flags.automod import FilterFlags, SpamFilterFlags
 from lib.classes.builtins import human_join

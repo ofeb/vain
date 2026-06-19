@@ -15,8 +15,8 @@ if TYPE_CHECKING:
     from .fun import Fun
 
 
-class Events(Cog):
-    def __init__(self: "Events", bot: discord.Client):
+class FunEvents(Cog):
+    def __init__(self: "FunEvents", bot: discord.Client):
         self.bot = bot
         self.locks = defaultdict(Lock)
         self.message_stats = defaultdict(int)
@@ -66,4 +66,4 @@ class Events(Cog):
 
 
 async def setup(bot: discord.Client):
-    await bot.add_cog(Events(bot))
+    await bot.add_cog(FunEvents(bot))

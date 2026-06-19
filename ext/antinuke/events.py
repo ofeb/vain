@@ -11,10 +11,10 @@ AUDIT_BACKLOG = 8
 WINDOW = 60
 
 
-class Events(Cog):
+class AntinukeEvents(Cog):
     """supplementary audit-log listeners that forward events to the Package cog."""
 
-    def __init__(self: "Events", bot: discord.Client):
+    def __init__(self: "AntinukeEvents", bot: discord.Client):
         self.bot = bot
         self._activity: dict[str, list[datetime]] = {}
 
@@ -142,4 +142,4 @@ class Events(Cog):
 
 
 async def setup(bot: discord.Client) -> None:
-    await bot.add_cog(Events(bot))
+    await bot.add_cog(AntinukeEvents(bot))

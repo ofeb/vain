@@ -132,7 +132,6 @@ class Emoji(Package):
     @has_permissions(manage_expressions=True)
     async def emoji_information(self, ctx, message_link: str):
         """get emote info from message"""
-        # Parse message link and get emote info
         await ctx.send("This feature would show emote information from the message")
 
     @emoji.command(

@@ -14,8 +14,8 @@ if TYPE_CHECKING:
     from .voicemaster import Voicemaster
 
 
-class Events(Cog):
-    def __init__(self: "Events", bot: discord.Client):
+class VoicemasterEvents(Cog):
+    def __init__(self: "VoicemasterEvents", bot: discord.Client):
         self.bot = bot
         self.locks = defaultdict(Lock)
         self.voice_channels = {}
@@ -126,4 +126,4 @@ class Events(Cog):
 
 
 async def setup(bot: discord.Client):
-    await bot.add_cog(Events(bot))
+    await bot.add_cog(VoicemasterEvents(bot))

@@ -7,21 +7,23 @@ from typing import TYPE_CHECKING
 import discord
 from discord import Embed, utils
 from discord.ext import commands
-from discord.ext.commands import Cog
 from asyncio import Lock
 import random
 
+from core.discord.package import Package
+
 if TYPE_CHECKING:
+    from core.bleed import Bleed
     from .roleplay import Roleplay
 
 
-class Events(Cog):
-    def __init__(self: "Events", bot: discord.Client):
-        self.bot = bot
+class RoleplayEvents(Package):
+    def __init__(self: "RoleplayEvents", bot: Bleed):
+        super().__init__(bot)
         self.locks = defaultdict(Lock)
         self.character_cache = {}
 
-    @Cog.listener("on_message")
+    @Package.listener("on_message")
     async def on_roleplay_action(self, message: discord.Message):
         if message.author.bot or not message.guild:
             return
@@ -50,7 +52,7 @@ class Events(Cog):
             
             await message.channel.send(embed=embed)
 
-    @Cog.listener("on_message")
+    @Package.listener("on_message")
     async def on_character_tracking(self, message: discord.Message):
         if message.author.bot or not message.guild:
             return
@@ -72,7 +74,7 @@ class Events(Cog):
                 message.author.id, message.guild.id
             )
 
-    @Cog.listener("on_raw_reaction_add")
+    @Package.listener("on_raw_reaction_add")
     async def on_character_reaction(self, payload: discord.RawReactionActionEvent):
         if payload.user_id == self.bot.user.id:
             return
@@ -121,5 +123,5 @@ class Events(Cog):
         await message.reply(embed=embed)
 
 
-async def setup(bot: discord.Client):
-    await bot.add_cog(Events(bot))
+async def setup(bot: Bleed):
+    await bot.add_cog(RoleplayEvents(bot))

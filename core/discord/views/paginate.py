@@ -1,8 +1,6 @@
-﻿"""Paginated list view with bleed-style navigation controls."""
+﻿from __future__ import annotations
 
-from __future__ import annotations
-
-from typing import List, Union
+from typing import Any, List, Union
 
 import discord
 from discord.ext.commands import Context
@@ -10,8 +8,8 @@ from discord.ext.commands import Context
 from core.managers.values import color, emojis
 
 
-class PageModal(discord.ui.Modal, title="Skip to Page"):
-    page: discord.ui.TextInput = discord.ui.TextInput(
+class GoToModal(discord.ui.Modal, title="Skip to Page"):
+    response: discord.ui.TextInput = discord.ui.TextInput(
         label="Page Number",
         placeholder="Enter a page number...",
         min_length=1,
@@ -25,7 +23,7 @@ class PageModal(discord.ui.Modal, title="Skip to Page"):
 
     async def on_submit(self, inter: discord.Interaction) -> None:
         try:
-            page = int(self.page.value)
+            page = int(self.response.value)
         except ValueError:
             embed = discord.Embed(
                 color=color.deny,
@@ -48,25 +46,35 @@ class PageModal(discord.ui.Modal, title="Skip to Page"):
 
 
 class PaginateView(discord.ui.View):
-    """navigate through a list of pages"""
-
-    def __init__(self, ctx: Context, pages: List[Union[discord.Embed, str]], timeout: float = 60.0):
+    def __init__(self, ctx: Context, pages: List[Union[discord.Embed, dict]], timeout: float = 60.0):
         super().__init__(timeout=timeout)
         self.ctx = ctx
         self.pages = pages
         self.index = 0
+        self.message: discord.Message | None = None
         self._update_buttons()
 
     def _update_buttons(self):
         self.prev_btn.disabled = self.index == 0
         self.next_btn.disabled = self.index == len(self.pages) - 1
 
+    def _get_footer_suffix(self, embed: discord.Embed) -> str:
+        total = len(self.pages)
+        current = self.index + 1
+        return f"Page {current}/{total} ({total} entry{'s' if total != 1 else ''})"
+
     def _current(self) -> dict:
-        p = self.pages[self.index]
-        base = {"view": self}
-        if isinstance(p, discord.Embed):
-            return {**base, "embed": p}
-        return {**base, "content": str(p)}
+        raw = self.pages[self.index]
+        base: dict[str, Any] = {"view": self}
+        if isinstance(raw, discord.Embed):
+            footer_text = raw.footer.text if raw.footer else ""
+            page_info = self._get_footer_suffix(raw)
+            if footer_text:
+                raw.set_footer(text=f"{footer_text} ∙ {page_info}")
+            else:
+                raw.set_footer(text=page_info)
+            return {**base, "embed": raw}
+        return {**base, "content": str(raw)}
 
     async def interaction_check(self, inter: discord.Interaction) -> bool:
         if inter.user.id == self.ctx.author.id:
@@ -123,8 +131,10 @@ class PaginateView(discord.ui.View):
 
         self.index = page - 1
         self._update_buttons()
-        await inter.edit_original_response(embed=None, content=None)
-        await self.message.edit(**self._current())
+        if self.message:
+            await self.message.edit(**self._current())
+        else:
+            await inter.edit_original_message(**self._current())
 
     @discord.ui.button(style=discord.ButtonStyle.danger, emoji=discord.PartialEmoji.from_str(emojis.paginator.cancel))
     async def cancel_btn(self, inter: discord.Interaction, _: discord.ui.Button):
@@ -134,7 +144,6 @@ class PaginateView(discord.ui.View):
         self.stop()
 
     async def start(self) -> discord.Message:
-        """send first page and start listening"""
         msg = await self.ctx.send(**self._current())
         self.message = msg
         return msg

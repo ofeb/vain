@@ -15,8 +15,8 @@ if TYPE_CHECKING:
     from .giveaway import Giveaway
 
 
-class Events(Cog):
-    def __init__(self: "Events", bot: discord.Client):
+class GiveawayEvents(Cog):
+    def __init__(self: "GiveawayEvents", bot: discord.Client):
         self.bot = bot
         self.locks = defaultdict(Lock)
 
@@ -161,4 +161,4 @@ class Events(Cog):
 
 
 async def setup(bot: discord.Client):
-    await bot.add_cog(Events(bot))
+    await bot.add_cog(GiveawayEvents(bot))

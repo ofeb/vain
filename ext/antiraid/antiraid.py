@@ -3,11 +3,12 @@ from __future__ import annotations
 import contextlib
 from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 import discord
 from discord import Embed
 from discord.ext import commands
-from discord.ext.commands import CommandError, group
+from discord.ext.commands import CommandError, FlagConverter, flag, group
 
 from core.discord.package import Package
 from core.tools.convert import MemberConvert, StatusConvert
@@ -481,6 +482,61 @@ class Antiraid(Package):
                     cfg.newaccounts.action or "ban",
                     reason="antiraid: account too new",
                 )
+
+    @antiraid.command(
+        name="enable",
+        usage="[--recommended]",
+        example="--recommended",
+    )
+    @has_permissions(manage_guild=True)
+    async def antiraid_enable(self, ctx, *, flags: str = None):
+        """Enable all antiraid modules."""
+        recommended = False
+        if flags and "--recommended" in flags.lower():
+            recommended = True
+
+        if recommended:
+            await self._store_module(ctx.guild.id, "massjoin",
+                enabled=True, threshold=5, action="ban", lock_channels=True, punish_new=True)
+            await self._store_module(ctx.guild.id, "avatar",
+                enabled=True, threshold=None, action="kick")
+            await self._store_module(ctx.guild.id, "newaccounts",
+                enabled=True, threshold=7, action="ban")
+            await ctx.success(
+                "**Antiraid** is now fully enabled with **recommended settings**.\n"
+                "Massjoin: ban @ 5/s, lock, punish | Avatar: kick | New accounts: ban < 7 days"
+            )
+            return
+
+        current = await self._cached_config(ctx.guild.id)
+        if not current.massjoin.enabled:
+            await self._store_module(ctx.guild.id, "massjoin",
+                enabled=True,
+                threshold=current.massjoin.threshold or 5,
+                action=current.massjoin.action or "ban",
+                lock_channels=current.massjoin.lock_channels,
+                punish_new=current.massjoin.punish_new)
+        if not current.avatar.enabled:
+            await self._store_module(ctx.guild.id, "avatar",
+                enabled=True, action=current.avatar.action or "kick")
+        if not current.newaccounts.enabled:
+            await self._store_module(ctx.guild.id, "newaccounts",
+                enabled=True,
+                threshold=current.newaccounts.threshold or 7,
+                action=current.newaccounts.action or "ban")
+        await ctx.success("All **antiraid modules** are now **enabled**.")
+
+    @antiraid.command(
+        name="disable",
+        usage="",
+    )
+    @has_permissions(manage_guild=True)
+    async def antiraid_disable(self, ctx):
+        """Disable all antiraid modules."""
+        await self._store_module(ctx.guild.id, "massjoin", enabled=False)
+        await self._store_module(ctx.guild.id, "avatar", enabled=False)
+        await self._store_module(ctx.guild.id, "newaccounts", enabled=False)
+        await ctx.success("All **antiraid modules** are now **disabled**.")
 
 
 async def setup(bot) -> None:

@@ -10,10 +10,10 @@ from discord.ext.commands import Cog
 from asyncio import Lock
 
 
-class Events(Cog):
+class AntiraidEvents(Cog):
     """supplementary antiraid event handlers."""
 
-    def __init__(self: "Events", bot: discord.Client):
+    def __init__(self: "AntiraidEvents", bot: discord.Client):
         self.bot = bot
         self._locks = defaultdict(Lock)
 
@@ -81,4 +81,4 @@ class Events(Cog):
 
 
 async def setup(bot: discord.Client) -> None:
-    await bot.add_cog(Events(bot))
+    await bot.add_cog(AntiraidEvents(bot))

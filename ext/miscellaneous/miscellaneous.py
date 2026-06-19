@@ -9,17 +9,16 @@ from discord.ext import commands
 
 from core.discord.ctx import Context
 from core.discord.hybrid import describe, hybrid, group
+from core.discord.package import Package
 from core.managers.values import color
 
 if TYPE_CHECKING:
-    pass
+    from core.bleed import Bleed
 
 
-class Miscellaneous(commands.Cog):
-    """Various useful commands that don't fit elsewhere."""
-
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
+class Miscellaneous(Package):
+    def __init__(self, bot: Bleed):
+        super().__init__(bot)
         self.afk_users: dict[int, dict] = {}
         self.active_polls: list[dict] = []
 
@@ -196,29 +195,7 @@ class Miscellaneous(commands.Cog):
         embed.add_field(name="Roles", value=" ".join(roles[:5]) if roles else "None", inline=False)
         await ctx.send(embed=embed)
 
-    @hybrid(
-        name="serverinfo",
-        description="View information about the server",
-        aliases=["si", "guildinfo"],
-        guild_only=True,
-    )
-    async def serverinfo(self, ctx: Context) -> None:
-        guild = ctx.guild
-        embed = discord.Embed(
-            title=f"Server Info — {guild.name}",
-            color=color.base,
-        )
-        if guild.icon:
-            embed.set_thumbnail(url=guild.icon.url)
-        embed.add_field(name="ID", value=guild.id, inline=True)
-        embed.add_field(name="Owner", value=guild.owner.mention if guild.owner else "N/A", inline=True)
-        embed.add_field(name="Members", value=guild.member_count, inline=True)
-        embed.add_field(name="Channels", value=len(guild.channels), inline=True)
-        embed.add_field(name="Roles", value=len(guild.roles), inline=True)
-        embed.add_field(name="Boost Level", value=guild.premium_tier, inline=True)
-        embed.add_field(name="Created", value=discord.utils.format_dt(guild.created_at, style="R"), inline=True)
-        await ctx.send(embed=embed)
 
 
-async def setup(bot: commands.Bot):
+async def setup(bot: Bleed):
     await bot.add_cog(Miscellaneous(bot))

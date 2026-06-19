@@ -6,21 +6,21 @@ from typing import TYPE_CHECKING
 
 import discord
 from discord import Embed, utils
-from discord.ext import commands
-from discord.ext.commands import Cog
 from asyncio import Lock
 
+from core.discord.package import Package
+
 if TYPE_CHECKING:
-    from .information import Information
+    from core.bleed import Bleed
 
 
-class Events(Cog):
-    def __init__(self: "Events", bot: discord.Client):
-        self.bot = bot
+class InformationEvents(Package):
+    def __init__(self: "InformationEvents", bot: Bleed):
+        super().__init__(bot)
         self.locks = defaultdict(Lock)
         self.joined_cache = {}
 
-    @Cog.listener("on_member_join")
+    @Package.listener("on_member_join")
     async def on_join_info(self, member: discord.Member):
         config = await self.bot.db.fetchrow(
             """SELECT * FROM information_config WHERE guild_id = $1""", member.guild.id
@@ -46,7 +46,7 @@ class Events(Cog):
         
         await info_channel.send(embed=embed)
 
-    @Cog.listener("on_member_remove")
+    @Package.listener("on_member_remove")
     async def on_leave_info(self, member: discord.Member):
         config = await self.bot.db.fetchrow(
             """SELECT * FROM information_config WHERE guild_id = $1""", member.guild.id
@@ -74,7 +74,7 @@ class Events(Cog):
         await info_channel.send(embed=embed)
         self.joined_cache.pop(member.id, None)
 
-    @Cog.listener("on_message_edit")
+    @Package.listener("on_message_edit")
     async def on_message_edit_info(self, before: discord.Message, after: discord.Message):
         if before.author.bot:
             return
@@ -104,7 +104,7 @@ class Events(Cog):
         
         await info_channel.send(embed=embed)
 
-    @Cog.listener("on_message_delete")
+    @Package.listener("on_message_delete")
     async def on_message_delete_info(self, message: discord.Message):
         if message.author.bot:
             return
@@ -131,5 +131,5 @@ class Events(Cog):
         await info_channel.send(embed=embed)
 
 
-async def setup(bot: discord.Client):
-    await bot.add_cog(Events(bot))
+async def setup(bot: Bleed):
+    await bot.add_cog(InformationEvents(bot))

@@ -9,8 +9,6 @@ from discord import Embed, Interaction, SelectOption, ui
 from discord.ext import commands
 from discord.ext.commands import Command, Group
 
-from core.managers.values import emojis
-
 if TYPE_CHECKING:
     from .ctx import Context
 
@@ -68,7 +66,6 @@ _COG_MAP: dict[str, str] = {
     "Spotify":     "Music",
     "Socials":     "Social",
     "Levels":      "Rewards",
-    "Levels":      "Rewards",
     "Level":       "Rewards",
     "Giveaway":    "Rewards",
     "Crypto":      "Crypto",
@@ -79,20 +76,37 @@ _COG_MAP: dict[str, str] = {
 
 _OWNER_COGS = frozenset({"Developer", "Jishaku", "Owner"})
 
+_CAT_EMOJIS: dict[str, str] = {
+    "Home": "\U0001f3e0",
+    "Server": "\U0001f4e1",
+    "Security": "\U0001f6e1\ufe0f",
+    "Moderation": "\U0001f6ae",
+    "Information": "\U0001f4ca",
+    "Utility": "\U0001f527",
+    "Fun": "\U0001f3b2",
+    "Miscellaneous": "\U0001f4ac",
+    "Music": "\U0001f3b5",
+    "Social": "\U0001f4e3",
+    "Rewards": "\U0001f3c6",
+    "Crypto": "\U0001fa99",
+    "Last.fm": "\U0001f3b6",
+    "Owner": "\U0001f512",
+}
+
 _BLURBS: dict[str, str] = {
-    "Server": "Prefixes, starboard, autorole, reactions, logs, and server setup",
-    "Security": "Antinuke, antiraid, and automod protection modules",
-    "Moderation": "Tools that help you moderate your server",
-    "Information": "User, guild, and bot lookups — avatars, banners, and stats",
-    "Utility": "Snipes, reminders, AFK, quotes, and voicemaster utilities",
-    "Fun": "Games, memes, roleplay, images, quotes, and fun commands",
-    "Miscellaneous": "Various useful commands that don't fit elsewhere",
-    "Music": "Queue, playback, Spotify, SoundCloud, and Lavalink controls",
-    "Social": "Twitch, YouTube, TikTok, Instagram, and feed notifications",
-    "Rewards": "XP, levels, giveaways, and reward systems",
-    "Crypto": "Cryptocurrency prices, charts, and market data",
-    "Last.fm": "Scrobbles, charts, covers, whoknows, and now playing",
-    "Owner": "Owner tools, reload, jishaku, and bot management",
+    "Server": "Prefixes, starboard, autorole, reactions, logs, and server setup.",
+    "Security": "Antinuke, antiraid, and automod protection modules.",
+    "Moderation": "Tools that help you moderate your server.",
+    "Information": "User, guild, and bot lookups, avatars, banners, and stats.",
+    "Utility": "Snipes, reminders, AFK, quotes, and voicemaster utilities.",
+    "Fun": "Games, memes, roleplay, images, and fun commands.",
+    "Miscellaneous": "Various useful commands that don't fit elsewhere.",
+    "Music": "Queue, playback, Spotify, SoundCloud, and Lavalink controls.",
+    "Social": "Twitch, YouTube, TikTok, Instagram, and feed notifications.",
+    "Rewards": "XP, levels, giveaways, and reward systems.",
+    "Crypto": "Cryptocurrency prices, charts, and market data.",
+    "Last.fm": "Scrobbles, charts, covers, whoknows, and now playing.",
+    "Owner": "Developer-only commands used to maintain bleed.",
 }
 
 _ORDER: tuple[str, ...] = (
@@ -170,14 +184,13 @@ def _params(cmd: Command) -> list[str]:
 
 def _aliases(cmd: Command) -> str:
     a = [x for x in cmd.aliases if x]
-    return ", ".join(a) if a else "n/a"
+    return ", ".join(a) if a else "none"
 
 
 def _syntax(cmd: Command, prefix: str) -> str:
     usage = (cmd.usage or "").strip()
     if usage:
         return f"{prefix}{cmd.qualified_name} {usage}".rstrip()
-
     tokens: list[str] = []
     for name, param in _param_items(cmd):
         label = name.replace("_", " ")
@@ -263,10 +276,10 @@ def _cooldown_label(cmd: Command) -> str | None:
 
 
 def _information(cmd: Command) -> dict[str, str]:
-    info = {
-        str(key): str(value)
-        for key, value in dict(getattr(cmd, "information", {}) or {}).items()
-    }
+    info: dict[str, str] = {}
+    raw_info = getattr(cmd, "information", {}) or {}
+    for key, value in dict(raw_info).items():
+        info[str(key)] = str(value)
     if cooldown := _cooldown_label(cmd):
         info["cooldown"] = cooldown
     if cmd.qualified_name.startswith("antinuke"):
@@ -280,6 +293,7 @@ def _information_value(cmd: Command) -> str:
     info = _information(cmd)
     if not info:
         return "N/A"
+    from core.managers.values import emojis
     emoji_map = {
         "cooldown": emojis.cooldown,
         "permissions": emojis.interface.information,
@@ -298,11 +312,12 @@ def _detail_embed(cmd: Command, ctx: Context) -> Embed:
     title = ("Group Command: " if isinstance(cmd, Group) else "Command: ") + cmd.qualified_name
     desc = cmd.help or cmd.description or "No description given"
     e = Embed(title=title, description=desc, color=ctx.bot.color)
-    e.add_field(name="Aliases", value=_aliases(cmd) if _aliases(cmd) != "n/a" else "N/A", inline=True)
-    e.add_field(name="Parameters", value=", ".join(_params(cmd)) or "N/A", inline=True)
+    e.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
+    e.add_field(name="Aliases", value=_aliases(cmd) if _aliases(cmd) != "none" else "none", inline=True)
+    e.add_field(name="Parameters", value=", ".join(_params(cmd)) or "none", inline=True)
     e.add_field(name="Information", value=_information_value(cmd), inline=True)
     e.add_field(name="Usage", value=_usage_block(cmd, str(prefix)), inline=False)
-    e.set_footer(text="Module: " + _module(cmd))
+    e.set_footer(text=f"Module: {_module(cmd)}")
     return e
 
 
@@ -310,21 +325,15 @@ def _brief_embed(cmd: Command, ctx: Context) -> Embed:
     prefix = getattr(ctx, "clean_prefix", None) or ctx.prefix or ";"
     if isinstance(prefix, list):
         prefix = prefix[0] if prefix else ";"
-
     desc = cmd.short_doc or cmd.help or cmd.description or ""
     usage = _usage_block(cmd, str(prefix))
     description = f"{desc}\n{usage}" if desc else usage
-
     e = Embed(
         color=ctx.bot.color,
         title="Command: " + cmd.qualified_name,
         description=description,
     )
-    if ctx.bot.user:
-        e.set_author(
-            name=f"{ctx.bot.user.display_name} help",
-            icon_url=ctx.bot.user.display_avatar.url,
-        )
+    e.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
     return e
 
 
@@ -338,14 +347,15 @@ class _CategorySelect(ui.Select):
             label="Home",
             value=_HOME,
             description="Return to the main help menu.",
-            emoji="🏠",
+            emoji=_CAT_EMOJIS.get("Home", "\U0001f3e0"),
         ))
 
         for label in labels[:24]:
             opts.append(SelectOption(
                 label=label,
                 value=label,
-                description=_BLURBS.get(label, f"{label} commands"),
+                description=_BLURBS.get(label, f"{label} commands."),
+                emoji=_CAT_EMOJIS.get(label),
             ))
 
         super().__init__(
@@ -365,8 +375,6 @@ class _CategorySelect(ui.Select):
 
 
 class HelpView(ui.View):
-    """interactive category select help view with Wraith-style dropdown"""
-
     def __init__(self, ctx: Context, cats: dict[str, list[Command]]) -> None:
         super().__init__(timeout=180)
         self.ctx = ctx
@@ -385,8 +393,10 @@ class HelpView(ui.View):
         prefix = getattr(self.ctx, "clean_prefix", None) or self.ctx.prefix or ";"
         if isinstance(prefix, list):
             prefix = prefix[0] if prefix else ";"
+        emoji = _CAT_EMOJIS.get(label, "")
+        title = f"{emoji} {label} Commands" if emoji else f"**{label} Commands**"
         e = Embed(
-            title=f"**{label} Commands**",
+            title=title,
             description=_fmt_commands(self.cats[label]),
             color=self.ctx.bot.color,
         )
@@ -402,7 +412,8 @@ class HelpView(ui.View):
             color=self.ctx.bot.color,
             description=(
                 f"> Use `{p}help <command>` for help on a specific command.\n"
-                f"> Parameters in `(...)` are required, `[...]` are optional."
+                f"> Parameters in `(...)` are required, `[...]` are optional.\n\n"
+                f"> Join the [support server](https://discord.gg/bleed) for more support."
             ),
         )
         if self.ctx.bot.user:
@@ -418,22 +429,16 @@ class HelpView(ui.View):
 
 
 class BleedHelp:
-    """help command handler with category select ui.
-    registers as a prefix command on the bot.
-    invoke via ctx or slash interaction"""
-
     def __init__(self) -> None:
-        self.ctx: Context = None  # type: ignore[assignment]
+        self.ctx: Context = None
         self._seen: dict[int, float] = {}
 
     def register(self, bot: commands.Bot) -> None:
-        """attach help prefix command to bot"""
         @bot.command(name="help", aliases=["h", "commands"], description="view command help")
         async def _help(ctx: Context, *, command: str | None = None) -> None:
             await self.invoke(ctx, command)
 
     async def invoke(self, ctx: Context, query: str | None = None) -> None:
-        """entry point for help from prefix or slash"""
         self.ctx = ctx
         bot = ctx.bot
         owner = ctx.author.id in bot.owners
@@ -463,7 +468,6 @@ class BleedHelp:
         direct = bot.get_command(query.strip())
         if direct is not None:
             return direct
-
         parts = query.strip().split()
         if not parts:
             return None

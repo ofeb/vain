@@ -1,7 +1,6 @@
 from discord.ext.commands import group, CommandError
 from core.discord.package import Package
 
-# All mod-action invoke customization commands live here
 from core.managers.permissions import has_permissions
 VALID_ACTIONS = [
     "softban", "jail", "timeout", "kick", "unban",

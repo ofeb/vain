@@ -14,8 +14,8 @@ if TYPE_CHECKING:
     from .manipulation import Manipulation
 
 
-class Events(Cog):
-    def __init__(self: "Events", bot: discord.Client):
+class ManipulationEvents(Cog):
+    def __init__(self: "ManipulationEvents", bot: discord.Client):
         self.bot = bot
         self.locks = defaultdict(Lock)
 
@@ -110,4 +110,4 @@ class Events(Cog):
 
 
 async def setup(bot: discord.Client):
-    await bot.add_cog(Events(bot))
+    await bot.add_cog(ManipulationEvents(bot))

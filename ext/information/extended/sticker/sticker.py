@@ -27,7 +27,6 @@ class Sticker(Package):
     @has_permissions(manage_expressions=True, manage_guild=True)
     async def sticker_tag(self, ctx):
         """add server vanity to stickers"""
-        # This would add the server's vanity URL to stickers
         await ctx.send("This feature would add server vanity to stickers")
 
     @sticker.command(

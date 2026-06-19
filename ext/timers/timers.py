@@ -82,7 +82,7 @@ class Timers(commands.Cog):
         name="timer",
         description="Create and manage timed reminders",
         invoke_without_command=True,
-        aliases=["remind", "reminder", "schedule"],
+        aliases=["reminder", "schedule"],
     )
     async def timer(self, ctx: Context, duration: str = None, *, text: str = None) -> None:
         if not duration or not text:
