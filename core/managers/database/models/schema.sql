@@ -770,6 +770,60 @@ CREATE TABLE IF NOT EXISTS trackers (
     PRIMARY KEY (guild_id, tracker_type)
 );
 
+CREATE TABLE IF NOT EXISTS moderation_config (
+    guild_id BIGINT PRIMARY KEY,
+    log_channel BIGINT,
+    role_change_logging BOOLEAN NOT NULL DEFAULT FALSE,
+    ban_logging BOOLEAN NOT NULL DEFAULT FALSE,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS roleplay_config (
+    guild_id BIGINT PRIMARY KEY,
+    enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    action_prefix VARCHAR(10) DEFAULT '*',
+    action_channel BIGINT,
+    delete_original BOOLEAN NOT NULL DEFAULT FALSE,
+    character_tracking BOOLEAN NOT NULL DEFAULT FALSE,
+    character_cards BOOLEAN NOT NULL DEFAULT FALSE,
+    card_emoji VARCHAR(100) DEFAULT '🎭',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS characters (
+    user_id BIGINT NOT NULL,
+    guild_id BIGINT NOT NULL,
+    name VARCHAR(100),
+    description TEXT,
+    avatar_url TEXT,
+    message_count BIGINT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, guild_id)
+);
+
+CREATE TABLE IF NOT EXISTS manipulation_config (
+    guild_id BIGINT PRIMARY KEY,
+    auto_delete BOOLEAN NOT NULL DEFAULT FALSE,
+    delete_patterns TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    auto_reply BOOLEAN NOT NULL DEFAULT FALSE,
+    auto_replies JSONB NOT NULL DEFAULT '{}'::JSONB,
+    auto_role_on_join BOOLEAN NOT NULL DEFAULT FALSE,
+    join_role_id BIGINT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS mutes (
+    id SERIAL PRIMARY KEY,
+    guild_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    moderator_id BIGINT,
+    mute_type VARCHAR(32) NOT NULL DEFAULT 'text',
+    role_id BIGINT,
+    expires_at TIMESTAMP,
+    reason TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_moderation_guild_user ON moderation(guild_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_blacklist_user ON blacklist(user_id);
 CREATE INDEX IF NOT EXISTS idx_blacklist_guild ON blacklist(guild_id);
@@ -810,3 +864,6 @@ CREATE INDEX IF NOT EXISTS idx_antinuke_actions_lookup ON antinuke_actions(guild
 CREATE INDEX IF NOT EXISTS idx_staff_roles_guild ON staff_roles(guild_id);
 CREATE INDEX IF NOT EXISTS idx_modlog_cases_guild ON modlog_cases(guild_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_custom_roles_guild ON custom_roles(guild_id);
+CREATE INDEX IF NOT EXISTS idx_mutes_guild_user ON mutes(guild_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_mutes_expires ON mutes(expires_at);
+CREATE INDEX IF NOT EXISTS idx_characters_guild ON characters(guild_id);

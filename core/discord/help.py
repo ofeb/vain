@@ -347,7 +347,6 @@ class _CategorySelect(ui.Select):
             label="Home",
             value=_HOME,
             description="Return to the main help menu.",
-            emoji=_CAT_EMOJIS.get("Home", "\U0001f3e0"),
         ))
 
         for label in labels[:24]:
@@ -355,7 +354,6 @@ class _CategorySelect(ui.Select):
                 label=label,
                 value=label,
                 description=_BLURBS.get(label, f"{label} commands."),
-                emoji=_CAT_EMOJIS.get(label),
             ))
 
         super().__init__(

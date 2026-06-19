@@ -339,58 +339,156 @@ class ModerationCommands(Package):
         """remove timeout from a member"""
         pass
 
+    async def _mute_member(
+        self,
+        ctx,
+        member: discord.Member,
+        mute_type: str,
+        *,
+        duration: str | None = None,
+        reason: str | None = None,
+    ):
+        self._ensure_targetable(ctx, member)
+
+        role_key = f"{mute_type}muted_role_id"
+        if mute_type == "":
+            role_key = "muted_role_id"
+        row = await self.bot.db.fetchrow(
+            f"SELECT {role_key} FROM server_settings WHERE guild_id = $1",
+            ctx.guild.id,
+        )
+        if not row or not row.get(role_key):
+            setting_name = {"": "muted", "i": "imuted", "r": "rmuted"}.get(mute_type, mute_type)
+            return await ctx.fail(
+                f"No **{setting_name}** role is set. "
+                f"Use `{ctx.clean_prefix}settings {setting_name}` first."
+            )
+        role = ctx.guild.get_role(row[role_key])
+        if not role:
+            return await ctx.fail("The configured mute role no longer exists.")
+
+        role_label = {"": "text-muted", "i": "image-muted", "r": "reaction-muted"}.get(mute_type, mute_type)
+
+        expires_at = None
+        if duration:
+            seconds = self._parse_duration_seconds(duration)
+            if not seconds:
+                return await ctx.fail(f"Invalid duration `{duration}`. Examples: `30m`, `2h`, `7d`.")
+            expires_at = discord.utils.utcnow() + timedelta(seconds=seconds)
+
+        if role in member.roles:
+            return await ctx.warn(f"**{member}** is already {role_label}.")
+
+        await member.add_roles(role, reason=self._audit_reason(ctx, reason))
+        await self.bot.db.execute(
+            """INSERT INTO mutes (guild_id, user_id, moderator_id, mute_type, role_id, expires_at, reason)
+               VALUES ($1, $2, $3, $4, $5, $6, $7)
+               ON CONFLICT (guild_id, user_id) DO UPDATE
+               SET mute_type = $4, role_id = $5, expires_at = $6, reason = $7, moderator_id = $3""",
+            ctx.guild.id, member.id, ctx.author.id, mute_type or "text",
+            role.id, expires_at, self._default_reason(reason),
+        )
+
+        case_id = await self._create_case(
+            ctx, action=role_label, target_id=member.id, reason=reason,
+        )
+        await self._send_modlog(
+            ctx, action=role_label, target=member, case_id=case_id, reason=reason,
+        )
+        self._dispatch_antinuke_action(
+            ctx, action=role_label, case_id=case_id,
+            meta={"target_id": member.id, "target_display": str(member)},
+        )
+
+        parts = [f"{role_label.title()} **{member}**"]
+        if expires_at:
+            parts.append(f"for **{self._format_duration(seconds)}**")
+        parts.append(f"- {self._default_reason(reason)}")
+        return await ctx.success(" ".join(parts))
+
+    async def _unmute_member(
+        self,
+        ctx,
+        member: discord.Member,
+        mute_type: str,
+        *,
+        reason: str | None = None,
+    ):
+        role_key = f"{mute_type}muted_role_id"
+        if mute_type == "":
+            role_key = "muted_role_id"
+        row = await self.bot.db.fetchrow(
+            f"SELECT {role_key} FROM server_settings WHERE guild_id = $1",
+            ctx.guild.id,
+        )
+        if not row or not row.get(role_key):
+            return await ctx.warn("No mute role is configured.")
+
+        role = ctx.guild.get_role(row[role_key])
+        if role and role in member.roles:
+            await member.remove_roles(role, reason=self._audit_reason(ctx, reason))
+
+        await self.bot.db.execute(
+            "DELETE FROM mutes WHERE guild_id = $1 AND user_id = $2 AND mute_type = $3",
+            ctx.guild.id, member.id, mute_type or "text",
+        )
+
+        role_label = {"": "text-muted", "i": "image-muted", "r": "reaction-muted"}.get(mute_type, mute_type)
+        return await ctx.success(f"Un{mute_type if mute_type else 'mute'}d **{member}** - {self._default_reason(reason)}")
+
     @command(
         name="mute",
-        description="No description given",
+        description="Mute a member",
     )
-    async def mute(self, ctx, member, duration, *, reason):
+    @has_permissions(moderate_members=True)
+    async def mute(self, ctx, member: discord.Member, duration: str = None, *, reason: str = None):
         """mute a member"""
-        pass
+        await self._mute_member(ctx, member, "", duration=duration, reason=reason)
 
     @command(
         name="unmute",
-        description="No description given",
+        description="Unmute a member",
     )
     @has_permissions(moderate_members=True)
-    async def unmute(self, ctx, member, *, reason):
+    async def unmute(self, ctx, member: discord.Member, *, reason: str = None):
         """unmute a member"""
-        pass
+        await self._unmute_member(ctx, member, "", reason=reason)
 
     @command(
         name="imute",
-        description="No description given",
+        description="Image mute a member",
     )
     @has_permissions(moderate_members=True)
-    async def imute(self, ctx, member, *, reason):
+    async def imute(self, ctx, member: discord.Member, *, reason: str = None):
         """image mute a member"""
-        pass
+        await self._mute_member(ctx, member, "i", reason=reason)
 
     @command(
         name="iunmute",
-        description="No description given",
+        description="Un-image mute a member",
     )
     @has_permissions(moderate_members=True)
-    async def iunmute(self, ctx, member, *, reason):
+    async def iunmute(self, ctx, member: discord.Member, *, reason: str = None):
         """un image mute a member"""
-        pass
+        await self._unmute_member(ctx, member, "i", reason=reason)
 
     @command(
         name="rmute",
-        description="No description given",
+        description="Reaction mute a member",
     )
     @has_permissions(moderate_members=True)
-    async def rmute(self, ctx, member, *, reason):
+    async def rmute(self, ctx, member: discord.Member, *, reason: str = None):
         """reaction mute a member"""
-        pass
+        await self._mute_member(ctx, member, "r", reason=reason)
 
     @command(
         name="runmute",
-        description="No description given",
+        description="Un-reaction mute a member",
     )
     @has_permissions(moderate_members=True)
-    async def runmute(self, ctx, member, *, reason):
+    async def runmute(self, ctx, member: discord.Member, *, reason: str = None):
         """un reaction mute a member"""
-        pass
+        await self._unmute_member(ctx, member, "r", reason=reason)
 
     @command(
         name="hardban",
@@ -719,6 +817,22 @@ class ModerationCommands(Package):
         """hide channel from role or member"""
         pass
 
+    async def _ensure_category(self, ctx, name: str) -> discord.CategoryChannel:
+        existing = discord.utils.get(ctx.guild.categories, name=name)
+        if existing:
+            return existing
+        return await ctx.guild.create_category(name, reason="Moderation setup")
+
+    async def _ensure_channel(
+        self, ctx, name: str, category: discord.CategoryChannel, topic: str = ""
+    ) -> discord.TextChannel:
+        existing = discord.utils.get(category.text_channels, name=name)
+        if existing:
+            return existing
+        return await ctx.guild.create_text_channel(
+            name, category=category, topic=topic, reason="Moderation setup"
+        )
+
     @command(
         name="setup",
         description="Start process for setting up the moderation system",
@@ -726,7 +840,111 @@ class ModerationCommands(Package):
     @has_permissions(administrator=True)
     async def setup(self, ctx):
         """setup moderation system"""
-        pass
+        async with ctx.typing():
+            logs_cat = await self._ensure_category(ctx, "logs")
+            jail_cat = await self._ensure_category(ctx, "jail")
+
+            antinuke_ch = await self._ensure_channel(
+                ctx, "antinuke-logs", logs_cat, "Antinuke moderation events"
+            )
+            antiraid_ch = await self._ensure_channel(
+                ctx, "antiraid-logs", logs_cat, "Antiraid moderation events"
+            )
+            jail_logs_ch = await self._ensure_channel(
+                ctx, "jail-logs", logs_cat, "Jail moderation events"
+            )
+            modlog_ch = await self._ensure_channel(
+                ctx, "modlogs", logs_cat, "Modlog channel"
+            )
+            jailed_ch = await self._ensure_channel(
+                ctx, "jailed", jail_cat, "Jail channel for muted members"
+            )
+
+            await self.bot.db.execute(
+                """INSERT INTO modlog_config (guild_id, channel_id)
+                   VALUES ($1, $2)
+                   ON CONFLICT (guild_id) DO UPDATE SET channel_id = $2""",
+                ctx.guild.id, modlog_ch.id,
+            )
+            await self.bot.db.execute(
+                """INSERT INTO server_settings (guild_id, jail_channel_id)
+                   VALUES ($1, $2)
+                   ON CONFLICT (guild_id) DO UPDATE SET jail_channel_id = $2""",
+                ctx.guild.id, jailed_ch.id,
+            )
+
+        embed = discord.Embed(
+            color=self.bot.color,
+            title="Setup Complete",
+            description=(
+                f"✅ Created/verified the following channels:\n\n"
+                f"**logs** category:\n"
+                f"  • {antinuke_ch.mention} — antinuke events\n"
+                f"  • {antiraid_ch.mention} — antiraid events\n"
+                f"  • {jail_logs_ch.mention} — jail events\n"
+                f"  • {modlog_ch.mention} — moderation log\n\n"
+                f"**jail** category:\n"
+                f"  • {jailed_ch.mention} — jail channel\n\n"
+                f"Use `{ctx.clean_prefix}settings modlog {modlog_ch.mention}` if you need to change the modlog channel."
+            ),
+        )
+        await ctx.send(embed=embed)
+
+    @command(
+        name="setupmute",
+        description="Sets up muted roles and channel permissions",
+    )
+    @has_permissions(manage_guild=True, manage_channels=True)
+    async def setupmute(self, ctx):
+        """setup mute system"""
+        async with ctx.typing():
+            muted_role = discord.utils.get(ctx.guild.roles, name="Muted")
+            if not muted_role:
+                muted_role = await ctx.guild.create_role(
+                    name="Muted",
+                    reason="Mute system setup",
+                    permissions=discord.Permissions(send_messages=False, add_reactions=False),
+                )
+            imuted_role = discord.utils.get(ctx.guild.roles, name="Image Muted")
+            if not imuted_role:
+                imuted_role = await ctx.guild.create_role(
+                    name="Image Muted",
+                    reason="Mute system setup",
+                    permissions=discord.Permissions(attach_files=False, embed_links=False),
+                )
+            rmuted_role = discord.utils.get(ctx.guild.roles, name="Reaction Muted")
+            if not rmuted_role:
+                rmuted_role = await ctx.guild.create_role(
+                    name="Reaction Muted",
+                    reason="Mute system setup",
+                    permissions=discord.Permissions(add_reactions=False),
+                )
+
+            await self.bot.db.execute(
+                """INSERT INTO server_settings (guild_id, muted_role_id, imuted_role_id, rmuted_role_id)
+                   VALUES ($1, $2, $3, $4)
+                   ON CONFLICT (guild_id) DO UPDATE SET
+                       muted_role_id = $2, imuted_role_id = $3, rmuted_role_id = $4""",
+                ctx.guild.id, muted_role.id, imuted_role.id, rmuted_role.id,
+            )
+
+            for channel in ctx.guild.text_channels:
+                await channel.set_permissions(muted_role, send_messages=False, add_reactions=False)
+                await channel.set_permissions(imuted_role, attach_files=False, embed_links=False)
+                await channel.set_permissions(rmuted_role, add_reactions=False)
+
+        embed = discord.Embed(
+            color=self.bot.color,
+            title="Mute Setup Complete",
+            description=(
+                f"✅ Created/verified mute roles:\n"
+                f"  • {muted_role.mention} (text mute)\n"
+                f"  • {imuted_role.mention} (image mute)\n"
+                f"  • {rmuted_role.mention} (reaction mute)\n\n"
+                f"Permissions have been applied to all text channels."
+            ),
+        )
+        await ctx.send(embed=embed)
 
     @command(
         name="rename",
@@ -760,15 +978,6 @@ class ModerationCommands(Package):
     @has_permissions(manage_channels=True)
     async def naughty(self, ctx, channel):
         """make channel nsfw temporarily"""
-        pass
-
-    @command(
-        name="setupmute",
-        description="Sets up muted roles and channel permissions",
-    )
-    @has_permissions(manage_guild=True, manage_channels=True)
-    async def setupmute(self, ctx):
-        """setup mute system"""
         pass
 
     @command(

@@ -63,7 +63,7 @@ class ManipulationEvents(Cog):
             return
         
         reaction_config = await self.bot.db.fetchrow(
-            """SELECT * FROM reaction_roles WHERE message_id = $1 AND emoji = $2""",
+            """SELECT * FROM reaction_role WHERE message_id = $1 AND emoji = $2""",
             payload.message_id, str(payload.emoji)
         )
         if not reaction_config:
@@ -87,7 +87,7 @@ class ManipulationEvents(Cog):
     @Cog.listener("on_raw_reaction_remove")
     async def on_reaction_remove_manipulation(self, payload: discord.RawReactionActionEvent):
         reaction_config = await self.bot.db.fetchrow(
-            """SELECT * FROM reaction_roles WHERE message_id = $1 AND emoji = $2""",
+            """SELECT * FROM reaction_role WHERE message_id = $1 AND emoji = $2""",
             payload.message_id, str(payload.emoji)
         )
         if not reaction_config:
