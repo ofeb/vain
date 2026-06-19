@@ -1,4 +1,4 @@
-"""postgres database connection pool.
+"""database connection pool.
 wraps asyncpg with basic caching built in.
 use fetch fetchrow fetchval or execute"""
 
@@ -19,7 +19,6 @@ log = getLogger(__name__)
 
 
 def query_limit(table: str, limit: int = 5):
-    """check row count before insert"""
     async def predicate(ctx: Context):
         count = await ctx.bot.db.fetchval(
             f"SELECT COUNT(*) FROM {table} WHERE guild_id = $1", ctx.guild.id
@@ -32,19 +31,15 @@ def query_limit(table: str, limit: int = 5):
 
 
 class Row(BaseRecord):
-    """asyncpg record with attr access"""
     def __getattr__(self, name: Union[str, Any]) -> Any:
         return self[name]
-
     def __dict__(self) -> dict:
         return dict(self)
-
     def get(self, key: str, default: Any = None) -> Any:
         return self[key] if key in self else default
 
 
 class ConnProto(Protocol):
-    """connection context manager type"""
     async def __aenter__(self) -> Connection: ...
     async def __aexit__(self, et, ev, tb) -> None: ...
 
@@ -1096,5 +1091,4 @@ class Database:
         ])
 
     async def purge_guild_data(self, guild_id: int) -> None:
-        """delete every row that belongs to one guild"""
         await self.purge("guild_id", guild_id)
