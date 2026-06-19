@@ -538,6 +538,31 @@ class Antiraid(Package):
         await self._store_module(ctx.guild.id, "newaccounts", enabled=False)
         await ctx.success("All **antiraid modules** are now **disabled**.")
 
+    @antiraid.command(
+        name="reset",
+        usage="",
+    )
+    @has_permissions(manage_guild=True)
+    async def antiraid_reset(self, ctx):
+        """Reset all antiraid configuration for this server."""
+        await self.bot.db.execute(
+            "DELETE FROM antiraid_config WHERE guild_id = $1",
+            ctx.guild.id,
+        )
+        await self.bot.db.execute(
+            "DELETE FROM antiraid_modules WHERE guild_id = $1",
+            ctx.guild.id,
+        )
+        await self.bot.db.execute(
+            "DELETE FROM antiraid_whitelist WHERE guild_id = $1",
+            ctx.guild.id,
+        )
+        await self.bot.db.execute(
+            "DELETE FROM antiraid_locked_channels WHERE guild_id = $1",
+            ctx.guild.id,
+        )
+        await ctx.success("Antiraid configuration has been **reset**.")
+
 
 async def setup(bot) -> None:
     await bot.add_cog(Antiraid(bot))

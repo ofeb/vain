@@ -1563,6 +1563,23 @@ class Antinuke(Package):
         await self._load_config(ctx.guild.id)
         return await ctx.success("All **antinuke modules** are now **disabled**.")
 
+    @antinuke.command(
+        name="reset",
+        usage="",
+    )
+    async def antinuke_reset(self, ctx):
+        """Reset all antinuke configuration for this server."""
+        await self.bot.db.execute(
+            "DELETE FROM antinuke WHERE guild_id = $1",
+            ctx.guild.id,
+        )
+        await self.bot.db.execute(
+            "DELETE FROM antinuke_actions WHERE guild_id = $1",
+            ctx.guild.id,
+        )
+        self._config = None
+        return await ctx.success("Antinuke configuration has been **reset**.")
+
 
 async def setup(bot) -> None:
     await bot.add_cog(Antinuke(bot))

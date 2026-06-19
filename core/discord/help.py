@@ -16,6 +16,18 @@ _BLANK = "‎"
 _HOME = "__home__"
 _SKIP = frozenset({"self", "cls", "flags"})
 
+_PERM_LABELS: dict[str, str] = {
+    "moderate_members": "Warn Members",
+    "manage_messages": "Manage Messages",
+    "manage_channels": "Manage Channels",
+    "manage_roles": "Manage Roles",
+    "manage_guild": "Manage Server",
+    "manage_expressions": "Manage Expressions",
+    "ban_members": "Ban Members",
+    "kick_members": "Kick Members",
+    "administrator": "Administrator",
+}
+
 _COG_MAP: dict[str, str] = {
     "Servers":       "Server",
     "Starboard":     "Server",
@@ -243,7 +255,7 @@ def _permission_label(cmd: Command) -> str | None:
                             seen.add(label)
                             labels.append(label)
                     perms = [
-                        perm.replace("_", " ").title()
+                        _PERM_LABELS.get(perm, perm.replace("_", " ").title())
                         for perm, enabled in value.items()
                         if enabled and perm not in {"send_messages", "server_owner", "guild_owner"}
                     ]

@@ -841,8 +841,39 @@ class ModerationCommands(Package):
     async def setup(self, ctx):
         """setup moderation system"""
         async with ctx.typing():
+            overwrites_logs = {
+                ctx.guild.default_role: discord.PermissionOverwrite(read_messages=False),
+                ctx.guild.me: discord.PermissionOverwrite(read_messages=True),
+            }
+            for role in ctx.guild.roles:
+                if role.permissions.administrator:
+                    overwrites_logs[role] = discord.PermissionOverwrite(read_messages=True)
+
             logs_cat = await self._ensure_category(ctx, "logs")
+            await logs_cat.edit(overwrites=overwrites_logs)
+
+            jail_role_id = None
+            jail_row = await self.bot.db.fetchrow(
+                "SELECT jail_role_id FROM server_settings WHERE guild_id = $1",
+                ctx.guild.id,
+            )
+            if jail_row and jail_row.get("jail_role_id"):
+                jail_role_id = jail_row["jail_role_id"]
+
+            overwrites_jail = {
+                ctx.guild.default_role: discord.PermissionOverwrite(read_messages=False, send_messages=False),
+                ctx.guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True, manage_messages=True),
+            }
+            for role in ctx.guild.roles:
+                if role.permissions.administrator:
+                    overwrites_jail[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+            if jail_role_id:
+                jail_role = ctx.guild.get_role(jail_role_id)
+                if jail_role:
+                    overwrites_jail[jail_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+
             jail_cat = await self._ensure_category(ctx, "jail")
+            await jail_cat.edit(overwrites=overwrites_jail)
 
             antinuke_ch = await self._ensure_channel(
                 ctx, "antinuke-logs", logs_cat, "Antinuke moderation events"
@@ -856,9 +887,12 @@ class ModerationCommands(Package):
             modlog_ch = await self._ensure_channel(
                 ctx, "modlogs", logs_cat, "Modlog channel"
             )
+
+            jailed_overwrites = dict(overwrites_jail)
             jailed_ch = await self._ensure_channel(
                 ctx, "jailed", jail_cat, "Jail channel for muted members"
             )
+            await jailed_ch.edit(overwrites=jailed_overwrites)
 
             await self.bot.db.execute(
                 """INSERT INTO modlog_config (guild_id, channel_id)
@@ -885,10 +919,45 @@ class ModerationCommands(Package):
                 f"  • {modlog_ch.mention} — moderation log\n\n"
                 f"**jail** category:\n"
                 f"  • {jailed_ch.mention} — jail channel\n\n"
+                f"**Permissions:**\n"
+                f"  • Logs: admin-only visibility\n"
+                f"  • Jail: jailed role + admin visibility\n"
                 f"Use `{ctx.clean_prefix}settings modlog {modlog_ch.mention}` if you need to change the modlog channel."
             ),
         )
         await ctx.send(embed=embed)
+
+    @command(
+        name="unsetup",
+        description="Remove moderation system setup (categories and channels)",
+    )
+    @has_permissions(administrator=True)
+    async def unsetup(self, ctx):
+        """remove moderation setup"""
+        async with ctx.typing():
+            removed = []
+
+            for cat_name in ("logs", "jail"):
+                cat = discord.utils.get(ctx.guild.categories, name=cat_name)
+                if cat:
+                    for ch in cat.channels:
+                        await ch.delete(reason="Moderation unsetup")
+                        removed.append(f"#{ch.name}")
+                    await cat.delete(reason="Moderation unsetup")
+                    removed.append(f"Category: {cat_name}")
+
+            await self.bot.db.execute(
+                "DELETE FROM modlog_config WHERE guild_id = $1",
+                ctx.guild.id,
+            )
+
+        if removed:
+            await ctx.success(
+                f"Removed: {', '.join(removed)}\n"
+                f"Use `{ctx.clean_prefix}setup` to recreate them."
+            )
+        else:
+            await ctx.warn("No setup channels found to remove.")
 
     @command(
         name="setupmute",

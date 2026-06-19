@@ -234,6 +234,7 @@ class VoiceControl(commands.Cog):
             "voicemaster",
             "voicemaster setup",
             "voicemaster reset",
+            "voicemaster unset",
             "voicemaster category",
             "voicemaster category private",
             "voicemaster default",
@@ -344,6 +345,20 @@ class VoiceControl(commands.Cog):
                     except discord.HTTPException:
                         pass
             await ctx.success("VoiceMaster configuration reset")
+        else:
+            await ctx.fail("Server is not configured")
+
+    @voicemaster.command(name="unset", aliases=["remove"])
+    @has_permissions(manage_guild=True)
+    @commands.cooldown(1, 60, commands.BucketType.guild)
+    async def voicemaster_unset(self, ctx: Context) -> None:
+        """Remove VoiceMaster configuration without deleting channels."""
+        row = await self.bot.db.fetchrow(
+            "DELETE FROM voicemaster_configuration WHERE guild_id = $1 RETURNING category_id",
+            ctx.guild.id
+        )
+        if row:
+            await ctx.success("VoiceMaster configuration removed. Channels were kept.")
         else:
             await ctx.fail("Server is not configured")
 
