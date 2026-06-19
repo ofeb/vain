@@ -24,6 +24,10 @@ def main() -> None:
     from core.managers.values import token
 
     if not token:
-        raise RuntimeError("BLEED_TOKEN is not set")
+        raise RuntimeError(
+            "Bot token is not set. Set BLEED_TOKEN in your environment, "
+            "create a .env file with BLEED_TOKEN=..., "
+            "or add a config.json with {\"token\": \"...\"} at the project root."
+        )
 
     Bleed().run(token, reconnect=True)

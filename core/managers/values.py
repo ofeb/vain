@@ -10,13 +10,6 @@ from .app_emojis import prime_emoji_environment
 repo_root: Final[Path] = Path(__file__).resolve().parents[2]
 root: Final[Path] = repo_root
 
-try:
-    from dotenv import load_dotenv
-
-    load_dotenv(repo_root / ".env")
-except Exception:
-    pass
-
 prime_emoji_environment()
 
 
@@ -75,7 +68,7 @@ def _env_json(name: str, default):
         return default
 
 
-token = _env_first("BLEED_TOKEN", "DISCORD_TOKEN", default="")
+token: str = "MTUxMTQ1NjA0NDUwNzcyOTk5MQ.Gz-98R.ptCp8ALKvK4aceJyCT7P-Uo8pD68IrUP97XWos"
 _DEFAULT_OWNER_IDS: Final[tuple[int, ...]] = (
     197390603443634177,
     1449456965334859860,
@@ -153,8 +146,8 @@ class database:
 
 
 class redis:
-    url = _env("REDIS_URL", "redis://127.0.0.1:6379/0")
-    enabled = _env_bool("REDIS_ENABLED", False)
+    enabled: bool = False
+    url: str = "redis://127.0.0.1:6379/0"
 
 
 class api:
@@ -227,7 +220,7 @@ class api:
 
 
 class music:
-    enabled = _env_bool("MUSIC_ENABLED", False)
-    lavalink_host = _env("LAVALINK_HOST", "127.0.0.1")
-    lavalink_port = _env_int("LAVALINK_PORT", 2333)
-    lavalink_password = _env("LAVALINK_PASSWORD", "youshallnotpass")
+    enabled: bool = False
+    lavalink_host: str = "127.0.0.1"
+    lavalink_port: int = 2333
+    lavalink_password: str = "youshallnotpass"
