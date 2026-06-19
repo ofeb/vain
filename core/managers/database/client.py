@@ -1092,3 +1092,137 @@ class Database:
 
     async def purge_guild_data(self, guild_id: int) -> None:
         await self.purge("guild_id", guild_id)
+
+    async def get_guild_customize(self, guild_id: int) -> dict:
+        """Get guild customize settings"""
+        row = await self.fetchrow(
+            "SELECT emoji, color, voicemaster_emoji FROM guild_customize WHERE guild_id = $1",
+            guild_id,
+        )
+        if not row:
+            return {"emoji": {}, "color": {}, "voicemaster_emoji": {}}
+        return {
+            "emoji": self._decode(row.get("emoji")) or {},
+            "color": self._decode(row.get("color")) or {},
+            "voicemaster_emoji": self._decode(row.get("voicemaster_emoji")) or {},
+        }
+
+    async def set_guild_customize(self, guild_id: int, key: str, value: dict) -> None:
+        """Set guild customize emoji/color"""
+        await self.execute(
+            f"""
+            INSERT INTO guild_customize (guild_id, {key}, updated_at)
+            VALUES ($1, $2::JSONB, CURRENT_TIMESTAMP)
+            ON CONFLICT (guild_id) DO UPDATE SET
+                {key} = EXCLUDED.{key},
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            guild_id,
+            self._encode(value),
+        )
+
+    async def get_user_customize(self, user_id: int, guild_id: int) -> dict:
+        """Get user customize settings"""
+        row = await self.fetchrow(
+            "SELECT emoji, color FROM user_customize WHERE user_id = $1 AND guild_id = $2",
+            user_id,
+            guild_id,
+        )
+        if not row:
+            return {"emoji": {}, "color": {}}
+        return {
+            "emoji": self._decode(row.get("emoji")) or {},
+            "color": self._decode(row.get("color")) or {},
+        }
+
+    async def set_user_customize(self, user_id: int, guild_id: int, key: str, value: dict) -> None:
+        """Set user customize emoji/color"""
+        await self.execute(
+            f"""
+            INSERT INTO user_customize (user_id, guild_id, {key}, updated_at)
+            VALUES ($1, $2, $3::JSONB, CURRENT_TIMESTAMP)
+            ON CONFLICT (user_id, guild_id) DO UPDATE SET
+                {key} = EXCLUDED.{key},
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            user_id,
+            guild_id,
+            self._encode(value),
+        )
+
+    async def get_emoji(self, guild_id: int, user_id: int = None) -> dict:
+        """Get emojis with guild/user override"""
+        default_emoji = {
+            "success": "<:embeds_approve:1511705992323272745>",
+            "warn": "<:embeds_warn:1511705997918343168>",
+            "deny": "<:embeds_deny:1511705993283633253>",
+            "cooldown": "<:embeds_cooldown:1511705992755417129>",
+            "loading": "<a:embeds_loading:1511705994823077988>",
+            "info": "<:interface_information:1511705999550185646>",
+        }
+
+        guild_settings = await self.get_guild_customize(guild_id)
+        guild_emoji = guild_settings.get("emoji", {})
+
+        result = {**default_emoji, **guild_emoji}
+
+        if user_id:
+            user_settings = await self.get_user_customize(user_id, guild_id)
+            user_emoji = user_settings.get("emoji", {})
+            result.update(user_emoji)
+
+        return result
+
+    async def get_color(self, guild_id: int, user_id: int = None) -> dict:
+        """Get colors with guild/user override"""
+        default_color = {
+            "base": 0x373737,
+            "approve": 0xA8EA7B,
+            "warn": 0xFDCF39,
+            "deny": 0xFF0000,
+            "cooldown": 0x4EC3E8,
+            "settings": 0x7289DA,
+            "dark": 0x2B2D31,
+        }
+
+        guild_settings = await self.get_guild_customize(guild_id)
+        guild_color = guild_settings.get("color", {})
+        for k, v in guild_color.items():
+            if isinstance(v, str):
+                try:
+                    guild_color[k] = int(v, 16)
+                except ValueError:
+                    pass
+
+        result = {**default_color, **guild_color}
+
+        if user_id:
+            user_settings = await self.get_user_customize(user_id, guild_id)
+            user_color = user_settings.get("color", {})
+            for k, v in user_color.items():
+                if isinstance(v, str):
+                    try:
+                        user_color[k] = int(v, 16)
+                    except ValueError:
+                        pass
+            result.update(user_color)
+
+        return result
+
+    async def get_vm_emoji(self, guild_id: int) -> dict:
+        """Get voicemaster emojis"""
+        default_vm = {
+            "lock": "<:interface_lock:1511706000007106721>",
+            "unlock": "<:interface_unlock:1511706000690774097>",
+            "ghost": "<:interface_ghost:1511705999264710756>",
+            "reveal": "<:interface_reveal:1511706000405692449>",
+            "claim": "<:interface_claim:1511705997897633954>",
+            "disconnect": "<:interface_disconnect:1511705999264972800>",
+            "activity": "<:interface_activity:1511705997889114273>",
+            "increase": "<:interface_increase:1511705999348596767>",
+            "decrease": "<:interface_decrease:1511705998434500719>",
+        }
+
+        guild_settings = await self.get_guild_customize(guild_id)
+        vm_emoji = guild_settings.get("voicemaster_emoji", {})
+        return {**default_vm, **vm_emoji}

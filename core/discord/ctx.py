@@ -45,7 +45,7 @@ class Cache:
     async def sadd(self, key: Any, *values: Any) -> int:
         if key not in self._data:
             self._data[key] = set()
-        assert isinstance(self._data[key], set), "key is not a set"
+        assert isinstance(self._data[key], set), "key is a set"
         added = {v for v in values if v not in self._data[key]}
         self._data[key].update(added)
         return len(added)
@@ -73,10 +73,51 @@ class Context(commands.Context):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.flags: dict[str, Any] = {}
+        self._custom_emoji: dict | None = None
+        self._custom_color: dict | None = None
 
     @property
     def color(self) -> int:
         return self.bot.color
+
+    async def _get_emoji(self, key: str) -> str:
+        """Get emoji with guild/user customization override"""
+        if self._custom_emoji is None:
+            try:
+                self._custom_emoji = await self.bot.db.get_emoji(
+                    self.guild.id if self.guild else 0,
+                    self.author.id if self.guild else None,
+                )
+            except Exception:
+                self._custom_emoji = {
+                    "success": emojis.approve,
+                    "warn": emojis.warn,
+                    "deny": emojis.deny,
+                    "cooldown": emojis.cooldown,
+                    "loading": emojis.loading,
+                    "info": emojis.interface.information,
+                }
+        return self._custom_emoji.get(key, getattr(emojis, key, emojis.approve))
+
+    async def _get_color(self, key: str) -> int:
+        """Get color with guild/user customization override"""
+        if self._custom_color is None:
+            try:
+                self._custom_color = await self.bot.db.get_color(
+                    self.guild.id if self.guild else 0,
+                    self.author.id if self.guild else None,
+                )
+            except Exception:
+                self._custom_color = {
+                    "base": color.base,
+                    "approve": color.approve,
+                    "warn": color.warn,
+                    "deny": color.deny,
+                    "cooldown": color.cooldown,
+                    "settings": color.settings,
+                    "dark": color.dark,
+                }
+        return self._custom_color.get(key, getattr(color, key, color.base))
 
     def _message_embed(
         self,
@@ -105,33 +146,39 @@ class Context(commands.Context):
 
     async def success(self, message: str, **kw):
         """send a success reply with bleed styling"""
+        emoji = await self._get_emoji("success")
+        color_value = await self._get_color("approve")
         return await self._send_embed_response(
             self._message_embed(
                 message,
-                emoji=emojis.approve,
-                color_value=color.approve,
+                emoji=emoji,
+                color_value=color_value,
             ),
             **kw,
         )
 
     async def fail(self, message: str, **kw):
         """send a failure reply with bleed styling"""
+        emoji = await self._get_emoji("deny")
+        color_value = await self._get_color("deny")
         return await self._send_embed_response(
             self._message_embed(
                 message,
-                emoji=emojis.deny,
-                color_value=color.deny,
+                emoji=emoji,
+                color_value=color_value,
             ),
             **kw,
         )
 
     async def warn(self, message: str, **kw):
         """send a warning reply with bleed styling"""
+        emoji = await self._get_emoji("warn")
+        color_value = await self._get_color("warn")
         return await self._send_embed_response(
             self._message_embed(
                 message,
-                emoji=emojis.warn,
-                color_value=color.warn,
+                emoji=emoji,
+                color_value=color_value,
             ),
             **kw,
         )

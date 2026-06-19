@@ -867,3 +867,20 @@ CREATE INDEX IF NOT EXISTS idx_custom_roles_guild ON custom_roles(guild_id);
 CREATE INDEX IF NOT EXISTS idx_mutes_guild_user ON mutes(guild_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_mutes_expires ON mutes(expires_at);
 CREATE INDEX IF NOT EXISTS idx_characters_guild ON characters(guild_id);
+
+CREATE TABLE IF NOT EXISTS guild_customize (
+    guild_id BIGINT PRIMARY KEY,
+    emoji JSONB NOT NULL DEFAULT '{}'::JSONB,
+    color JSONB NOT NULL DEFAULT '{}'::JSONB,
+    voicemaster_emoji JSONB NOT NULL DEFAULT '{}'::JSONB,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS user_customize (
+    user_id BIGINT NOT NULL,
+    guild_id BIGINT NOT NULL,
+    emoji JSONB NOT NULL DEFAULT '{}'::JSONB,
+    color JSONB NOT NULL DEFAULT '{}'::JSONB,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, guild_id)
+);

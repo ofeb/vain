@@ -185,15 +185,14 @@ class Antinuke(Package):
         if not status:
             return await ctx.success(f"Turned **{label}** antinuke protection off")
 
-        summary = [f"action: **{payload['punishment']}**"]
+        verb = "Updated" if getattr(self._config, name, None) and getattr(getattr(self._config, name, None), 'status', False) else "Enabled"
+        parts = [f"Punishment is set to **{payload['punishment']}**"]
         if with_threshold:
-            summary.append(f"limit: **{payload['threshold']}**")
+            parts.append(f"threshold is set to **{payload['threshold']}**")
         if with_command:
-            summary.append(
-                f"cmd: **{'yes' if payload['command'] else 'no'}**"
-            )
+            parts.append(f"command detection is **{'on' if payload['command'] else 'off'}**")
         return await ctx.success(
-            f"**{label}** antinuke is now active ({self._concatenate(summary)})"
+            f"{verb} **{label}** antinuke module. {', '.join(parts)}"
         )
 
     def _count_perms(self, config: AntinukeConfig, *, kind: str) -> int:
@@ -1183,18 +1182,18 @@ class Antinuke(Package):
         embed = Embed(
             color=self.color,
             title="Settings",
-            description=f"Antinuke is **{'active' if active else 'inactive'}** in this server",
+            description=f"Antinuke is **{'enabled' if active else 'disabled'}** in this server",
         )
         embed.add_field(
             name="Modules",
             value=(
-                f"**Role Deletion:** {self._toggle_icon(config.role.status)}"
+                f"**Mass Member Kick:** {self._toggle_icon(config.kick.status)}"
+                f"\n**Webhook Creation:** {self._toggle_icon(config.webhook.status)}"
                 f"\n**Emoji Deletion:** {self._toggle_icon(config.emoji.status)}"
                 f"\n**Mass Member Ban:** {self._toggle_icon(config.ban.status)}"
-                f"\n**Mass Member Kick:** {self._toggle_icon(config.kick.status)}"
-                f"\n**Webhook Creation:** {self._toggle_icon(config.webhook.status)}"
                 f"\n**Channel Creation/Deletion:** {self._toggle_icon(config.channel.status)}"
-                f"\n**Vanity Change:** {self._toggle_icon(config.vanity.status)}"
+                f"\n**Role Deletion:** {self._toggle_icon(config.role.status)}"
+                f"\n**Vanity Protection:** {self._toggle_icon(config.vanity.status)}"
             ),
             inline=True,
         )
@@ -1204,10 +1203,10 @@ class Antinuke(Package):
                 f"**Super Admins:** {len(all_admins)}"
                 f"\n**Whitelisted Bots:** {bot_count}"
                 f"\n**Whitelisted Members:** {member_count}"
-                f"\n**Protection Modules:** {active} active"
+                f"\n**Protection Modules:** {active} enabled"
                 f"\n**Watch Permission Grant:** {self._count_perms(config, kind='grant')}/{len(DANGEROUS_PERMISSIONS)} perms"
                 f"\n**Watch Permission Remove:** {self._count_perms(config, kind='remove')}/{len(DANGEROUS_PERMISSIONS)} perms"
-                f"\n**Deny Bot Joins (bot add):** {self._toggle_icon(config.botadd.status)}"
+                f"\n**Deny Bot Joins (botadd):** {self._toggle_icon(config.botadd.status)}"
             ),
             inline=True,
         )
@@ -1237,9 +1236,8 @@ class Antinuke(Package):
         await self._load_config(ctx.guild.id)
 
         if member.id in (whitelist or []):
-            note = "can join" if getattr(member, "bot", False) else "bypasses **antinuke**"
-            return await ctx.success(f"**{member}** added to whitelist ({note})")
-        return await ctx.success(f"**{member}** removed from whitelist")
+            return await ctx.success(f"{member} is now whitelisted and will not trigger **antinuke**")
+        return await ctx.success(f"{member} is no longer whitelisted")
 
     @antinuke.command(
         name="admin",
@@ -1273,10 +1271,10 @@ class Antinuke(Package):
 
         if member.id in (admins or []):
             return await ctx.success(
-                f"**{member}** promoted to **antinuke admin**"
+                f"{member} is now an **antinuke admin** and can edit **antinuke settings**"
             )
         return await ctx.success(
-            f"**{member}** demoted from **antinuke admin**"
+            f"{member} is no longer an **antinuke admin** and can no longer edit **antinuke settings**"
         )
 
     @antinuke.command(name="admins")
@@ -1302,20 +1300,20 @@ class Antinuke(Package):
         entries: list[str] = []
 
         for tag, mod in config.enabled_modules():
-            parts = [f"action: {mod.punishment or 'kick'}"]
+            parts = [f"do: {mod.punishment or 'kick'}"]
             if tag in {"botadd", "vanity"}:
-                parts.append("limit: N/A")
+                parts.append("threshold: N/A")
             else:
-                parts.append(f"limit: {mod.threshold}")
+                parts.append(f"threshold: {mod.threshold}")
             if tag in {"ban", "kick", "role"}:
-                parts.append(f"cmd: {'yes' if mod.command else 'no'}")
+                parts.append(f"cmd: {'on' if mod.command else 'off'}")
             entries.append(f"{tag} ({', '.join(parts)})")
 
         for uid in config.whitelist:
             obj = self.bot.get_user(uid) or ctx.guild.get_member(uid)
             label = str(obj) if obj else "Unknown User"
             tag = "BOT" if obj and obj.bot else ("UNKNOWN" if obj is None else "MEMBER")
-            entries.append(f"{label} ({uid}) [{tag}]")
+            entries.append(f"{label} whitelisted ({uid}) [ {tag} ]")
 
         if not entries:
             return await ctx.warn("No **antinuke modules** are currently active")

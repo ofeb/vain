@@ -473,7 +473,7 @@ async def main():
         except Exception as e:
             fail(f"_detail_embed({cmd.qualified_name}) crashed: {e}")
 
-    print("\n-- INTEGRATION: COMMAND INVOCATION --")
+    print("\n command invocations ")
 
     async def invoke_cmd(cmd_name: str, *args, **kwargs):
         nonlocal ctx
@@ -641,7 +641,7 @@ async def main():
 
     print(f"\n  Commands invoked: {_results['commands_pass']}/{_results['commands_invoked']} passed")
 
-    print("\n-- INTEGRATION: EVENT COVERAGE --")
+    print("\n events coverage ")
     _results["events_tested"] = 0
     _results["events_pass"] = 0
 
@@ -729,7 +729,7 @@ async def main():
             ok("ManipulationEvents.on_message_manipulation auto_delete")
             break
 
-    print("\n-- INTEGRATION: PAGINATOR --")
+    print("\n paginator ")
     from core.discord.views.paginate import PaginateView
     ctx_pag = _build_mock_context(bot, guild, admin)
     sample_embeds = [Embed(title=f"Page {i}", description="test") for i in range(3)]
@@ -739,7 +739,7 @@ async def main():
     except Exception as e:
         fail(f"PaginateView crashed: {e}")
 
-    print("\n-- DATABASE SCHEMA COVERAGE --")
+    print("\n db schema coverages ")
     from pathlib import Path
     schema_path = Path("core/managers/database/models/schema.sql")
     if schema_path.exists():

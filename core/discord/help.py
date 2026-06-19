@@ -191,7 +191,7 @@ def _param_items(cmd: Command) -> list[tuple[str, Any]]:
 
 
 def _params(cmd: Command) -> list[str]:
-    return [name for name, _ in _param_items(cmd)]
+    return [name.replace("_", " ") for name, _ in _param_items(cmd)]
 
 
 def _aliases(cmd: Command) -> str:
@@ -305,12 +305,13 @@ def _information_value(cmd: Command) -> str:
     info = _information(cmd)
     if not info:
         return "N/A"
-    from core.managers.values import emojis
+    warning_emoji = "<:warning:743006201981173831>"
+    cooldown_emoji = "<:embeds_cooldown:1511705992755417129>"
     emoji_map = {
-        "cooldown": emojis.cooldown,
-        "permissions": emojis.interface.information,
+        "cooldown": cooldown_emoji,
+        "permissions": warning_emoji,
     }
-    return "\n".join(f"{emoji_map.get(key, emojis.interface.information)} {value}" for key, value in info.items())
+    return "\n".join(f"{emoji_map.get(key, warning_emoji)} {value}" for key, value in info.items())
 
 
 def _module(cmd: Command) -> str:

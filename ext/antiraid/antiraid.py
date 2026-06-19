@@ -90,23 +90,27 @@ class Antiraid(Package):
 
     def _describe(self, module: str, cfg: ModuleConfig) -> str:
         if not cfg.enabled:
-            return f"{self._indicator(False)} off"
+            return f"{self._indicator(False)} N/A, threshold: N/A"
 
         if module == "massjoin":
             return (
-                f"{self._indicator(True)} action: **{cfg.action or 'ban'}**"
-                f" | limit: **{cfg.threshold}**"
-                f" | lock: **{'yes' if cfg.lock_channels else 'no'}**"
-                f" | punish: **{'yes' if cfg.punish_new else 'no'}**"
+                f"{self._indicator(True)}"
+                f" (do: {cfg.action or 'ban'}, threshold: {cfg.threshold})"
             )
 
         if module == "newaccounts":
             return (
-                f"{self._indicator(True)} action: **{cfg.action or 'ban'}**"
-                f" | limit: **{cfg.threshold}** days"
+                f"{self._indicator(True)}"
+                f" (do: {cfg.action or 'ban'}, threshold: {cfg.threshold})"
             )
 
-        return f"{self._indicator(True)} action: **{cfg.action or 'kick'}**"
+        if module == "avatar":
+            return (
+                f"{self._indicator(True)}"
+                f" (do: {cfg.action or 'kick'}, threshold: N/A)"
+            )
+
+        return f"{self._indicator(True)} (do: {cfg.action or 'kick'}, threshold: N/A)"
 
     def _validate_action(self, action: str | None, *, fallback: str) -> str:
         value = (action or fallback).lower()
@@ -230,23 +234,14 @@ class Antiraid(Package):
         embed = Embed(
             color=self.color,
             title="Antiraid settings",
-            description=f"Raid state: **{'active' if cfg.raid_active else 'safe'}**",
+            description=f"Current Raid State: **{'active' if cfg.raid_active else 'Safe'}**",
         )
         embed.add_field(
             name="Modules",
             value=(
-                f"**Mass Joins:** {self._describe('massjoin', cfg.massjoin)}"
-                f"\n**Avatar:** {self._describe('avatar', cfg.avatar)}"
-                f"\n**New Accounts:** {self._describe('newaccounts', cfg.newaccounts)}"
-            ),
-            inline=False,
-        )
-        embed.add_field(
-            name="General",
-            value=(
-                f"**Punish Window:** {pwin}"
-                f"\n**Whitelisted Users:** {len(wl)}"
-                f"\n**Locked Channels:** {len(locked)}"
+                f"**Punish New Accounts:** {self._describe('newaccounts', cfg.newaccounts)}"
+                f"\n**Mass Bot Raids:** {self._describe('massjoin', cfg.massjoin)}"
+                f"\n**Punish Default PFPs:** {self._describe('avatar', cfg.avatar)}"
             ),
             inline=False,
         )
@@ -284,8 +279,8 @@ class Antiraid(Package):
 
         added = await self.db.toggle_antiraid_whitelist(ctx.guild.id, member.id)
         if added:
-            return await ctx.success(f"**{member}** added to **antiraid** bypass")
-        return await ctx.success(f"**{member}** removed from **antiraid** bypass")
+            return await ctx.success(f"**{member}** is now **temporarily** whitelisted and can join")
+        return await ctx.success(f"**{member}** is no longer whitelisted")
 
     @antiraid_whitelist.command(name="view", aliases=["list"])
     @has_permissions(manage_guild=True)
@@ -329,6 +324,7 @@ class Antiraid(Package):
         lock_channels = current.lock_channels if ctx.flags.get("lock") is None else bool(ctx.flags.get("lock"))
         punish_new = current.punish_new if ctx.flags.get("punish") is None else bool(ctx.flags.get("punish"))
 
+        was_enabled = current.enabled
         await self._store_module(
             ctx.guild.id,
             "massjoin",
@@ -338,10 +334,12 @@ class Antiraid(Package):
             lock_channels=lock_channels,
             punish_new=punish_new,
         )
+        verb = "Updated" if was_enabled else "Enabled"
         return await ctx.success(
-            "**massjoin** protection active.\n"
-            f"Action: **{action}**, limit: **{threshold}**, "
-            f"lock: **{'yes' if lock_channels else 'no'}**, punish: **{'yes' if punish_new else 'no'}**"
+            f"{verb} **massjoin** antiraid. Punishment set to **{action}** , "
+            f"threshold set to {threshold}, "
+            f"lock channels set to **{lock_channels}**, "
+            f"punish new members set to **{punish_new}**"
         )
 
     @antiraid.command(
@@ -363,14 +361,16 @@ class Antiraid(Package):
             ctx.flags.get("punishment") or current.action,
             fallback="kick",
         )
+        was_enabled = current.enabled
         await self._store_module(
             ctx.guild.id,
             "avatar",
             enabled=True,
             action=action,
         )
+        verb = "Updated" if was_enabled else "Enabled"
         return await ctx.success(
-            f"**avatar** protection active.\nAction: **{action}**"
+            f"{verb} **avatar** antiraid. Punishment set to **{action}**"
         )
 
     @antiraid.command(
@@ -399,6 +399,7 @@ class Antiraid(Package):
             ctx.flags.get("punishment") or current.action,
             fallback="ban",
         )
+        was_enabled = current.enabled
         await self._store_module(
             ctx.guild.id,
             "newaccounts",
@@ -406,9 +407,9 @@ class Antiraid(Package):
             threshold=threshold,
             action=action,
         )
+        verb = "Updated" if was_enabled else "Enabled"
         return await ctx.success(
-            "**new accounts** protection active.\n"
-            f"Action: **{action}**, min age: **{threshold}** days"
+            f"{verb} **newaccounts** antiraid. Punishment set to **{action}**, threshold set to {threshold}"
         )
 
     @Package.listener()
