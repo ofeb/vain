@@ -4,6 +4,7 @@ aiohttp
 async-timeout
 asyncpg
 fast-string-match
+git+https://github.com/nxyyhaha/dcspoof
 humanize
 loguru
 orjson
@@ -14,7 +15,9 @@ python-dateutil
 python-dotenv
 redis
 TagScriptEngine
+timescaledb
 tuuid
+udownloader
 ujson
 watchfiles
 xxhash

@@ -494,7 +494,7 @@ class ModerationCommands(Package):
         name="hardban",
         description="Keep a member banned",
     )
-    async def hardban(self, ctx, member, *, reason):
+    async def hardban(self, ctx, member, *, reason=None):
         """hardban a member"""
         pass
 
@@ -544,7 +544,7 @@ class ModerationCommands(Package):
         name="unban",
         description="Unbans the mentioned user",
     )
-    async def unban(self, ctx, user, *, reason):
+    async def unban(self, ctx, user, *, reason=None):
         """unban a user"""
         pass
 

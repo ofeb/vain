@@ -62,7 +62,7 @@ _PERM_LABELS: dict[str, str] = {
     "manage_messages": "Manage Messages",
     "manage_channels": "Manage Channels",
     "manage_roles": "Manage Roles",
-    "manage_guild": "Manage Server",
+    "manage_guild": "Manage Guild",
     "manage_expressions": "Manage Expressions",
     "ban_members": "Ban Members",
     "kick_members": "Kick Members",

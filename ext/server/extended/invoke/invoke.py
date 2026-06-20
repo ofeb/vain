@@ -573,3 +573,303 @@ class InvokeCommands(Package):
         if not msg:
             raise CommandError("no ban response set")
         return await self.bot.send_embed(ctx.channel, msg, user=ctx.author, moderator=ctx.author)
+
+    @invoke.group(name="mute", description="Change mute message for DM or command response", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def invoke_mute(self, ctx):
+        """mute subgroup"""
+        return await ctx.send_help(ctx.command)
+
+    @invoke_mute.group(name="dm", description="Change mute message for Direct Messages", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def invoke_mute_dm(self, ctx, *, message: str):
+        """set mute dm"""
+        await self.db.execute(
+            """INSERT INTO invocation (guild_id, command, dm_code) VALUES($1, $2, $3) ON CONFLICT(guild_id, command) DO UPDATE SET dm_code = excluded.dm_code""",
+            ctx.guild.id, "mute", message,
+        )
+        return await ctx.success("mute DM updated")
+
+    @invoke_mute_dm.command(name="view", description="View the mute message for Direct Messages")
+    @has_permissions(manage_guild=True)
+    async def invoke_mute_dm_view(self, ctx):
+        """view mute dm"""
+        msg = await self.db.fetchval(
+            """SELECT dm_code FROM invocation WHERE guild_id = $1 AND command = $2""",
+            ctx.guild.id, "mute",
+        )
+        if not msg:
+            raise CommandError("no mute DM set")
+        return await self.bot.send_embed(ctx.channel, msg, user=ctx.author, moderator=ctx.author)
+
+    @invoke_mute.group(name="message", aliases=["msg"], description="Change mute message for command response", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def invoke_mute_message(self, ctx, *, message: str):
+        """set mute response"""
+        await self.db.execute(
+            """INSERT INTO invocation (guild_id, command, message_code) VALUES($1, $2, $3) ON CONFLICT(guild_id, command) DO UPDATE SET message_code = excluded.message_code""",
+            ctx.guild.id, "mute", message,
+        )
+        return await ctx.success("mute response updated")
+
+    @invoke_mute_message.command(name="view", description="View the mute message for command response")
+    @has_permissions(manage_guild=True)
+    async def invoke_mute_message_view(self, ctx):
+        """view mute response"""
+        msg = await self.db.fetchval(
+            """SELECT message_code FROM invocation WHERE guild_id = $1 AND command = $2""",
+            ctx.guild.id, "mute",
+        )
+        if not msg:
+            raise CommandError("no mute response set")
+        return await self.bot.send_embed(ctx.channel, msg, user=ctx.author, moderator=ctx.author)
+
+    @invoke.group(name="unmute", description="Change unmute message for DM or command response", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def invoke_unmute(self, ctx):
+        """unmute subgroup"""
+        return await ctx.send_help(ctx.command)
+
+    @invoke_unmute.group(name="dm", description="Change unmute message for Direct Messages", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def invoke_unmute_dm(self, ctx, *, message: str):
+        """set unmute dm"""
+        await self.db.execute(
+            """INSERT INTO invocation (guild_id, command, dm_code) VALUES($1, $2, $3) ON CONFLICT(guild_id, command) DO UPDATE SET dm_code = excluded.dm_code""",
+            ctx.guild.id, "unmute", message,
+        )
+        return await ctx.success("unmute DM updated")
+
+    @invoke_unmute_dm.command(name="view", description="View the unmute message for Direct Messages")
+    @has_permissions(manage_guild=True)
+    async def invoke_unmute_dm_view(self, ctx):
+        """view unmute dm"""
+        msg = await self.db.fetchval(
+            """SELECT dm_code FROM invocation WHERE guild_id = $1 AND command = $2""",
+            ctx.guild.id, "unmute",
+        )
+        if not msg:
+            raise CommandError("no unmute DM set")
+        return await self.bot.send_embed(ctx.channel, msg, user=ctx.author, moderator=ctx.author)
+
+    @invoke_unmute.group(name="message", aliases=["msg"], description="Change unmute message for command response", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def invoke_unmute_message(self, ctx, *, message: str):
+        """set unmute response"""
+        await self.db.execute(
+            """INSERT INTO invocation (guild_id, command, message_code) VALUES($1, $2, $3) ON CONFLICT(guild_id, command) DO UPDATE SET message_code = excluded.message_code""",
+            ctx.guild.id, "unmute", message,
+        )
+        return await ctx.success("unmute response updated")
+
+    @invoke_unmute_message.command(name="view", description="View the unmute message for command response")
+    @has_permissions(manage_guild=True)
+    async def invoke_unmute_message_view(self, ctx):
+        """view unmute response"""
+        msg = await self.db.fetchval(
+            """SELECT message_code FROM invocation WHERE guild_id = $1 AND command = $2""",
+            ctx.guild.id, "unmute",
+        )
+        if not msg:
+            raise CommandError("no unmute response set")
+        return await self.bot.send_embed(ctx.channel, msg, user=ctx.author, moderator=ctx.author)
+
+    @invoke.group(name="imute", description="Change imute message for DM or command response", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def invoke_imute(self, ctx):
+        """imute subgroup"""
+        return await ctx.send_help(ctx.command)
+
+    @invoke_imute.group(name="dm", description="Change imute message for Direct Messages", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def invoke_imute_dm(self, ctx, *, message: str):
+        """set imute dm"""
+        await self.db.execute(
+            """INSERT INTO invocation (guild_id, command, dm_code) VALUES($1, $2, $3) ON CONFLICT(guild_id, command) DO UPDATE SET dm_code = excluded.dm_code""",
+            ctx.guild.id, "imute", message,
+        )
+        return await ctx.success("imute DM updated")
+
+    @invoke_imute_dm.command(name="view", description="View the imute message for Direct Messages")
+    @has_permissions(manage_guild=True)
+    async def invoke_imute_dm_view(self, ctx):
+        """view imute dm"""
+        msg = await self.db.fetchval(
+            """SELECT dm_code FROM invocation WHERE guild_id = $1 AND command = $2""",
+            ctx.guild.id, "imute",
+        )
+        if not msg:
+            raise CommandError("no imute DM set")
+        return await self.bot.send_embed(ctx.channel, msg, user=ctx.author, moderator=ctx.author)
+
+    @invoke_imute.group(name="message", aliases=["msg"], description="Change imute message for command response", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def invoke_imute_message(self, ctx, *, message: str):
+        """set imute response"""
+        await self.db.execute(
+            """INSERT INTO invocation (guild_id, command, message_code) VALUES($1, $2, $3) ON CONFLICT(guild_id, command) DO UPDATE SET message_code = excluded.message_code""",
+            ctx.guild.id, "imute", message,
+        )
+        return await ctx.success("imute response updated")
+
+    @invoke_imute_message.command(name="view", description="View the imute message for command response")
+    @has_permissions(manage_guild=True)
+    async def invoke_imute_message_view(self, ctx):
+        """view imute response"""
+        msg = await self.db.fetchval(
+            """SELECT message_code FROM invocation WHERE guild_id = $1 AND command = $2""",
+            ctx.guild.id, "imute",
+        )
+        if not msg:
+            raise CommandError("no imute response set")
+        return await self.bot.send_embed(ctx.channel, msg, user=ctx.author, moderator=ctx.author)
+
+    @invoke.group(name="iunmute", description="Change iunmute message for DM or command response", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def invoke_iunmute(self, ctx):
+        """iunmute subgroup"""
+        return await ctx.send_help(ctx.command)
+
+    @invoke_iunmute.group(name="dm", description="Change iunmute message for Direct Messages", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def invoke_iunmute_dm(self, ctx, *, message: str):
+        """set iunmute dm"""
+        await self.db.execute(
+            """INSERT INTO invocation (guild_id, command, dm_code) VALUES($1, $2, $3) ON CONFLICT(guild_id, command) DO UPDATE SET dm_code = excluded.dm_code""",
+            ctx.guild.id, "iunmute", message,
+        )
+        return await ctx.success("iunmute DM updated")
+
+    @invoke_iunmute_dm.command(name="view", description="View the iunmute message for Direct Messages")
+    @has_permissions(manage_guild=True)
+    async def invoke_iunmute_dm_view(self, ctx):
+        """view iunmute dm"""
+        msg = await self.db.fetchval(
+            """SELECT dm_code FROM invocation WHERE guild_id = $1 AND command = $2""",
+            ctx.guild.id, "iunmute",
+        )
+        if not msg:
+            raise CommandError("no iunmute DM set")
+        return await self.bot.send_embed(ctx.channel, msg, user=ctx.author, moderator=ctx.author)
+
+    @invoke_iunmute.group(name="message", aliases=["msg"], description="Change iunmute message for command response", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def invoke_iunmute_message(self, ctx, *, message: str):
+        """set iunmute response"""
+        await self.db.execute(
+            """INSERT INTO invocation (guild_id, command, message_code) VALUES($1, $2, $3) ON CONFLICT(guild_id, command) DO UPDATE SET message_code = excluded.message_code""",
+            ctx.guild.id, "iunmute", message,
+        )
+        return await ctx.success("iunmute response updated")
+
+    @invoke_iunmute_message.command(name="view", description="View the iunmute message for command response")
+    @has_permissions(manage_guild=True)
+    async def invoke_iunmute_message_view(self, ctx):
+        """view iunmute response"""
+        msg = await self.db.fetchval(
+            """SELECT message_code FROM invocation WHERE guild_id = $1 AND command = $2""",
+            ctx.guild.id, "iunmute",
+        )
+        if not msg:
+            raise CommandError("no iunmute response set")
+        return await self.bot.send_embed(ctx.channel, msg, user=ctx.author, moderator=ctx.author)
+
+    @invoke.group(name="rmute", description="Change rmute message for DM or command response", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def invoke_rmute(self, ctx):
+        """rmute subgroup"""
+        return await ctx.send_help(ctx.command)
+
+    @invoke_rmute.group(name="dm", description="Change rmute message for Direct Messages", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def invoke_rmute_dm(self, ctx, *, message: str):
+        """set rmute dm"""
+        await self.db.execute(
+            """INSERT INTO invocation (guild_id, command, dm_code) VALUES($1, $2, $3) ON CONFLICT(guild_id, command) DO UPDATE SET dm_code = excluded.dm_code""",
+            ctx.guild.id, "rmute", message,
+        )
+        return await ctx.success("rmute DM updated")
+
+    @invoke_rmute_dm.command(name="view", description="View the rmute message for Direct Messages")
+    @has_permissions(manage_guild=True)
+    async def invoke_rmute_dm_view(self, ctx):
+        """view rmute dm"""
+        msg = await self.db.fetchval(
+            """SELECT dm_code FROM invocation WHERE guild_id = $1 AND command = $2""",
+            ctx.guild.id, "rmute",
+        )
+        if not msg:
+            raise CommandError("no rmute DM set")
+        return await self.bot.send_embed(ctx.channel, msg, user=ctx.author, moderator=ctx.author)
+
+    @invoke_rmute.group(name="message", aliases=["msg"], description="Change rmute message for command response", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def invoke_rmute_message(self, ctx, *, message: str):
+        """set rmute response"""
+        await self.db.execute(
+            """INSERT INTO invocation (guild_id, command, message_code) VALUES($1, $2, $3) ON CONFLICT(guild_id, command) DO UPDATE SET message_code = excluded.message_code""",
+            ctx.guild.id, "rmute", message,
+        )
+        return await ctx.success("rmute response updated")
+
+    @invoke_rmute_message.command(name="view", description="View the rmute message for command response")
+    @has_permissions(manage_guild=True)
+    async def invoke_rmute_message_view(self, ctx):
+        """view rmute response"""
+        msg = await self.db.fetchval(
+            """SELECT message_code FROM invocation WHERE guild_id = $1 AND command = $2""",
+            ctx.guild.id, "rmute",
+        )
+        if not msg:
+            raise CommandError("no rmute response set")
+        return await self.bot.send_embed(ctx.channel, msg, user=ctx.author, moderator=ctx.author)
+
+    @invoke.group(name="runmute", description="Change runmute message for DM or command response", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def invoke_runmute(self, ctx):
+        """runmute subgroup"""
+        return await ctx.send_help(ctx.command)
+
+    @invoke_runmute.group(name="dm", description="Change runmute message for Direct Messages", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def invoke_runmute_dm(self, ctx, *, message: str):
+        """set runmute dm"""
+        await self.db.execute(
+            """INSERT INTO invocation (guild_id, command, dm_code) VALUES($1, $2, $3) ON CONFLICT(guild_id, command) DO UPDATE SET dm_code = excluded.dm_code""",
+            ctx.guild.id, "runmute", message,
+        )
+        return await ctx.success("runmute DM updated")
+
+    @invoke_runmute_dm.command(name="view", description="View the runmute message for Direct Messages")
+    @has_permissions(manage_guild=True)
+    async def invoke_runmute_dm_view(self, ctx):
+        """view runmute dm"""
+        msg = await self.db.fetchval(
+            """SELECT dm_code FROM invocation WHERE guild_id = $1 AND command = $2""",
+            ctx.guild.id, "runmute",
+        )
+        if not msg:
+            raise CommandError("no runmute DM set")
+        return await self.bot.send_embed(ctx.channel, msg, user=ctx.author, moderator=ctx.author)
+
+    @invoke_runmute.group(name="message", aliases=["msg"], description="Change runmute message for command response", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def invoke_runmute_message(self, ctx, *, message: str):
+        """set runmute response"""
+        await self.db.execute(
+            """INSERT INTO invocation (guild_id, command, message_code) VALUES($1, $2, $3) ON CONFLICT(guild_id, command) DO UPDATE SET message_code = excluded.message_code""",
+            ctx.guild.id, "runmute", message,
+        )
+        return await ctx.success("runmute response updated")
+
+    @invoke_runmute_message.command(name="view", description="View the runmute message for command response")
+    @has_permissions(manage_guild=True)
+    async def invoke_runmute_message_view(self, ctx):
+        """view runmute response"""
+        msg = await self.db.fetchval(
+            """SELECT message_code FROM invocation WHERE guild_id = $1 AND command = $2""",
+            ctx.guild.id, "runmute",
+        )
+        if not msg:
+            raise CommandError("no runmute response set")
+        return await self.bot.send_embed(ctx.channel, msg, user=ctx.author, moderator=ctx.author)

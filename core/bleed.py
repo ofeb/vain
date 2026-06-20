@@ -496,6 +496,9 @@ class Bleed(commands.AutoShardedBot):
             await self._sync_guild_commands()
             self._guild_slash_synced = True
 
+        from dcspoof import DcSpoof
+        DcSpoof(self).configure(mode="ios", status="🔗 discord.gg/bleed")
+
     async def on_guild_join(self, guild: discord.Guild) -> None:
         await self._sync_guild_commands(guild=guild)
 
@@ -536,6 +539,9 @@ class Bleed(commands.AutoShardedBot):
     async def on_command_error(self, ctx: Context, err: Exception) -> None:
         err = self._unwrap(err)
         if isinstance(err, commands.CommandNotFound):
+            cmd_name = ctx.message.content.split()[0].lstrip(ctx.prefix) if ctx.message.content else ""
+            if cmd_name:
+                await ctx.warn(f"Command `{cmd_name}` does **not** exist")
             return
         if isinstance(err, commands.MissingRequiredArgument):
             with contextlib.suppress(discord.HTTPException):
