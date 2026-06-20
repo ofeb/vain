@@ -25,10 +25,14 @@ class ServerCommands(Package):
     async def _send_embed_script(self, ctx, script: str):
         normalized = self._normalize_embed_script(script)
 
-        try:
-            payload = await parse(normalized, sendable=True)
-        except (ParseError, BadEmbed) as error:
-            return await ctx.warn(str(error))
+        from core.tools.embed import is_embed_script
+        if not is_embed_script(normalized):
+            payload = {"content": normalized}
+        else:
+            try:
+                payload = await parse(normalized, sendable=True)
+            except (ParseError, BadEmbed) as error:
+                return await ctx.warn(str(error))
 
         if not payload or (
             payload.get("content") in {None, ""}

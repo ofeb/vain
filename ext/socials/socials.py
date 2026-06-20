@@ -170,7 +170,7 @@ class Socials(commands.Cog):
         if not url:
             await ctx.send_help(ctx.command)
             return
-        await self.tiktok_download.callback(ctx, url=url)
+        await ctx.invoke(self.tiktok_download, url=url)
 
     @tiktok.command(
         name="download",

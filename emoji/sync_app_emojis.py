@@ -11,11 +11,6 @@ import tempfile
 from pathlib import Path
 from urllib.request import Request, urlopen
 
-try:
-    from dotenv import load_dotenv
-except Exception:
-    load_dotenv = None
-
 
 API_BASE = "https://discord.com/api/v10"
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -113,14 +108,9 @@ def main() -> None:
     parser.add_argument("--manifest", type=Path, default=None)
     args = parser.parse_args()
 
-    if load_dotenv is not None:
-        load_dotenv(REPO_ROOT / ".env")
+    from core.managers.values import token as bleed_token
 
-    token = (
-        os.getenv("BLEED_TOKEN")
-        or os.getenv("DISCORD_TOKEN")
-        or os.getenv("TOKEN")
-    )
+    token = bleed_token
     if not token:
         raise SystemExit("BLEED_TOKEN, DISCORD_TOKEN, or TOKEN is required")
 

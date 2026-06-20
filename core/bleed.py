@@ -20,6 +20,7 @@ from .managers.redis.client import BleedCache
 from .managers.watch import Watcher
 from .managers.guard import Guard
 from .tools.embed import PreparedScript, Script, parse
+from .tools.snipe import Snipe
 from .managers.values import token, bot, color, database, redis, emojis
 
 log = logging.getLogger("bleed")
@@ -153,6 +154,7 @@ class Bleed(commands.AutoShardedBot):
         self._bleed_help = BleedHelp()
         self.object_cache = Cache(self)
         self.guard = Guard()
+        self.snipes = Snipe(self)
         self.watcher: Optional[Watcher] = None
         self.started_at = datetime.datetime.now(datetime.timezone.utc)
         self._seen_message_ids: set[int] = set()

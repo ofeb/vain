@@ -5,13 +5,12 @@ use ctx.success ctx.fail ctx.warn for quick replies"""
 from __future__ import annotations
 
 import asyncio
-import os
 from typing import Any, Optional
 
 import discord
 from discord.ext import commands
 
-from core.managers.values import color, emojis
+from core.managers.values import color, emojis, lastfm_color
 
 
 class Cache:
@@ -211,9 +210,8 @@ class Context(commands.Context):
 
     async def lastfm(self, message: str, **kw):
         """send a compact Last.fm reply with bleed styling."""
-        lastfm_color = os.getenv("LASTFM_COLOR", "#c1272d")
         try:
-            color_value = discord.Color.from_str(lastfm_color)
+            color_value = discord.Color.from_str(lastfm_color.value)
         except ValueError:
             color_value = discord.Color(0xC1272D)
 

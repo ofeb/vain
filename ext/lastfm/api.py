@@ -6,7 +6,6 @@ import contextlib
 import copy
 import hashlib
 import json
-import os
 import re
 import time
 from datetime import datetime, timezone
@@ -16,6 +15,7 @@ import aiohttp
 import discord
 
 from core.discord.ctx import Context
+from core.managers.values import api as api_values
 
 from .constants import LASTFM_EMBED_FOOTER_ICON_URL
 
@@ -128,11 +128,11 @@ class LastFMApiClient:
         self._cache.clear()
 
     def _api_key(self) -> str | None:
-        value = os.getenv("LASTFM_API_KEY")
+        value = api_values.lastfm.key
         return value.strip() if value and value.strip() else None
 
     def _api_secret(self) -> str | None:
-        value = os.getenv("LASTFM_API_SECRET")
+        value = api_values.lastfm.secret
         return value.strip() if value and value.strip() else None
 
     def _lastfm_sig(self, params: dict[str, str]) -> str | None:
@@ -284,8 +284,8 @@ class LastFMApiClient:
         if self._spotify_token and now < self._spotify_token_expires - 30:
             return self._spotify_token
 
-        client_id = os.getenv("SPOTIFY_CLIENT_ID")
-        client_secret = os.getenv("SPOTIFY_CLIENT_SECRET")
+        client_id = api_values.spotify_client_id
+        client_secret = api_values.spotify_client_secret
         if not client_id or not client_secret:
             return None
 

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import re
 from collections import defaultdict
 from typing import Any, Awaitable, Callable
@@ -9,6 +8,7 @@ from typing import Any, Awaitable, Callable
 import discord
 
 from core.discord.ctx import Context
+from core.managers.values import lastfm_crown
 from core.tools.guild_members import collect_guild_members
 
 from .api import LastFMApiClient
@@ -484,7 +484,7 @@ class LastFMCrownStore:
         if not candidates:
             return
 
-        min_crown_plays = self._number_value(os.getenv("LASTFM_CROWN_MIN_PLAYS", "5"))
+        min_crown_plays = lastfm_crown.min_plays
         min_required = max(1, min_crown_plays)
 
         stored_crowns = await self.library.get_seed_crowns(

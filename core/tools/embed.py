@@ -94,11 +94,21 @@ def _has_link(s: str) -> bool:
 def is_embed_script(raw: str) -> bool:
     """Return True when a template should be parsed as bleed embed code."""
     stripped = str(raw).strip()
-    return (
+    if (
         stripped.startswith("{embed}")
         or stripped.startswith("$v{")
         or stripped.lower().startswith("embed$v")
+    ):
+        return True
+    lowered = stripped.lower()
+    _EMBED_KEYS = (
+        "content:", "description:", "title:", "color:", "field:",
+        "footer:", "author:", "image:", "thumbnail:", "button:",
+        "url:", "autodelete:", "timestamp",
     )
+    if stripped.startswith("{") and any(lowered.startswith(f"{{{k}") for k in _EMBED_KEYS):
+        return True
+    return False
 
 
 def _over_by(val, limit: int) -> int:

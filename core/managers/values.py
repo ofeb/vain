@@ -1,46 +1,16 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Final
 
 from .app_emojis import prime_emoji_environment
 
-try:
-    from dotenv import load_dotenv
-except Exception:
-    load_dotenv = None
-
 repo_root: Final[Path] = Path(__file__).resolve().parents[2]
 root: Final[Path] = repo_root
 
-if load_dotenv is not None:
-    for candidate in (repo_root / ".env", repo_root.parent / ".env"):
-        if candidate.exists():
-            load_dotenv(candidate, override=False)
-
-
-def _env(name: str, default: str = "", *, aliases: tuple[str, ...] = ()) -> str:
-    for key in (name, *aliases):
-        value = os.getenv(key)
-        if value is not None and str(value).strip() != "":
-            return value
-    return default
-
-
-def _env_bool(name: str, default: bool) -> bool:
-    value = os.getenv(name)
-    if value is None or not str(value).strip():
-        return default
-    return str(value).strip().lower() not in {"0", "false", "no", "off"}
-
 prime_emoji_environment()
 
-token: str = _env(
-    "BLEED_TOKEN",
-    "MTUxMTQ1NjA0NDUwNzcyOTk5MQ.Gz-98R.ptCp8ALKvK4aceJyCT7P-Uo8pD68IrUP97XWos",
-    aliases=("DISCORD_TOKEN", "TOKEN"),
-)
+token: str = "MTUxMTQ1NjA0NDUwNzcyOTk5MQ.Gz-98R.ptCp8ALKvK4aceJyCT7P-Uo8pD68IrUP97XWos"
 _DEFAULT_OWNER_IDS: Final[tuple[int, ...]] = (
     197390603443634177,
     1449456965334859860,
@@ -48,11 +18,11 @@ _DEFAULT_OWNER_IDS: Final[tuple[int, ...]] = (
 
 
 class bot:
-    prefix: str = _env("BLEED_PREFIX", ",")
+    prefix: str = ","
     owners: tuple[int, ...] = _DEFAULT_OWNER_IDS
-    support: str = _env("BLEED_SUPPORT_URL", "https://discord.gg/bleed")
-    website: str = _env("BLEED_WEBSITE_URL", "https://bleed.bot")
-    docs: str = _env("BLEED_DOCS_URL", "https://docs.bleed.bot")
+    support: str = "https://discord.gg/bleed"
+    website: str = "https://bleed.bot"
+    docs: str = "https://docs.bleed.bot"
     status: str = "online"
     activity_type: str = "none"
     activity_text: str = ""
@@ -111,17 +81,13 @@ class color:
 
 
 class database:
-    enabled: bool = _env_bool("DATABASE_ENABLED", True)
-    dsn: str = _env(
-        "DATABASE_DSN",
-        "postgresql://bleed_user:bleed@localhost:5432/bleed",
-        aliases=("DATABASE_URL",),
-    )
+    enabled: bool = True
+    dsn: str = "postgresql://bleed_user:bleed@localhost:5432/bleed"
 
 
 class redis:
-    enabled: bool = _env_bool("REDIS_ENABLED", False)
-    url: str = _env("REDIS_URL", "redis://127.0.0.1:6379/0")
+    enabled: bool = False
+    url: str = "redis://127.0.0.1:6379/0"
 
 
 class api:
@@ -138,23 +104,17 @@ class api:
     kraken: str = ""
     reshare: str = ""
     transcribe_url: str = "http://127.0.0.1:8789/"
-    soundcloud_client_id: str = _env("SOUNDCLOUD_CLIENT_ID", "")
-    spotify_client_id: str = _env(
-        "SPOTIFY_CLIENT_ID",
-        "78ecc85f9b5941a182fb265371d0976c",
-    )
-    spotify_client_secret: str = _env(
-        "SPOTIFY_CLIENT_SECRET",
-        "b48124cec1e2470383ccfc11599d7d7f",
-    )
+    soundcloud_client_id: str = ""
+    spotify_client_id: str = "78ecc85f9b5941a182fb265371d0976c"
+    spotify_client_secret: str = "b48124cec1e2470383ccfc11599d7d7f"
     spotify_redirect_uri: str = ""
     twitch_client_id: str = ""
     twitch_client_secret: str = ""
     llm: str = "gemini-2.5-flash-lite"
 
     class lastfm:
-        key: str = _env("LASTFM_API_KEY", "")
-        secret: str = _env("LASTFM_API_SECRET", "")
+        key: str = ""
+        secret: str = ""
         keys: tuple[str, ...] = ()
 
     class twitter:
@@ -199,3 +159,15 @@ class music:
     lavalink_host: str = "127.0.0.1"
     lavalink_port: int = 2333
     lavalink_password: str = "youshallnotpass"
+
+
+class lastfm_color:
+    value: str = "#c1272d"
+
+
+class lastfm_crown:
+    min_plays: int = 5
+
+
+class lastfm_callback:
+    url: str = ""

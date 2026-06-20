@@ -7,7 +7,6 @@ import datetime
 import typing
 from collections import deque
 import discord
-from .errors import RolePosition
 
 
 class SnipeError(Exception):
@@ -32,7 +31,7 @@ class Snipe:
             self.data[key] = deque(maxlen=100)
         self.data[key].appendleft(entry)
 
-    async def add(self, kind: str, message: typing.Union[discord.Message, tuple]) -> dict:
+    async def add_entry(self, kind: str, message: typing.Union[discord.Message, tuple]) -> dict:
         """store a snipe entry for a channel"""
         if isinstance(message, discord.Message):
             entry = {
@@ -86,10 +85,10 @@ class Snipe:
         )
         return True
 
-    async def get(self, channel: discord.TextChannel, kind: str, index: int) -> tuple:
+    async def get_entry(self, channel: discord.TextChannel, *, type: str = "snipe", index: int = 1) -> tuple:
         """get snipe entry at index for channel"""
-        prefix = {"snipe": "s-", "editsnipe": "es-", "reactionsnipe": "rs-"}.get(kind.lower(), "s-")
-        label = {"snipe": "deleted messages", "editsnipe": "edits", "reactionsnipe": "reaction removals"}.get(kind.lower(), "entries")
+        prefix = {"snipe": "s-", "editsnipe": "es-", "reactionsnipe": "rs-"}.get(type.lower(), "s-")
+        label = {"snipe": "deleted messages", "editsnipe": "edits", "reactionsnipe": "reaction removals"}.get(type.lower(), "entries")
         data = self.data.get(self._key(prefix, channel.id))
         if not data:
             raise SnipeError(f"no {label} in {channel.mention}")
@@ -97,7 +96,7 @@ class Snipe:
             raise SnipeError(f"not {index} {label} stored")
         return (data[index - 1], len(data))
 
-    async def delete(self, channel: discord.TextChannel, kind: str, index: int) -> None:
+    async def delete_entry(self, channel: discord.TextChannel, kind: str, index: int) -> None:
         """remove a snipe entry at index"""
         prefix = {"snipe": "s-", "editsnipe": "es-", "reactionsnipe": "rs-"}.get(kind.lower(), "s-")
         key = self._key(prefix, channel.id)
@@ -106,7 +105,7 @@ class Snipe:
             raise SnipeError(f"no entry at {index}")
         self.data[key].remove(data[index - 1])
 
-    async def clear(self, channel: discord.TextChannel) -> None:
+    async def clear_entries(self, channel: discord.TextChannel) -> None:
         """clear all snipe data for a channel"""
         for prefix in ("s-", "es-", "rs-"):
             self.data.pop(self._key(prefix, channel.id), None)

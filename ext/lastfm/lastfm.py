@@ -4,7 +4,6 @@ import asyncio
 import base64
 import contextlib
 import io
-import os
 import random
 import re
 import time
@@ -17,7 +16,7 @@ from discord.ext import commands
 
 from core.discord.ctx import Context
 from core.discord.package import Package
-from core.managers.values import emojis
+from core.managers.values import emojis, api as api_values, lastfm_color as lastfm_color_config, lastfm_callback
 from core.tools.guild_members import collect_guild_members
 from core.tools import embed as embed_builder
 from .api import LastFMApiClient
@@ -128,7 +127,7 @@ class Lastfm(Package):
         asyncio.create_task(self._api.close())
 
     def _lastfm_color(self) -> discord.Color:
-        return discord.Color.from_str(os.getenv("LASTFM_COLOR", "#c1272d"))
+        return discord.Color.from_str(lastfm_color_config.value)
 
     def _info_color(self) -> discord.Color:
         return self._lastfm_color()
@@ -664,8 +663,8 @@ class Lastfm(Package):
         """
         Login and authenticate bored to use your account
         """
-        api_key = os.getenv("LASTFM_API_KEY")
-        callback = os.getenv("LASTFM_CALLBACK_URL")
+        api_key = api_values.lastfm.key
+        callback = lastfm_callback.url
         if not api_key or not callback:
             await ctx.warn("Last.fm is not configured on this bot.")
             return
