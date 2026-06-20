@@ -173,6 +173,8 @@ class Antinuke(Package):
         with_threshold: bool = False,
         with_command: bool = False,
     ):
+        current = await self._guild_config(ctx.guild.id)
+        was_enabled = getattr(current, name).status
         payload = self._build_module_payload(
             status=status,
             with_threshold=with_threshold,
@@ -183,9 +185,9 @@ class Antinuke(Package):
 
         label = MODULE_NAMES[name]
         if not status:
-            return await ctx.success(f"Turned **{label}** antinuke protection off")
+            return await ctx.success(f"Disabled **{label}** antinuke module")
 
-        verb = "Updated" if getattr(self._config, name, None) and getattr(getattr(self._config, name, None), 'status', False) else "Enabled"
+        verb = "Updated" if was_enabled else "Enabled"
         parts = [f"Punishment is set to **{payload['punishment']}**"]
         if with_threshold:
             parts.append(f"threshold is set to **{payload['threshold']}**")
@@ -1184,6 +1186,10 @@ class Antinuke(Package):
             title="Settings",
             description=f"Antinuke is **{'enabled' if active else 'disabled'}** in this server",
         )
+        embed.set_author(
+            name=str(ctx.author),
+            icon_url=ctx.author.display_avatar.url,
+        )
         embed.add_field(
             name="Modules",
             value=(
@@ -1236,6 +1242,8 @@ class Antinuke(Package):
         await self._load_config(ctx.guild.id)
 
         if member.id in (whitelist or []):
+            if getattr(member, "bot", False) and ctx.guild.get_member(member.id) is None:
+                return await ctx.success(f"{member} is now whitelisted and can join")
             return await ctx.success(f"{member} is now whitelisted and will not trigger **antinuke**")
         return await ctx.success(f"{member} is no longer whitelisted")
 
@@ -1288,9 +1296,17 @@ class Antinuke(Package):
         ]
         if not deduped:
             return await ctx.warn("No **antinuke admins** configured")
+        width = max(2, len(str(len(deduped))))
+        embed = Embed(title="Antinuke admins", color=self.color).set_author(
+            name=str(ctx.author),
+            icon_url=ctx.author.display_avatar.url,
+        )
         return await ctx.paginate(
-            Embed(title="Antinuke Admins", color=self.color),
-            [f"<@{uid}>" for uid in deduped],
+            embed,
+            [
+                f"{index:0{width}d} <@{uid}>"
+                for index, uid in enumerate(deduped, start=1)
+            ],
         )
 
     @antinuke.command(name="list")
@@ -1313,7 +1329,7 @@ class Antinuke(Package):
             obj = self.bot.get_user(uid) or ctx.guild.get_member(uid)
             label = str(obj) if obj else "Unknown User"
             tag = "BOT" if obj and obj.bot else ("UNKNOWN" if obj is None else "MEMBER")
-            entries.append(f"{label} whitelisted ({uid}) [ {tag} ]")
+            entries.append(f"{label} whitelisted ({uid}) [{tag}]")
 
         if not entries:
             return await ctx.warn("No **antinuke modules** are currently active")
@@ -1575,7 +1591,10 @@ class Antinuke(Package):
             "DELETE FROM antinuke_actions WHERE guild_id = $1",
             ctx.guild.id,
         )
-        self._config = None
+        self.config.pop(ctx.guild.id, None)
+        for key in list(self._stale_cmd_actions):
+            if key[0] == ctx.guild.id:
+                self._stale_cmd_actions.pop(key, None)
         return await ctx.success("Antinuke configuration has been **reset**.")
 
 

@@ -90,7 +90,7 @@ class Antiraid(Package):
 
     def _describe(self, module: str, cfg: ModuleConfig) -> str:
         if not cfg.enabled:
-            return f"{self._indicator(False)} N/A, threshold: N/A"
+            return f"{self._indicator(False)} (do: N/A, threshold: N/A)"
 
         if module == "massjoin":
             return (
@@ -224,26 +224,20 @@ class Antiraid(Package):
     async def antiraid_config(self, ctx):
         """View the current antiraid configuration."""
         cfg = await self._cached_config(ctx.guild.id)
-        wl = await self.db.fetch_antiraid_whitelist(ctx.guild.id)
-        locked = await self.db.fetch_antiraid_locked_channels(ctx.guild.id)
-
-        pwin = "inactive"
-        if cfg.punish_until and cfg.punish_until > datetime.now(timezone.utc):
-            pwin = f"<t:{int(cfg.punish_until.timestamp())}:R>"
-
         embed = Embed(
             color=self.color,
             title="Antiraid settings",
-            description=f"Current Raid State: **{'active' if cfg.raid_active else 'Safe'}**",
-        )
-        embed.add_field(
-            name="Modules",
-            value=(
-                f"**Punish New Accounts:** {self._describe('newaccounts', cfg.newaccounts)}"
-                f"\n**Mass Bot Raids:** {self._describe('massjoin', cfg.massjoin)}"
-                f"\n**Punish Default PFPs:** {self._describe('avatar', cfg.avatar)}"
+            description=(
+                f"**Current Raid State:** {'Active' if cfg.raid_active else 'Safe'}"
+                "\n\n**Modules**\n"
+                f"**Punish New Accounts:** {self._describe('newaccounts', cfg.newaccounts)}\n"
+                f"**Mass Bot Raids:** {self._describe('massjoin', cfg.massjoin)}\n"
+                f"**Punish Default PFPs:** {self._describe('avatar', cfg.avatar)}"
             ),
-            inline=False,
+        )
+        embed.set_author(
+            name=str(ctx.author),
+            icon_url=ctx.author.display_avatar.url,
         )
         return await ctx.send(embed=embed)
 
@@ -279,8 +273,8 @@ class Antiraid(Package):
 
         added = await self.db.toggle_antiraid_whitelist(ctx.guild.id, member.id)
         if added:
-            return await ctx.success(f"**{member}** is now **temporarily** whitelisted and can join")
-        return await ctx.success(f"**{member}** is no longer whitelisted")
+            return await ctx.success(f"{member} is now temporarily whitelisted and can join")
+        return await ctx.success(f"{member} is no longer whitelisted")
 
     @antiraid_whitelist.command(name="view", aliases=["list"])
     @has_permissions(manage_guild=True)
@@ -290,9 +284,16 @@ class Antiraid(Package):
         if not rows:
             return await ctx.warn("No **antiraid whitelist** entries exist")
 
-        lines = [f"<@{row.user_id}> (`{row.user_id}`)" for row in rows]
+        width = max(2, len(str(len(rows))))
+        lines = [
+            f"{index:0{width}d} <@{row.user_id}> (`{row.user_id}`)"
+            for index, row in enumerate(rows, start=1)
+        ]
         return await ctx.paginate(
-            Embed(title="Antiraid whitelist", color=self.color),
+            Embed(title="Antiraid whitelist", color=self.color).set_author(
+                name=str(ctx.author),
+                icon_url=ctx.author.display_avatar.url,
+            ),
             lines,
         )
 
@@ -336,10 +337,11 @@ class Antiraid(Package):
         )
         verb = "Updated" if was_enabled else "Enabled"
         return await ctx.success(
-            f"{verb} **massjoin** antiraid. Punishment set to **{action}** , "
+            f"{verb} **massjoin** antiraid. "
+            f"Punishment set to {action}, "
             f"threshold set to {threshold}, "
-            f"lock channels set to **{lock_channels}**, "
-            f"punish new members set to **{punish_new}**"
+            f"lock channels set to {lock_channels}, "
+            f"punish new members set to {punish_new}"
         )
 
     @antiraid.command(
@@ -370,7 +372,7 @@ class Antiraid(Package):
         )
         verb = "Updated" if was_enabled else "Enabled"
         return await ctx.success(
-            f"{verb} **avatar** antiraid. Punishment set to **{action}**"
+            f"{verb} **avatar** antiraid. Punishment set to {action}"
         )
 
     @antiraid.command(
@@ -409,7 +411,8 @@ class Antiraid(Package):
         )
         verb = "Updated" if was_enabled else "Enabled"
         return await ctx.success(
-            f"{verb} **newaccounts** antiraid. Punishment set to **{action}**, threshold set to {threshold}"
+            f"{verb} **newaccounts** antiraid. "
+            f"Punishment set to {action}, threshold set to {threshold}"
         )
 
     @Package.listener()
@@ -546,6 +549,7 @@ class Antiraid(Package):
     @has_permissions(manage_guild=True)
     async def antiraid_reset(self, ctx):
         """Reset all antiraid configuration for this server."""
+        unlocked = await self._enable_chat(ctx.guild)
         await self.bot.db.execute(
             "DELETE FROM antiraid_config WHERE guild_id = $1",
             ctx.guild.id,
@@ -562,7 +566,12 @@ class Antiraid(Package):
             "DELETE FROM antiraid_locked_channels WHERE guild_id = $1",
             ctx.guild.id,
         )
-        await ctx.success("Antiraid configuration has been **reset**.")
+        self.config.pop(ctx.guild.id, None)
+        self.join_log.pop(ctx.guild.id, None)
+        suffix = ""
+        if unlocked:
+            suffix = f" and **{unlocked}** channel{'s' if unlocked != 1 else ''} unlocked"
+        await ctx.success(f"Antiraid configuration has been **reset**{suffix}.")
 
 
 async def setup(bot) -> None:

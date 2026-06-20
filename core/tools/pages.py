@@ -55,6 +55,7 @@ class Paginator:
         pages: Sequence[discord.Embed | str] | Iterable[discord.Embed | str],
         *,
         timeout: float = 60.0,
+        start_index: int = 0,
         **kwargs,
     ) -> None:
         if isinstance(pages, list):
@@ -63,6 +64,7 @@ class Paginator:
             self.pages = list(pages)
         self.ctx = ctx
         self.timeout = timeout
+        self.start_index = start_index
         self.kwargs = kwargs
         self.message: discord.Message | None = None
 
@@ -79,6 +81,11 @@ class Paginator:
             self.message = await self.ctx.send(**payload)
             return self.message
 
-        view = PaginateView(self.ctx, self.pages, timeout=self.timeout)
+        view = PaginateView(
+            self.ctx,
+            self.pages,
+            timeout=self.timeout,
+            start_index=self.start_index,
+        )
         self.message = await view.start()
         return self.message
