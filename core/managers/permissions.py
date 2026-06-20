@@ -86,7 +86,7 @@ def has_permissions(**permissions):
 
         if unresolved == ["server owner"]:
             raise CommandError(
-                f"you must be the **server owner** to use `{ctx.command.qualified_name}`"
+                f"You must be the **server owner** to run this command."
             )
 
         raise MissingPermissions([name.replace(" ", "_") for name in unresolved])

@@ -247,13 +247,18 @@ def _aliases(cmd: Command) -> str:
 
 
 def _description(cmd: Command) -> str:
+    if isinstance(cmd, Group):
+        for value in (cmd.description, cmd.help, cmd.short_doc):
+            text = str(value or "").strip()
+            if not text or text.lower() in _PLACEHOLDER_DESCRIPTIONS:
+                continue
+            return text[:1].upper() + text[1:]
+        return f"Use subcommands under {cmd.qualified_name}"
     for value in (cmd.help, cmd.description, cmd.short_doc):
         text = str(value or "").strip()
         if not text or text.lower() in _PLACEHOLDER_DESCRIPTIONS:
             continue
         return text[:1].upper() + text[1:]
-    if isinstance(cmd, Group):
-        return f"Use subcommands under {cmd.qualified_name}"
     return f"Run the {cmd.qualified_name} command"
 
 

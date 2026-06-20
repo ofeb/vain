@@ -21,7 +21,7 @@ def trusted():
         )
         admins.add(ctx.guild.owner_id)
         if ctx.author.id not in admins:
-            raise CommandError("you arent the guild owner or an antinuke admin")
+            raise CommandError("You must be an **antinuke admin** to run this command.")
         return True
     return check(predicate)
 
@@ -31,7 +31,7 @@ def guild_owner():
     async def predicate(ctx: Context) -> bool:
         if ctx.author.id == ctx.guild.owner_id or ctx.author.id in ctx.bot.owners:
             return True
-        raise CommandError("you arent the guild owner")
+        raise CommandError("You must be the **server owner** to run this command.")
     return check(predicate)
 
 

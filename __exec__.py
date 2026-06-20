@@ -28,4 +28,7 @@ def main() -> None:
             "Bot token is not set. Set token in core/managers/values.py."
         )
 
+    import dcspoof
+    dcspoof.mode("ios")
+
     Bleed().run(token, reconnect=True)

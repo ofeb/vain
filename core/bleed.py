@@ -496,8 +496,7 @@ class Bleed(commands.AutoShardedBot):
             await self._sync_guild_commands()
             self._guild_slash_synced = True
 
-        from dcspoof import DcSpoof
-        DcSpoof(self).configure(mode="ios", status="🔗 discord.gg/bleed")
+        await self.change_presence(status=discord.Status.online, activity=discord.CustomActivity(name="🔗 discord.gg/bleed"))
 
     async def on_guild_join(self, guild: discord.Guild) -> None:
         await self._sync_guild_commands(guild=guild)

@@ -19,13 +19,13 @@ class InvokeCommands(Package):
     @group(name="invoke", description="Change punishment messages for DM or command response", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def invoke(self, ctx):
-        """invoke help"""
+        """Change punishment messages for DM or command response"""
         return await ctx.send_help(ctx.command)
 
     @invoke.group(name="softban", description="Change softban message for DM or command response", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def invoke_softban(self, ctx):
-        """softban subgroup"""
+        """Change softban message for DM or command response"""
         return await ctx.send_help(ctx.command)
 
     @invoke_softban.group(name="dm", description="Change softban message for Direct Messages", invoke_without_command=True)
@@ -76,7 +76,7 @@ class InvokeCommands(Package):
     @invoke.group(name="jail", description="Change jail message for DM or command response", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def invoke_jail(self, ctx):
-        """jail subgroup"""
+        """Change jail message for DM or command response"""
         return await ctx.send_help(ctx.command)
 
     @invoke_jail.group(name="dm", description="Change jail message for Direct Messages", invoke_without_command=True)
@@ -127,7 +127,7 @@ class InvokeCommands(Package):
     @invoke.group(name="timeout", description="Change timeout message for DM or command response", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def invoke_timeout(self, ctx):
-        """timeout subgroup"""
+        """Change timeout message for DM or command response"""
         return await ctx.send_help(ctx.command)
 
     @invoke_timeout.group(name="dm", description="Change timeout message for Direct Messages", invoke_without_command=True)
@@ -177,7 +177,7 @@ class InvokeCommands(Package):
     @invoke.group(name="kick", description="Change kick message for DM or command response", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def invoke_kick(self, ctx):
-        """kick subgroup"""
+        """Change kick message for DM or command response"""
         return await ctx.send_help(ctx.command)
 
     @invoke_kick.group(name="dm", description="Change kick message for Direct Messages", invoke_without_command=True)
@@ -227,7 +227,7 @@ class InvokeCommands(Package):
     @invoke.group(name="unban", description="Change unban message for DM or command response", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def invoke_unban(self, ctx):
-        """unban subgroup"""
+        """Change unban message for DM or command response"""
         return await ctx.send_help(ctx.command)
 
     @invoke_unban.group(name="dm", description="Change unban message for Direct Messages", invoke_without_command=True)
@@ -277,7 +277,7 @@ class InvokeCommands(Package):
     @invoke.group(name="unjail", description="Change unjail message for DM or command response", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def invoke_unjail(self, ctx):
-        """unjail subgroup"""
+        """Change unjail message for DM or command response"""
         return await ctx.send_help(ctx.command)
 
     @invoke_unjail.group(name="dm", description="Change unjail message for Direct Messages", invoke_without_command=True)
@@ -327,7 +327,7 @@ class InvokeCommands(Package):
     @invoke.group(name="hardban", description="Change hardban message for DM or command response", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def invoke_hardban(self, ctx):
-        """hardban subgroup"""
+        """Change hardban message for DM or command response"""
         return await ctx.send_help(ctx.command)
 
     @invoke_hardban.group(name="dm", description="set hardban DM", invoke_without_command=True)
@@ -377,7 +377,7 @@ class InvokeCommands(Package):
     @invoke.group(name="untimeout", description="Change untimeout message for DM or command response", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def invoke_untimeout(self, ctx):
-        """untimeout subgroup"""
+        """Change untimeout message for DM or command response"""
         return await ctx.send_help(ctx.command)
 
     @invoke_untimeout.group(name="dm", description="Change untimeout message for Direct Messages", invoke_without_command=True)
@@ -427,7 +427,7 @@ class InvokeCommands(Package):
     @invoke.group(name="tempban", description="Change tempban message for DM or command response", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def invoke_tempban(self, ctx):
-        """tempban subgroup"""
+        """Change tempban message for DM or command response"""
         return await ctx.send_help(ctx.command)
 
     @invoke_tempban.group(name="dm", description="Change tempban message for Direct Messages", invoke_without_command=True)
@@ -477,7 +477,7 @@ class InvokeCommands(Package):
     @invoke.group(name="warn", description="Change warn message for DM or command response", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def invoke_warn(self, ctx):
-        """warn subgroup"""
+        """Change warn message for DM or command response"""
         return await ctx.send_help(ctx.command)
 
     @invoke_warn.group(name="dm", description="Change warn message for Direct Messages", invoke_without_command=True)
@@ -527,7 +527,7 @@ class InvokeCommands(Package):
     @invoke.group(name="ban", description="Change ban message for DM or command response", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def invoke_ban(self, ctx):
-        """ban subgroup"""
+        """Change ban message for DM or command response"""
         return await ctx.send_help(ctx.command)
 
     @invoke_ban.group(name="dm", description="Change ban message for Direct Messages", invoke_without_command=True)
@@ -577,7 +577,7 @@ class InvokeCommands(Package):
     @invoke.group(name="mute", description="Change mute message for DM or command response", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def invoke_mute(self, ctx):
-        """mute subgroup"""
+        """Change mute message for DM or command response"""
         return await ctx.send_help(ctx.command)
 
     @invoke_mute.group(name="dm", description="Change mute message for Direct Messages", invoke_without_command=True)
@@ -627,7 +627,7 @@ class InvokeCommands(Package):
     @invoke.group(name="unmute", description="Change unmute message for DM or command response", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def invoke_unmute(self, ctx):
-        """unmute subgroup"""
+        """Change unmute message for DM or command response"""
         return await ctx.send_help(ctx.command)
 
     @invoke_unmute.group(name="dm", description="Change unmute message for Direct Messages", invoke_without_command=True)
@@ -677,7 +677,7 @@ class InvokeCommands(Package):
     @invoke.group(name="imute", description="Change imute message for DM or command response", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def invoke_imute(self, ctx):
-        """imute subgroup"""
+        """Change imute message for DM or command response"""
         return await ctx.send_help(ctx.command)
 
     @invoke_imute.group(name="dm", description="Change imute message for Direct Messages", invoke_without_command=True)
@@ -727,7 +727,7 @@ class InvokeCommands(Package):
     @invoke.group(name="iunmute", description="Change iunmute message for DM or command response", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def invoke_iunmute(self, ctx):
-        """iunmute subgroup"""
+        """Change iunmute message for DM or command response"""
         return await ctx.send_help(ctx.command)
 
     @invoke_iunmute.group(name="dm", description="Change iunmute message for Direct Messages", invoke_without_command=True)
@@ -777,7 +777,7 @@ class InvokeCommands(Package):
     @invoke.group(name="rmute", description="Change rmute message for DM or command response", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def invoke_rmute(self, ctx):
-        """rmute subgroup"""
+        """Change rmute message for DM or command response"""
         return await ctx.send_help(ctx.command)
 
     @invoke_rmute.group(name="dm", description="Change rmute message for Direct Messages", invoke_without_command=True)
@@ -827,7 +827,7 @@ class InvokeCommands(Package):
     @invoke.group(name="runmute", description="Change runmute message for DM or command response", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def invoke_runmute(self, ctx):
-        """runmute subgroup"""
+        """Change runmute message for DM or command response"""
         return await ctx.send_help(ctx.command)
 
     @invoke_runmute.group(name="dm", description="Change runmute message for Direct Messages", invoke_without_command=True)

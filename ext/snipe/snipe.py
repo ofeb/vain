@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+import datetime
 from typing import TYPE_CHECKING
 
 import discord
@@ -8,12 +8,175 @@ from discord.ext import commands
 
 from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe
-from core.managers.values import color
+from core.managers.values import color, emojis
 from core.managers.permissions import has_permissions
 from core.tools.snipe import SnipeError
 
 if TYPE_CHECKING:
     from .events import SnipeEvents
+
+
+class SnipePaginateView(discord.ui.View):
+    def __init__(self, ctx: Context, pages: list[discord.Embed], snipe_type: str, snipe_store):
+        super().__init__(timeout=60.0)
+        self.ctx = ctx
+        self.pages = pages
+        self.snipe_type = snipe_type
+        self.snipe_store = snipe_store
+        self.index = 0
+        self.message: discord.Message | None = None
+
+    def _current(self) -> dict:
+        return {"embed": self.pages[self.index], "view": self}
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id == self.ctx.author.id:
+            return True
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                color=color.warn,
+                description=f"{emojis.warn} {interaction.user.mention}: You're not the **author** of this embed!",
+            ),
+            ephemeral=True,
+        )
+        return False
+
+    async def on_timeout(self) -> None:
+        if self.message is not None:
+            try:
+                await self.message.edit(view=None)
+            except discord.HTTPException:
+                pass
+
+    @discord.ui.button(
+        style=discord.ButtonStyle.primary,
+        emoji=discord.PartialEmoji.from_str(emojis.paginator.previous),
+    )
+    async def prev_btn(self, interaction: discord.Interaction, _: discord.ui.Button):
+        self.index = (self.index - 1) % len(self.pages)
+        await interaction.response.edit_message(**self._current())
+
+    @discord.ui.button(
+        style=discord.ButtonStyle.primary,
+        emoji=discord.PartialEmoji.from_str(emojis.paginator.next),
+    )
+    async def next_btn(self, interaction: discord.Interaction, _: discord.ui.Button):
+        self.index = (self.index + 1) % len(self.pages)
+        await interaction.response.edit_message(**self._current())
+
+    @discord.ui.button(
+        style=discord.ButtonStyle.secondary,
+        emoji=discord.PartialEmoji.from_str(emojis.paginator.navigate),
+    )
+    async def goto_btn(self, interaction: discord.Interaction, _: discord.ui.Button):
+        modal = discord.ui.Modal(title="Skip to page")
+        page_input = discord.ui.TextInput(
+            label="Page number",
+            placeholder=f"1-{len(self.pages)}",
+            required=True,
+            max_length=4,
+        )
+        modal.add_item(page_input)
+
+        async def on_submit(modal_inter: discord.Interaction):
+            raw = str(page_input.value).strip()
+            if not raw.isdigit():
+                await modal_inter.response.send_message(
+                    embed=discord.Embed(color=color.warn, description=f"{emojis.warn} Provide a **valid page number**."),
+                    ephemeral=True,
+                )
+                return
+            page_number = int(raw)
+            if page_number < 1 or page_number > len(self.pages):
+                await modal_inter.response.send_message(
+                    embed=discord.Embed(color=color.warn, description=f"{emojis.warn} That page is **out of range**."),
+                    ephemeral=True,
+                )
+                return
+            self.index = page_number - 1
+            await modal_inter.response.edit_message(**self._current())
+
+        modal.on_submit = on_submit
+        await interaction.response.send_modal(modal)
+
+    @discord.ui.button(
+        style=discord.ButtonStyle.danger,
+        emoji=discord.PartialEmoji.from_str(emojis.remove),
+    )
+    async def remove_btn(self, interaction: discord.Interaction, _: discord.ui.Button):
+        try:
+            await self.snipe_store.delete_entry(self.ctx.channel, self.snipe_type, self.index + 1)
+            del self.pages[self.index]
+        except SnipeError:
+            await interaction.response.send_message(
+                embed=discord.Embed(
+                    color=color.warn,
+                    description=f"{emojis.warn} No snipe found at this index.",
+                ),
+                ephemeral=True,
+            )
+            return
+
+        if not self.pages:
+            await interaction.response.edit_message(
+                embed=discord.Embed(
+                    color=color.base,
+                    description=f"{emojis.approve} All snipes cleared for {self.ctx.channel.mention}",
+                ),
+                view=None,
+            )
+            self.stop()
+            return
+
+        self.index = min(self.index, len(self.pages) - 1)
+        await interaction.response.edit_message(**self._current())
+
+    @discord.ui.button(
+        style=discord.ButtonStyle.danger,
+        emoji=discord.PartialEmoji.from_str(emojis.paginator.cancel),
+    )
+    async def cancel_btn(self, interaction: discord.Interaction, _: discord.ui.Button):
+        await interaction.response.defer()
+        if interaction.message is not None:
+            try:
+                await interaction.message.delete()
+            except discord.HTTPException:
+                pass
+        self.stop()
+
+    async def start(self) -> discord.Message:
+        self.message = await self.ctx.send(**self._current())
+        return self.message
+
+
+def _build_snipe_embed(snipe: dict, index: int, total: int, snipe_type: str) -> discord.Embed:
+    content = snipe.get("content", "")
+    if content:
+        if any(x in content.lower() for x in ["discord.gg/", "discord.com/", "discordapp.com/"]):
+            content = "*snipe had filtered content*"
+
+    embed = discord.Embed(
+        color=color.base,
+        description=content or "",
+        timestamp=datetime.datetime.fromtimestamp(snipe.get("timestamp", 0)),
+    )
+
+    author = snipe.get("author", {})
+    if author:
+        embed.set_author(
+            name=author.get("name", "Unknown"),
+            icon_url=author.get("avatar", ""),
+        )
+
+    if att := snipe.get("attachments"):
+        embed.set_image(url=att[0])
+    elif sticks := snipe.get("stickers"):
+        embed.set_image(url=sticks[0])
+
+    label = {"snipe": "Deleted", "editsnipe": "Edited", "reactionsnipe": "Reaction"}.get(snipe_type, "Deleted")
+    embed.set_footer(text=f"{label} {discord.utils.format_dt(snipe.get('timestamp', 0), style='R')} \u2219 {index}/{total} \u2219 Module: utility")
+
+    return embed
 
 
 class Snipe(commands.Cog):
@@ -30,39 +193,30 @@ class Snipe(commands.Cog):
     )
     @describe(index="Index of the snipe to retrieve")
     async def snipe(self, ctx: Context, index: int = 1) -> None:
-        """Retrieve a recently deleted message."""
+        """Retrieve recently deleted messages."""
         try:
-            snipe = await self.bot.snipes.get_entry(ctx.channel, type="snipe", index=index)
+            snipe_data = await self.bot.snipes.get_entry(ctx.channel, type="snipe", index=index)
         except SnipeError:
             return await ctx.fail(f"There are no deleted messages for {ctx.channel.mention}")
 
-        total = snipe[1]
-        snipe = snipe[0]
+        total = snipe_data[1]
+        store = self.bot.snipes
 
-        content = snipe.get("content")
-        if content:
-            if any(x in content.lower() for x in ["discord.gg/", "discord.com/", "discordapp.com/"]):
-                return await ctx.fail("snipe had filtered content")
+        if total == 1:
+            snipe = snipe_data[0]
+            embed = _build_snipe_embed(snipe, 1, 1, "snipe")
+            return await ctx.send(embed=embed)
 
-        embed = discord.Embed(
-            color=color.base,
-            description=content or "",
-            timestamp=datetime.fromtimestamp(snipe.get("timestamp")),
-        )
+        pages = []
+        prefix = "s-"
+        key = store._key(prefix, ctx.channel.id)
+        data = store.data.get(key, [])
+        for i, entry in enumerate(data, start=1):
+            pages.append(_build_snipe_embed(entry, i, total, "snipe"))
 
-        embed.set_author(
-            name=snipe.get("author").get("name"),
-            icon_url=snipe.get("author").get("avatar"),
-        )
-
-        if att := snipe.get("attachments"):
-            embed.set_image(url=att[0])
-        elif sticks := snipe.get("stickers"):
-            embed.set_image(url=sticks[0])
-
-        embed.set_footer(text=f"Deleted {discord.utils.format_dt(snipe.get('timestamp'), style='R')} \u2219 {index}/{total}")
-
-        await ctx.send(embed=embed)
+        view = SnipePaginateView(ctx, pages, "snipe", store)
+        view.index = min(index - 1, len(pages) - 1)
+        await view.start()
 
     @hybrid(
         name="editsnipe",
@@ -74,37 +228,28 @@ class Snipe(commands.Cog):
     async def editsnipe(self, ctx: Context, index: int = 1) -> None:
         """Retrieve a message's original text before edited."""
         try:
-            snipe = await self.bot.snipes.get_entry(ctx.channel, type="editsnipe", index=index)
+            snipe_data = await self.bot.snipes.get_entry(ctx.channel, type="editsnipe", index=index)
         except SnipeError:
             return await ctx.fail("There is nothing to snipe")
 
-        total = snipe[1]
-        snipe = snipe[0]
+        total = snipe_data[1]
+        store = self.bot.snipes
 
-        content = snipe.get("content")
-        if content:
-            if any(x in content.lower() for x in ["discord.gg/", "discord.com/", "discordapp.com/"]):
-                return await ctx.fail("snipe had filtered content")
+        if total == 1:
+            snipe = snipe_data[0]
+            embed = _build_snipe_embed(snipe, 1, 1, "editsnipe")
+            return await ctx.send(embed=embed)
 
-        embed = discord.Embed(
-            color=color.base,
-            description=content or "",
-            timestamp=datetime.fromtimestamp(snipe.get("timestamp")),
-        )
+        pages = []
+        prefix = "es-"
+        key = store._key(prefix, ctx.channel.id)
+        data = store.data.get(key, [])
+        for i, entry in enumerate(data, start=1):
+            pages.append(_build_snipe_embed(entry, i, total, "editsnipe"))
 
-        embed.set_author(
-            name=snipe.get("author").get("name"),
-            icon_url=snipe.get("author").get("avatar"),
-        )
-
-        if att := snipe.get("attachments"):
-            embed.set_image(url=att[0])
-        elif sticks := snipe.get("stickers"):
-            embed.set_image(url=sticks[0])
-
-        embed.set_footer(text=f"Edited {discord.utils.format_dt(snipe.get('timestamp'), style='R')} \u2219 {index}/{total}")
-
-        await ctx.send(embed=embed)
+        view = SnipePaginateView(ctx, pages, "editsnipe", store)
+        view.index = min(index - 1, len(pages) - 1)
+        await view.start()
 
     @hybrid(
         name="reactionsnipe",
@@ -116,18 +261,20 @@ class Snipe(commands.Cog):
     async def reactionsnipe(self, ctx: Context, index: int = 1) -> None:
         """Retrieve a deleted reaction from a message."""
         try:
-            snipe = await self.bot.snipes.get_entry(ctx.channel, type="reactionsnipe", index=index)
+            snipe_data = await self.bot.snipes.get_entry(ctx.channel, type="reactionsnipe", index=index)
         except SnipeError:
             return await ctx.fail("There is nothing to snipe")
 
-        snipe = snipe[0]
-        reaction = snipe.get("reaction")
+        snipe = snipe_data[0]
+        total = snipe_data[1]
+        reaction = snipe.get("reaction", "")
         reaction_display = reaction if not reaction.startswith("https://cdn.discordapp.com/") else str(reaction)
 
         embed = discord.Embed(
             color=color.base,
-            description=f"**{snipe.get('author').get('name')}** reacted with {reaction_display} <t:{int(snipe.get('timestamp'))}:R>",
+            description=f"**{snipe.get('author', {}).get('name', 'Unknown')}** reacted with {reaction_display} <t:{int(snipe.get('timestamp', 0))}:R>",
         )
+        embed.set_footer(text=f"Reaction \u2219 {index}/{total} \u2219 Module: utility")
 
         await ctx.send(embed=embed)
 
