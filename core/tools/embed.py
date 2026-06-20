@@ -36,6 +36,56 @@ class BadEmbed(Exception):
         super().__init__(msg)
 
 
+class ParsedEmbedScript:
+    """Compatibility wrapper for callers that expect bored-style parsed scripts."""
+
+    def __init__(
+        self,
+        *,
+        content: str | None = None,
+        embed: discord.Embed | None = None,
+        embeds: list[discord.Embed] | None = None,
+        view: discord.ui.View | None = None,
+        allowed_mentions: discord.AllowedMentions | None = None,
+        delete_after: float | int | None = None,
+    ) -> None:
+        self.content = content
+        self.embed = embed
+        self.embeds = embeds or []
+        self.view = view
+        self.allowed_mentions = allowed_mentions
+        self.delete_after = delete_after
+
+    def has_message(self) -> bool:
+        return any(
+            (
+                self.content,
+                self.embed is not None,
+                bool(self.embeds),
+                self.view is not None,
+            )
+        )
+
+    def to_send_kwargs(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {}
+        if self.content is not None:
+            payload["content"] = self.content
+        if self.embed is not None:
+            payload["embed"] = self.embed
+        elif self.embeds:
+            if len(self.embeds) == 1:
+                payload["embed"] = self.embeds[0]
+            else:
+                payload["embeds"] = self.embeds
+        if self.view is not None:
+            payload["view"] = self.view
+        if self.allowed_mentions is not None:
+            payload["allowed_mentions"] = self.allowed_mentions
+        if self.delete_after is not None:
+            payload["delete_after"] = self.delete_after
+        return payload
+
+
 def _has_link(s: str) -> bool:
     pat = r"((https?://)([\w\-./])*(.[a-zA-Z]{2,3}/?))([^\s\b\n|]*)[^.,;:?!@^$ -]"
     return len(re.findall(pat, s)) > 0
@@ -44,11 +94,74 @@ def _has_link(s: str) -> bool:
 def is_embed_script(raw: str) -> bool:
     """Return True when a template should be parsed as bleed embed code."""
     stripped = str(raw).strip()
-    return stripped.startswith("{embed}") or stripped.startswith("$v{")
+    return (
+        stripped.startswith("{embed}")
+        or stripped.startswith("$v{")
+        or stripped.lower().startswith("embed$v")
+    )
 
 
 def _over_by(val, limit: int) -> int:
     return limit - (val if isinstance(val, int) else len(val))
+
+
+def _split_fields(value: str) -> list[str]:
+    return [part.strip() for part in str(value).split("&&")]
+
+
+def _parse_bool(value: str) -> bool:
+    return str(value).strip().lower() in {"true", "yes", "on", "1", "inline"}
+
+
+def _parse_button_state(value: str | None) -> bool | None:
+    if not value:
+        return None
+    lowered = str(value).strip().lower()
+    if lowered in {"enable", "enabled"}:
+        return False
+    if lowered in {"disable", "disabled"}:
+        return True
+    return None
+
+
+def _parse_button_style(value: str) -> discord.ButtonStyle:
+    lowered = str(value).strip().lower()
+    if lowered == "link":
+        return discord.ButtonStyle.link
+    if lowered == "blurple":
+        return discord.ButtonStyle.primary
+    if lowered == "green":
+        return discord.ButtonStyle.success
+    if lowered in {"grey", "gray"}:
+        return discord.ButtonStyle.secondary
+    if lowered == "red":
+        return discord.ButtonStyle.danger
+    return discord.ButtonStyle.secondary
+
+
+def _parse_button_emoji(value: str | None) -> discord.PartialEmoji | None:
+    if not value:
+        return None
+    cleaned = str(value).strip()
+    if not cleaned:
+        return None
+    if cleaned.lower() in {"none", "null", "off"}:
+        return None
+    if cleaned.startswith("<:") or cleaned.startswith("<a:"):
+        return discord.PartialEmoji.from_str(cleaned)
+    try:
+        cleaned.encode("ascii")
+    except UnicodeEncodeError:
+        return discord.PartialEmoji.from_str(cleaned)
+    return None
+
+
+class PassiveButton(discord.ui.Button):
+    """Static button used by embed scripts for non-link button rows."""
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not interaction.response.is_done():
+            await interaction.response.defer()
 
 
 def _asset_url(asset) -> str:
@@ -142,16 +255,23 @@ async def _validate(data: dict) -> bool:
 
 async def parse(raw: str, sendable: bool = False) -> dict:
     """parse embed script string into dict or embed"""
-    raw = str(raw).replace("{embed}", "")
+    raw = str(raw).strip().replace("{embed}", "")
     out: dict[str, Any] = {"fields": []}
-    final: dict[str, Any] = {"view": discord.ui.View()}
+    final: dict[str, Any] = {"view": discord.ui.View(timeout=None)}
 
     if raw.startswith("$v"):
         raw = raw[2:]
     if raw.endswith("$v"):
         raw = raw[:-2]
 
-    chunks = raw.split("$v")
+    chunks = [chunk.strip() for chunk in raw.split("$v") if chunk.strip()]
+    if not chunks:
+        return {}
+
+    author_name = None
+    author_icon = None
+    author_url = None
+
     for chunk in chunks:
         if "}{" in chunk:
             raise ParseError("missing $v between }{")
@@ -165,112 +285,187 @@ async def parse(raw: str, sendable: bool = False) -> dict:
         key = part.declaration
         if part.payload is None:
             return {"content": key}
-        payload = part.payload.strip()
 
-        if payload and " && " in payload:
-            bits = payload.split(" && ")
-            lowered = key.lower()
-            if lowered == "footer":
-                out["footer"] = {
-                    "text": bits[0],
-                    "icon": bits[1].replace("icon: ", "") if len(bits) > 1 else "",
+        payload = part.payload.strip()
+        lowered = key.lower()
+
+        if lowered in {"content", "message"}:
+            final["content"] = payload
+            continue
+
+        if lowered == "autodelete":
+            try:
+                final["delete_after"] = int(payload)
+            except ValueError as error:
+                raise BadEmbed("autodelete must be a number") from error
+            continue
+
+        if lowered == "timestamp":
+            out["timestamp"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            continue
+
+        if lowered == "url":
+            if not _has_link(payload):
+                raise BadEmbed("embed url invalid")
+            out["url"] = payload
+            continue
+
+        if lowered == "color":
+            color_value = payload
+            if not color_value.startswith("#"):
+                try:
+                    out["color"] = discord.Color(value=int(color_value)).value
+                    continue
+                except Exception:
+                    color_value = f"#{color_value}"
+            try:
+                out["color"] = int(discord.Color.from_str(color_value))
+            except Exception as error:
+                raise BadEmbed(str(error)) from error
+            continue
+
+        if lowered in {"title", "description"}:
+            out[lowered] = payload
+            continue
+
+        if lowered in {"image", "thumbnail"}:
+            if not _has_link(payload):
+                raise BadEmbed(f"{lowered} url invalid")
+            out[lowered] = {"url": payload}
+            continue
+
+        if lowered == "author":
+            bits = _split_fields(payload)
+            name = bits[0] if bits else ""
+            icon = bits[1] if len(bits) > 1 else ""
+            url = bits[2] if len(bits) > 2 else ""
+            out["author"] = {"name": name}
+            if icon:
+                if not _has_link(icon):
+                    raise BadEmbed("author icon url invalid")
+                out["author"]["icon_url"] = icon
+            if url:
+                if not _has_link(url):
+                    raise BadEmbed("author url invalid")
+                out["author"]["url"] = url
+            continue
+
+        if lowered == "author.name":
+            author_name = payload
+            continue
+
+        if lowered in {"author.icon", "author.icon_url"}:
+            if payload and not _has_link(payload):
+                raise BadEmbed("author icon url invalid")
+            author_icon = payload
+            continue
+
+        if lowered == "author.url":
+            if payload and not _has_link(payload):
+                raise BadEmbed("author url invalid")
+            author_url = payload
+            continue
+
+        if lowered == "footer":
+            bits = _split_fields(payload)
+            out["footer"] = {"text": bits[0] if bits else ""}
+            if len(bits) > 1 and bits[1]:
+                if not _has_link(bits[1]):
+                    raise BadEmbed("footer icon url invalid")
+                out["footer"]["icon_url"] = bits[1]
+            continue
+
+        if lowered == "field":
+            bits = _split_fields(payload)
+            if len(bits) < 2:
+                raise BadEmbed("field needs a name and value")
+            out["fields"].append(
+                {
+                    "name": bits[0],
+                    "value": bits[1],
+                    "inline": len(bits) > 2 and _parse_bool(bits[2]),
                 }
-            elif lowered == "field":
-                field = {"name": bits[0], "value": bits[1].replace("value:", "")}
-                if len(bits) == 3:
-                    field["inline"] = bool(bits[2].replace("inline:", "").strip())
-                out["fields"].append(field)
-            elif lowered in ("author", "uthor"):
-                author: dict[str, Any] = {"name": bits[0]}
-                for bit in bits[1:]:
-                    bit = bit.strip()
-                    if "icon:" in bit:
-                        icon = bit.replace("icon:", "")
-                        if not _has_link(icon):
-                            raise BadEmbed("author icon url invalid")
-                        author["icon_url"] = icon
-                    elif ":" in bit:
-                        url = bit.split(":", 1)[1]
-                        if not _has_link(url):
-                            raise BadEmbed("author url invalid")
-                        author["url"] = url
-                out["author"] = author
-            elif lowered == "button":
-                label = bits[0].replace("label:", "").strip()
-                url = bits[1].replace("link:", "").strip()
-                final["view"].add_item(
-                    discord.ui.Button(label=label or None, url=url)
-                )
-            elif lowered == "label":
+            )
+            continue
+
+        if lowered == "button":
+            bits = _split_fields(payload)
+            if len(bits) < 2:
+                raise BadEmbed("button needs at least two arguments")
+
+            first = bits[0]
+            second = bits[1]
+            third = bits[2] if len(bits) > 2 else ""
+            fourth = bits[3] if len(bits) > 3 else None
+
+            first_url = first if _has_link(first) else None
+            label = second or None
+            emoji = None
+            url = None
+            disabled = False
+
+            if first_url:
+                style = discord.ButtonStyle.link
+                url = first_url
+                state_fourth = _parse_button_state(fourth)
+                state_third = _parse_button_state(third)
+                if state_fourth is not None:
+                    disabled = bool(state_fourth)
+                    emoji = _parse_button_emoji(third if state_third is None else "")
+                elif state_third is not None:
+                    disabled = bool(state_third)
+                else:
+                    emoji = _parse_button_emoji(third)
+            else:
+                if len(bits) < 3:
+                    raise BadEmbed("styled buttons need a type, label, and emoji or url")
+                style = _parse_button_style(first)
+                target = third
+                state = _parse_button_state(fourth)
+                if state is None:
+                    state = _parse_button_state(target)
+                    if state is not None:
+                        target = ""
+                disabled = bool(state)
+
+                if style == discord.ButtonStyle.link:
+                    if not target or not _has_link(target):
+                        raise BadEmbed("link buttons need a valid url")
+                    url = target
+                else:
+                    emoji = _parse_button_emoji(target)
+
+            if style == discord.ButtonStyle.link:
                 final["view"].add_item(
                     discord.ui.Button(
-                        label=bits[0],
-                        url=bits[1].strip("link:").strip(),
+                        label=label,
+                        style=style,
+                        url=url,
+                        emoji=emoji,
+                        disabled=disabled,
                     )
                 )
             else:
-                obj: dict[str, Any] = {}
-                for bit in bits:
-                    if ":" in bit:
-                        left, right = bit.split(":", 1)
-                        obj[left.strip()] = right
-                    else:
-                        out[key] = bit
-                out[key] = obj
-        else:
-            lowered = key.lower()
-            if lowered in ("content", "autodelete"):
-                final[key] = payload
-            elif lowered == "author":
-                out["author"] = {"name": payload}
-            elif lowered == "url":
-                if not _has_link(payload):
-                    raise BadEmbed("embed url invalid")
-                out[key] = payload
-            elif lowered == "timestamp":
-                out["timestamp"] = datetime.datetime.now().isoformat()
-            else:
-                out[key] = payload
+                final["view"].add_item(
+                    PassiveButton(
+                        label=label,
+                        style=style,
+                        emoji=emoji,
+                        disabled=disabled,
+                    )
+                )
+            continue
 
-    for image_key in ("thumbnail", "image"):
-        if out.get(image_key) and isinstance(out[image_key], str):
-            if not _has_link(out[image_key]):
-                raise BadEmbed(f"{image_key} url invalid")
-            out[image_key] = {"url": out[image_key]}
+        out[key] = payload
 
-    if out.get("footer"):
-        if isinstance(out["footer"], str):
-            out["footer"] = {"text": out["footer"]}
-        icon = out["footer"].pop("icon", None)
-        if icon:
-            out["footer"]["icon_url"] = icon.strip("icon: ")
-
-    if out.get("uthor"):
-        out["author"] = out.pop("uthor")
-        icon = out["author"].pop("icon", None)
-        if icon:
-            out["author"]["icon_url"] = icon
-
-    if out.get("color"):
-        color_value = out["color"]
-        if color_value.endswith("}"):
-            color_value = color_value[:-2]
-        if not color_value.startswith("#"):
-            try:
-                out["color"] = discord.Color(value=int(color_value))
-            except Exception:
-                color_value = f"#{color_value}"
-        try:
-            out["color"] = int(discord.Color.from_str(color_value))
-        except Exception as error:
-            final["error"] = str(error)
-            out["color"] = 0x000001
-
-    if out.get("autodelete"):
-        final["delete_after"] = int(out.pop("autodelete"))
-
-    for drop in ("field", "label", "button"):
-        out.pop(drop, None)
+    if author_name or author_icon or author_url:
+        out["author"] = {
+            "name": author_name or "",
+        }
+        if author_icon:
+            out["author"]["icon_url"] = author_icon
+        if author_url:
+            out["author"]["url"] = author_url
 
     if out.get("fields") == []:
         out.pop("fields")
@@ -280,8 +475,6 @@ async def parse(raw: str, sendable: bool = False) -> dict:
 
     if out:
         final["embed"] = out
-    else:
-        final.pop("embed", None)
 
     if sendable and final.get("embed"):
         final["embed"] = discord.Embed.from_dict(final["embed"])
@@ -290,6 +483,23 @@ async def parse(raw: str, sendable: bool = False) -> dict:
         final.pop("view", None)
 
     return final
+
+
+async def parse_embed_script(raw: str, _ctx: Context | None = None) -> ParsedEmbedScript:
+    """Return a compatibility object for embed-script consumers."""
+    payload = await parse(raw, sendable=True)
+    embed = payload.get("embed")
+    embeds = payload.get("embeds") or []
+    if embed is not None and not embeds:
+        embeds = [embed]
+    return ParsedEmbedScript(
+        content=payload.get("content"),
+        embed=embed,
+        embeds=embeds,
+        view=payload.get("view"),
+        allowed_mentions=payload.get("allowed_mentions"),
+        delete_after=payload.get("delete_after"),
+    )
 
 
 def to_code(

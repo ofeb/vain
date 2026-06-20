@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 from typing import Optional
+from urllib.parse import quote_plus
 
 import aiohttp
 import discord
@@ -196,34 +197,86 @@ class Spotify(commands.Cog):
         description="Search for an album on Spotify",
         aliases=["spalbum"],
     )
-    @describe(query="Album name to search for")
-    async def spotifyalbum(self, ctx: Context, *, query: str) -> None:
-        result = await self.client.search_albums(query)
-        if not result or not result.get("albums", {}).get("items"):
-            await ctx.fail(f"No albums found for `{query}`.")
-            return
+    @describe(query="Album name to search for, or leave empty to use your current Last.fm album")
+    async def spotifyalbum(self, ctx: Context, *, query: str | None = None) -> None:
+        query_value = query.strip() if query else ""
+        if not query_value:
+            lastfm = ctx.bot.get_cog("Lastfm")
+            if lastfm is None:
+                await ctx.info("No **album** is playing right now.")
+                return
+            username = await lastfm._username_for(ctx, None)
+            if not username:
+                return
+            resolved = await lastfm._resolve_album_identity(username, None)
+            if not resolved:
+                await ctx.info("No **album** is playing right now.")
+                return
+            query_value = f"{resolved[0]} {resolved[1]}"
 
-        albums = result["albums"]["items"]
-        entries = []
-        for i, album in enumerate(albums[:5], 1):
-            artists = ", ".join(a["name"] for a in album["artists"])
-            entries.append(f"`{i}.` **{album['name']}** — {artists} ({album['total_tracks']} tracks)")
-
+        url = f"https://open.spotify.com/search/{quote_plus(query_value)}"
         embed = discord.Embed(
-            title=f"Spotify Albums — {query}",
-            description="\n".join(entries),
+            title="Spotify album search",
+            description="Open Spotify album results for your query.",
             color=color.base,
         )
-        await ctx.send(embed=embed)
+        embed.set_author(
+            name=ctx.author.display_name,
+            icon_url=ctx.author.display_avatar.url,
+        )
+        view = discord.ui.View(timeout=None)
+        view.add_item(
+            discord.ui.Button(
+                style=discord.ButtonStyle.link,
+                emoji="🟢",
+                label="Spotify",
+                url=url,
+            )
+        )
+        await ctx.send(embed=embed, view=view)
 
     @hybrid(
         name="spotifytrack",
         description="Search for a track on Spotify",
         aliases=["sptrack"],
     )
-    @describe(query="Track name to search for")
-    async def spotifytrack(self, ctx: Context, *, query: str) -> None:
-        await self.spotify.callback(ctx, query=query)
+    @describe(query="Track name to search for, or leave empty to use your current Last.fm track")
+    async def spotifytrack(self, ctx: Context, *, query: str | None = None) -> None:
+        query_value = query.strip() if query else ""
+        if not query_value:
+            lastfm = ctx.bot.get_cog("Lastfm")
+            if lastfm is None:
+                await ctx.info("No **track** is playing right now.")
+                return
+            username = await lastfm._username_for(ctx, None)
+            if not username:
+                return
+            resolved = await lastfm._resolve_track_identity(username, None)
+            if not resolved:
+                await ctx.info("No **track** is playing right now.")
+                return
+            query_value = f"{resolved[0]} {resolved[1]}"
+
+        url = f"https://open.spotify.com/search/{quote_plus(query_value)}"
+        embed = discord.Embed(
+            title="Spotify track search",
+            description="Open Spotify track results for your query.",
+            color=color.base,
+        )
+        embed.set_author(
+            name=ctx.author.display_name,
+            icon_url=ctx.author.display_avatar.url,
+        )
+        view = discord.ui.View(timeout=None)
+        view.add_item(
+            discord.ui.Button(
+                style=discord.ButtonStyle.link,
+                emoji="🟢",
+                label="Spotify",
+                url=url,
+            )
+        )
+        await ctx.send(embed=embed, view=view)
 
 
 async def setup(bot: commands.Bot):

@@ -554,6 +554,525 @@ class Database:
             guild_id,
         )
 
+    async def set_lastfm_login(self, token: str, user_id: int) -> None:
+        """store a pending Last.fm login token"""
+        if not self.pool:
+            return
+        await self.execute(
+            """
+            INSERT INTO lastfm_logins (token, user_id)
+            VALUES ($1, $2)
+            ON CONFLICT (token) DO UPDATE SET user_id = EXCLUDED.user_id
+            """,
+            token,
+            user_id,
+        )
+
+    async def consume_lastfm_login(self, token: str) -> int | None:
+        """consume a Last.fm login token once authorized"""
+        if not self.pool:
+            return None
+        row = await self.fetchrow(
+            "SELECT user_id FROM lastfm_logins WHERE token = $1 AND used_at IS NULL",
+            token,
+            cached=False,
+        )
+        if not row:
+            return None
+        await self.execute(
+            "UPDATE lastfm_logins SET used_at = NOW() WHERE token = $1",
+            token,
+        )
+        return row["user_id"]
+
+    async def get_lastfm_login_user(self, token: str) -> int | None:
+        """fetch the owner of a stored Last.fm login token"""
+        if not self.pool:
+            return None
+        row = await self.fetchrow(
+            "SELECT user_id FROM lastfm_logins WHERE token = $1",
+            token,
+        )
+        return row["user_id"] if row else None
+
+    async def mark_lastfm_login_used(self, token: str) -> None:
+        """mark a Last.fm login token as consumed"""
+        if not self.pool:
+            return
+        await self.execute(
+            "UPDATE lastfm_logins SET used_at = NOW() WHERE token = $1",
+            token,
+        )
+
+    async def set_lastfm_user(
+        self,
+        user_id: int,
+        username: str,
+        session_key: str | None,
+    ) -> None:
+        """upsert a linked Last.fm account"""
+        if not self.pool:
+            return
+        existing = await self.fetchrow(
+            "SELECT lastfm_username FROM lastfm_users WHERE user_id = $1",
+            user_id,
+            cached=False,
+        )
+        await self.execute(
+            """
+            INSERT INTO lastfm_users (user_id, lastfm_username, session_key)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (user_id)
+            DO UPDATE SET
+                lastfm_username = EXCLUDED.lastfm_username,
+                session_key = EXCLUDED.session_key,
+                updated_at = NOW()
+            """,
+            user_id,
+            username,
+            session_key,
+        )
+        await self.execute(
+            """
+            INSERT INTO lastfm (user_id, username)
+            VALUES ($1, $2)
+            ON CONFLICT (user_id)
+            DO UPDATE SET username = EXCLUDED.username
+            """,
+            user_id,
+            username,
+        )
+        if existing and existing["lastfm_username"] != username:
+            await self.execute(
+                "DELETE FROM lastfm_library_profiles WHERE user_id = $1",
+                user_id,
+            )
+            await self.execute(
+                "DELETE FROM lastfm_library_artists WHERE user_id = $1",
+                user_id,
+            )
+            await self.execute(
+                "DELETE FROM lastfm_library_albums WHERE user_id = $1",
+                user_id,
+            )
+            await self.execute(
+                "DELETE FROM lastfm_library_tracks WHERE user_id = $1",
+                user_id,
+            )
+
+    async def get_lastfm_user(self, user_id: int) -> dict | None:
+        """fetch a linked Last.fm account"""
+        if not self.pool:
+            return None
+        row = await self.fetchrow(
+            """
+            SELECT user_id, lastfm_username, session_key
+            FROM lastfm_users
+            WHERE user_id = $1
+            """,
+            user_id,
+        )
+        if row:
+            return dict(row)
+        legacy = await self.fetchrow(
+            "SELECT user_id, username FROM lastfm WHERE user_id = $1",
+            user_id,
+        )
+        if not legacy or not legacy["username"]:
+            return None
+        return {
+            "user_id": legacy["user_id"],
+            "lastfm_username": legacy["username"],
+            "session_key": None,
+        }
+
+    async def get_lastfm_users(self) -> list[dict]:
+        """list all linked Last.fm accounts"""
+        if not self.pool:
+            return []
+        rows = await self.fetch(
+            """
+            SELECT user_id, lastfm_username
+            FROM lastfm_users
+            UNION
+            SELECT user_id, username AS lastfm_username
+            FROM lastfm
+            WHERE COALESCE(username, '') <> ''
+              AND user_id NOT IN (SELECT user_id FROM lastfm_users)
+            ORDER BY user_id
+            """,
+            cached=False,
+        )
+        return [dict(row) for row in rows]
+
+    async def remove_lastfm_user(self, user_id: int) -> None:
+        """remove a linked Last.fm account and its cached data"""
+        if not self.pool:
+            return
+        await self.execute("DELETE FROM lastfm_users WHERE user_id = $1", user_id)
+        await self.execute("DELETE FROM lastfm WHERE user_id = $1", user_id)
+        await self.execute(
+            "DELETE FROM lastfm_library_profiles WHERE user_id = $1",
+            user_id,
+        )
+        await self.execute(
+            "DELETE FROM lastfm_library_artists WHERE user_id = $1",
+            user_id,
+        )
+        await self.execute(
+            "DELETE FROM lastfm_library_albums WHERE user_id = $1",
+            user_id,
+        )
+        await self.execute(
+            "DELETE FROM lastfm_library_tracks WHERE user_id = $1",
+            user_id,
+        )
+        await self.execute(
+            "DELETE FROM lastfm_album_artwork WHERE user_id = $1",
+            user_id,
+        )
+        await self.execute("DELETE FROM lastfm_crowns WHERE user_id = $1", user_id)
+        await self.execute(
+            """
+            DELETE FROM lastfm_crown_history
+            WHERE previous_user_id = $1 OR new_user_id = $1
+            """,
+            user_id,
+        )
+
+    async def set_lastfm_color(self, user_id: int, color: str | None) -> None:
+        """set or clear a user's Last.fm color override"""
+        if not self.pool:
+            return
+        await self.execute(
+            """
+            INSERT INTO lastfm_settings (user_id, color)
+            VALUES ($1, $2)
+            ON CONFLICT (user_id)
+            DO UPDATE SET color = EXCLUDED.color, updated_at = NOW()
+            """,
+            user_id,
+            color,
+        )
+
+    async def get_lastfm_color(self, user_id: int) -> str | None:
+        """fetch a user's Last.fm color override"""
+        if not self.pool:
+            return None
+        row = await self.fetchrow(
+            "SELECT color FROM lastfm_settings WHERE user_id = $1",
+            user_id,
+        )
+        return row["color"] if row else None
+
+    async def set_lastfm_mode(self, user_id: int, mode: str | None) -> None:
+        """set or clear a user's Last.fm nowplaying mode"""
+        if not self.pool:
+            return
+        await self.execute(
+            """
+            INSERT INTO lastfm_settings (user_id, mode)
+            VALUES ($1, $2)
+            ON CONFLICT (user_id)
+            DO UPDATE SET mode = EXCLUDED.mode, updated_at = NOW()
+            """,
+            user_id,
+            mode,
+        )
+
+    async def get_lastfm_mode(self, user_id: int) -> str | None:
+        """fetch a user's Last.fm nowplaying mode"""
+        if not self.pool:
+            return None
+        row = await self.fetchrow(
+            "SELECT mode FROM lastfm_settings WHERE user_id = $1",
+            user_id,
+        )
+        return row["mode"] if row else None
+
+    async def set_lastfm_reactions(
+        self,
+        user_id: int,
+        upvote: str | None,
+        downvote: str | None,
+    ) -> None:
+        """set or clear personal Last.fm reactions"""
+        if not self.pool:
+            return
+        await self.execute(
+            """
+            INSERT INTO lastfm_settings (user_id, upvote, downvote)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (user_id)
+            DO UPDATE SET
+                upvote = EXCLUDED.upvote,
+                downvote = EXCLUDED.downvote,
+                updated_at = NOW()
+            """,
+            user_id,
+            upvote,
+            downvote,
+        )
+
+    async def get_lastfm_reactions(self, user_id: int) -> dict | None:
+        """fetch personal Last.fm reactions"""
+        if not self.pool:
+            return None
+        row = await self.fetchrow(
+            "SELECT upvote, downvote FROM lastfm_settings WHERE user_id = $1",
+            user_id,
+        )
+        return dict(row) if row else None
+
+    async def set_lastfm_custom_embed(
+        self,
+        user_id: int,
+        script: str | None,
+        *,
+        np_reply: bool = False,
+    ) -> None:
+        """set or clear a user's custom Last.fm embed"""
+        if not self.pool:
+            return
+        effective_reply = bool(np_reply) if script else False
+        await self.execute(
+            """
+            INSERT INTO lastfm_settings (user_id, custom_embed, np_reply)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (user_id)
+            DO UPDATE SET
+                custom_embed = EXCLUDED.custom_embed,
+                np_reply = EXCLUDED.np_reply,
+                updated_at = NOW()
+            """,
+            user_id,
+            script,
+            effective_reply,
+        )
+
+    async def get_lastfm_custom_embed_settings(
+        self,
+        user_id: int,
+    ) -> tuple[str | None, bool]:
+        """fetch a user's custom Last.fm embed and reply flag"""
+        if not self.pool:
+            return None, False
+        row = await self.fetchrow(
+            """
+            SELECT custom_embed, np_reply
+            FROM lastfm_settings
+            WHERE user_id = $1
+            """,
+            user_id,
+        )
+        if not row:
+            return None, False
+        return row["custom_embed"], bool(row["np_reply"])
+
+    async def get_lastfm_custom_embed(self, user_id: int) -> str | None:
+        """fetch a user's custom Last.fm embed only"""
+        script, _ = await self.get_lastfm_custom_embed_settings(user_id)
+        return script
+
+    async def set_lastfm_guild_reactions(
+        self,
+        guild_id: int,
+        upvote: str | None,
+        downvote: str | None,
+    ) -> None:
+        """set or clear guild-wide Last.fm reactions"""
+        if not self.pool:
+            return
+        await self.execute(
+            """
+            INSERT INTO lastfm_guild_settings (guild_id, upvote, downvote)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (guild_id)
+            DO UPDATE SET
+                upvote = EXCLUDED.upvote,
+                downvote = EXCLUDED.downvote,
+                updated_at = NOW()
+            """,
+            guild_id,
+            upvote,
+            downvote,
+        )
+
+    async def get_lastfm_guild_reactions(self, guild_id: int) -> dict | None:
+        """fetch guild-wide Last.fm reactions"""
+        if not self.pool:
+            return None
+        row = await self.fetchrow(
+            "SELECT upvote, downvote FROM lastfm_guild_settings WHERE guild_id = $1",
+            guild_id,
+        )
+        return dict(row) if row else None
+
+    async def set_lastfm_custom_command(
+        self,
+        guild_id: int,
+        user_id: int,
+        command: str,
+    ) -> None:
+        """set a custom nowplaying alias fragment for a member"""
+        if not self.pool:
+            return
+        await self.execute(
+            """
+            INSERT INTO lastfm_custom_commands (guild_id, user_id, command)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (guild_id, user_id)
+            DO UPDATE SET command = EXCLUDED.command, updated_at = NOW()
+            """,
+            guild_id,
+            user_id,
+            command,
+        )
+
+    async def get_lastfm_custom_command(
+        self,
+        guild_id: int,
+        user_id: int,
+    ) -> dict | None:
+        """fetch a member's custom nowplaying command"""
+        if not self.pool:
+            return None
+        row = await self.fetchrow(
+            """
+            SELECT command, public
+            FROM lastfm_custom_commands
+            WHERE guild_id = $1 AND user_id = $2
+            """,
+            guild_id,
+            user_id,
+        )
+        return dict(row) if row else None
+
+    async def list_lastfm_custom_commands(self, guild_id: int) -> list[dict]:
+        """list custom nowplaying commands for a guild"""
+        if not self.pool:
+            return []
+        rows = await self.fetch(
+            """
+            SELECT user_id, command, public
+            FROM lastfm_custom_commands
+            WHERE guild_id = $1
+            ORDER BY created_at ASC
+            """,
+            guild_id,
+            cached=False,
+        )
+        return [dict(row) for row in rows]
+
+    async def remove_lastfm_custom_command(self, guild_id: int, user_id: int) -> None:
+        """remove one custom nowplaying command"""
+        if not self.pool:
+            return
+        await self.execute(
+            "DELETE FROM lastfm_custom_commands WHERE guild_id = $1 AND user_id = $2",
+            guild_id,
+            user_id,
+        )
+
+    async def reset_lastfm_custom_commands(self, guild_id: int) -> None:
+        """remove all custom nowplaying commands for a guild"""
+        if not self.pool:
+            return
+        await self.execute(
+            "DELETE FROM lastfm_custom_commands WHERE guild_id = $1",
+            guild_id,
+        )
+
+    async def set_lastfm_custom_public(
+        self,
+        guild_id: int,
+        user_id: int,
+        public: bool,
+    ) -> None:
+        """toggle whether a member's custom command is public"""
+        if not self.pool:
+            return
+        await self.execute(
+            """
+            UPDATE lastfm_custom_commands
+            SET public = $3, updated_at = NOW()
+            WHERE guild_id = $1 AND user_id = $2
+            """,
+            guild_id,
+            user_id,
+            public,
+        )
+
+    async def set_lastfm_blacklist(self, guild_id: int, user_id: int) -> None:
+        """add a user to the Last.fm custom command blacklist"""
+        if not self.pool:
+            return
+        await self.execute(
+            """
+            INSERT INTO lastfm_custom_blacklist (guild_id, user_id)
+            VALUES ($1, $2)
+            ON CONFLICT (guild_id, user_id) DO NOTHING
+            """,
+            guild_id,
+            user_id,
+        )
+
+    async def remove_lastfm_blacklist(self, guild_id: int, user_id: int) -> None:
+        """remove a user from the Last.fm custom command blacklist"""
+        if not self.pool:
+            return
+        await self.execute(
+            "DELETE FROM lastfm_custom_blacklist WHERE guild_id = $1 AND user_id = $2",
+            guild_id,
+            user_id,
+        )
+
+    async def list_lastfm_blacklist(self, guild_id: int) -> list[int]:
+        """list blacklisted users for Last.fm custom commands"""
+        if not self.pool:
+            return []
+        rows = await self.fetch(
+            "SELECT user_id FROM lastfm_custom_blacklist WHERE guild_id = $1",
+            guild_id,
+            cached=False,
+        )
+        return [row["user_id"] for row in rows]
+
+    async def set_lastfm_hidden(self, guild_id: int, user_id: int) -> None:
+        """hide a member from guild whoknows results"""
+        if not self.pool:
+            return
+        await self.execute(
+            """
+            INSERT INTO lastfm_hidden (guild_id, user_id)
+            VALUES ($1, $2)
+            ON CONFLICT (guild_id, user_id) DO NOTHING
+            """,
+            guild_id,
+            user_id,
+        )
+
+    async def remove_lastfm_hidden(self, guild_id: int, user_id: int) -> None:
+        """unhide a member from guild whoknows results"""
+        if not self.pool:
+            return
+        await self.execute(
+            "DELETE FROM lastfm_hidden WHERE guild_id = $1 AND user_id = $2",
+            guild_id,
+            user_id,
+        )
+
+    async def list_lastfm_hidden(self, guild_id: int) -> list[int]:
+        """list members hidden from guild whoknows results"""
+        if not self.pool:
+            return []
+        rows = await self.fetch(
+            "SELECT user_id FROM lastfm_hidden WHERE guild_id = $1",
+            guild_id,
+            cached=False,
+        )
+        return [row["user_id"] for row in rows]
+
     async def add_webhook(
         self,
         guild_id: int,

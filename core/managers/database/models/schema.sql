@@ -629,6 +629,162 @@ CREATE TABLE IF NOT EXISTS lastfm (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS lastfm_users (
+    user_id BIGINT PRIMARY KEY,
+    lastfm_username TEXT NOT NULL,
+    session_key TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS lastfm_logins (
+    token TEXT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    used_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS lastfm_hidden (
+    guild_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (guild_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS lastfm_custom_commands (
+    guild_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    command TEXT NOT NULL,
+    public BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (guild_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS lastfm_custom_blacklist (
+    guild_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (guild_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS lastfm_settings (
+    user_id BIGINT PRIMARY KEY,
+    color TEXT,
+    mode TEXT,
+    upvote TEXT,
+    downvote TEXT,
+    custom_embed TEXT,
+    np_reply BOOLEAN NOT NULL DEFAULT FALSE,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS lastfm_guild_settings (
+    guild_id BIGINT PRIMARY KEY,
+    upvote TEXT,
+    downvote TEXT,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS lastfm_library_profiles (
+    user_id BIGINT PRIMARY KEY,
+    username TEXT NOT NULL,
+    scrobble_count BIGINT NOT NULL DEFAULT 0,
+    artist_count BIGINT NOT NULL DEFAULT 0,
+    album_count BIGINT NOT NULL DEFAULT 0,
+    track_count BIGINT NOT NULL DEFAULT 0,
+    registered_at TIMESTAMPTZ,
+    last_indexed_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS lastfm_library_artists (
+    user_id BIGINT NOT NULL,
+    username TEXT NOT NULL,
+    artist_key TEXT NOT NULL,
+    artist_name TEXT NOT NULL,
+    playcount BIGINT NOT NULL DEFAULT 0,
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (user_id, artist_key)
+);
+
+CREATE TABLE IF NOT EXISTS lastfm_library_albums (
+    user_id BIGINT NOT NULL,
+    username TEXT NOT NULL,
+    artist_key TEXT NOT NULL,
+    artist_name TEXT NOT NULL,
+    album_key TEXT NOT NULL,
+    album_name TEXT NOT NULL,
+    playcount BIGINT NOT NULL DEFAULT 0,
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (user_id, artist_key, album_key)
+);
+
+CREATE TABLE IF NOT EXISTS lastfm_library_tracks (
+    user_id BIGINT NOT NULL,
+    username TEXT NOT NULL,
+    artist_key TEXT NOT NULL,
+    artist_name TEXT NOT NULL,
+    track_key TEXT NOT NULL,
+    track_name TEXT NOT NULL,
+    playcount BIGINT NOT NULL DEFAULT 0,
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (user_id, artist_key, track_key)
+);
+
+CREATE INDEX IF NOT EXISTS lastfm_library_profiles_last_indexed_idx
+    ON lastfm_library_profiles (last_indexed_at DESC);
+
+CREATE INDEX IF NOT EXISTS lastfm_library_artists_artist_idx
+    ON lastfm_library_artists (artist_key, playcount DESC);
+
+CREATE INDEX IF NOT EXISTS lastfm_library_albums_lookup_idx
+    ON lastfm_library_albums (artist_key, album_key, playcount DESC);
+
+CREATE INDEX IF NOT EXISTS lastfm_library_tracks_lookup_idx
+    ON lastfm_library_tracks (artist_key, track_key, playcount DESC);
+
+CREATE TABLE IF NOT EXISTS lastfm_crowns (
+    guild_id BIGINT NOT NULL,
+    artist_key TEXT NOT NULL,
+    artist_name TEXT NOT NULL,
+    user_id BIGINT NOT NULL,
+    playcount BIGINT NOT NULL DEFAULT 0,
+    claimed_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (guild_id, artist_key)
+);
+
+CREATE TABLE IF NOT EXISTS lastfm_crown_history (
+    id BIGSERIAL PRIMARY KEY,
+    guild_id BIGINT NOT NULL,
+    artist_key TEXT NOT NULL,
+    artist_name TEXT NOT NULL,
+    previous_user_id BIGINT,
+    previous_playcount BIGINT,
+    new_user_id BIGINT NOT NULL,
+    new_playcount BIGINT NOT NULL,
+    changed_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS lastfm_album_artwork (
+    user_id BIGINT NOT NULL,
+    artist_key TEXT NOT NULL,
+    album_key TEXT NOT NULL,
+    artist_name TEXT NOT NULL,
+    album_name TEXT NOT NULL,
+    image_url TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (user_id, artist_key, album_key)
+);
+
+INSERT INTO lastfm_users (user_id, lastfm_username)
+SELECT user_id, username
+FROM lastfm
+WHERE COALESCE(username, '') <> ''
+ON CONFLICT (user_id) DO NOTHING;
+
 CREATE TABLE IF NOT EXISTS social_links (
     user_id BIGINT,
     platform VARCHAR(50),

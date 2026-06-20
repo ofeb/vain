@@ -5,6 +5,7 @@ use ctx.success ctx.fail ctx.warn for quick replies"""
 from __future__ import annotations
 
 import asyncio
+import os
 from typing import Any, Optional
 
 import discord
@@ -119,6 +120,15 @@ class Context(commands.Context):
                 }
         return self._custom_color.get(key, getattr(color, key, color.base))
 
+    def _strip_self_mention(self, message: str) -> str:
+        text = str(message or "").strip()
+        mention = str(getattr(self.author, "mention", "")).strip()
+        if mention and text.startswith(mention):
+            text = text[len(mention):].lstrip()
+            if text.startswith(":"):
+                text = text[1:].lstrip()
+        return text
+
     def _message_embed(
         self,
         message: str,
@@ -150,7 +160,7 @@ class Context(commands.Context):
         color_value = await self._get_color("approve")
         return await self._send_embed_response(
             self._message_embed(
-                message,
+                self._strip_self_mention(message),
                 emoji=emoji,
                 color_value=color_value,
             ),
@@ -163,7 +173,7 @@ class Context(commands.Context):
         color_value = await self._get_color("deny")
         return await self._send_embed_response(
             self._message_embed(
-                message,
+                self._strip_self_mention(message),
                 emoji=emoji,
                 color_value=color_value,
             ),
@@ -176,7 +186,7 @@ class Context(commands.Context):
         color_value = await self._get_color("warn")
         return await self._send_embed_response(
             self._message_embed(
-                message,
+                self._strip_self_mention(message),
                 emoji=emoji,
                 color_value=color_value,
             ),
@@ -190,7 +200,29 @@ class Context(commands.Context):
     async def normal(self, message: str, *, emoji: str = "", **kw):
         """send a neutral informational reply"""
         return await self._send_embed_response(
-            self._message_embed(message, emoji=emoji),
+            self._message_embed(self._strip_self_mention(message), emoji=emoji),
+            **kw,
+        )
+
+    async def info(self, message: str, **kw):
+        """send an informational reply using bleed's info emoji."""
+        emoji = await self._get_emoji("info")
+        return await self.normal(message, emoji=emoji, **kw)
+
+    async def lastfm(self, message: str, **kw):
+        """send a compact Last.fm reply with bleed styling."""
+        lastfm_color = os.getenv("LASTFM_COLOR", "#c1272d")
+        try:
+            color_value = discord.Color.from_str(lastfm_color)
+        except ValueError:
+            color_value = discord.Color(0xC1272D)
+
+        return await self._send_embed_response(
+            self._message_embed(
+                self._strip_self_mention(message),
+                emoji=emojis.lastfm,
+                color_value=color_value.value,
+            ),
             **kw,
         )
 

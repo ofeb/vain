@@ -1,97 +1,49 @@
 from __future__ import annotations
 
-import re
-from datetime import datetime
-
 import discord
-from discord import Embed
 from discord.ext.commands import command, group
 
 from core.discord.package import Package
-from core.discord.views.paginate import PaginateView
+from core.tools.embed import BadEmbed, ParseError, PreparedScript, parse
 
 
 class ServerCommands(Package):
     """standalone server commands"""
 
-    def _parse_embed_script(self, script: str) -> dict:
-        """Parse embed script format: {key: value}$v{key2: value2}"""
-        result = {}
-        parts = script.split("$v")
-        for part in parts:
-            part = part.strip()
-            if not part.startswith("{") or not part.endswith("}"):
-                continue
-            content = part[1:-1].strip()
-            colon_idx = content.find(":")
-            if colon_idx == -1:
-                continue
-            key = content[:colon_idx].strip().lower()
-            value = content[colon_idx + 1:].strip()
-            result[key] = value
-        return result
+    @staticmethod
+    def _normalize_embed_script(script: str) -> str:
+        value = str(script).strip()
+        lowered = value.lower()
+        if lowered.startswith("{embed}") or lowered.startswith("embed$v"):
+            return value
+        if value.startswith("$v{"):
+            return "{embed}" + value
+        if value.startswith("{"):
+            return f"{{embed}}$v{value}"
+        return value
 
-    def _parse_fields(self, embed_data: dict) -> list[dict]:
-        """Extract fields from embed data."""
-        fields = []
-        for key, value in embed_data.items():
-            if key.startswith("field"):
-                parts = value.split("&&")
-                if len(parts) >= 2:
-                    name = parts[0].strip()
-                    val = parts[1].strip()
-                    inline = False
-                    if len(parts) >= 3:
-                        inline_str = parts[2].strip().lower()
-                        inline = inline_str in ("true", "1", "yes", "on")
-                    fields.append({"name": name, "value": val, "inline": inline})
-        return fields
+    async def _send_embed_script(self, ctx, script: str):
+        normalized = self._normalize_embed_script(script)
 
-    def _parse_author(self, embed_data: dict) -> dict | None:
-        """Extract author from embed data."""
-        author_str = embed_data.get("author")
-        if not author_str:
-            return None
-        parts = author_str.split("&&")
-        result = {}
-        if len(parts) >= 1:
-            result["name"] = parts[0].strip()
-        if len(parts) >= 2:
-            result["icon_url"] = parts[1].strip()
-        if len(parts) >= 3:
-            result["url"] = parts[2].strip()
-        return result
-
-    def _parse_footer(self, embed_data: dict) -> dict | None:
-        """Extract footer from embed data."""
-        footer_str = embed_data.get("footer")
-        if not footer_str:
-            return None
-        parts = footer_str.split("&&")
-        result = {}
-        if len(parts) >= 1:
-            result["text"] = parts[0].strip()
-        if len(parts) >= 2:
-            result["icon_url"] = parts[1].strip()
-        return result
-
-    def _parse_color(self, color_str: str) -> int:
-        """Parse color from hex string."""
-        color_str = color_str.strip().lstrip("#")
         try:
-            return int(color_str, 16)
-        except ValueError:
-            return self.color
+            payload = await parse(normalized, sendable=True)
+        except (ParseError, BadEmbed) as error:
+            return await ctx.warn(str(error))
 
-    def _parse_timestamp(self, timestamp_str: str) -> datetime | None:
-        """Parse timestamp string."""
-        timestamp_str = timestamp_str.strip().lower()
-        if timestamp_str in ("now", "true", "yes"):
-            return datetime.utcnow()
+        if not payload or (
+            payload.get("content") in {None, ""}
+            and payload.get("embed") is None
+            and payload.get("view") is None
+        ):
+            return await ctx.warn("Provide **valid embed code**.")
+
         try:
-            return datetime.fromisoformat(timestamp_str)
-        except ValueError:
-            return None
+            return await PreparedScript(payload).send(ctx)
+        except discord.HTTPException as error:
+            message = str(error)
+            if "):" in message:
+                message = message.split("):", 1)[1].strip()
+            return await ctx.warn(message or "invalid embed data")
 
     @group(
         name="embedcreate",
@@ -104,62 +56,7 @@ class ServerCommands(Package):
         """Create a custom embed using embed scripting."""
         if script is None:
             return await ctx.send_help()
-
-        embed_data = self._parse_embed_script(script)
-        
-        if not embed_data:
-            embed = Embed(description=script, color=self.color)
-            return await ctx.send(embed=embed)
-
-        embed = Embed(color=self.color)
-
-        if "title" in embed_data:
-            embed.title = embed_data["title"][:256]
-
-        if "description" in embed_data:
-            embed.description = embed_data["description"][:4096]
-
-        if "color" in embed_data:
-            embed.color = self._parse_color(embed_data["color"])
-
-        if "url" in embed_data:
-            embed.url = embed_data["url"]
-
-        if "image" in embed_data:
-            embed.set_image(url=embed_data["image"])
-
-        if "thumbnail" in embed_data:
-            embed.set_thumbnail(url=embed_data["thumbnail"])
-
-        if "timestamp" in embed_data:
-            ts = self._parse_timestamp(embed_data["timestamp"])
-            if ts:
-                embed.timestamp = ts
-
-        author = self._parse_author(embed_data)
-        if author:
-            embed.set_author(
-                name=author.get("name", ""),
-                icon_url=author.get("icon_url"),
-                url=author.get("url"),
-            )
-
-        footer = self._parse_footer(embed_data)
-        if footer:
-            embed.set_footer(
-                text=footer.get("text", ""),
-                icon_url=footer.get("icon_url"),
-            )
-
-        fields = self._parse_fields(embed_data)
-        for field in fields:
-            embed.add_field(
-                name=field["name"][:256],
-                value=field["value"][:1024],
-                inline=field["inline"],
-            )
-
-        await ctx.send(embed=embed)
+        return await self._send_embed_script(ctx, script)
 
     @embedcreate.command(
         name="preview",
@@ -171,61 +68,7 @@ class ServerCommands(Package):
         """Preview an embed script without sending it."""
         if script is None:
             return await ctx.fail("Provide an embed script to preview")
-
-        embed_data = self._parse_embed_script(script)
-        if not embed_data:
-            embed = Embed(description=script, color=self.color)
-            return await ctx.send(embed=embed)
-
-        embed = Embed(color=self.color)
-
-        if "title" in embed_data:
-            embed.title = embed_data["title"][:256]
-
-        if "description" in embed_data:
-            embed.description = embed_data["description"][:4096]
-
-        if "color" in embed_data:
-            embed.color = self._parse_color(embed_data["color"])
-
-        if "url" in embed_data:
-            embed.url = embed_data["url"]
-
-        if "image" in embed_data:
-            embed.set_image(url=embed_data["image"])
-
-        if "thumbnail" in embed_data:
-            embed.set_thumbnail(url=embed_data["thumbnail"])
-
-        if "timestamp" in embed_data:
-            ts = self._parse_timestamp(embed_data["timestamp"])
-            if ts:
-                embed.timestamp = ts
-
-        author = self._parse_author(embed_data)
-        if author:
-            embed.set_author(
-                name=author.get("name", ""),
-                icon_url=author.get("icon_url"),
-                url=author.get("url"),
-            )
-
-        footer = self._parse_footer(embed_data)
-        if footer:
-            embed.set_footer(
-                text=footer.get("text", ""),
-                icon_url=footer.get("icon_url"),
-            )
-
-        fields = self._parse_fields(embed_data)
-        for field in fields:
-            embed.add_field(
-                name=field["name"][:256],
-                value=field["value"][:1024],
-                inline=field["inline"],
-            )
-
-        await ctx.send(embed=embed)
+        return await self._send_embed_script(ctx, script)
 
     @command(
         name="variables",
