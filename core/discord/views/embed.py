@@ -5,6 +5,8 @@ use EmbedView to send embeds with a trash button"""
 import discord
 from discord.ext.commands import Context
 
+from core.managers.values import color, emojis
+
 
 class EmbedView(discord.ui.View):
     """embed with a delete button"""
@@ -16,7 +18,16 @@ class EmbedView(discord.ui.View):
 
     async def interaction_check(self, inter: discord.Interaction) -> bool:
         if inter.user.id != self.ctx.author.id:
-            await inter.response.send_message("not yours", ephemeral=True)
+            await inter.response.send_message(
+                embed=discord.Embed(
+                    color=color.warn,
+                    description=(
+                        f"{emojis.warn} {inter.user.mention}: "
+                        "You're not the **author** of this embed!"
+                    ),
+                ),
+                ephemeral=True,
+            )
             return False
         return True
 

@@ -9,7 +9,7 @@ from discord import Embed, Interaction, SelectOption, ui
 from discord.ext import commands
 from discord.ext.commands import Command, Group
 
-from core.managers.values import emojis
+from core.managers.values import color, emojis
 
 if TYPE_CHECKING:
     from .ctx import Context
@@ -399,7 +399,16 @@ class HelpView(ui.View):
     async def interaction_check(self, inter: Interaction) -> bool:
         if inter.user.id == self.ctx.author.id:
             return True
-        await inter.response.send_message("not yours", ephemeral=True)
+        await inter.response.send_message(
+            embed=Embed(
+                color=color.warn,
+                description=(
+                    f"{emojis.warn} {inter.user.mention}: "
+                    "You're not the **author** of this embed!"
+                ),
+            ),
+            ephemeral=True,
+        )
         return False
 
     def cat_embed(self, label: str) -> Embed:

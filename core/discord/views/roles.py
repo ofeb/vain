@@ -6,6 +6,8 @@ import discord
 from discord.ext.commands import Context
 from typing import List
 
+from core.managers.values import color, emojis
+
 
 class RoleSelectView(discord.ui.View):
     """dropdown select menu for self roles"""
@@ -20,7 +22,16 @@ class RoleSelectView(discord.ui.View):
 
     async def interaction_check(self, inter: discord.Interaction) -> bool:
         if inter.user.id != self.ctx.author.id:
-            await inter.response.send_message("not yours", ephemeral=True)
+            await inter.response.send_message(
+                embed=discord.Embed(
+                    color=color.warn,
+                    description=(
+                        f"{emojis.warn} {inter.user.mention}: "
+                        "You're not the **author** of this embed!"
+                    ),
+                ),
+                ephemeral=True,
+            )
             return False
         return True
 
