@@ -114,7 +114,7 @@ class database:
     enabled: bool = _env_bool("DATABASE_ENABLED", True)
     dsn: str = _env(
         "DATABASE_DSN",
-        "postgresql://postgres:sjnjmv7ai0wz7sw0@77.247.127.102:5432/postgres",
+        "postgresql://bleed_user:bleed@localhost:5432/bleed",
         aliases=("DATABASE_URL",),
     )
 
