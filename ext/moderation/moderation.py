@@ -611,7 +611,9 @@ class ModerationCommands(Package):
 
     @command(
         name="ban",
-        description="No description given",
+        usage="(user) (delete history) <reason>",
+        example="jonathan 1d Threatening members",
+        description="Bans the mentioned user",
     )
     @has_permissions(ban_members=True)
     async def ban(
@@ -622,7 +624,7 @@ class ModerationCommands(Package):
         *,
         reason: str = None,
     ):
-        """ban a member"""
+        """Bans the mentioned user"""
         self._ensure_targetable(ctx, member)
 
         delete_days = self._coerce_delete_days(delete_history, default=0)
@@ -733,18 +735,22 @@ class ModerationCommands(Package):
 
     @command(
         name="ban recent",
-        description="No description given",
+        usage="(amount) <reason>",
+        example="50 Threatening members",
+        description="Bans the most recently joined members",
     )
     async def ban_recent(self, ctx):
-        """ban recent members"""
+        """Bans the most recently joined members"""
         pass
 
     @command(
         name="ban purge",
-        description="No description given",
+        usage="(delete history)",
+        example="7",
+        description="Bans all members and purges their recent messages",
     )
     async def ban_purge(self, ctx, delete_history):
-        """ban and purge"""
+        """Bans all members and purges their recent messages"""
         pass
 
     @command(

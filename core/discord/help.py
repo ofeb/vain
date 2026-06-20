@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import contextlib
+import inspect
+import re
 import time
-from typing import TYPE_CHECKING, Any, Iterable
+from typing import TYPE_CHECKING, Any, Iterable, get_args, get_origin
 
 import discord
 from discord import Embed, Interaction, SelectOption, ui
@@ -17,6 +19,43 @@ if TYPE_CHECKING:
 _BLANK = "‎"
 _HOME = "__home__"
 _SKIP = frozenset({"self", "cls", "flags"})
+_PLACEHOLDER_DESCRIPTIONS = frozenset({"no description", "no description given"})
+_USAGE_TOKENS = re.compile(r"\([^)]+\)|\[[^\]]+\]|<[^>]+>")
+_EXAMPLE_PLACEHOLDERS: dict[str, str] = {
+    "action": "ban",
+    "amount": "50",
+    "channel": "#general",
+    "command": "ban",
+    "count": "10",
+    "days": "7",
+    "delete history": "1d",
+    "description": "Threatening members",
+    "duration": "1h",
+    "emoji": ":warning:",
+    "guild": "123456789012345678",
+    "id": "123456789012345678",
+    "member": "jonathan",
+    "message": "hello world",
+    "mode": "on",
+    "name": "example",
+    "number": "1",
+    "permission": "administrator",
+    "punishment": "ban",
+    "query": "example",
+    "reason": "Threatening members",
+    "role": "@role",
+    "server": "123456789012345678",
+    "setting": "on",
+    "state": "on",
+    "subcommand": "config",
+    "text": "hello world",
+    "threshold": "3",
+    "time": "1h",
+    "toggle": "on",
+    "url": "https://example.com",
+    "user": "jonathan",
+    "value": "1",
+}
 
 _PERM_LABELS: dict[str, str] = {
     "moderate_members": "Warn Members",
@@ -197,41 +236,261 @@ def _params(cmd: Command) -> list[str]:
 
 
 def _aliases(cmd: Command) -> str:
-    a = [x for x in cmd.aliases if x]
-    return ", ".join(a) if a else "none"
+    seen: set[str] = set()
+    aliases: list[str] = []
+    for alias in cmd.aliases:
+        if not alias or alias in seen:
+            continue
+        seen.add(alias)
+        aliases.append(alias)
+    return ", ".join(aliases) if aliases else "n/a"
+
+
+def _description(cmd: Command) -> str:
+    for value in (cmd.help, cmd.description, cmd.short_doc):
+        text = str(value or "").strip()
+        if not text or text.lower() in _PLACEHOLDER_DESCRIPTIONS:
+            continue
+        return text[:1].upper() + text[1:]
+    if isinstance(cmd, Group):
+        return f"Use subcommands under {cmd.qualified_name}"
+    return f"Run the {cmd.qualified_name} command"
+
+
+def _command_names(cmd: Command) -> tuple[str, ...]:
+    names = [cmd.qualified_name.lower()]
+    names.extend(alias.lower() for alias in cmd.aliases if alias)
+    return tuple(dict.fromkeys(names))
+
+
+def _strip_prefix(value: str, prefix: str) -> str:
+    cleaned = str(value or "").strip()
+    if prefix and cleaned.startswith(prefix):
+        cleaned = cleaned[len(prefix) :].strip()
+    return cleaned
+
+
+def _annotation_labels(annotation: object) -> list[str]:
+    if annotation is inspect._empty or annotation is None:
+        return []
+    if isinstance(annotation, commands.Greedy):
+        return _annotation_labels(getattr(annotation, "converter", inspect._empty))
+    origin = get_origin(annotation)
+    if origin is not None:
+        labels: list[str] = []
+        for item in get_args(annotation):
+            if item is type(None):
+                continue
+            for label in _annotation_labels(item):
+                if label not in labels:
+                    labels.append(label)
+        return labels
+    if annotation in (discord.Member, discord.User):
+        return ["user"]
+    if annotation is discord.Role:
+        return ["role"]
+    if annotation in (
+        discord.TextChannel,
+        discord.VoiceChannel,
+        discord.StageChannel,
+        discord.ForumChannel,
+    ):
+        return ["channel"]
+    if annotation is discord.CategoryChannel:
+        return ["category"]
+    if annotation is discord.Thread:
+        return ["thread"]
+    if annotation is discord.Attachment:
+        return ["attachment"]
+    if annotation is discord.Message:
+        return ["message"]
+    if annotation in (discord.Emoji, discord.PartialEmoji):
+        return ["emoji"]
+    if annotation is discord.Guild:
+        return ["server"]
+    return []
+
+
+def _usage_parameter_label(label: str, annotation: object = inspect._empty) -> str:
+    raw = label.strip().strip("()[]<>")
+    if not raw:
+        return ""
+    lowered = re.sub(r"\s+", " ", raw.replace("_", " ").strip().lower())
+    choices = _annotation_labels(annotation)
+    if choices:
+        label_text = " or ".join(choices)
+        if lowered in {"member", "user", "target", "role", "channel", "category", "thread", "message", "attachment", "emoji", "guild", "server"}:
+            return label_text
+        if lowered.endswith(" target"):
+            return lowered.replace("target", label_text)
+    replacements = {
+        "guild": "server",
+        "member/role": "role or user",
+        "member or role": "role or user",
+        "role/member": "role or user",
+        "role or member": "role or user",
+        "target": "user",
+    }
+    return replacements.get(lowered, lowered)
+
+
+def _normalize_usage_and_example(
+    raw_usage: str,
+    *,
+    prefix: str,
+) -> tuple[str, str | None]:
+    text = str(raw_usage or "").replace("```", "").strip()
+    if not text:
+        return "", None
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines:
+        return "", None
+
+    syntax = lines[0]
+    if syntax.lower().startswith("syntax:"):
+        syntax = syntax.split(":", 1)[1].strip()
+
+    example: str | None = None
+    for line in lines[1:]:
+        if line.lower().startswith("example:"):
+            example = line.split(":", 1)[1].strip() or None
+            break
+
+    if example is None:
+        match = re.search(r"example:\s*(.+)", syntax, re.IGNORECASE)
+        if match:
+            example = match.group(1).strip() or None
+            syntax = syntax[: match.start()].strip()
+
+    return _strip_prefix(syntax, prefix), _strip_prefix(example or "", prefix) or None
+
+
+def _format_usage_token(label: str, *, required: bool) -> str:
+    cleaned = label.strip()
+    if not cleaned:
+        return ""
+    return f"({cleaned})" if required else f"[{cleaned}]"
+
+
+def _derived_syntax(cmd: Command) -> str:
+    tokens: list[str] = []
+    for name, param in _param_items(cmd):
+        label = _usage_parameter_label(name, getattr(param, "annotation", inspect._empty))
+        if not label:
+            label = name.replace("_", " ")
+        token = _format_usage_token(label, required=getattr(param, "required", False))
+        if token:
+            tokens.append(token)
+    suffix = " ".join(tokens)
+    return f"{cmd.qualified_name} {suffix}".strip()
 
 
 def _syntax(cmd: Command, prefix: str) -> str:
-    usage = (cmd.usage or "").strip()
-    if usage:
-        return f"{prefix}{cmd.qualified_name} {usage}".rstrip()
-    tokens: list[str] = []
-    for name, param in _param_items(cmd):
-        label = name.replace("_", " ")
-        if getattr(param, "required", False):
-            tokens.append(f"({label})")
-        else:
-            tokens.append(f"[{label}]")
-    suffix = " ".join(tokens)
-    return f"{prefix}{cmd.qualified_name} {suffix}".rstrip()
+    usage, _ = _normalize_usage_and_example(str(cmd.usage or ""), prefix=str(prefix))
+    syntax = usage or _derived_syntax(cmd)
+    lowered = syntax.lower()
+    if any(lowered == name or lowered.startswith(f"{name} ") for name in _command_names(cmd)):
+        return syntax
+    return f"{cmd.qualified_name} {syntax}".strip()
+
+
+def _token_to_example(token: str) -> str | None:
+    raw = token.strip().strip("()[]<>")
+    if not raw:
+        return None
+    lowered = re.sub(r"\s+", " ", raw.replace("_", " ").strip().lower())
+    if lowered.startswith("--"):
+        return None
+    if "|" in lowered:
+        lowered = lowered.split("|", 1)[0].strip()
+    if " or " in lowered:
+        lowered = lowered.split(" or ", 1)[0].strip()
+    if lowered in {"args", "argument", "arguments", "value"}:
+        return "example"
+    if lowered in _EXAMPLE_PLACEHOLDERS:
+        return _EXAMPLE_PLACEHOLDERS[lowered]
+    if lowered.endswith(" id"):
+        return _EXAMPLE_PLACEHOLDERS["id"]
+    if lowered.endswith(" url"):
+        return _EXAMPLE_PLACEHOLDERS["url"]
+    if lowered.endswith(" reason"):
+        return _EXAMPLE_PLACEHOLDERS["reason"]
+    if lowered.endswith(" user") or lowered.endswith(" member"):
+        return _EXAMPLE_PLACEHOLDERS["user"]
+    if lowered.endswith(" channel"):
+        return _EXAMPLE_PLACEHOLDERS["channel"]
+    return raw
+
+
+def _autogenerated_example(cmd: Command, syntax: str) -> str:
+    body = syntax.strip()
+    lowered = body.lower()
+    for name in sorted(_command_names(cmd), key=len, reverse=True):
+        if lowered == name:
+            body = ""
+            break
+        if lowered.startswith(f"{name} "):
+            body = body[len(name) :].strip()
+            break
+
+    samples = [sample for sample in (_token_to_example(token) for token in _USAGE_TOKENS.findall(body)) if sample]
+    if not samples and body:
+        samples = [sample for sample in (_token_to_example(token) for token in body.split()) if sample]
+    if not samples:
+        return cmd.qualified_name
+    return f"{cmd.qualified_name} {' '.join(samples)}"
 
 
 def _example(cmd: Command, prefix: str) -> str | None:
-    raw = (getattr(cmd, "example", None) or "").strip()
-    if not raw:
+    usage = _syntax(cmd, prefix)
+    _, usage_example = _normalize_usage_and_example(str(cmd.usage or ""), prefix=str(prefix))
+    raw = _strip_prefix(str(getattr(cmd, "example", None) or ""), str(prefix))
+    candidate = raw or usage_example or _autogenerated_example(cmd, usage)
+    if not candidate:
         return None
-    if raw.startswith(prefix):
-        return raw
-    if raw.startswith(cmd.qualified_name):
-        return f"{prefix}{raw}"
-    return f"{prefix}{cmd.qualified_name} {raw}".rstrip()
+
+    lowered = candidate.lower()
+    if any(lowered == name or lowered.startswith(f"{name} ") for name in _command_names(cmd)):
+        return candidate
+    return f"{cmd.qualified_name} {candidate}".strip()
+
+
+def _usage_params(cmd: Command, prefix: str) -> list[str]:
+    usage, _ = _normalize_usage_and_example(str(cmd.usage or ""), prefix=str(prefix))
+    if not usage:
+        return []
+
+    body = usage
+    lowered = body.lower()
+    for name in sorted(_command_names(cmd), key=len, reverse=True):
+        if lowered == name:
+            body = ""
+            break
+        if lowered.startswith(f"{name} "):
+            body = body[len(name) :].strip()
+            break
+
+    params: list[str] = []
+    for token in _USAGE_TOKENS.findall(body):
+        label = token.strip().strip("()[]<>").replace("_", " ").strip().lower()
+        if label:
+            params.append(label)
+    return params
+
+
+def _parameter_value(cmd: Command, prefix: str) -> str:
+    if params := _params(cmd):
+        return ", ".join(params)
+    if params := _usage_params(cmd, prefix):
+        return ", ".join(params)
+    return "n/a"
 
 
 def _usage_block(cmd: Command, prefix: str) -> str:
     block = [f"Syntax: {_syntax(cmd, prefix)}"]
     if example := _example(cmd, prefix):
         block.append(f"Example: {example}")
-    return "```\n" + "\n".join(block) + "```"
+    return "```" + "\n".join(block) + "\n```"
 
 
 def _permission_label(cmd: Command) -> str | None:
@@ -306,7 +565,7 @@ def _information(cmd: Command) -> dict[str, str]:
 def _information_value(cmd: Command) -> str:
     info = _information(cmd)
     if not info:
-        return "N/A"
+        return "n/a"
     warning_emoji = emojis.warn
     cooldown_emoji = emojis.cooldown
     emoji_map = {
@@ -317,22 +576,34 @@ def _information_value(cmd: Command) -> str:
 
 
 def _module(cmd: Command) -> str:
-    return cmd.cog_name.lower() if cmd.cog_name else "N/A"
+    return cmd.cog_name.lower() if cmd.cog_name else "n/a"
 
 
-def _detail_embed(cmd: Command, ctx: Context) -> Embed:
+def _detail_embed(
+    cmd: Command,
+    ctx: Context,
+    *,
+    group_title: bool = False,
+    page_index: int | None = None,
+    total_pages: int | None = None,
+) -> Embed:
     prefix = getattr(ctx, "clean_prefix", None) or ctx.prefix or ";"
     if isinstance(prefix, list):
         prefix = prefix[0] if prefix else ";"
-    title = ("Group Command: " if isinstance(cmd, Group) else "Command: ") + cmd.qualified_name
-    desc = cmd.help or cmd.description or "No description given"
+    title = ("Group Command: " if group_title or isinstance(cmd, Group) else "Command: ") + cmd.qualified_name
+    desc = _description(cmd)
     e = Embed(title=title, description=desc, color=ctx.bot.color)
     e.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
-    e.add_field(name="Aliases", value=_aliases(cmd) if _aliases(cmd) != "none" else "none", inline=True)
-    e.add_field(name="Parameters", value=", ".join(_params(cmd)) or "none", inline=True)
-    e.add_field(name="Information", value=_information_value(cmd), inline=True)
-    e.add_field(name="Usage", value=_usage_block(cmd, str(prefix)), inline=False)
-    e.set_footer(text=f"Module: {_module(cmd)}")
+    e.add_field(name="**Aliases**", value=_aliases(cmd), inline=True)
+    e.add_field(name="**Parameters**", value=_parameter_value(cmd, str(prefix)), inline=True)
+    e.add_field(name="**Information**", value=_information_value(cmd), inline=True)
+    e.add_field(name="**Usage**", value=_usage_block(cmd, str(prefix)), inline=False)
+    module = _module(cmd)
+    if total_pages and page_index and total_pages > 1:
+        entry_word = "entry" if total_pages == 1 else "entries"
+        e.set_footer(text=f"Page {page_index}/{total_pages} ({total_pages} {entry_word}) ∙ Module: {module}")
+    else:
+        e.set_footer(text=f"Module: {module}")
     return e
 
 
@@ -340,15 +611,13 @@ def _brief_embed(cmd: Command, ctx: Context) -> Embed:
     prefix = getattr(ctx, "clean_prefix", None) or ctx.prefix or ";"
     if isinstance(prefix, list):
         prefix = prefix[0] if prefix else ";"
-    desc = cmd.short_doc or cmd.help or cmd.description or ""
-    usage = _usage_block(cmd, str(prefix))
-    description = f"{desc}\n{usage}" if desc else usage
     e = Embed(
         color=ctx.bot.color,
-        title="Command: " + cmd.qualified_name,
-        description=description,
+        title=("Group Command: " if isinstance(cmd, Group) else "Command: ") + cmd.qualified_name,
+        description=_description(cmd),
     )
     e.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
+    e.add_field(name=_BLANK, value=_usage_block(cmd, str(prefix)), inline=False)
     return e
 
 
@@ -481,8 +750,9 @@ class BleedHelp:
         if cmd is None or _cmd_hidden(cmd, owner=owner):
             await self._not_found(query)
             return
-        if isinstance(cmd, Group):
-            await self._send_group(cmd)
+        family = self._family_targets(bot, cmd, owner=owner)
+        if isinstance(cmd, Group) or len(family) > 1:
+            await self._send_group(cmd, targets=family)
         else:
             await self._send_cmd(cmd)
 
@@ -567,9 +837,44 @@ class BleedHelp:
     async def _send_cmd(self, cmd: Command) -> None:
         await self._send(_detail_embed(cmd, self.ctx))
 
-    async def _send_group(self, grp: Group) -> None:
-        targets = [grp] + _visible_subs(grp)
-        embeds = [_detail_embed(target, self.ctx) for target in targets]
+    def _family_targets(
+        self,
+        bot: commands.Bot,
+        root: Command,
+        *,
+        owner: bool,
+    ) -> list[Command]:
+        if isinstance(root, Group):
+            return [root] + _visible_subs(root)
+
+        prefix = f"{root.qualified_name.lower()} "
+        seen = {root.qualified_name}
+        family = [root]
+        candidates = root.cog.get_commands() if root.cog is not None else list(bot.walk_commands())
+        for command in candidates:
+            if command.qualified_name in seen:
+                continue
+            if command.hidden or _cmd_hidden(command, owner=owner):
+                continue
+            if command.qualified_name.lower().startswith(prefix):
+                seen.add(command.qualified_name)
+                family.append(command)
+        return family
+
+    async def _send_group(self, grp: Command, *, targets: list[Command] | None = None) -> None:
+        owner = self.ctx.author.id in self.ctx.bot.owners
+        targets = targets or self._family_targets(self.ctx.bot, grp, owner=owner)
+        total = len(targets)
+        embeds = [
+            _detail_embed(
+                target,
+                self.ctx,
+                group_title=target is grp and total > 1,
+                page_index=index if total > 1 else None,
+                total_pages=total if total > 1 else None,
+            )
+            for index, target in enumerate(targets, start=1)
+        ]
         if len(embeds) == 1:
             await self._send(embeds[0])
         else:

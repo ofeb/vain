@@ -98,7 +98,7 @@ class PaginateView(discord.ui.View):
             await self.message.edit(view=None)
 
     @discord.ui.button(
-        style=discord.ButtonStyle.secondary,
+        style=discord.ButtonStyle.primary,
         emoji=discord.PartialEmoji.from_str(emojis.paginator.previous),
     )
     async def prev_btn(self, interaction: discord.Interaction, _: discord.ui.Button):
@@ -106,7 +106,7 @@ class PaginateView(discord.ui.View):
         await interaction.response.edit_message(**self._current())
 
     @discord.ui.button(
-        style=discord.ButtonStyle.secondary,
+        style=discord.ButtonStyle.primary,
         emoji=discord.PartialEmoji.from_str(emojis.paginator.next),
     )
     async def next_btn(self, interaction: discord.Interaction, _: discord.ui.Button):
