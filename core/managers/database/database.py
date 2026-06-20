@@ -79,7 +79,7 @@ class HighlightIgnore:
     guild_id: int
     user_id: int
     target_id: int
-    target_type: str  # "member", "channel", "role"
+    target_type: str
     created_at: datetime = None
 
     def __post_init__(self):

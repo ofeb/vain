@@ -213,6 +213,7 @@ class CustomizeCommands(Package):
     @customize_emoji.command(
         name="list",
         aliases=["view"],
+        example="",
     )
     async def customize_emoji_list(self, ctx):
         """View all customizable emoji slots."""
@@ -244,6 +245,7 @@ class CustomizeCommands(Package):
     @customize_emoji.command(
         name="success",
         description="Set the success/approve emoji",
+        example=":white_check_mark:",
     )
     async def customize_emoji_success(self, ctx, emoji: str = None):
         """Set the success emoji."""
@@ -265,6 +267,7 @@ class CustomizeCommands(Package):
     @customize_emoji.command(
         name="warn",
         description="Set the warning emoji",
+        example=":warning:",
     )
     async def customize_emoji_warn(self, ctx, emoji: str = None):
         """Set the warn emoji."""
@@ -287,6 +290,7 @@ class CustomizeCommands(Package):
         name="deny",
         aliases=["error"],
         description="Set the deny/error emoji",
+        example=":x:",
     )
     async def customize_emoji_deny(self, ctx, emoji: str = None):
         """Set the deny emoji."""
@@ -308,6 +312,7 @@ class CustomizeCommands(Package):
     @customize_emoji.command(
         name="cooldown",
         description="Set the cooldown emoji",
+        example=":clock1:",
     )
     async def customize_emoji_cooldown(self, ctx, emoji: str = None):
         """Set the cooldown emoji."""
@@ -329,6 +334,7 @@ class CustomizeCommands(Package):
     @customize_emoji.command(
         name="loading",
         description="Set the loading emoji",
+        example=":loading:",
     )
     async def customize_emoji_loading(self, ctx, emoji: str = None):
         """Set the loading emoji."""
@@ -351,6 +357,7 @@ class CustomizeCommands(Package):
         name="info",
         aliases=["information"],
         description="Set the info emoji",
+        example=":information_source:",
     )
     async def customize_emoji_info(self, ctx, emoji: str = None):
         """Set the info emoji."""
@@ -385,6 +392,7 @@ class CustomizeCommands(Package):
     @customize_emoji_vm.command(
         name="list",
         aliases=["view"],
+        example="",
     )
     async def customize_emoji_vm_list(self, ctx):
         """View all voicemaster emoji slots."""
@@ -419,6 +427,7 @@ class CustomizeCommands(Package):
     @customize_emoji_vm.command(
         name="lock",
         description="Set the lock emoji",
+        example=":lock:",
     )
     async def customize_emoji_vm_lock(self, ctx, emoji: str = None):
         """Set the lock emoji."""
@@ -440,6 +449,7 @@ class CustomizeCommands(Package):
     @customize_emoji_vm.command(
         name="unlock",
         description="Set the unlock emoji",
+        example=":unlock:",
     )
     async def customize_emoji_vm_unlock(self, ctx, emoji: str = None):
         """Set the unlock emoji."""
@@ -461,6 +471,7 @@ class CustomizeCommands(Package):
     @customize_emoji_vm.command(
         name="ghost",
         description="Set the ghost emoji",
+        example=":ghost:",
     )
     async def customize_emoji_vm_ghost(self, ctx, emoji: str = None):
         """Set the ghost emoji."""
@@ -482,6 +493,7 @@ class CustomizeCommands(Package):
     @customize_emoji_vm.command(
         name="reveal",
         description="Set the reveal emoji",
+        example=":eyes:",
     )
     async def customize_emoji_vm_reveal(self, ctx, emoji: str = None):
         """Set the reveal emoji."""
@@ -503,6 +515,7 @@ class CustomizeCommands(Package):
     @customize_emoji_vm.command(
         name="claim",
         description="Set the claim emoji",
+        example=":hand:",
     )
     async def customize_emoji_vm_claim(self, ctx, emoji: str = None):
         """Set the claim emoji."""
@@ -525,6 +538,7 @@ class CustomizeCommands(Package):
         name="disconnect",
         aliases=["dc"],
         description="Set the disconnect emoji",
+        example=": telephone_receiver:",
     )
     async def customize_emoji_vm_disconnect(self, ctx, emoji: str = None):
         """Set the disconnect emoji."""
@@ -546,6 +560,7 @@ class CustomizeCommands(Package):
     @customize_emoji_vm.command(
         name="activity",
         description="Set the activity emoji",
+        example=":game_die:",
     )
     async def customize_emoji_vm_activity(self, ctx, emoji: str = None):
         """Set the activity emoji."""
@@ -567,6 +582,7 @@ class CustomizeCommands(Package):
     @customize_emoji_vm.command(
         name="increase",
         description="Set the increase emoji",
+        example=":arrow_up:",
     )
     async def customize_emoji_vm_increase(self, ctx, emoji: str = None):
         """Set the increase emoji."""
@@ -588,6 +604,7 @@ class CustomizeCommands(Package):
     @customize_emoji_vm.command(
         name="decrease",
         description="Set the decrease emoji",
+        example=":arrow_down:",
     )
     async def customize_emoji_vm_decrease(self, ctx, emoji: str = None):
         """Set the decrease emoji."""
@@ -619,6 +636,7 @@ class CustomizeCommands(Package):
     @customize_selfemoji.command(
         name="list",
         aliases=["view"],
+        example="",
     )
     async def customize_selfemoji_list(self, ctx):
         """View your personal emoji settings."""
@@ -640,6 +658,7 @@ class CustomizeCommands(Package):
     @customize_selfemoji.command(
         name="success",
         description="Set your personal success emoji",
+        example=":white_check_mark:",
     )
     async def customize_selfemoji_success(self, ctx, emoji: str = None):
         """Set your personal success emoji."""
@@ -659,6 +678,7 @@ class CustomizeCommands(Package):
     @customize_selfemoji.command(
         name="warn",
         description="Set your personal warning emoji",
+        example=":warning:",
     )
     async def customize_selfemoji_warn(self, ctx, emoji: str = None):
         """Set your personal warn emoji."""
@@ -679,6 +699,7 @@ class CustomizeCommands(Package):
         name="deny",
         aliases=["error"],
         description="Set your personal deny/error emoji",
+        example=":x:",
     )
     async def customize_selfemoji_deny(self, ctx, emoji: str = None):
         """Set your personal deny emoji."""
@@ -698,6 +719,7 @@ class CustomizeCommands(Package):
     @customize_selfemoji.command(
         name="cooldown",
         description="Set your personal cooldown emoji",
+        example=":clock1:",
     )
     async def customize_selfemoji_cooldown(self, ctx, emoji: str = None):
         """Set your personal cooldown emoji."""
@@ -729,6 +751,7 @@ class CustomizeCommands(Package):
     @customize_color.command(
         name="list",
         aliases=["view"],
+        example="",
     )
     async def customize_color_list(self, ctx):
         """View all customizable color slots."""
@@ -761,6 +784,7 @@ class CustomizeCommands(Package):
     @customize_color.command(
         name="base",
         description="Set the base embed color",
+        example="373737",
     )
     async def customize_color_base(self, ctx, hex_code: str = None):
         """Set the base embed color."""
@@ -789,6 +813,7 @@ class CustomizeCommands(Package):
         name="approve",
         aliases=["success"],
         description="Set the approve/success color",
+        example="A8EA7B",
     )
     async def customize_color_approve(self, ctx, hex_code: str = None):
         """Set the approve color."""
@@ -816,6 +841,7 @@ class CustomizeCommands(Package):
     @customize_color.command(
         name="warn",
         description="Set the warning color",
+        example="FDCF39",
     )
     async def customize_color_warn(self, ctx, hex_code: str = None):
         """Set the warn color."""
@@ -844,6 +870,7 @@ class CustomizeCommands(Package):
         name="deny",
         aliases=["error"],
         description="Set the deny/error color",
+        example="FF0000",
     )
     async def customize_color_deny(self, ctx, hex_code: str = None):
         """Set the deny color."""
@@ -871,6 +898,7 @@ class CustomizeCommands(Package):
     @customize_color.command(
         name="cooldown",
         description="Set the cooldown color",
+        example="4EC3E8",
     )
     async def customize_color_cooldown(self, ctx, hex_code: str = None):
         """Set the cooldown color."""
@@ -898,6 +926,7 @@ class CustomizeCommands(Package):
     @customize_color.command(
         name="settings",
         description="Set the settings color",
+        example="7289DA",
     )
     async def customize_color_settings(self, ctx, hex_code: str = None):
         """Set the settings color."""
@@ -925,6 +954,7 @@ class CustomizeCommands(Package):
     @customize_color.command(
         name="dark",
         description="Set the dark embed color",
+        example="2B2D31",
     )
     async def customize_color_dark(self, ctx, hex_code: str = None):
         """Set the dark color."""
@@ -962,6 +992,7 @@ class CustomizeCommands(Package):
     @customize_selfcolor.command(
         name="list",
         aliases=["view"],
+        example="",
     )
     async def customize_selfcolor_list(self, ctx):
         """View your personal color settings."""
@@ -983,6 +1014,7 @@ class CustomizeCommands(Package):
     @customize_selfcolor.command(
         name="base",
         description="Set your personal base embed color",
+        example="373737",
     )
     async def customize_selfcolor_base(self, ctx, hex_code: str = None):
         """Set your personal base color."""
@@ -1009,6 +1041,7 @@ class CustomizeCommands(Package):
         name="approve",
         aliases=["success"],
         description="Set your personal approve/success color",
+        example="A8EA7B",
     )
     async def customize_selfcolor_approve(self, ctx, hex_code: str = None):
         """Set your personal approve color."""
@@ -1034,6 +1067,7 @@ class CustomizeCommands(Package):
     @customize_selfcolor.command(
         name="warn",
         description="Set your personal warning color",
+        example="FDCF39",
     )
     async def customize_selfcolor_warn(self, ctx, hex_code: str = None):
         """Set your personal warn color."""
@@ -1060,6 +1094,7 @@ class CustomizeCommands(Package):
         name="deny",
         aliases=["error"],
         description="Set your personal deny/error color",
+        example="FF0000",
     )
     async def customize_selfcolor_deny(self, ctx, hex_code: str = None):
         """Set your personal deny color."""
@@ -1085,6 +1120,7 @@ class CustomizeCommands(Package):
     @customize_selfcolor.command(
         name="cooldown",
         description="Set your personal cooldown color",
+        example="4EC3E8",
     )
     async def customize_selfcolor_cooldown(self, ctx, hex_code: str = None):
         """Set your personal cooldown color."""
@@ -1110,6 +1146,7 @@ class CustomizeCommands(Package):
     @customize_selfcolor.command(
         name="settings",
         description="Set your personal settings color",
+        example="7289DA",
     )
     async def customize_selfcolor_settings(self, ctx, hex_code: str = None):
         """Set your personal settings color."""
@@ -1135,6 +1172,7 @@ class CustomizeCommands(Package):
     @customize_selfcolor.command(
         name="dark",
         description="Set your personal dark embed color",
+        example="2B2D31",
     )
     async def customize_selfcolor_dark(self, ctx, hex_code: str = None):
         """Set your personal dark color."""

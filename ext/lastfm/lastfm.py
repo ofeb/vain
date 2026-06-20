@@ -124,10 +124,23 @@ class Lastfm(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.client = LastFMClient()
-        self._logins: dict[int, str] = {}
 
-    def _get_username(self, user_id: int) -> Optional[str]:
-        return self._logins.get(user_id)
+    async def _get_username(self, user_id: int) -> Optional[str]:
+        row = await self.bot.db.fetchrow(
+            "SELECT username FROM lastfm WHERE user_id = $1", user_id
+        )
+        return row["username"] if row else None
+
+    async def _set_username(self, user_id: int, username: str) -> None:
+        await self.bot.db.execute(
+            """
+            INSERT INTO lastfm (user_id, username)
+            VALUES ($1, $2)
+            ON CONFLICT (user_id) DO UPDATE SET username = $2
+            """,
+            user_id,
+            username,
+        )
 
     @group(
         name="lastfm",
@@ -137,7 +150,7 @@ class Lastfm(commands.Cog):
     )
     async def lastfm(self, ctx: Context, *, member: discord.Member = None) -> None:
         member = member or ctx.author
-        username = self._get_username(member.id)
+        username = await self._get_username(member.id)
         if not username:
             await ctx.fail(
                 f"{member.display_name} hasn't connected their Last.fm account.\n"
@@ -186,7 +199,7 @@ class Lastfm(commands.Cog):
             await ctx.fail(f"Could not find Last.fm user `{username}`.")
             return
 
-        self._logins[ctx.author.id] = username
+        await self._set_username(ctx.author.id, username)
         user = user_info["user"]
         playcount = int(user.get("playcount", 0))
         embed = discord.Embed(
@@ -209,10 +222,13 @@ class Lastfm(commands.Cog):
         description="Disconnect your Last.fm account",
     )
     async def lastfm_logout(self, ctx: Context) -> None:
-        if ctx.author.id not in self._logins:
+        username = await self._get_username(ctx.author.id)
+        if not username:
             await ctx.fail("You haven't connected a Last.fm account.")
             return
-        del self._logins[ctx.author.id]
+        await self.bot.db.execute(
+            "DELETE FROM lastfm WHERE user_id = $1", ctx.author.id
+        )
         await ctx.success("Disconnected your Last.fm account.")
 
     @lastfm.command(
@@ -222,7 +238,7 @@ class Lastfm(commands.Cog):
     )
     async def lastfm_recent(self, ctx: Context, *, member: discord.Member = None) -> None:
         member = member or ctx.author
-        username = self._get_username(member.id)
+        username = await self._get_username(member.id)
         if not username:
             await ctx.fail(f"{member.display_name} hasn't connected their Last.fm account.")
             return
@@ -277,7 +293,7 @@ class Lastfm(commands.Cog):
 
     async def _show_top(self, ctx: Context, chart_type: str, period: str) -> None:
         member = ctx.author
-        username = self._get_username(member.id)
+        username = await self._get_username(member.id)
         if not username:
             await ctx.fail("Connect your Last.fm account first with `lastfm login <username>`.")
             return
@@ -353,7 +369,7 @@ class Lastfm(commands.Cog):
     )
     async def lastfm_youtube(self, ctx: Context, *, member: discord.Member = None) -> None:
         member = member or ctx.author
-        username = self._get_username(member.id)
+        username = await self._get_username(member.id)
         if not username:
             await ctx.fail("Connect your Last.fm account first.")
             return
@@ -378,7 +394,7 @@ class Lastfm(commands.Cog):
     )
     async def lastfm_spotify(self, ctx: Context, *, member: discord.Member = None) -> None:
         member = member or ctx.author
-        username = self._get_username(member.id)
+        username = await self._get_username(member.id)
         if not username:
             await ctx.fail("Connect your Last.fm account first.")
             return
@@ -403,7 +419,7 @@ class Lastfm(commands.Cog):
     )
     async def lastfm_itunes(self, ctx: Context, *, member: discord.Member = None) -> None:
         member = member or ctx.author
-        username = self._get_username(member.id)
+        username = await self._get_username(member.id)
         if not username:
             await ctx.fail("Connect your Last.fm account first.")
             return
@@ -428,7 +444,7 @@ class Lastfm(commands.Cog):
     )
     async def lastfm_soundcloud(self, ctx: Context, *, member: discord.Member = None) -> None:
         member = member or ctx.author
-        username = self._get_username(member.id)
+        username = await self._get_username(member.id)
         if not username:
             await ctx.fail("Connect your Last.fm account first.")
             return
@@ -453,7 +469,7 @@ class Lastfm(commands.Cog):
     )
     async def lastfm_favorites(self, ctx: Context, *, member: discord.Member = None) -> None:
         member = member or ctx.author
-        username = self._get_username(member.id)
+        username = await self._get_username(member.id)
         if not username:
             await ctx.fail("Connect your Last.fm account first.")
             return
@@ -482,7 +498,7 @@ class Lastfm(commands.Cog):
     )
     async def lastfm_streak(self, ctx: Context, *, member: discord.Member = None) -> None:
         member = member or ctx.author
-        username = self._get_username(member.id)
+        username = await self._get_username(member.id)
         if not username:
             await ctx.fail("Connect your Last.fm account first.")
             return
@@ -536,8 +552,8 @@ class Lastfm(commands.Cog):
     )
     @describe(member="Member to compare with", period="Time period (7d, 1m, 3m, 6m, 12m, overall)")
     async def lastfm_taste(self, ctx: Context, member: discord.Member, *, period: str = "overall") -> None:
-        username1 = self._get_username(ctx.author.id)
-        username2 = self._get_username(member.id)
+        username1 = await self._get_username(ctx.author.id)
+        username2 = await self._get_username(member.id)
         if not username1:
             await ctx.fail("Connect your Last.fm account first.")
             return
@@ -608,7 +624,7 @@ class Lastfm(commands.Cog):
     )
     @describe(size="Grid size (e.g. 3x3, 4x4, 5x5)", period="Time period")
     async def lastfm_collage(self, ctx: Context, size: str = "3x3", *, period: str = "overall") -> None:
-        username = self._get_username(ctx.author.id)
+        username = await self._get_username(ctx.author.id)
         if not username:
             await ctx.fail("Connect your Last.fm account first.")
             return
@@ -647,7 +663,7 @@ class Lastfm(commands.Cog):
     )
     async def lastfm_crowns(self, ctx: Context, *, member: discord.Member = None) -> None:
         member = member or ctx.author
-        username = self._get_username(member.id)
+        username = await self._get_username(member.id)
         if not username:
             await ctx.fail("Connect your Last.fm account first.")
             return

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import datetime
 import json
+import random
 from typing import TYPE_CHECKING, Optional
 
 import aiohttp
@@ -180,6 +181,8 @@ class Miscellaneous(Package):
         name="translate",
         description="Translate text to another language",
         aliases=["tr"],
+        usage="(language) (text)",
+        example="es hello world",
         guild_only=True,
     )
     @describe(
@@ -304,6 +307,114 @@ class Miscellaneous(Package):
         embed.add_field(name="Roles", value=" ".join(roles[:5]) if roles else "None", inline=False)
         await ctx.send(embed=embed)
 
+    @hybrid(
+        name="color",
+        description="Show a hex codes color in an embed",
+        aliases=["colour"],
+        guild_only=True,
+    )
+    @describe(hex="Hex color code (e.g. #FF0000)")
+    async def color_cmd(self, ctx: Context, *, hex: str) -> None:
+        hex_clean = hex.strip().lstrip("#")
+        try:
+            color_val = int(hex_clean, 16)
+        except ValueError:
+            return await ctx.fail("Invalid hex color code.")
+
+        embed = discord.Embed(
+            title=f"Color: #{hex_clean.upper()}",
+            color=color_val,
+        )
+        embed.set_thumbnail(url=f"https://singlecolorimage.com/get/{hex_clean}/200x200")
+        await ctx.send(embed=embed)
+
+    @hybrid(
+        name="charinfo",
+        description="Get information about a character/symbol",
+        guild_only=True,
+    )
+    @describe(characters="Characters to get info about")
+    async def charinfo(self, ctx: Context, *, characters: str) -> None:
+        entries = []
+        for char in characters[:10]:
+            code = f"U+{ord(char):04X}"
+            entries.append(f"`{char}` — {code} — {char.name if hasattr(char, 'name') and char.name else 'character'}")
+        embed = discord.Embed(
+            title="Character Info",
+            description="\n".join(entries),
+            color=color.base,
+        )
+        await ctx.send(embed=embed)
+
+    @hybrid(
+        name="randomhex",
+        description="Generate a random hex (color)",
+        guild_only=True,
+    )
+    async def randomhex(self, ctx: Context) -> None:
+        hex_val = f"{random.randint(0, 0xFFFFFF):06x}"
+        embed = discord.Embed(
+            title="Random Hex Color",
+            color=int(hex_val, 16),
+        )
+        embed.add_field(name="Hex", value=f"#{hex_val.upper()}", inline=True)
+        embed.set_thumbnail(url=f"https://singlecolorimage.com/get/{hex_val}/200x200")
+        await ctx.send(embed=embed)
+
+    @hybrid(
+        name="jumbo",
+        description="Enlarge an emoji",
+        aliases=["e", "enlarge", "enlargen"],
+        guild_only=True,
+    )
+    @describe(emoji="Emoji to enlarge")
+    async def jumbo(self, ctx: Context, *, emoji: str) -> None:
+        import re
+        match = re.match(r"<(a?):(\w+):(\d+)>", emoji)
+        if not match:
+            return await ctx.fail("Provide a valid custom emoji.")
+
+        animated = match.group(1) == "a"
+        ext = "gif" if animated else "png"
+        emoji_id = match.group(3)
+        url = f"https://cdn.discordapp.com/emojis/{emoji_id}.{ext}?size=256"
+
+        embed = discord.Embed(title=match.group(2), color=color.base)
+        embed.set_image(url=url)
+        await ctx.send(embed=embed)
+
+    @hybrid(
+        name="addemote",
+        description="Downloads emote and adds to server",
+        aliases=["adde"],
+        guild_only=True,
+    )
+    @describe(emoji="Emoji or URL", characters="Name for the emote")
+    async def addemote(self, ctx: Context, emoji: str, *, characters: str = None) -> None:
+        import re
+        match = re.match(r"<(a?):(\w+):(\d+)>", emoji)
+        if match:
+            ext = "gif" if match.group(1) == "a" else "png"
+            url = f"https://cdn.discordapp.com/emojis/{match.group(3)}.{ext}"
+            name = characters or match.group(2)
+        elif emoji.startswith("http"):
+            url = emoji
+            name = characters or "emote"
+        else:
+            return await ctx.fail("Provide a valid emoji or image URL.")
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as resp:
+                    if resp.status != 200:
+                        return await ctx.fail("Could not download the image.")
+                    data = await resp.read()
+            emote = await ctx.guild.create_custom_emoji(name=name, image=data)
+            await ctx.success(f"Created emoji {emote}")
+        except discord.Forbidden:
+            await ctx.fail("I don't have permission to manage emojis.")
+        except Exception as e:
+            await ctx.fail(f"Failed: {str(e)[:100]}")
 
 
 async def setup(bot: Bleed):

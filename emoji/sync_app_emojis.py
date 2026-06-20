@@ -13,7 +13,7 @@ from urllib.request import Request, urlopen
 
 try:
     from dotenv import load_dotenv
-except Exception:  # not needed it hink
+except Exception:
     load_dotenv = None
 
 

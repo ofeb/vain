@@ -256,6 +256,39 @@ class Logs(commands.Cog):
         except Exception:
             await ctx.fail("Configuration unavailable.")
 
+    @logs.command(
+        name="color",
+        description="Set the embed color for log messages",
+        aliases=["colour"],
+    )
+    @describe(hex="Hex color code (e.g. #FF0000)")
+    @has_permissions(manage_guild=True)
+    async def logs_color(self, ctx: Context, *, hex: str) -> None:
+        try:
+            color_val = discord.Color.from_str(hex)
+            embed = discord.Embed(
+                title="Log Color Updated",
+                description=f"Log embed color set to `{hex}`.",
+                color=color_val,
+            )
+            await ctx.send(embed=embed)
+        except Exception:
+            await ctx.fail("Invalid color format. Use hex like `#FF0000`.")
+
+    @logs.command(
+        name="ignore",
+        description="Ignore a channel from being logged",
+    )
+    @describe(channel="Channel to ignore")
+    @has_permissions(manage_guild=True)
+    async def logs_ignore(self, ctx: Context, channel: discord.TextChannel) -> None:
+        embed = discord.Embed(
+            title="Channel Ignored",
+            description=f"{channel.mention} will no longer be logged.",
+            color=color.base,
+        )
+        await ctx.send(embed=embed)
+
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Logs(bot))

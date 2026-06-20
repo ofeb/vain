@@ -4,6 +4,7 @@ from asyncpg import UniqueViolationError
 from asyncio import sleep, Lock
 from collections import defaultdict
 from core.discord.package import Package
+from core.managers.converters import EmbedConverter
 from lib.classes.flags.servers import Parameters
 
 
@@ -36,7 +37,7 @@ class GoodbyeCommands(Package):
     )
     @has_permissions(manage_guild=True)
     async def goodbye_add(
-        self, ctx, channel: TextChannel, *, message
+        self, ctx, channel: TextChannel, *, message: EmbedConverter
     ) -> Message:
         """add a goodbye channel"""
         timer = ctx.flags.get("self_destruct")

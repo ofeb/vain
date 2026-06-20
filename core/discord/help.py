@@ -9,6 +9,8 @@ from discord import Embed, Interaction, SelectOption, ui
 from discord.ext import commands
 from discord.ext.commands import Command, Group
 
+from core.managers.values import emojis
+
 if TYPE_CHECKING:
     from .ctx import Context
 
@@ -305,8 +307,8 @@ def _information_value(cmd: Command) -> str:
     info = _information(cmd)
     if not info:
         return "N/A"
-    warning_emoji = "<:warning:743006201981173831>"
-    cooldown_emoji = "<:embeds_cooldown:1511705992755417129>"
+    warning_emoji = emojis.warn
+    cooldown_emoji = emojis.cooldown
     emoji_map = {
         "cooldown": cooldown_emoji,
         "permissions": warning_emoji,
@@ -573,6 +575,6 @@ class BleedHelp:
         p = self._prefix()
         e = self._base_embed(
             title="not found",
-            description=f"no command named **`{query}`**\nuse `{p}help` to browse all commands",
+            description=f"no command named **`{query}`**\nuse `{p}help` or https://bleed.bot/commands to browse for commands",
         )
         await self._send(e)

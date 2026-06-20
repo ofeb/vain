@@ -269,8 +269,6 @@ def _build_mock_guild(gid=_GUILD_ID) -> MagicMock:
         MagicMock(spec=discord.CategoryChannel, id=88888, name="cat",
                            text_channels=[tch])
     )
-
-    # ensure discord.utils.get works on categories
     type(guild).categories = PropertyMock(return_value=[])
 
     return guild

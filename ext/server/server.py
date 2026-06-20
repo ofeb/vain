@@ -8,6 +8,7 @@ from discord import Embed
 from discord.ext.commands import command, group
 
 from core.discord.package import Package
+from core.discord.views.paginate import PaginateView
 
 
 class ServerCommands(Package):
@@ -105,8 +106,10 @@ class ServerCommands(Package):
             return await ctx.send_help()
 
         embed_data = self._parse_embed_script(script)
+        
         if not embed_data:
-            return await ctx.fail("Invalid embed script format. Use `{key: value}$v{key2: value2}`")
+            embed = Embed(description=script, color=self.color)
+            return await ctx.send(embed=embed)
 
         embed = Embed(color=self.color)
 
@@ -171,7 +174,8 @@ class ServerCommands(Package):
 
         embed_data = self._parse_embed_script(script)
         if not embed_data:
-            return await ctx.fail("Invalid embed script format")
+            embed = Embed(description=script, color=self.color)
+            return await ctx.send(embed=embed)
 
         embed = Embed(color=self.color)
 
@@ -243,7 +247,7 @@ class ServerCommands(Package):
                     "{guild.created_at}": "Server creation date",
                     "{guild.icon}": "Server icon URL",
                     "{guild.banner}": "Server banner URL",
-                    "{guild_boost_count}": "Boost count",
+                    "{guild.boost_count}": "Boost count",
                     "{guild.boost_tier}": "Boost tier",
                 },
             },
@@ -313,14 +317,19 @@ class ServerCommands(Package):
             embed.set_footer(text="Use these variables in embedcreate, autoresponders, and more")
             return await ctx.send(embed=embed)
 
-        lines = [f"**{cat['description']}**\n" + "\n".join(f"`{var}` — {desc}" for var, desc in cat["variables"].items()) for cat in categories.values()]
-        embed = Embed(
-            title="Available Variables",
-            description="\n\n".join(lines),
-            color=self.color,
-        )
-        embed.set_footer(text=f"Use {ctx.clean_prefix}variables <category> for more details")
-        await ctx.send(embed=embed)
+        pages = []
+        for cat in categories.values():
+            lines = [f"`{var}` — {desc}" for var, desc in cat["variables"].items()]
+            page = Embed(
+                title=cat["description"],
+                description="\n".join(lines),
+                color=self.color,
+            )
+            page.set_footer(text=f"Use {ctx.clean_prefix}variables <category> for more details")
+            pages.append(page)
+
+        view = PaginateView(ctx, pages)
+        view.message = await ctx.send(embed=pages[0], view=view)
 
     @command(
         name="serverinfo",

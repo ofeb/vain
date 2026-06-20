@@ -105,7 +105,7 @@ class DisconnectMembers(ui.Select):
     def __init__(self, member: discord.Member) -> None:
         self.member = member
         self.guild = member.guild
-        self.channel = member.voice.channel  # type: ignore[union-attr]
+        self.channel = member.voice.channel
         super().__init__(
             placeholder="Choose members...",
             min_values=1,
@@ -155,7 +155,7 @@ class ActivitySelection(ui.Select):
     def __init__(self, member: discord.Member) -> None:
         self.member = member
         self.guild = member.guild
-        self.channel = member.voice.channel  # type: ignore[union-attr]
+        self.channel = member.voice.channel
         super().__init__(
             placeholder="Choose an activity...",
             min_values=1,
@@ -250,7 +250,7 @@ class VoiceInterface(ui.View):
     @ui.button(emoji=PANEL_EMOJIS["lock"], custom_id="voicemaster:lock")
     async def lock(self, interaction: discord.Interaction, button: ui.Button) -> None:
         """Lock your voice channel."""
-        channel = interaction.user.voice.channel  # type: ignore[union-attr]
+        channel = interaction.user.voice.channel
         await channel.set_permissions(
             interaction.guild.default_role,
             connect=False,
@@ -264,7 +264,7 @@ class VoiceInterface(ui.View):
     @ui.button(emoji=PANEL_EMOJIS["unlock"], custom_id="voicemaster:unlock")
     async def unlock(self, interaction: discord.Interaction, button: ui.Button) -> None:
         """Unlock your voice channel."""
-        channel = interaction.user.voice.channel  # type: ignore[union-attr]
+        channel = interaction.user.voice.channel
         await channel.set_permissions(
             interaction.guild.default_role,
             connect=None,
@@ -278,7 +278,7 @@ class VoiceInterface(ui.View):
     @ui.button(emoji=PANEL_EMOJIS["ghost"], custom_id="voicemaster:ghost")
     async def ghost(self, interaction: discord.Interaction, button: ui.Button) -> None:
         """Hide your voice channel."""
-        channel = interaction.user.voice.channel  # type: ignore[union-attr]
+        channel = interaction.user.voice.channel
         await channel.set_permissions(
             interaction.guild.default_role,
             view_channel=False,
@@ -289,7 +289,7 @@ class VoiceInterface(ui.View):
     @ui.button(emoji=PANEL_EMOJIS["reveal"], custom_id="voicemaster:reveal")
     async def reveal(self, interaction: discord.Interaction, button: ui.Button) -> None:
         """Reveal your voice channel."""
-        channel = interaction.user.voice.channel  # type: ignore[union-attr]
+        channel = interaction.user.voice.channel
         await channel.set_permissions(
             interaction.guild.default_role,
             view_channel=None,
@@ -300,7 +300,7 @@ class VoiceInterface(ui.View):
     @ui.button(emoji=PANEL_EMOJIS["claim"], custom_id="voicemaster:claim")
     async def claim(self, interaction: discord.Interaction, button: ui.Button) -> None:
         """Claim an inactive voice channel."""
-        channel = interaction.user.voice.channel  # type: ignore[union-attr]
+        channel = interaction.user.voice.channel
         await self.cog.bot.db.execute(
             "UPDATE voicemaster_channels SET owner_id = $2 WHERE channel_id = $1",
             channel.id,
@@ -315,7 +315,7 @@ class VoiceInterface(ui.View):
     async def disconnect(self, interaction: discord.Interaction, button: ui.Button) -> None:
         """Disconnect members from your VC."""
         view = ui.View(timeout=None)
-        view.add_item(DisconnectMembers(interaction.user))  # type: ignore[arg-type]
+        view.add_item(DisconnectMembers(interaction.user))
         await _reply(
             interaction,
             _neutral(interaction, "Select members from the **dropdown** to disconnect.", emoji="🔨"),
@@ -326,7 +326,7 @@ class VoiceInterface(ui.View):
     async def activity(self, interaction: discord.Interaction, button: ui.Button) -> None:
         """Start an activity in your voice channel."""
         view = ui.View(timeout=None)
-        view.add_item(ActivitySelection(interaction.user))  # type: ignore[arg-type]
+        view.add_item(ActivitySelection(interaction.user))
         await _reply(
             interaction,
             _neutral(
@@ -343,7 +343,7 @@ class VoiceInterface(ui.View):
         with contextlib.suppress(discord.InteractionResponded):
             await interaction.response.defer(ephemeral=True)
 
-        channel = interaction.user.voice.channel  # type: ignore[union-attr]
+        channel = interaction.user.voice.channel
         locked = channel.permissions_for(interaction.guild.default_role).connect is False
 
         embed = discord.Embed(
@@ -396,7 +396,7 @@ class VoiceInterface(ui.View):
     @ui.button(emoji=PANEL_EMOJIS["increase"], custom_id="voicemaster:increase")
     async def increase(self, interaction: discord.Interaction, button: ui.Button) -> None:
         """Increase the user limit of your voice channel."""
-        channel = interaction.user.voice.channel  # type: ignore[union-attr]
+        channel = interaction.user.voice.channel
         limit = channel.user_limit or 0
         if limit == 99:
             await _reply(
@@ -416,7 +416,7 @@ class VoiceInterface(ui.View):
     @ui.button(emoji=PANEL_EMOJIS["decrease"], custom_id="voicemaster:decrease")
     async def decrease(self, interaction: discord.Interaction, button: ui.Button) -> None:
         """Decrease the user limit of your voice channel."""
-        channel = interaction.user.voice.channel  # type: ignore[union-attr]
+        channel = interaction.user.voice.channel
         limit = channel.user_limit or 0
         if limit == 0:
             await _reply(

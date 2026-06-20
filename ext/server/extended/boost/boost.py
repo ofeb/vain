@@ -8,6 +8,7 @@ from discord import Embed, Member, Message, TextChannel
 from discord.ext.commands import group
 
 from core.discord.package import Package
+from core.managers.converters import EmbedConverter
 from lib.classes.flags.servers import Parameters
 
 
@@ -39,7 +40,7 @@ class BoostCommands(Package):
         flags=Parameters,
     )
     @has_permissions(manage_guild=True)
-    async def boosts_add(self, ctx, channel: TextChannel, *, message) -> Message:
+    async def boosts_add(self, ctx, channel: TextChannel, *, message: EmbedConverter) -> Message:
         """add a boost channel"""
         timer = ctx.flags.get("self_destruct")
         if timer:

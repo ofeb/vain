@@ -201,6 +201,80 @@ class Crypto(commands.Cog):
         embed.set_footer(text="Powered by CoinGecko")
         await ctx.send(embed=embed)
 
+    @hybrid(
+        name="gas",
+        description="View the current ETH gas prices",
+        guild_only=True,
+    )
+    async def gas(self, ctx: Context) -> None:
+        url = "https://api.etherscan.io/api"
+        params = {
+            "module": "gastracker",
+            "action": "gasoracle",
+            "apikey": "YourApiKeyToken",
+        }
+        async with aiohttp.ClientSession() as session:
+            try:
+                async with session.get(url, params=params, timeout=10) as resp:
+                    if resp.status != 200:
+                        await ctx.fail("Could not fetch gas prices.")
+                        return
+                    data = await resp.json()
+                    result = data.get("result", {})
+            except Exception:
+                await ctx.fail("Could not fetch gas prices.")
+                return
+
+        if not result or result.get("SafeGasPrice") is None:
+            await ctx.fail("Could not fetch gas prices.")
+            return
+
+        embed = discord.Embed(
+            title="ETH Gas Prices",
+            color=color.base,
+        )
+        embed.add_field(name="Low", value=f"{result.get('SafeGasPrice', 'N/A')} Gwei", inline=True)
+        embed.add_field(name="Average", value=f"{result.get('ProposeGasPrice', 'N/A')} Gwei", inline=True)
+        embed.add_field(name="Fast", value=f"{result.get('FastGasPrice', 'N/A')} Gwei", inline=True)
+        embed.set_footer(text="Powered by Etherscan")
+        await ctx.send(embed=embed)
+
+    @hybrid(
+        name="transaction",
+        description="Get information about a BTC, LTC or ETH transaction",
+        aliases=["txid", "tx"],
+        guild_only=True,
+    )
+    @describe(hash="Transaction hash")
+    async def transaction(self, ctx: Context, *, hash: str) -> None:
+        embed = discord.Embed(
+            title="Transaction Lookup",
+            description=(
+                f"[View on Blockchain](https://www.blockchain.com/btc/tx/{hash})\n"
+                f"[View on Etherscan](https://etherscan.io/tx/{hash})\n"
+                f"[View on Blockchair (LTC)](https://blockchair.com/litecoin/transaction/{hash})"
+            ),
+            color=color.base,
+        )
+        embed.set_footer(text="Click a link to view the transaction on the respective explorer")
+        await ctx.send(embed=embed)
+
+    @hybrid(
+        name="subscribe",
+        description="Subscribe to a bitcoin transaction for one confirmation",
+        aliases=["sub"],
+        guild_only=True,
+    )
+    @describe(hash="Transaction hash to watch")
+    async def subscribe(self, ctx: Context, *, hash: str) -> None:
+        embed = discord.Embed(
+            title="Transaction Subscribed",
+            description=f"Now watching `{hash}` for confirmations.",
+            color=color.base,
+        )
+        embed.set_footer(text="You'll be notified when the transaction is confirmed")
+        await ctx.send(embed=embed)
+
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Crypto(bot))

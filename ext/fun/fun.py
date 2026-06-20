@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import random
 import re
+import urllib.parse
 from typing import TYPE_CHECKING
 
+import aiohttp
 import discord
 from discord.ext import commands
 
@@ -241,6 +243,226 @@ class Fun(commands.Cog):
             description=random.choice(jokes),
             color=color.base,
         )
+        await ctx.send(embed=embed)
+
+    @hybrid(
+        name="google",
+        description="Search the largest search engine on the internet",
+        aliases=["g"],
+        guild_only=True,
+    )
+    @describe(search="Search query")
+    async def google(self, ctx: Context, *, search: str) -> None:
+        query = urllib.parse.quote(search)
+        embed = discord.Embed(
+            title="Google Search",
+            description=f"[Search for **{search}** on Google](https://www.google.com/search?q={query})",
+            color=color.base,
+        )
+        embed.set_footer(text="Google", icon_url="https://www.google.com/favicon.ico")
+        await ctx.send(embed=embed)
+
+    @hybrid(
+        name="duckduckgo",
+        description="Search the DuckDuckGo search engine",
+        aliases=["ddg"],
+        guild_only=True,
+    )
+    @describe(search="Search query")
+    async def duckduckgo(self, ctx: Context, *, search: str) -> None:
+        query = urllib.parse.quote(search)
+        embed = discord.Embed(
+            title="DuckDuckGo Search",
+            description=f"[Search for **{search}** on DuckDuckGo](https://duckduckgo.com/?q={query})",
+            color=color.base,
+        )
+        embed.set_footer(text="DuckDuckGo", icon_url="https://duckduckgo.com/favicon.ico")
+        await ctx.send(embed=embed)
+
+    @hybrid(
+        name="duckduckgoimage",
+        description="Search DuckDuckGo for an image",
+        aliases=["ddgim", "ddgimg"],
+        guild_only=True,
+    )
+    @describe(search="Search query")
+    async def duckduckgoimage(self, ctx: Context, *, search: str) -> None:
+        query = urllib.parse.quote(search)
+        embed = discord.Embed(
+            title="DuckDuckGo Image Search",
+            description=f"[Search for **{search}** images on DuckDuckGo](https://duckduckgo.com/?q={query}&iar=images&iax=images&ia=images)",
+            color=color.base,
+        )
+        embed.set_footer(text="DuckDuckGo", icon_url="https://duckduckgo.com/favicon.ico")
+        await ctx.send(embed=embed)
+
+    @hybrid(
+        name="reverseimage",
+        description="Reverse image search on Google",
+        aliases=["rimage", "rimg"],
+        guild_only=True,
+    )
+    @describe(url="Image URL to reverse search")
+    async def reverseimage(self, ctx: Context, url: str = None) -> None:
+        if not url and ctx.message.attachments:
+            url = ctx.message.attachments[0].url
+        if not url:
+            return await ctx.fail("Provide an image URL or attach an image.")
+
+        query = urllib.parse.quote(url)
+        embed = discord.Embed(
+            title="Reverse Image Search",
+            description=f"[Reverse search this image on Google](https://lens.google.com/uploadbyurl?url={query})",
+            color=color.base,
+        )
+        embed.set_thumbnail(url=url)
+        await ctx.send(embed=embed)
+
+    @hybrid(
+        name="image",
+        description="Search Google for an image",
+        aliases=["im", "img"],
+        guild_only=True,
+    )
+    @describe(search="Search query")
+    async def image(self, ctx: Context, *, search: str) -> None:
+        query = urllib.parse.quote(search)
+        embed = discord.Embed(
+            title="Image Search",
+            description=f"[Search for **{search}** images on Google](https://www.google.com/search?q={query}&tbm=isch)",
+            color=color.base,
+        )
+        await ctx.send(embed=embed)
+
+    @hybrid(
+        name="giphy",
+        description="Search Giphy for gif results",
+        aliases=["gif"],
+        guild_only=True,
+    )
+    @describe(keyword="Search keyword")
+    async def giphy(self, ctx: Context, *, keyword: str) -> None:
+        query = urllib.parse.quote(keyword)
+        embed = discord.Embed(
+            title="Giphy Search",
+            description=f"[Search for **{keyword}** on Giphy](https://giphy.com/search/{query})",
+            color=color.base,
+        )
+        await ctx.send(embed=embed)
+
+    @hybrid(
+        name="tenor",
+        description="Search Tenor for gif results",
+        guild_only=True,
+    )
+    @describe(keyword="Search keyword")
+    async def tenor(self, ctx: Context, *, keyword: str) -> None:
+        query = urllib.parse.quote(keyword)
+        embed = discord.Embed(
+            title="Tenor Search",
+            description=f"[Search for **{keyword}** on Tenor](https://tenor.com/search/{query})",
+            color=color.base,
+        )
+        await ctx.send(embed=embed)
+
+    @hybrid(
+        name="wikihow",
+        description="How to...?",
+        aliases=["whow"],
+        guild_only=True,
+    )
+    @describe(query="What you want to learn how to do")
+    async def wikihow(self, ctx: Context, *, query: str) -> None:
+        query_encoded = urllib.parse.quote(query)
+        embed = discord.Embed(
+            title="WikiHow",
+            description=f"[How to {query}?](https://www.wikihow.com/wikiHowTo?search={query_encoded})",
+            color=color.base,
+        )
+        await ctx.send(embed=embed)
+
+    @hybrid(
+        name="brainly",
+        description="Search Brainly for answers",
+        guild_only=True,
+    )
+    @describe(query="Question to search for")
+    async def brainly(self, ctx: Context, *, query: str) -> None:
+        query_encoded = urllib.parse.quote(query)
+        embed = discord.Embed(
+            title="Brainly",
+            description=f"[Search for **{query}** on Brainly](https://brainly.com/app/ask?q={query_encoded})",
+            color=color.base,
+        )
+        await ctx.send(embed=embed)
+
+    @hybrid(
+        name="rps",
+        description="Play Rock-Paper-Scissors with me!",
+        aliases=["rockpaperscissors"],
+        guild_only=True,
+    )
+    @describe(choice="rock, paper, or scissors")
+    async def rps(self, ctx: Context, *, choice: str) -> None:
+        choice = choice.lower().strip()
+        if choice not in ("rock", "paper", "scissors"):
+            return await ctx.fail("Choose `rock`, `paper`, or `scissors`.")
+
+        bot_choice = random.choice(["rock", "paper", "scissors"])
+        emojis_map = {"rock": "🪨", "paper": "📄", "scissors": "✂️"}
+
+        if choice == bot_choice:
+            result = "It's a tie!"
+        elif (choice == "rock" and bot_choice == "scissors") or \
+             (choice == "paper" and bot_choice == "rock") or \
+             (choice == "scissors" and bot_choice == "paper"):
+            result = "You win!"
+        else:
+            result = "I win!"
+
+        embed = discord.Embed(
+            title="Rock Paper Scissors",
+            description=f"{emojis_map[choice]} **You:** {choice.title()}\n{emojis_map[bot_choice]} **Bot:** {bot_choice.title()}\n\n**{result}**",
+            color=color.base,
+        )
+        await ctx.send(embed=embed)
+
+    @hybrid(
+        name="wouldyourather",
+        description="Would you rather?",
+        aliases=["wyr"],
+        guild_only=True,
+    )
+    @describe(option1="First option", option2="Second option")
+    async def wouldyourather(self, ctx: Context, option1: str, option2: str) -> None:
+        embed = discord.Embed(
+            title="Would You Rather?",
+            description=f"**1:** {option1}\n**2:** {option2}",
+            color=color.base,
+        )
+        msg = await ctx.send(embed=embed)
+        await msg.add_reaction("1️⃣")
+        await msg.add_reaction("2️⃣")
+
+    @hybrid(
+        name="quote",
+        description="Quote a message",
+        guild_only=True,
+    )
+    @describe(message_link="Message link to quote")
+    async def quote(self, ctx: Context, message_link: str) -> None:
+        try:
+            msg = await ctx.bot.fetch_message(message_link)
+        except Exception:
+            return await ctx.fail("Could not fetch that message.")
+
+        embed = discord.Embed(
+            description=msg.content[:4000],
+            color=color.base,
+            timestamp=msg.created_at,
+        )
+        embed.set_author(name=str(msg.author), icon_url=msg.author.display_avatar.url)
+        embed.set_footer(text=f"Quoted from #{msg.channel.name}")
         await ctx.send(embed=embed)
 
 

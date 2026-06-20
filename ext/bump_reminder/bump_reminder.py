@@ -142,6 +142,61 @@ class BumpReminder(commands.Cog):
         self._cache.pop(ctx.guild.id, None)
         await ctx.success("Bump reminder removed.")
 
+    @bumpreminder.command(
+        name="thankyou",
+        description="Set the 'Thank You' message for successfully running /bump",
+        aliases=["ty"],
+        guild_only=True,
+    )
+    @describe(message="The thank you message to send")
+    @has_permissions(manage_channels=True)
+    async def bumpreminder_thankyou(self, ctx: Context, *, message: str) -> None:
+        if ctx.guild.id not in self._cache:
+            self._cache[ctx.guild.id] = {}
+        self._cache[ctx.guild.id]["thankyou_message"] = message
+        await ctx.success(f"Thank you message set to: {message}")
+
+    @bumpreminder.command(
+        name="autoclean",
+        description="Automatically delete messages that aren't /bump",
+        guild_only=True,
+    )
+    @describe(choice="on or off")
+    @has_permissions(manage_channels=True)
+    async def bumpreminder_autoclean(self, ctx: Context, choice: str) -> None:
+        if ctx.guild.id not in self._cache:
+            self._cache[ctx.guild.id] = {}
+        enabled = choice.lower() in ("on", "true", "enable", "1")
+        self._cache[ctx.guild.id]["autoclean"] = enabled
+        await ctx.success(f"Autoclean {'enabled' if enabled else 'disabled'}.")
+
+    @bumpreminder.command(
+        name="autolock",
+        description="Lock channel until ready to use /bump",
+        guild_only=True,
+    )
+    @describe(choice="on or off")
+    @has_permissions(manage_channels=True)
+    async def bumpreminder_autolock(self, ctx: Context, choice: str) -> None:
+        if ctx.guild.id not in self._cache:
+            self._cache[ctx.guild.id] = {}
+        enabled = choice.lower() in ("on", "true", "enable", "1")
+        self._cache[ctx.guild.id]["autolock"] = enabled
+        await ctx.success(f"Autolock {'enabled' if enabled else 'disabled'}.")
+
+    @bumpreminder.command(
+        name="message",
+        description="Set the reminder message to run /bump",
+        guild_only=True,
+    )
+    @describe(message="The reminder message to send")
+    @has_permissions(manage_channels=True)
+    async def bumpreminder_message(self, ctx: Context, *, message: str) -> None:
+        if ctx.guild.id not in self._cache:
+            self._cache[ctx.guild.id] = {}
+        self._cache[ctx.guild.id]["remind_message"] = message
+        await ctx.success(f"Reminder message set to: {message}")
+
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(BumpReminder(bot))

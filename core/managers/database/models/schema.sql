@@ -884,3 +884,13 @@ CREATE TABLE IF NOT EXISTS user_customize (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (user_id, guild_id)
 );
+
+CREATE SCHEMA IF NOT EXISTS roleplay;
+
+CREATE TABLE IF NOT EXISTS roleplay.actions (
+    action TEXT NOT NULL,
+    giver BIGINT NOT NULL,
+    receiver BIGINT NOT NULL,
+    amount INT NOT NULL DEFAULT 1,
+    PRIMARY KEY (action, giver, receiver)
+);
