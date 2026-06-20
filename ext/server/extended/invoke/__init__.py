@@ -7,7 +7,6 @@ from .invoke import InvokeCommands
 
 class Invoke(InvokeCommands, Cog):
     """invoke message customization cog"""
-    __cog_name__ = "Servers"
 
 
 async def setup(bot) -> None:

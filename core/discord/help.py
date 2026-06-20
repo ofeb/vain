@@ -581,7 +581,9 @@ def _information_value(cmd: Command) -> str:
 
 
 def _module(cmd: Command) -> str:
-    return cmd.cog_name.lower() if cmd.cog_name else "n/a"
+    if cmd.cog:
+        return _category(cmd.cog).lower()
+    return "n/a"
 
 
 def _detail_embed(
@@ -869,17 +871,26 @@ class BleedHelp:
     async def _send_group(self, grp: Command, *, targets: list[Command] | None = None) -> None:
         owner = self.ctx.author.id in self.ctx.bot.owners
         targets = targets or self._family_targets(self.ctx.bot, grp, owner=owner)
-        total = len(targets)
-        embeds = [
-            _detail_embed(
-                target,
+        subs = sorted(
+            [t for t in targets if t is not grp],
+            key=lambda c: c.qualified_name.lower(),
+        )
+        if not subs:
+            await self._send(_detail_embed(grp, self.ctx))
+            return
+        total = len(subs)
+        prefix = self._prefix()
+        embeds = []
+        for index, sub in enumerate(subs, start=1):
+            e = _detail_embed(
+                sub,
                 self.ctx,
-                group_title=target is grp and total > 1,
+                group_title=True,
                 page_index=index if total > 1 else None,
                 total_pages=total if total > 1 else None,
             )
-            for index, target in enumerate(targets, start=1)
-        ]
+            e.title = "Group Command: " + grp.qualified_name
+            embeds.append(e)
         if len(embeds) == 1:
             await self._send(embeds[0])
         else:
@@ -891,9 +902,4 @@ class BleedHelp:
         await self._send(e)
 
     async def _not_found(self, query: str) -> None:
-        p = self._prefix()
-        e = self._base_embed(
-            title="not found",
-            description=f"no command named **`{query}`**\nuse `{p}help` or https://bleed.bot/commands to browse for commands",
-        )
-        await self._send(e)
+        await self.ctx.warn(f"Command `{query}` does **not** exist")
