@@ -237,21 +237,77 @@ class ModerationCommands(Package):
 
     @command(
         name="moveall",
-        description="Move all members in current channel to another channel",
+        description="Move all members in your voice channel to another channel",
     )
-    @has_permissions(administrator=True)
-    async def moveall(self, ctx, channel):
+    @has_permissions(move_members=True)
+    async def moveall(self, ctx, channel: discord.VoiceChannel):
         """move all members to another channel"""
-        pass
+        if not ctx.author.voice or not ctx.author.voice.channel:
+            return await ctx.fail("You must be in a **voice channel** to use this command")
+
+        source = ctx.author.voice.channel
+
+        if source.id == channel.id:
+            return await ctx.fail("Source and destination **cannot** be the same")
+
+        if not ctx.guild.me.guild_permissions.move_members:
+            return await ctx.fail("I don't have the **Move Members** permission")
+
+        moved = 0
+        failed = 0
+
+        for member in list(source.members):
+            try:
+                await member.move_to(channel, reason=f"Moveall by {ctx.author}")
+                moved += 1
+            except (discord.HTTPException, discord.Forbidden):
+                failed += 1
+
+        msg = f"Moved **{moved}** members from {source.mention} to {channel.mention}"
+        if failed:
+            msg += f" ({failed} failed)"
+
+        return await ctx.success(msg)
 
     @command(
         name="stripstaff",
-        description="No description given",
+        description="Remove all staff roles from a member",
     )
-    @has_permissions(administrator=True)
-    async def stripstaff(self, ctx, member):
+    @has_permissions(manage_roles=True)
+    async def stripstaff(self, ctx, *, member: discord.Member):
         """strip staff roles from member"""
-        pass
+        if member.id == ctx.author.id:
+            return await ctx.fail("You cannot **strip yourself** of staff roles")
+
+        if member.id == ctx.guild.owner_id:
+            return await ctx.fail("You cannot strip the **server owner**")
+
+        if ctx.author.top_role <= member.top_role and ctx.author.id != ctx.guild.owner_id:
+            return await ctx.fail("Your top role must be **higher** than this member's top role")
+
+        rows = await self.db.fetch(
+            """SELECT role_id FROM staff_roles WHERE guild_id = $1""",
+            ctx.guild.id,
+        )
+
+        if not rows:
+            return await ctx.fail("No **staff roles** are configured for this server")
+
+        staff_role_ids = {row[0] for row in rows}
+        removed = []
+
+        for role in list(member.roles):
+            if role.id in staff_role_ids and role < ctx.author.top_role:
+                try:
+                    await member.remove_roles(role, reason=f"Stripstaff by {ctx.author}")
+                    removed.append(role.mention)
+                except discord.HTTPException:
+                    continue
+
+        if not removed:
+            return await ctx.fail(f"{member.mention} has **no dangerous roles** to strip")
+
+        return await ctx.success(f"Stripped **{len(removed)}** dangerous roles from {member.mention}: {', '.join(removed)}")
 
     @command(
         name="jail",
@@ -913,28 +969,13 @@ class ModerationCommands(Package):
                 ctx.guild.id, jailed_ch.id,
             )
 
-        embed = discord.Embed(
-            color=self.bot.color,
-            title="Setup Complete",
-            description=(
-                f"✅ Created/verified the following channels:\n\n"
-                f"**logs** category:\n"
-                f"  • {antinuke_ch.mention} — antinuke events\n"
-                f"  • {antiraid_ch.mention} — antiraid events\n"
-                f"  • {jail_logs_ch.mention} — jail events\n"
-                f"  • {modlog_ch.mention} — moderation log\n\n"
-                f"**jail** category:\n"
-                f"  • {jailed_ch.mention} — jail channel\n\n"
-                f"**Permissions:**\n"
-                f"  • Logs: admin-only visibility\n"
-                f"  • Jail: jailed role + admin visibility\n"
-                f"Use `{ctx.clean_prefix}settings modlog {modlog_ch.mention}` if you need to change the modlog channel."
-            ),
-        )
-        await ctx.send(embed=embed)
+        await ctx.success(
+                f"Moderation system set up has been completed. Please make sure that all of your channels and roles have been configured properly."
+            )
 
     @command(
         name="unsetup",
+        aliases=["unsetme", "reset"],
         description="Remove moderation system setup (categories and channels)",
     )
     @has_permissions(administrator=True)

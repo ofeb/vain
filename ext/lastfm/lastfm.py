@@ -57,8 +57,8 @@ PERIOD_LABELS = {
     "12month": "12m",
 }
 
-# Only explicit mentions / IDs parse as a target user so free text like "kendrick lamar"
-# is never mistaken for a Discord username/global-name match on the first token.
+
+
 _PLAYS_QUERY_USER_MENTION_PREFIX_RE = re.compile(r"^<@!?([0-9]{17,20})>\s*(.*)$", re.DOTALL)
 _PLAYS_QUERY_USER_ID_PREFIX_RE = re.compile(r"^([0-9]{17,20})\s+(.+)$", re.DOTALL)
 

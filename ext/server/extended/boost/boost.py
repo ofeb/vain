@@ -144,11 +144,14 @@ class BoostCommands(Package):
                 if not channel:
                     continue
 
-                builder = await self.create_embed(
-                    row.message,
-                    member=member,
-                    user=member,
-                )
+                try:
+                    builder = await self.create_embed(
+                        row.message,
+                        member=member,
+                        user=member,
+                    )
+                except Exception:
+                    continue
                 if row.self_destruct:
                     builder.data["delete_after"] = row.self_destruct
 

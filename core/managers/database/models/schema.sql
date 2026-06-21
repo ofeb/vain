@@ -980,6 +980,32 @@ CREATE TABLE IF NOT EXISTS mutes (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS lockdowns (
+    guild_id BIGINT NOT NULL,
+    channel_id BIGINT NOT NULL,
+    locked_by BIGINT NOT NULL,
+    reason TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, channel_id)
+);
+
+CREATE TABLE IF NOT EXISTS lockdown_ignore (
+    guild_id BIGINT NOT NULL,
+    channel_id BIGINT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, channel_id)
+);
+
+CREATE TABLE IF NOT EXISTS log_config (
+    guild_id BIGINT NOT NULL,
+    channel_id BIGINT NOT NULL,
+    events TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    color VARCHAR(7),
+    ignored_channels BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, channel_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_moderation_guild_user ON moderation(guild_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_blacklist_user ON blacklist(user_id);
 CREATE INDEX IF NOT EXISTS idx_blacklist_guild ON blacklist(guild_id);

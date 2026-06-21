@@ -111,6 +111,16 @@ def is_embed_script(raw: str) -> bool:
     return False
 
 
+def maybe_wrap_embed_script(text: str) -> str:
+    """Wrap plain text as ``{content: text}`` when it is not already embed code."""
+    if is_embed_script(text):
+        return text
+    stripped = text.strip()
+    if "{" in stripped and "}" in stripped:
+        return text
+    return f"{{content: {stripped}}}"
+
+
 def _over_by(val, limit: int) -> int:
     return limit - (val if isinstance(val, int) else len(val))
 
@@ -719,6 +729,7 @@ class Script:
 
     async def data(self, sendable: bool = False, **kwargs) -> dict[str, Any]:
         rendered = self.render(**kwargs)
+        rendered = maybe_wrap_embed_script(rendered)
         if is_embed_script(rendered):
             payload = await parse(rendered, sendable=sendable)
         else:

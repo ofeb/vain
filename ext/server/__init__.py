@@ -36,6 +36,8 @@ from .extended.stickymessage.stickymessage import StickymessageCommands
 from .extended.suggest.suggest import SuggestCommands
 from .extended.webhook.webhook import WebhookCommands
 from .extended.welcome.welcome import WelcomeCommands
+from .extended.steal.steal import Steal
+from .extended.embedcode.embedcode import Embedcode
 
 
 class Server(
@@ -67,6 +69,8 @@ class Server(
     SettingsCommands,
     ReposterCommands,
     SuggestCommands,
+    Steal,
+    Embedcode,
     commands.Cog,
     metaclass=_Meta,
 ):

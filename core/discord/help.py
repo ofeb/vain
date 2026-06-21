@@ -219,9 +219,10 @@ def _visible_subs(grp: Group) -> list[Command]:
         for c in g.commands:
             if c.hidden:
                 continue
-            out.append(c)
             if isinstance(c, Group) and c.commands:
                 _walk(c)
+            else:
+                out.append(c)
 
     _walk(grp)
     return out
@@ -879,7 +880,6 @@ class BleedHelp:
             await self._send(_detail_embed(grp, self.ctx))
             return
         total = len(subs)
-        prefix = self._prefix()
         embeds = []
         for index, sub in enumerate(subs, start=1):
             e = _detail_embed(

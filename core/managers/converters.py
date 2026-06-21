@@ -74,7 +74,8 @@ class EmbedConverter(commands.Converter):
     """pass embed script bodies through while preserving `.script` access."""
 
     async def convert(self, ctx: commands.Context, argument: str):
-        return ScriptType(argument)
+        from core.tools.embed import maybe_wrap_embed_script
+        return ScriptType(maybe_wrap_embed_script(argument))
 
 
 class MessageLinkConverter(commands.MessageConverter):

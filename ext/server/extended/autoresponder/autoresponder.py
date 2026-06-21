@@ -78,8 +78,8 @@ def _parse_response_flags(raw: str) -> tuple[str, dict[str, object], str | None]
 
 def _is_embed_script(response: str) -> bool:
     """Return True when the response should be parsed as bleed embed code."""
-    stripped = response.strip()
-    return stripped.startswith("{embed}") or stripped.startswith("$v{")
+    from core.tools.embed import is_embed_script as _core_is_embed_script
+    return _core_is_embed_script(response)
 
 
 def _normalize_embed_script_urls(response: str) -> str:
@@ -156,14 +156,19 @@ class AutoresponderCommands(Package):
         reply_reference = ctx.message if record["reply"] else None
 
         if _is_embed_script(response):
-            builder = await self.create_embed(
-                response,
-                ctx=ctx,
-                user=ctx.author,
-                member=ctx.author,
-                guild=ctx.guild,
-                channel=ctx.channel,
-            )
+            try:
+                builder = await self.create_embed(
+                    response,
+                    ctx=ctx,
+                    user=ctx.author,
+                    member=ctx.author,
+                    guild=ctx.guild,
+                    channel=ctx.channel,
+                )
+            except Exception as error:
+                with contextlib.suppress(discord.HTTPException):
+                    await ctx.send(f"Embed script error: {error}\n`{response}`")
+                return
             if record["self_destruct"] is not None:
                 builder.data["delete_after"] = record["self_destruct"]
             if reply_reference is not None:
@@ -308,7 +313,8 @@ class AutoresponderCommands(Package):
         if not response:
             raise CommandError("expected: trigger, response")
 
-        response = _normalize_embed_script_urls(response)
+        from core.tools.embed import maybe_wrap_embed_script
+        response = _normalize_embed_script_urls(maybe_wrap_embed_script(response))
         if _is_embed_script(response):
             try:
                 await self.create_embed(

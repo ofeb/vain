@@ -174,7 +174,10 @@ def _build_snipe_embed(snipe: dict, index: int, total: int, snipe_type: str) -> 
         embed.set_image(url=sticks[0])
 
     label = {"snipe": "Deleted", "editsnipe": "Edited", "reactionsnipe": "Reaction"}.get(snipe_type, "Deleted")
-    embed.set_footer(text=f"{label} {discord.utils.format_dt(snipe.get('timestamp', 0), style='R')} \u2219 {index}/{total} \u2219 Module: utility")
+    ts = snipe.get("timestamp", 0)
+    if isinstance(ts, (int, float)):
+        ts = datetime.datetime.fromtimestamp(ts)
+    embed.set_footer(text=f"{label} {discord.utils.format_dt(ts, style='R')} \u2219 {index}/{total} \u2219 Module: utility")
 
     return embed
 

@@ -141,9 +141,12 @@ class GoodbyeCommands(Package):
                 ch = member.guild.get_channel(row["channel_id"])
                 if not ch:
                     continue
-                builder = await self.create_embed(
-                    row.message, member=member, user=member
-                )
+                try:
+                    builder = await self.create_embed(
+                        row.message, member=member, user=member
+                    )
+                except Exception:
+                    continue
                 if row.self_destruct:
                     builder.data["delete_after"] = row.self_destruct
                 try:

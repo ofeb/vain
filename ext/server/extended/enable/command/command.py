@@ -48,6 +48,34 @@ class CommandEnableCommands(Package):
             f"**enabled** `{command.qualified_name}` for {target.mention}"
         )
 
+    @enablecommand.command(
+        name="list",
+        aliases=["ls", "show", "view"],
+        description="View a list of enabled commands in guild",
+    )
+    @has_permissions(manage_channels=True)
+    async def enablecommand_list(self, ctx):
+        """list enabled commands"""
+        data = await self.db.fetch(
+            """SELECT command FROM disabled_commands WHERE guild_id = $1""",
+            ctx.guild.id,
+        )
+        disabled = {row.command for row in data}
+        all_commands = sorted(
+            cmd.qualified_name
+            for cmd in self.bot.commands
+            if cmd.qualified_name != "help" and cmd.qualified_name not in disabled
+        )
+        if not all_commands:
+            return await ctx.fail("no commands are enabled")
+        numbered = [f"`{i}` `{cmd}`" for i, cmd in enumerate(all_commands, start=1)]
+        return await ctx.paginate(
+            Embed(color=self.bot.color, title="Enabled Commands").set_author(
+                name=str(ctx.author), icon_url=ctx.author.display_avatar.url
+            ),
+            numbered,
+        )
+
     @enablecommand.command(name="all", description="Enable a command in every channel")
     @has_permissions(manage_channels=True)
     async def enablecommand_all(self, ctx, *, command: CommandConverter):

@@ -538,9 +538,6 @@ class Bleed(commands.AutoShardedBot):
     async def on_command_error(self, ctx: Context, err: Exception) -> None:
         err = self._unwrap(err)
         if isinstance(err, commands.CommandNotFound):
-            cmd_name = ctx.message.content.split()[0].lstrip(ctx.prefix) if ctx.message.content else ""
-            if cmd_name:
-                await ctx.warn(f"Command `{cmd_name}` does **not** exist")
             return
         if isinstance(err, commands.MissingRequiredArgument):
             with contextlib.suppress(discord.HTTPException):

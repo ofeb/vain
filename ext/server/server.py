@@ -3,7 +3,9 @@ from __future__ import annotations
 import discord
 from discord.ext.commands import command, group
 
+import discord
 from core.discord.package import Package
+from core.discord.views.paginate import PaginateView
 from core.tools.embed import BadEmbed, ParseError, PreparedScript, parse
 
 
@@ -12,7 +14,8 @@ class ServerCommands(Package):
 
     @staticmethod
     def _normalize_embed_script(script: str) -> str:
-        value = str(script).strip()
+        from core.tools.embed import maybe_wrap_embed_script
+        value = maybe_wrap_embed_script(str(script).strip())
         lowered = value.lower()
         if lowered.startswith("{embed}") or lowered.startswith("embed$v"):
             return value
@@ -32,7 +35,9 @@ class ServerCommands(Package):
             try:
                 payload = await parse(normalized, sendable=True)
             except (ParseError, BadEmbed) as error:
-                return await ctx.warn(str(error))
+                return await ctx.warn(
+                    f"{error}\n`{script}`"
+                )
 
         if not payload or (
             payload.get("content") in {None, ""}
@@ -156,7 +161,7 @@ class ServerCommands(Package):
 
             cat = categories[category]
             lines = [f"`{var}` — {desc}" for var, desc in cat["variables"].items()]
-            embed = Embed(
+            embed = discord.Embed(
                 title=f"{cat['description']}",
                 description="\n".join(lines),
                 color=self.color,
@@ -167,7 +172,7 @@ class ServerCommands(Package):
         pages = []
         for cat in categories.values():
             lines = [f"`{var}` — {desc}" for var, desc in cat["variables"].items()]
-            page = Embed(
+            page = discord.Embed(
                 title=cat["description"],
                 description="\n".join(lines),
                 color=self.color,
@@ -186,7 +191,7 @@ class ServerCommands(Package):
     async def serverinfo(self, ctx):
         """show server info"""
         g = ctx.guild
-        e = Embed(title=g.name, color=self.color)
+        e = discord.Embed(title=g.name, color=self.color)
         e.set_thumbnail(url=g.icon.url if g.icon else None)
         e.add_field(name="Owner", value=str(g.owner), inline=True)
         e.add_field(name="Members", value=str(g.member_count), inline=True)
@@ -209,7 +214,7 @@ class ServerCommands(Package):
         if not lines:
             from discord.ext.commands import CommandError
             raise CommandError("no roles in this server")
-        e = Embed(
+        e = discord.Embed(
             title=f"Roles ({len(lines)})",
             description=" ".join(lines),
             color=self.color,
@@ -223,7 +228,7 @@ class ServerCommands(Package):
     async def bots(self, ctx):
         """list all bots"""
         bots = [m for m in ctx.guild.members if m.bot]
-        e = Embed(
+        e = discord.Embed(
             title=f"Bots ({len(bots)})",
             description=" ".join(b.mention for b in bots) or "none",
             color=self.color,
@@ -240,7 +245,7 @@ class ServerCommands(Package):
         if not ctx.guild.icon:
             from discord.ext.commands import CommandError
             raise CommandError("this server has no icon")
-        e = Embed(color=self.color)
+        e = discord.Embed(color=self.color)
         e.set_image(url=ctx.guild.icon.url)
         e.set_author(name=ctx.guild.name)
         await ctx.send(embed=e)
@@ -255,7 +260,7 @@ class ServerCommands(Package):
         if not ctx.guild.banner:
             from discord.ext.commands import CommandError
             raise CommandError("this server has no banner")
-        e = Embed(color=self.color)
+        e = discord.Embed(color=self.color)
         e.set_image(url=ctx.guild.banner.url)
         e.set_author(name=ctx.guild.name)
         await ctx.send(embed=e)

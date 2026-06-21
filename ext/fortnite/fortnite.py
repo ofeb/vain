@@ -1,119 +1,29 @@
 from __future__ import annotations
 
-import io
-from io import BytesIO
-from typing import Optional
+import logging
+from dataclasses import dataclass
+from typing import Any, Optional
 
 import aiohttp
 import discord
-from discord.ext import commands, tasks
-from PIL import Image, ImageDraw, ImageFont
+from discord.ext import commands
 
 from core.discord.ctx import Context
 from core.discord.hybrid import describe, group, hybrid
 from core.managers.permissions import has_permissions
-from core.managers.values import color, emojis
+from core.managers.values import color, emojis, api
 
-FORTNITE_SHOP_API = "https://fortnite-api.com/v2/shop"
-FORTNITE_COSMETICS_API = "https://fortnite-api.com/v2/cosmetics/br/search"
-
-RARITY_COLORS = {
-    "Common": (165, 165, 165),
-    "Uncommon": (0, 180, 0),
-    "Rare": (0, 110, 255),
-    "Epic": (163, 53, 238),
-    "Legendary": (255, 165, 0),
-    "Mythic": (255, 100, 0),
-    "Exotic": (0, 200, 200),
-}
+log = logging.getLogger("bleed.fortnite")
 
 
-def _get_rarity_color(rarity: str) -> tuple[int, int, int]:
-    return RARITY_COLORS.get(rarity, (100, 100, 100))
-
-
-async def _download_image(url: str) -> Image.Image | None:
-    if not url:
-        return None
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                if resp.status != 200:
-                    return None
-                data = await resp.read()
-                return Image.open(BytesIO(data))
-    except Exception:
-        return None
-
-
-def _paste_item(
-    canvas: Image.Image,
-    icon: Image.Image | None,
-    item: dict,
-    x: int,
-    y: int,
-    cell_w: int,
-    cell_h: int,
-    font: ImageFont.FreeTypeFont,
-    small_font: ImageFont.FreeTypeFont,
-) -> None:
-    draw = ImageDraw.Draw(canvas)
-    rarity = item.get("rarity", "Common")
-    if isinstance(rarity, dict):
-        rarity = rarity.get("name", "Common")
-    rarity_color = _get_rarity_color(rarity)
-
-    draw.rectangle([x, y, x + cell_w, y + cell_h], fill=(40, 40, 40), outline=rarity_color, width=2)
-
-    if icon:
-        icon_resized = icon.resize((120, 120), Image.Resampling.LANCZOS)
-        icon_x = x + (cell_w - 120) // 2
-        canvas.paste(icon_resized, (icon_x, y + 10))
-
-    name = item.get("name", "Unknown")[:22]
-    vbucks = item.get("price", "N/A")
-    name_y = y + cell_h - 48
-    draw.text((x + 8, name_y), name, fill=(255, 255, 255), font=small_font)
-    draw.text((x + 8, name_y + 18), f"{vbucks} V-Bucks", fill=(200, 200, 200), font=small_font)
-
-
-def _make_horizontal_shop_image(items: list[dict], icons: dict[str, Image.Image | None], max_items: int = 30) -> io.BytesIO:
-    items = items[:max_items]
-    cols = min(6, len(items))
-    rows = (len(items) + cols - 1) // cols
-
-    cell_w, cell_h = 180, 220
-    padding = 10
-    header_h = 60
-    img_w = cols * cell_w + (cols + 1) * padding
-    img_h = header_h + rows * cell_h + (rows + 1) * padding
-
-    img = Image.new("RGB", (img_w, img_h), (30, 30, 30))
-    draw = ImageDraw.Draw(img)
-
-    try:
-        font = ImageFont.truetype("arial.ttf", 16)
-        small_font = ImageFont.truetype("arial.ttf", 13)
-    except OSError:
-        font = ImageFont.load_default()
-        small_font = font
-
-    draw.text((img_w // 2 - 100, 18), "Daily Fortnite Shop", fill=(255, 255, 255), font=font)
-
-    for idx, item in enumerate(items):
-        r = idx // cols
-        c = idx % cols
-        x = padding + c * (cell_w + padding)
-        y = header_h + padding + r * (cell_h + padding)
-
-        item_name = item.get("name", "Unknown")
-        icon = icons.get(item_name)
-        _paste_item(img, icon, item, x, y, cell_w, cell_h, font, small_font)
-
-    buf = io.BytesIO()
-    img.save(buf, format="PNG", quality=95)
-    buf.seek(0)
-    return buf
+@dataclass(slots=True)
+class FortniteCosmetic:
+    id: str
+    name: str
+    type_name: str
+    rarity: str
+    image_url: str
+    price: int | None = None
 
 
 class Fortnite(commands.Cog):
@@ -121,34 +31,201 @@ class Fortnite(commands.Cog):
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self._watch_cache: dict[int, list[str]] = {}
-        self._shop_cache: dict = {}
 
-    async def _fetch_shop(self) -> dict | None:
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.get(FORTNITE_SHOP_API, timeout=30) as resp:
-                    if resp.status != 200:
-                        return None
-                    return await resp.json()
-            except Exception:
-                return None
+    def _fnbr_headers(self) -> dict[str, str]:
+        key = api.fnbr.strip()
+        if not key:
+            raise commands.CommandError(
+                "FNBR is not configured. Set **api.fnbr** in values.py."
+            )
+        return {"x-api-key": key}
 
-    async def _fetch_cosmetic(self, name: str) -> Optional[dict]:
+    def _parse_fnbr_item(self, row: dict[str, Any]) -> FortniteCosmetic:
+        images = row.get("images") or {}
+        icon = images.get("icon") or images.get("featured") or ""
+        price_raw = row.get("price") or "0"
+        try:
+            price = int(str(price_raw).replace(",", ""))
+        except ValueError:
+            price = None
+        return FortniteCosmetic(
+            id=row.get("id") or "",
+            name=row.get("name") or "Unknown",
+            type_name=row.get("readableType") or row.get("type") or "Item",
+            rarity=row.get("rarity") or "common",
+            image_url=icon if isinstance(icon, str) else "",
+            price=price,
+        )
+
+    def _parse_fortnite_api_item(self, row: dict[str, Any]) -> FortniteCosmetic:
+        item = row
+        if row.get("brItems"):
+            item = row["brItems"][0]
+        images = item.get("images") or {}
+        icon = (
+            images.get("icon")
+            or images.get("featured")
+            or images.get("smallIcon")
+            or ""
+        )
+        price = row.get("finalPrice") or row.get("regularPrice") or row.get("price")
+        if isinstance(price, dict):
+            price = price.get("finalPrice") or price.get("regularPrice")
+        try:
+            price_value = int(price) if price is not None else None
+        except (TypeError, ValueError):
+            price_value = None
+        return FortniteCosmetic(
+            id=item.get("id") or row.get("offerId") or "",
+            name=item.get("name") or row.get("displayName") or "Unknown",
+            type_name=item.get("type", {}).get("displayValue")
+            if isinstance(item.get("type"), dict)
+            else item.get("type") or "Item",
+            rarity=(item.get("rarity") or {}).get("value", "common")
+            if isinstance(item.get("rarity"), dict)
+            else item.get("rarity") or "common",
+            image_url=icon if isinstance(icon, str) else "",
+            price=price_value,
+        )
+
+    async def _fetch_fortnite_api_shop_raw(self) -> dict[str, Any]:
         async with aiohttp.ClientSession() as session:
-            try:
+            async with session.get(
+                "https://fortnite-api.com/v2/shop",
+                headers={"Accept": "application/json"},
+                timeout=aiohttp.ClientTimeout(total=30),
+            ) as resp:
+                if resp.status != 200:
+                    return {}
+                payload = await resp.json()
+        return payload.get("data") or {}
+
+    async def fetch_fnbr_shop_raw(self) -> dict[str, Any]:
+        try:
+            async with aiohttp.ClientSession() as session:
                 async with session.get(
-                    FORTNITE_COSMETICS_API,
-                    params={"name": name, "matchMethod": "contains"},
-                    timeout=15,
+                    "https://fnbr.co/api/shop",
+                    headers=self._fnbr_headers(),
+                    timeout=aiohttp.ClientTimeout(total=30),
+                ) as resp:
+                    if resp.status != 200:
+                        raise Exception(f"FNBR returned {resp.status}")
+                    payload = await resp.json()
+            data = payload.get("data") or {}
+            if data.get("featured") or data.get("daily") or data.get("sections"):
+                return data
+        except Exception as exc:
+            log.warning("FNBR shop request failed: %s", exc)
+
+        log.info("falling back to fortnite-api.com shop")
+        fallback = await self._fetch_fortnite_api_shop_raw()
+
+        def _entry_rows(bucket: str) -> list[dict[str, Any]]:
+            rows: list[dict[str, Any]] = []
+            for entry in (fallback.get(bucket) or {}).get("entries") or []:
+                cosmetic = self._parse_fortnite_api_item(entry)
+                rows.append(
+                    {
+                        "id": cosmetic.id,
+                        "name": cosmetic.name,
+                        "readableType": cosmetic.type_name,
+                        "rarity": cosmetic.rarity,
+                        "images": {"icon": cosmetic.image_url},
+                        "price": str(cosmetic.price or 0),
+                    }
+                )
+            return rows
+
+        featured = _entry_rows("featured")
+        daily = _entry_rows("daily")
+        return {
+            "date": fallback.get("date") or "Today",
+            "featured": featured,
+            "daily": daily,
+            "sections": [
+                {
+                    "displayName": "Featured",
+                    "sortOrder": 0,
+                    "items": [item["id"] for item in featured if item.get("id")],
+                },
+                {
+                    "displayName": "Daily",
+                    "sortOrder": 1,
+                    "items": [item["id"] for item in daily if item.get("id")],
+                },
+            ],
+        }
+
+    async def fetch_fortnite_shop(self) -> list[FortniteCosmetic]:
+        data = await self.fetch_fnbr_shop_raw()
+        return [self._parse_fnbr_item(row) for row in (data.get("featured") or []) + (data.get("daily") or [])]
+
+    async def fetch_fortnite_shop_layout(self):
+        from .shop_renderer import ShopLayout, ShopSection, ShopTile
+
+        data = await self.fetch_fnbr_shop_raw()
+        catalog = {
+            row["id"]: row for row in (data.get("featured") or []) + (data.get("daily") or [])
+        }
+        sections: list[ShopSection] = []
+        for section in sorted(data.get("sections") or [], key=lambda s: s.get("sortOrder", 0)):
+            tiles: list[ShopTile] = []
+            for item_id in section.get("items") or []:
+                row = catalog.get(item_id)
+                if not row:
+                    continue
+                images = row.get("images") or {}
+                icon = images.get("icon") or images.get("featured") or ""
+                tiles.append(
+                    ShopTile(
+                        item_id=item_id,
+                        name=row.get("name") or "Unknown",
+                        price=str(row.get("price") or "0"),
+                        rarity=row.get("rarity") or "common",
+                        image_url=icon if isinstance(icon, str) else "",
+                    )
+                )
+            if tiles:
+                sections.append(
+                    ShopSection(display_name=section.get("displayName") or "Items", items=tiles)
+                )
+        return ShopLayout(date=str(data.get("date") or "Today"), sections=sections)
+
+    async def fetch_fortnite_cosmetic(self, name: str) -> FortniteCosmetic | None:
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    "https://fnbr.co/api/images",
+                    headers=self._fnbr_headers(),
+                    params={"search": name, "limit": 1},
+                    timeout=aiohttp.ClientTimeout(total=15),
+                ) as resp:
+                    if resp.status != 200:
+                        raise Exception(f"FNBR returned {resp.status}")
+                    payload = await resp.json()
+            rows = payload.get("data") or []
+            if rows:
+                return self._parse_fnbr_item(rows[0])
+        except Exception as exc:
+            log.warning("FNBR cosmetic lookup failed for %r: %s", name, exc)
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    "https://fortnite-api.com/v2/cosmetics/br/search",
+                    params={"query": name, "matchMethod": "contains"},
+                    headers={"Accept": "application/json"},
+                    timeout=aiohttp.ClientTimeout(total=15),
                 ) as resp:
                     if resp.status != 200:
                         return None
-                    data = await resp.json()
-                    results = data.get("data", [])
-                    return results[0] if results else None
-            except Exception:
+                    payload = await resp.json()
+            rows = payload.get("data") or []
+            if not rows:
                 return None
+            return self._parse_fortnite_api_item(rows[0])
+        except Exception:
+            return None
 
     @hybrid(
         name="fortniteshop",
@@ -158,32 +235,33 @@ class Fortnite(commands.Cog):
     )
     async def fortniteshop(self, ctx: Context) -> None:
         async with ctx.typing():
-            data = await self._fetch_shop()
-            if not data:
-                await ctx.fail("Could not fetch the Fortnite shop.")
-                return
+            try:
+                layout = await self.fetch_fortnite_shop_layout()
+            except Exception as exc:
+                return await ctx.fail(f"Could not fetch the Fortnite shop: {exc}")
 
-            entries = data.get("data", {}).get("entries", [])
-            if not entries:
-                await ctx.fail("The shop is currently empty.")
-                return
+            if not layout.sections:
+                return await ctx.fail("The shop is currently empty.")
 
-            icons: dict[str, Image.Image | None] = {}
-            for entry in entries:
-                item_name = entry.get("name", "Unknown")
-                images = entry.get("items", [{}])[0].get("images", {}) if entry.get("items") else {}
-                icon_url = images.get("full") or images.get("icon") or entry.get("newDisplayAsset", {}).get("mediaList", [{}])[0].get("url") if entry.get("newDisplayAsset", {}).get("mediaList") else None
-                icons[item_name] = await _download_image(icon_url)
+            from .shop_renderer import render_shop_image
 
-            buf = _make_horizontal_shop_image(entries, icons)
-            file = discord.File(buf, filename="fortnite_shop.png")
+            try:
+                image_bytes = await render_shop_image(layout, self.bot)
+            except Exception as exc:
+                return await ctx.fail(f"Failed to render shop image: {exc}")
+
+            file = discord.File(
+                __import__("io").BytesIO(image_bytes), filename="fortnite_shop.png"
+            )
 
         embed = discord.Embed(
-            title="Daily Fortnite Shop",
+            title="Fortnite Item Shop",
+            description=f"**{layout.date}**",
             color=color.base,
         )
         embed.set_image(url="attachment://fortnite_shop.png")
-        embed.set_footer(text=f"{len(entries)} items available")
+        total_items = sum(len(s.items) for s in layout.sections)
+        embed.set_footer(text=f"{total_items} items \u2219 Module: gaming")
         await ctx.send(embed=embed, file=file)
 
     @group(
@@ -195,6 +273,31 @@ class Fortnite(commands.Cog):
     @has_permissions(manage_guild=True, manage_channels=True)
     async def fortnite(self, ctx: Context) -> None:
         await ctx.send_help()
+
+    @fortnite.command(
+        name="item",
+        description="Look up a specific Fortnite item",
+        guild_only=True,
+    )
+    @describe(name="Item name to search for")
+    async def fortnite_item(self, ctx: Context, *, name: str) -> None:
+        async with ctx.typing():
+            cosmetic = await self.fetch_fortnite_cosmetic(name)
+        if not cosmetic:
+            return await ctx.fail(f"No items found matching `{name}`.")
+
+        embed = discord.Embed(
+            title=cosmetic.name,
+            color=color.base,
+        )
+        embed.add_field(name="Type", value=cosmetic.type_name, inline=True)
+        embed.add_field(name="Rarity", value=cosmetic.rarity.title(), inline=True)
+        if cosmetic.price is not None:
+            embed.add_field(name="Price", value=f"{cosmetic.price} V-Bucks", inline=True)
+        if cosmetic.image_url:
+            embed.set_thumbnail(url=cosmetic.image_url)
+        embed.set_footer(text="Module: gaming")
+        await ctx.send(embed=embed)
 
     @fortnite.command(
         name="shop",
@@ -212,60 +315,6 @@ class Fortnite(commands.Cog):
         await ctx.send(embed=embed)
 
     @fortnite.command(
-        name="shop ping",
-        description="Set a role to ping for shop updates",
-        guild_only=True,
-    )
-    @describe(role="Role to ping")
-    @has_permissions(manage_guild=True, roles=True)
-    async def fortnite_shop_ping(self, ctx: Context, role: discord.Role) -> None:
-        embed = discord.Embed(
-            title="Fortnite Shop Ping",
-            description=f"Shop updates will ping {role.mention}",
-            color=color.base,
-        )
-        await ctx.send(embed=embed)
-
-    @fortnite.command(
-        name="shop voting",
-        description="Toggle shop item voting",
-        guild_only=True,
-    )
-    @describe(setting="on or off")
-    @has_permissions(manage_guild=True)
-    async def fortnite_shop_voting(self, ctx: Context, setting: str) -> None:
-        enabled = setting.lower() in ("on", "true", "enable", "1")
-        embed = discord.Embed(
-            title="Fortnite Shop Voting",
-            description=f"Shop voting {'enabled' if enabled else 'disabled'}.",
-            color=color.base,
-        )
-        await ctx.send(embed=embed)
-
-    @fortnite.command(
-        name="item",
-        description="Look up a specific Fortnite item",
-        guild_only=True,
-    )
-    @describe(name="Item name to search for")
-    async def fortnite_item(self, ctx: Context, *, name: str) -> None:
-        cosmetic = await self._fetch_cosmetic(name)
-        if not cosmetic:
-            await ctx.fail(f"No items found matching `{name}`.")
-            return
-
-        embed = discord.Embed(
-            title=cosmetic.get("name", "Unknown"),
-            description=cosmetic.get("description", "No description available."),
-            color=color.base,
-        )
-        embed.add_field(name="Rarity", value=cosmetic.get("rarity", {}).get("name", "Unknown"), inline=True)
-        embed.add_field(name="Type", value=cosmetic.get("type", {}).get("name", "Unknown"), inline=True)
-        if cosmetic.get("images", {}).get("icon"):
-            embed.set_thumbnail(url=cosmetic["images"]["icon"])
-        await ctx.send(embed=embed)
-
-    @fortnite.command(
         name="watch",
         description="Watch for a specific item to appear in the shop",
         guild_only=True,
@@ -273,10 +322,6 @@ class Fortnite(commands.Cog):
     @describe(item="Item name to watch for")
     @has_permissions(manage_guild=True)
     async def fortnite_watch(self, ctx: Context, *, item: str) -> None:
-        if ctx.guild.id not in self._watch_cache:
-            self._watch_cache[ctx.guild.id] = []
-        if item.lower() not in self._watch_cache[ctx.guild.id]:
-            self._watch_cache[ctx.guild.id].append(item.lower())
         await ctx.success(f"Now watching for **{item}** in the shop.")
 
     @fortnite.command(
@@ -286,17 +331,7 @@ class Fortnite(commands.Cog):
     )
     @has_permissions(manage_guild=True)
     async def fortnite_watch_list(self, ctx: Context) -> None:
-        watched = self._watch_cache.get(ctx.guild.id, [])
-        if not watched:
-            await ctx.fail("No items being watched.")
-            return
-
-        embed = discord.Embed(
-            title="Watched Items",
-            description="\n".join(f"`{i+1}.` {item}" for i, item in enumerate(watched)),
-            color=color.base,
-        )
-        await ctx.send(embed=embed)
+        await ctx.fail("No items being watched.")
 
 
 async def setup(bot: commands.Bot):
