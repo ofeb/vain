@@ -407,7 +407,7 @@ class Connect4Button(discord.ui.Button["Connect4View"]):
         super().__init__(
             style=discord.ButtonStyle.secondary,
             label=str(column + 1),
-            row=0,
+            row=0 if column < 5 else 1,
             custom_id=f"c4:{column}",
         )
         self.column = column

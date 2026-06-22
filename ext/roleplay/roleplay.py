@@ -9,7 +9,7 @@ from discord.ext import commands
 
 from core.discord.package import Package
 from core.discord.ctx import Context
-from core.discord.hybrid import hybrid, describe
+from core.discord.hybrid import hybrid, describe, command
 from core.tools.human.text import ordinal
 
 from .media import fetch_action_gif
@@ -111,7 +111,7 @@ class RoleplayCommands(Package):
     )
     async def roleplay(
         self,
-        ctx: Context,
+        ctx: commands.Context,
         action: str,
         member: Optional[discord.User] = None,
     ):
@@ -177,11 +177,7 @@ class RoleplayCommands(Package):
 
 
 def _make_prefix_action(name: str):
-    @hybrid(
-        name=name,
-        description=f"Roleplay: {name}",
-    )
-    @describe(member="Member to roleplay with")
+    @command(name=name)
     async def action(self, ctx: Context, member: Optional[discord.User] = None):
         return await self._perform_action(ctx, name, member)
 

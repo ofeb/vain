@@ -224,8 +224,11 @@ def _visible_subs(grp: Group) -> list[Command]:
         for c in g.commands:
             if c.hidden:
                 continue
-            if isinstance(c, Group) and c.commands:
-                _walk(c)
+            if isinstance(c, Group):
+                if c.invoke_without_command:
+                    out.append(c)
+                if c.commands:
+                    _walk(c)
             else:
                 out.append(c)
 

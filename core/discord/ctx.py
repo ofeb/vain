@@ -242,6 +242,19 @@ class Context(commands.Context):
             if isinstance(entity, str):
                 entity = self.bot.get_command(entity)
             if entity is not None:
+                owner = self.author.id in self.bot.owners
+                if isinstance(entity, commands.Group):
+                    family = help_handler._family_targets(
+                        self.bot,
+                        entity,
+                        owner=owner,
+                    )
+                    subs = [target for target in family if target is not entity]
+                    if subs:
+                        return await help_handler._send_group(
+                            entity,
+                            targets=family,
+                        )
                 return await help_handler.send_brief(self, entity)
             return await help_handler.invoke(self, None)
         return await super().send_help(*args)
