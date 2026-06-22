@@ -121,15 +121,18 @@ class Database:
     async def connect(self) -> Pool:
         """open pool, create db if missing"""
         user, pw, host, port, name = self._dsn_parts(self.uri)
+        log.info("connecting to postgres at %s:%s/%s", host, port, name)
         try:
             self.pool = await self._make_pool()
         except InvalidCatalogNameError:
+            log.warning("database %s missing, creating", name)
             await asyncio.to_thread(self._create_db, name, user, pw, host, port)
             self.pool = await self._make_pool()
         try:
             await self.execute("CREATE EXTENSION IF NOT EXISTS timescaledb;")
         except Exception as e:
             log.warning(f"timescaledb not available: {e}")
+        log.info("postgres pool ready")
         return self.pool
 
     async def close(self) -> None:

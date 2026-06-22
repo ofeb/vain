@@ -1,10 +1,24 @@
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from pathlib import Path
 
 RUNTIME_ROOT = Path(__file__).resolve().parent
+
+
+def configure_logging() -> None:
+    level_name = os.environ.get("BLEED_LOG_LEVEL", "INFO").upper()
+    level = getattr(logging, level_name, logging.INFO)
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s %(levelname)-8s %(name)s %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        force=True,
+    )
+    logging.getLogger("discord").setLevel(logging.INFO)
+    logging.getLogger("bleed").setLevel(level)
 
 
 def bootstrap() -> Path:
@@ -19,6 +33,10 @@ def bootstrap() -> Path:
 
 def main() -> None:
     bootstrap()
+    configure_logging()
+
+    log = logging.getLogger("bleed")
+    log.info("starting bleed-bot")
 
     from core.bleed import Bleed
     from core.managers.values import token
@@ -31,4 +49,5 @@ def main() -> None:
     import dcspoof
     dcspoof.mode("ios")
 
+    log.info("launching discord client")
     Bleed().run(token, reconnect=True)

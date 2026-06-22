@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 import random
 from typing import TYPE_CHECKING
 
@@ -11,6 +13,8 @@ from core.discord.hybrid import describe, hybrid
 from core.managers.values import color, music as nl, music_enabled
 
 from .events import MusicEvents
+
+log = logging.getLogger("bleed.music")
 
 if TYPE_CHECKING:
     from core.bleed import Bleed
@@ -49,17 +53,27 @@ class Music(MusicEvents, Package):
 
     async def cog_load(self) -> None:
         if not music_enabled or not HAS_LYRA:
+            log.info("music cog skipped (enabled=%s, lyra=%s)", music_enabled, HAS_LYRA)
             return
+        log.info("connecting to nodelink at %s:%s", nl.host, nl.port)
         try:
-            self._node = await lyra.NodePool.create_node(
-                bot=self.bot,
-                host=nl.host,
-                port=nl.port,
-                password=nl.password,
-                identifier=nl.identifier,
-                fallback=True,
+            self._node = await asyncio.wait_for(
+                lyra.NodePool.create_node(
+                    bot=self.bot,
+                    host=nl.host,
+                    port=nl.port,
+                    password=nl.password,
+                    identifier=nl.identifier,
+                    fallback=True,
+                ),
+                timeout=15,
             )
-        except Exception:
+            log.info("nodelink connected")
+        except asyncio.TimeoutError:
+            log.warning("nodelink connection timed out after 15s")
+            self._node = None
+        except Exception as e:
+            log.warning("nodelink connection failed: %s", e)
             self._node = None
 
     def _queue(self, guild_id: int) -> GuildQueue:

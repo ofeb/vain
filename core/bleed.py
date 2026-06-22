@@ -5,6 +5,7 @@ import asyncio
 import contextlib
 import datetime
 import logging
+import time
 from pathlib import Path
 from typing import Awaitable, Callable, Iterable, Optional
 
@@ -295,25 +296,45 @@ class Bleed(commands.AutoShardedBot):
 
     async def setup_hook(self) -> None:
         """connect db redis and load all extensions"""
+        started = time.perf_counter()
+        log.info("setup process started")
+
+        log.info("connecting database")
         await self.db.connect()
-        log.info("db connected")
-        
+        log.info("database connected (%.1fs)", time.perf_counter() - started)
+
+        log.info("running schema migration")
+        migration_started = time.perf_counter()
         await self._run_schema_migration()
+        log.info("schema migration finished (%.1fs)", time.perf_counter() - migration_started)
 
         if redis.enabled:
+            log.info("connecting redis")
             try:
                 self.redis = await BleedCache.from_url(redis.url)
                 log.info("redis connected")
             except Exception as e:
                 log.warning(f"redis failed: {e}")
+        else:
+            log.info("redis disabled")
 
         self.add_check(self._global_check)
         self.tree.on_error = self._slash_error
         self.tree.interaction_check = self._slash_check
 
+        log.info("loading jishaku")
         await self._load_jishaku()
+
+        log.info("loading extensions")
+        extensions_started = time.perf_counter()
         await self._load_extensions()
+        log.info("extensions finished (%.1fs)", time.perf_counter() - extensions_started)
+
+        log.info("syncing global slash commands")
+        sync_started = time.perf_counter()
         await self._sync_global_commands()
+        log.info("global slash sync finished (%.1fs)", time.perf_counter() - sync_started)
+        log.info("setup_hook complete (%.1fs total)", time.perf_counter() - started)
 
     async def _run_schema_migration(self) -> None:
         """Execute schema.sql to ensure all tables exist"""
@@ -324,6 +345,7 @@ class Bleed(commands.AutoShardedBot):
 
         try:
             schema = schema_path.read_text(encoding="utf-8")
+            log.info("applying schema.sql (%d bytes)", len(schema))
             async with self.db.pool.acquire() as conn:
                 await conn.execute(schema)
             log.info("schema migration completed successfully")
@@ -347,11 +369,14 @@ class Bleed(commands.AutoShardedBot):
         log.info(f"{ok}/{len(extensions)} extensions loaded")
 
     async def _try_load(self, ext: str) -> bool:
+        started = time.perf_counter()
         try:
+            log.info("loading %s", ext)
             await self.load_extension(ext)
+            log.info("loaded %s (%.1fs)", ext, time.perf_counter() - started)
             return True
         except Exception as e:
-            log.exception(f"failed to load {ext}: {e}")
+            log.exception(f"failed to load {ext} after {time.perf_counter() - started:.1f}s: {e}")
             return False
 
     async def _sync_global_commands(self) -> None:
