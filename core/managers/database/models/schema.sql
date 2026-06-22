@@ -1029,6 +1029,26 @@ CREATE INDEX IF NOT EXISTS idx_crypto_alerts_user ON crypto_alerts(user_id);
 CREATE INDEX IF NOT EXISTS idx_social_links_user ON social_links(user_id);
 CREATE INDEX IF NOT EXISTS idx_timers_time ON timers(time);
 
+CREATE TABLE IF NOT EXISTS log_event_colors (
+    guild_id BIGINT NOT NULL,
+    channel_id BIGINT NOT NULL,
+    event TEXT NOT NULL,
+    color VARCHAR(7) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, channel_id, event)
+);
+
+CREATE TABLE IF NOT EXISTS log_ignored (
+    guild_id BIGINT NOT NULL,
+    target_id BIGINT NOT NULL,
+    target_type TEXT NOT NULL DEFAULT 'channel',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, target_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_log_ignored_guild ON log_ignored(guild_id);
+CREATE INDEX IF NOT EXISTS idx_log_event_colors_guild ON log_event_colors(guild_id);
+
 CREATE INDEX IF NOT EXISTS idx_emoji_usage_guild ON emoji_usage(guild_id);
 CREATE INDEX IF NOT EXISTS idx_invocation_guild ON invocation(guild_id);
 CREATE INDEX IF NOT EXISTS idx_command_usage_guild_user ON command_usage(guild_id, user_id);
@@ -1066,6 +1086,93 @@ CREATE TABLE IF NOT EXISTS user_customize (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (user_id, guild_id)
 );
+
+CREATE TABLE IF NOT EXISTS saved_embeds (
+    guild_id BIGINT NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    script TEXT NOT NULL,
+    author_id BIGINT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS ticket_settings (
+    guild_id BIGINT PRIMARY KEY,
+    log_channel_id BIGINT,
+    transcript_channel_id BIGINT,
+    category_id BIGINT,
+    support_role_ids BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    greeting_message TEXT,
+    close_message TEXT,
+    creator_can_close BOOLEAN NOT NULL DEFAULT TRUE,
+    claim_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    max_open_per_user INT NOT NULL DEFAULT 1,
+    channel_name_format VARCHAR(100) NOT NULL DEFAULT 'ticket-{user}',
+    blacklist_user_ids BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    config JSONB NOT NULL DEFAULT '{}'::JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS ticket_panels (
+    id SERIAL PRIMARY KEY,
+    guild_id BIGINT NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    channel_id BIGINT NOT NULL,
+    message_id BIGINT,
+    panel_type VARCHAR(16) NOT NULL DEFAULT 'buttons',
+    embed_script TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (guild_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS ticket_forms (
+    id SERIAL PRIMARY KEY,
+    guild_id BIGINT NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    questions JSONB NOT NULL DEFAULT '[]'::JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (guild_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS ticket_options (
+    id SERIAL PRIMARY KEY,
+    guild_id BIGINT NOT NULL,
+    panel_id INT NOT NULL REFERENCES ticket_panels(id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL,
+    label VARCHAR(100) NOT NULL,
+    emoji VARCHAR(100),
+    description TEXT,
+    category_id BIGINT,
+    support_role_ids BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    form_id INT REFERENCES ticket_forms(id) ON DELETE SET NULL,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    position INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (panel_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS tickets (
+    id SERIAL PRIMARY KEY,
+    guild_id BIGINT NOT NULL,
+    channel_id BIGINT NOT NULL UNIQUE,
+    user_id BIGINT NOT NULL,
+    option_id INT REFERENCES ticket_options(id) ON DELETE SET NULL,
+    panel_id INT REFERENCES ticket_panels(id) ON DELETE SET NULL,
+    claimed_by BIGINT,
+    status VARCHAR(16) NOT NULL DEFAULT 'open',
+    form_answers JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    closed_at TIMESTAMP,
+    closed_by BIGINT
+);
+
+CREATE INDEX IF NOT EXISTS idx_saved_embeds_guild ON saved_embeds(guild_id);
+CREATE INDEX IF NOT EXISTS idx_ticket_panels_guild ON ticket_panels(guild_id);
+CREATE INDEX IF NOT EXISTS idx_ticket_options_panel ON ticket_options(panel_id);
+CREATE INDEX IF NOT EXISTS idx_ticket_forms_guild ON ticket_forms(guild_id);
+CREATE INDEX IF NOT EXISTS idx_tickets_guild_user ON tickets(guild_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_tickets_guild_status ON tickets(guild_id, status);
 
 CREATE SCHEMA IF NOT EXISTS roleplay;
 

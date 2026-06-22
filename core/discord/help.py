@@ -9,12 +9,15 @@ from typing import TYPE_CHECKING, Any, Iterable, get_args, get_origin
 import discord
 from discord import Embed, Interaction, SelectOption, ui
 from discord.ext import commands
+
+from core.discord.package import Package
 from discord.ext.commands import Command, Group
 
 from core.managers.values import color, emojis
 
 if TYPE_CHECKING:
     from .ctx import Context
+    from core.bleed import Bleed
 
 _BLANK = "‎"
 _HOME = "__home__"
@@ -78,7 +81,7 @@ _COG_MAP: dict[str, str] = {
     "BumpReminder":  "Server",
     "Reaction":      "Server",
     "Timers":        "Server",
-    "Logs":          "Server",
+    "Logs":          "Logs",
     "Counters":      "Server",
     "Webhook":       "Server",
     "Prefix":        "Server",
@@ -144,6 +147,7 @@ _CAT_EMOJIS: dict[str, str] = {
     "Crypto": "\U0001fa99",
     "Last.fm": "\U0001f3b6",
     "Owner": "\U0001f512",
+    "Logs": "\U0001f4dd",
 }
 
 _BLURBS: dict[str, str] = {
@@ -160,16 +164,17 @@ _BLURBS: dict[str, str] = {
     "Crypto": "Cryptocurrency prices, charts, and market data.",
     "Last.fm": "Scrobbles, charts, covers, whoknows, and now playing.",
     "Owner": "Developer-only commands used to maintain bleed.",
+    "Logs": "Set up logging for your community events.",
 }
 
 _ORDER: tuple[str, ...] = (
-    "Server", "Security", "Moderation",
+    "Server", "Security", "Moderation", "Logs",
     "Information", "Utility", "Fun", "Miscellaneous",
     "Music", "Social", "Rewards", "Crypto", "Last.fm", "Owner",
 )
 
 
-def _cog_key(cog: commands.Cog | None) -> str:
+def _cog_key(cog: Package | None) -> str:
     if cog is None:
         return "Other"
     name = cog.qualified_name
@@ -179,15 +184,15 @@ def _cog_key(cog: commands.Cog | None) -> str:
     return name
 
 
-def _category(cog: commands.Cog | None) -> str:
+def _category(cog: Package | None) -> str:
     return _COG_MAP.get(_cog_key(cog), _cog_key(cog))
 
 
-def is_owner_cog(cog: commands.Cog | None) -> bool:
+def is_owner_cog(cog: Package | None) -> bool:
     return cog is not None and (_cog_key(cog) in _OWNER_COGS or _category(cog) == "Owner")
 
 
-def _hidden(cog: commands.Cog | None, *, owner: bool) -> bool:
+def _hidden(cog: Package | None, *, owner: bool) -> bool:
     return is_owner_cog(cog) and not owner
 
 
@@ -732,7 +737,7 @@ class BleedHelp:
         self.ctx: Context = None
         self._seen: dict[int, float] = {}
 
-    def register(self, bot: commands.Bot) -> None:
+    def register(self, bot: Bleed) -> None:
         @bot.command(name="help", aliases=["h", "commands"], description="view command help")
         async def _help(ctx: Context, *, command: str | None = None) -> None:
             await self.invoke(ctx, command)
@@ -764,7 +769,7 @@ class BleedHelp:
         else:
             await self._send_cmd(cmd)
 
-    def _find(self, bot: commands.Bot, query: str) -> Command | None:
+    def _find(self, bot: Bleed, query: str) -> Command | None:
         direct = bot.get_command(query.strip())
         if direct is not None:
             return direct
@@ -801,7 +806,7 @@ class BleedHelp:
             e.set_author(name=self.ctx.bot.user.display_name, icon_url=self.ctx.bot.user.display_avatar.url)
         return e
 
-    def _build_cats(self, bot: commands.Bot, owner: bool) -> dict[str, list[Command]]:
+    def _build_cats(self, bot: Bleed, owner: bool) -> dict[str, list[Command]]:
         cats: dict[str, list[Command]] = {}
         for cog in bot.cogs.values():
             if _hidden(cog, owner=owner):
@@ -831,7 +836,7 @@ class BleedHelp:
             kw["allowed_mentions"] = discord.AllowedMentions.none()
         return await ctx.send(embed=embed, view=view, **kw)
 
-    async def _send_home(self, bot: commands.Bot, owner: bool) -> None:
+    async def _send_home(self, bot: Bleed, owner: bool) -> None:
         if self._dedup():
             return
         cats = self._build_cats(bot, owner)
@@ -847,7 +852,7 @@ class BleedHelp:
 
     def _family_targets(
         self,
-        bot: commands.Bot,
+        bot: Bleed,
         root: Command,
         *,
         owner: bool,
@@ -896,7 +901,7 @@ class BleedHelp:
         else:
             await self.ctx.paginate(embeds)
 
-    async def _send_cog(self, cog: commands.Cog) -> None:
+    async def _send_cog(self, cog: Package) -> None:
         cmds = [c for c in cog.get_commands() if not c.hidden]
         e = self._base_embed(title=f"**{_category(cog)} Commands**", description=_fmt_commands(cmds))
         await self._send(e)

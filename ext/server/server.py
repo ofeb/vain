@@ -4,6 +4,7 @@ import discord
 from discord.ext.commands import command, group
 
 import discord
+from core.discord.hybrid import hybrid
 from core.discord.package import Package
 from core.discord.views.paginate import PaginateView
 from core.tools.embed import BadEmbed, ParseError, PreparedScript, parse
@@ -183,10 +184,11 @@ class ServerCommands(Package):
         view = PaginateView(ctx, pages)
         view.message = await ctx.send(embed=pages[0], view=view)
 
-    @command(
+    @hybrid(
         name="serverinfo",
-        aliases=["si", "server", "guildinfo", "gi"],
         description="View information about the server",
+        aliases=["si", "server", "guildinfo", "gi"],
+        guild_only=True,
     )
     async def serverinfo(self, ctx):
         """show server info"""
@@ -194,11 +196,17 @@ class ServerCommands(Package):
         e = discord.Embed(title=g.name, color=self.color)
         e.set_thumbnail(url=g.icon.url if g.icon else None)
         e.add_field(name="Owner", value=str(g.owner), inline=True)
-        e.add_field(name="Members", value=str(g.member_count), inline=True)
+        e.add_field(name="Members", value=f"{g.member_count:,}", inline=True)
         e.add_field(name="Channels", value=str(len(g.channels)), inline=True)
+        e.add_field(name="Text Channels", value=str(len(g.text_channels)), inline=True)
+        e.add_field(name="Voice Channels", value=str(len(g.voice_channels)), inline=True)
         e.add_field(name="Roles", value=str(len(g.roles)), inline=True)
-        e.add_field(name="Boosts", value=str(g.premium_subscription_count), inline=True)
-        e.add_field(name="Created", value=f"<t:{int(g.created_at.timestamp())}:R>", inline=True)
+        e.add_field(name="Emojis", value=str(len(g.emojis)), inline=True)
+        e.add_field(name="Boosts", value=str(g.premium_subscription_count or 0), inline=True)
+        e.add_field(name="Boost Tier", value=str(g.premium_tier), inline=True)
+        e.add_field(name="Verification", value=str(g.verification_level).replace("_", " ").title(), inline=True)
+        e.add_field(name="Created", value=discord.utils.format_dt(g.created_at, style="R"), inline=True)
+        e.add_field(name="ID", value=str(g.id), inline=True)
         if g.banner:
             e.set_image(url=g.banner.url)
         await ctx.send(embed=e)

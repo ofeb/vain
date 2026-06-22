@@ -11,6 +11,7 @@ class CommandEnableCommands(Package):
 
     @group(
         name="enablecommand",
+        aliases=["ecmd"],
         description="Enable a previously disabled command in a channel",
         invoke_without_command=True,
         example=",enablecommand @jon ping",

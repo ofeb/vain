@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from discord.ext import commands
+from discord.ext import commands, tasks
 
 from .mixin import Mixin
 

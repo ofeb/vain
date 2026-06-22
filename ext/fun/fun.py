@@ -9,24 +9,25 @@ import aiohttp
 import discord
 from discord.ext import commands
 
+from core.discord.package import Package
+
 from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe, group
 from core.managers.values import color, emojis
 
+from .games import start_connect4, start_rps, start_ttt
+
 if TYPE_CHECKING:
-    pass
+    from core.bleed import Bleed
 
 
-class Fun(commands.Cog):
+class Fun(Package):
     """Fun commands and games."""
 
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
 
     @hybrid(
         name="8ball",
         description="Ask the magic 8-ball a question",
-        guild_only=True,
     )
     @describe(question="Your question for the magic 8-ball")
     async def eightball(self, ctx: Context, *, question: str) -> None:
@@ -64,7 +65,6 @@ class Fun(commands.Cog):
     @hybrid(
         name="roll",
         description="Roll a dice",
-        guild_only=True,
     )
     @describe(sides="Number of sides on the dice (default 6)", count="Number of dice to roll (default 1)")
     async def roll(self, ctx: Context, sides: int = 6, count: int = 1) -> None:
@@ -87,7 +87,6 @@ class Fun(commands.Cog):
     @hybrid(
         name="flip",
         description="Flip a coin",
-        guild_only=True,
     )
     async def flip(self, ctx: Context) -> None:
         """Flip a coin."""
@@ -102,7 +101,6 @@ class Fun(commands.Cog):
     @hybrid(
         name="choose",
         description="Choose from a list of options",
-        guild_only=True,
     )
     @describe(options="Options to choose from (separated by commas)")
     async def choose(self, ctx: Context, *, options: str) -> None:
@@ -122,7 +120,6 @@ class Fun(commands.Cog):
     @hybrid(
         name="rate",
         description="Rate something out of 10",
-        guild_only=True,
     )
     @describe(thing="Thing to rate")
     async def rate(self, ctx: Context, *, thing: str) -> None:
@@ -138,7 +135,6 @@ class Fun(commands.Cog):
     @hybrid(
         name="banner",
         description="Get a user's banner",
-        guild_only=True,
     )
     @describe(member="Member to get banner from (defaults to you)")
     async def banner(self, ctx: Context, member: discord.Member = None) -> None:
@@ -159,7 +155,6 @@ class Fun(commands.Cog):
     @hybrid(
         name="ship",
         description="Ship two people together",
-        guild_only=True,
     )
     @describe(member1="First member", member2="Second member (defaults to you)")
     async def ship(self, ctx: Context, member1: discord.Member, member2: discord.Member = None) -> None:
@@ -196,7 +191,6 @@ class Fun(commands.Cog):
     @hybrid(
         name="fact",
         description="Get a random fun fact",
-        guild_only=True,
     )
     async def fact(self, ctx: Context) -> None:
         """Get a random fun fact."""
@@ -222,7 +216,6 @@ class Fun(commands.Cog):
     @hybrid(
         name="joke",
         description="Get a random joke",
-        guild_only=True,
     )
     async def joke(self, ctx: Context) -> None:
         """Get a random joke."""
@@ -249,7 +242,6 @@ class Fun(commands.Cog):
         name="google",
         description="Search the largest search engine on the internet",
         aliases=["g"],
-        guild_only=True,
     )
     @describe(search="Search query")
     async def google(self, ctx: Context, *, search: str) -> None:
@@ -266,7 +258,6 @@ class Fun(commands.Cog):
         name="duckduckgo",
         description="Search the DuckDuckGo search engine",
         aliases=["ddg"],
-        guild_only=True,
     )
     @describe(search="Search query")
     async def duckduckgo(self, ctx: Context, *, search: str) -> None:
@@ -283,7 +274,6 @@ class Fun(commands.Cog):
         name="duckduckgoimage",
         description="Search DuckDuckGo for an image",
         aliases=["ddgim", "ddgimg"],
-        guild_only=True,
     )
     @describe(search="Search query")
     async def duckduckgoimage(self, ctx: Context, *, search: str) -> None:
@@ -300,7 +290,6 @@ class Fun(commands.Cog):
         name="reverseimage",
         description="Reverse image search on Google",
         aliases=["rimage", "rimg"],
-        guild_only=True,
     )
     @describe(url="Image URL to reverse search")
     async def reverseimage(self, ctx: Context, url: str = None) -> None:
@@ -322,7 +311,6 @@ class Fun(commands.Cog):
         name="image",
         description="Search Google for an image",
         aliases=["im", "img"],
-        guild_only=True,
     )
     @describe(search="Search query")
     async def image(self, ctx: Context, *, search: str) -> None:
@@ -338,7 +326,6 @@ class Fun(commands.Cog):
         name="giphy",
         description="Search Giphy for gif results",
         aliases=["gif"],
-        guild_only=True,
     )
     @describe(keyword="Search keyword")
     async def giphy(self, ctx: Context, *, keyword: str) -> None:
@@ -353,7 +340,6 @@ class Fun(commands.Cog):
     @hybrid(
         name="tenor",
         description="Search Tenor for gif results",
-        guild_only=True,
     )
     @describe(keyword="Search keyword")
     async def tenor(self, ctx: Context, *, keyword: str) -> None:
@@ -369,7 +355,6 @@ class Fun(commands.Cog):
         name="wikihow",
         description="How to...?",
         aliases=["whow"],
-        guild_only=True,
     )
     @describe(query="What you want to learn how to do")
     async def wikihow(self, ctx: Context, *, query: str) -> None:
@@ -384,7 +369,6 @@ class Fun(commands.Cog):
     @hybrid(
         name="brainly",
         description="Search Brainly for answers",
-        guild_only=True,
     )
     @describe(query="Question to search for")
     async def brainly(self, ctx: Context, *, query: str) -> None:
@@ -397,41 +381,71 @@ class Fun(commands.Cog):
         await ctx.send(embed=embed)
 
     @hybrid(
-        name="rps",
-        description="Play Rock-Paper-Scissors with me!",
-        aliases=["rockpaperscissors"],
-        guild_only=True,
+        name="lyrics",
+        description="Search for song lyrics",
     )
-    @describe(choice="rock, paper, or scissors")
-    async def rps(self, ctx: Context, *, choice: str) -> None:
-        choice = choice.lower().strip()
-        if choice not in ("rock", "paper", "scissors"):
-            return await ctx.fail("Choose `rock`, `paper`, or `scissors`.")
-
-        bot_choice = random.choice(["rock", "paper", "scissors"])
-        emojis_map = {"rock": "🪨", "paper": "📄", "scissors": "✂️"}
-
-        if choice == bot_choice:
-            result = "It's a tie!"
-        elif (choice == "rock" and bot_choice == "scissors") or \
-             (choice == "paper" and bot_choice == "rock") or \
-             (choice == "scissors" and bot_choice == "paper"):
-            result = "You win!"
-        else:
-            result = "I win!"
-
+    @describe(query="Artist and song title")
+    async def lyrics(self, ctx: Context, *, query: str) -> None:
+        artist, _, title = query.partition(" - ")
+        if not title.strip():
+            parts = query.rsplit(" ", 1)
+            if len(parts) == 2:
+                artist, title = parts[0], parts[1]
+            else:
+                artist, title = query, query
+        url = f"https://api.lyrics.ovh/v1/{urllib.parse.quote(artist.strip())}/{urllib.parse.quote(title.strip())}"
+        async with self.bot.session.get(url) as resp:
+            if resp.status != 200:
+                return await ctx.fail("Could not find lyrics for that track.")
+            data = await resp.json()
+        lyrics_text = data.get("lyrics")
+        if not lyrics_text:
+            return await ctx.fail("Could not find lyrics for that track.")
         embed = discord.Embed(
-            title="Rock Paper Scissors",
-            description=f"{emojis_map[choice]} **You:** {choice.title()}\n{emojis_map[bot_choice]} **Bot:** {bot_choice.title()}\n\n**{result}**",
+            title=f"{title.strip()} — {artist.strip()}",
+            description=lyrics_text[:4000],
             color=color.base,
         )
         await ctx.send(embed=embed)
 
     @hybrid(
+        name="rockpaperscissors",
+        description="Play rock paper scissors with another member",
+        aliases=["rps"],
+    )
+    @describe(member="Opponent to play against", rounds="Number of rounds (1-3)")
+    async def rockpaperscissors(
+        self,
+        ctx: Context,
+        member: discord.Member,
+        rounds: int = 1,
+    ) -> None:
+        if rounds < 1 or rounds > 3:
+            return await ctx.fail("Rounds must be between **1** and **3**.")
+        await start_rps(ctx, opponent=member, rounds=rounds)
+
+    @hybrid(
+        name="tictactoe",
+        description="Play tic-tac-toe against another member or the AI",
+        aliases=["ttt", "tic-tac-toe"],
+    )
+    @describe(member="Opponent (leave empty to play against AI)")
+    async def tictactoe(self, ctx: Context, member: discord.Member = None) -> None:
+        await start_ttt(ctx, opponent=member, vs_ai=member is None)
+
+    @hybrid(
+        name="connect4",
+        description="Play connect four with another member",
+        aliases=["4inarow", "connectfour", "c4"],
+    )
+    @describe(member="Opponent to play against")
+    async def connect4(self, ctx: Context, member: discord.Member) -> None:
+        await start_connect4(ctx, opponent=member)
+
+    @hybrid(
         name="wouldyourather",
         description="Would you rather?",
         aliases=["wyr"],
-        guild_only=True,
     )
     @describe(option1="First option", option2="Second option")
     async def wouldyourather(self, ctx: Context, option1: str, option2: str) -> None:
@@ -447,7 +461,6 @@ class Fun(commands.Cog):
     @hybrid(
         name="quote",
         description="Quote a message",
-        guild_only=True,
     )
     @describe(message_link="Message link to quote")
     async def quote(self, ctx: Context, message_link: str) -> None:
@@ -466,5 +479,5 @@ class Fun(commands.Cog):
         await ctx.send(embed=embed)
 
 
-async def setup(bot: commands.Bot):
+async def setup(bot: Bleed):
     await bot.add_cog(Fun(bot))

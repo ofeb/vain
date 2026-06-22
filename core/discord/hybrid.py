@@ -128,7 +128,7 @@ def group(name: str | None = None, **attrs: Any):
     return commands.command(name=name, **attrs)
 
 
-def _pop_hybrid_attrs(attrs: dict) -> tuple[str | None, dict, bool, bool | None, bool | None, bool | None, bool]:
+def _pop_hybrid_attrs(attrs: dict) -> tuple[str | None, dict, bool, bool | None, bool | None, bool | None, bool, bool]:
     example = attrs.pop("example", None)
     parameters = attrs.pop("parameters", {})
     guild_only = attrs.pop("guild_only", False)
@@ -136,24 +136,28 @@ def _pop_hybrid_attrs(attrs: dict) -> tuple[str | None, dict, bool, bool | None,
     dms = attrs.pop("dms", None)
     groupchats = attrs.pop("groupchats", None)
     slash = attrs.pop("slash", True)
+    is_group = attrs.pop("group", False)
     attrs.pop("dm_enabled", None)
     attrs.pop("cls", None)
     if not slash:
         attrs["with_app_command"] = False
-    return example, parameters, guild_only, servers, dms, groupchats, slash
+    return example, parameters, guild_only, servers, dms, groupchats, slash, is_group
 
 
 def hybrid(name: str | None = None, **attrs: Any):
     """hybrid command or group factory.
-    pass invoke_without_command to make it a group.
+    pass group=True for slash+prefix command groups.
     auto defers interactions and applies slash context flags"""
-    if "invoke_without_command" in attrs:
+    is_group = attrs.pop("group", False)
+    if is_group or "invoke_without_command" in attrs:
+        if "invoke_without_command" not in attrs:
+            attrs["invoke_without_command"] = True
         return _hybrid_group(name, **attrs)
     return _hybrid_command(name, **attrs)
 
 
 def _hybrid_command(name: str | None = None, **attrs: Any):
-    example, params, guild_only, servers, dms, groupchats, _ = _pop_hybrid_attrs(attrs)
+    example, params, guild_only, servers, dms, groupchats, _, _ = _pop_hybrid_attrs(attrs)
     guilds, _dms, _gcs = _resolve_contexts(guild_only=guild_only, servers=servers, dms=dms, groupchats=groupchats)
 
     def deco(fn: Callable[..., Any]) -> commands.HybridCommand:
@@ -167,7 +171,7 @@ def _hybrid_command(name: str | None = None, **attrs: Any):
 
 
 def _hybrid_group(name: str | None = None, **attrs: Any):
-    example, params, guild_only, servers, dms, groupchats, _ = _pop_hybrid_attrs(attrs)
+    example, params, guild_only, servers, dms, groupchats, _, _ = _pop_hybrid_attrs(attrs)
     guilds, _dms, _gcs = _resolve_contexts(guild_only=guild_only, servers=servers, dms=dms, groupchats=groupchats)
 
     def deco(fn: Callable[..., Any]) -> commands.HybridGroup:

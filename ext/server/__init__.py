@@ -4,6 +4,7 @@ from asyncio import Lock
 from collections import defaultdict
 
 from discord.ext import commands
+from typing import TYPE_CHECKING
 
 from core.discord.mixin import _Meta
 from core.discord.package import Package
@@ -38,7 +39,12 @@ from .extended.webhook.webhook import WebhookCommands
 from .extended.welcome.welcome import WelcomeCommands
 from .extended.steal.steal import Steal
 from .extended.embedcode.embedcode import Embedcode
+from .extended.embed.embed import EmbedCommands
 
+
+
+if TYPE_CHECKING:
+    from core.bleed import Bleed
 
 class Server(
     ServerCommands,
@@ -71,12 +77,13 @@ class Server(
     SuggestCommands,
     Steal,
     Embedcode,
-    commands.Cog,
+    EmbedCommands,
+    Package,
     metaclass=_Meta,
 ):
     """main server extension — all subcommands combined"""
 
-    def __init__(self, bot) -> None:
+    def __init__(self, bot: Bleed) -> None:
         Package.__init__(self, bot)
         self.ar_locks = defaultdict(Lock)
         self.leave_locks = defaultdict(Lock)
@@ -85,45 +92,45 @@ class Server(
         self.sticky_locks = defaultdict(Lock)
         self.pinned_ids = {}
 
-    @commands.Cog.listener("on_member_join")
+    @Package.listener("on_member_join")
     async def _welcome_listener(self, member) -> None:
         await WelcomeCommands.on_member_agree(self, member)
 
-    @commands.Cog.listener("on_member_remove")
+    @Package.listener("on_member_remove")
     async def _goodbye_listener(self, member) -> None:
         await GoodbyeCommands.on_member_remove(self, member)
 
-    @commands.Cog.listener("on_context")
+    @Package.listener("on_context")
     async def _autoresponder_listener(self, ctx) -> None:
         await AutoresponderCommands.on_context(self, ctx)
 
-    @commands.Cog.listener("on_valid_message")
+    @Package.listener("on_valid_message")
     async def _sticky_listener(self, ctx) -> None:
         await StickymessageCommands.on_valid_message(self, ctx)
 
-    @commands.Cog.listener("on_raw_reaction_add")
+    @Package.listener("on_raw_reaction_add")
     async def _pagination_reaction_listener(self, payload) -> None:
         await PaginationCommands.on_raw_reaction_add(self, payload)
 
-    @commands.Cog.listener("on_paginator_update")
+    @Package.listener("on_paginator_update")
     async def _pagination_update_listener(self, message, row, page) -> None:
         await PaginationCommands.on_paginator_update(self, message, row, page)
 
-    @commands.Cog.listener("on_vanity_change")
+    @Package.listener("on_vanity_change")
     async def _tracker_vanity_listener(self, vanity) -> None:
         await SettingsCommands.on_vanity_change(self, vanity)
 
-    @commands.Cog.listener("on_username_change")
+    @Package.listener("on_username_change")
     async def _tracker_username_listener(self, username) -> None:
         await SettingsCommands.on_username_change(self, username)
 
-    @commands.Cog.listener("on_member_update")
+    @Package.listener("on_member_update")
     async def _boost_listener(self, before, after) -> None:
         if before.premium_since == after.premium_since or after.premium_since is None:
             return
         await BoostCommands.on_member_boost(self, after)
 
 
-async def setup(bot) -> None:
+async def setup(bot: Bleed) -> None:
     """load server extension"""
     await bot.add_cog(Server(bot))
