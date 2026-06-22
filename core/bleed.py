@@ -468,8 +468,8 @@ class Bleed(commands.AutoShardedBot):
         while opts:
             entry = opts[0]
             if entry.get("type") not in (
-                app_commands.AppCommandOptionType.subcommand.value,
-                app_commands.AppCommandOptionType.subcommand_group.value,
+                discord.AppCommandOptionType.subcommand.value,
+                discord.AppCommandOptionType.subcommand_group.value,
             ):
                 break
             parts.append(entry["name"])
