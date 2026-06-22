@@ -8,8 +8,6 @@ from discord.ext import tasks
 
 from core.discord.package import Package
 
-from .events import LevelEvents
-
 from core.discord.ctx import Context
 from core.discord.hybrid import describe, group, hybrid
 from core.managers.permissions import has_permissions
@@ -34,6 +32,9 @@ def level_from_xp(xp: int) -> int:
         xp -= xp_for_level(level)
         level += 1
     return level
+
+
+from .events import LevelEvents
 
 
 class Level(LevelEvents, Package):

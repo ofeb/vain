@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import random
+
 import discord
 
 from core.discord.package import Package
+
+from .level import XP_COOLDOWN, XP_PER_MESSAGE, level_from_xp
 
 
 class LevelEvents:

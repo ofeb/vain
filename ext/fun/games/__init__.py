@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import random
 from typing import TYPE_CHECKING, Optional
 
@@ -12,8 +13,10 @@ if TYPE_CHECKING:
     from core.discord.ctx import Context
 
 INACTIVITY_SECONDS = 180
+START_TIMEOUT_SECONDS = 30
 RPS_EMOJI = {"rock": "🪨", "paper": "📄", "scissors": "✂️"}
 RPS_BEATS = {"rock": "scissors", "paper": "rock", "scissors": "paper"}
+ZWSP = "\u200b"
 
 
 def _rps_winner(a: str, b: str) -> int:
@@ -167,29 +170,32 @@ class RPSView(discord.ui.View):
 
 class TicTacToeButton(discord.ui.Button["TicTacToeView"]):
     def __init__(self, x: int, y: int) -> None:
-        super().__init__(style=discord.ButtonStyle.secondary, label="\u200b", row=y, custom_id=f"ttt:{x}:{y}")
+        super().__init__(style=discord.ButtonStyle.secondary, label=ZWSP, row=y, custom_id=f"ttt:{x}:{y}")
         self.x = x
         self.y = y
 
     def refresh(self, board: list[list[str]]) -> None:
         cell = board[self.y][self.x]
         if cell == "X":
-            self.label = "❌"
+            self.label = "X"
+            self.style = discord.ButtonStyle.danger
             self.disabled = True
         elif cell == "O":
-            self.label = "⭕"
+            self.label = "O"
+            self.style = discord.ButtonStyle.success
             self.disabled = True
         else:
-            self.label = "\u200b"
+            self.label = ZWSP
+            self.style = discord.ButtonStyle.secondary
             self.disabled = False
 
-    async def callback(self) -> None:
+    async def callback(self, interaction: discord.Interaction) -> None:
         view = self.view
         if view is None or not isinstance(view, TicTacToeView):
             return
-        if not await view.interaction_check(self.interaction):
+        if not await view.interaction_check(interaction):
             return
-        await view.handle_click(self.interaction, self.x, self.y)
+        await view.handle_click(interaction, self.x, self.y)
 
 
 class TicTacToeView(discord.ui.View):
@@ -212,19 +218,42 @@ class TicTacToeView(discord.ui.View):
         self.turn = "X"
         self.message: discord.Message | None = None
         self.finished = False
+        self._started = False
+        self._start_timer: asyncio.Task | None = asyncio.create_task(self._start_timeout())
         for y in range(3):
             for x in range(3):
                 self.add_item(TicTacToeButton(x, y))
 
-    def _opponent_label(self) -> str:
+    def _player_o_name(self) -> str:
         if self.vs_ai:
-            return "**AI**"
-        return self.player_o.mention if self.player_o else "opponent"
+            return "AI"
+        return self.player_o.display_name if self.player_o else "opponent"
+
+    def _header(self) -> str:
+        return f"**{self.player_x.display_name}** vs **{self._player_o_name()}**"
+
+    def _turn_emoji(self) -> str:
+        return "❌" if self.turn == "X" else "⭕"
 
     def _current_player(self) -> discord.User | None:
         if self.turn == "X":
             return self.player_x
         return None if self.vs_ai else self.player_o
+
+    def _content(self, *, status: str = "", starting: bool = False) -> str:
+        lines = [self._header(), ""]
+        if status:
+            lines.append(status)
+        elif starting:
+            lines.append(f"⏰ You have **{START_TIMEOUT_SECONDS} seconds** to start!")
+            lines.append(f"❌ {self.player_x.mention}, make your first move.")
+        elif not self.finished:
+            current = self._current_player()
+            if current:
+                lines.append(f"{self._turn_emoji()} {current.mention}, your turn.")
+            elif self.vs_ai and self.turn == "O":
+                lines.append("⭕ **AI** is thinking...")
+        return "\n".join(lines)
 
     def _check_winner(self) -> str | None:
         lines = self.board + [
@@ -240,22 +269,33 @@ class TicTacToeView(discord.ui.View):
             return "tie"
         return None
 
-    def _embed(self, status: str = "") -> discord.Embed:
-        desc = f"**{self.player_x.mention}** (❌) vs {self._opponent_label()} (⭕)"
-        if status:
-            desc += f"\n\n{status}"
-        elif not self.finished:
-            current = self._current_player()
-            if current:
-                desc += f"\n\n{current.mention}, your turn"
-            elif self.vs_ai:
-                desc += "\n\n**AI** is thinking..."
-        return discord.Embed(title="Tic-Tac-Toe", description=desc, color=color.base)
-
     def _sync_buttons(self) -> None:
         for child in self.children:
             if isinstance(child, TicTacToeButton):
                 child.refresh(self.board)
+
+    def _cancel_start_timer(self) -> None:
+        if self._start_timer and not self._start_timer.done():
+            self._start_timer.cancel()
+        self._start_timer = None
+
+    async def _start_timeout(self) -> None:
+        try:
+            await asyncio.sleep(START_TIMEOUT_SECONDS)
+        except asyncio.CancelledError:
+            return
+        if self._started or self.finished:
+            return
+        self.finished = True
+        self.stop()
+        for child in self.children:
+            child.disabled = True
+        p2 = self.player_o.mention if self.player_o and not self.vs_ai else "**AI**"
+        await _inactive_warning(
+            self.ctx,
+            f"Stopped the tic-tac-toe game between {self.player_x.mention} and {p2} — no move in {START_TIMEOUT_SECONDS} seconds.",
+            self.message,
+        )
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if self.finished:
@@ -276,6 +316,11 @@ class TicTacToeView(discord.ui.View):
         if self.board[y][x]:
             await interaction.response.send_message("That cell is taken.", ephemeral=True)
             return
+
+        if not self._started:
+            self._started = True
+            self._cancel_start_timer()
+
         self.board[y][x] = self.turn
         winner = self._check_winner()
         if winner:
@@ -285,18 +330,21 @@ class TicTacToeView(discord.ui.View):
             elif winner == "X":
                 status = f"**{self.player_x.mention}** wins!"
             else:
-                status = f"**{self._opponent_label()}** wins!"
+                if self.vs_ai:
+                    status = "**AI** wins!"
+                else:
+                    status = f"**{self.player_o.mention}** wins!"
             self._sync_buttons()
             for child in self.children:
                 child.disabled = True
-            await interaction.response.edit_message(embed=self._embed(status), view=self)
+            await interaction.response.edit_message(content=self._content(status=status), view=self)
             return
 
         self.turn = "O" if self.turn == "X" else "X"
         self._sync_buttons()
 
         if self.vs_ai and self.turn == "O":
-            await interaction.response.defer()
+            await interaction.response.edit_message(content=self._content(), view=self)
             await self._ai_move()
             winner = self._check_winner()
             if winner:
@@ -310,15 +358,15 @@ class TicTacToeView(discord.ui.View):
                 for child in self.children:
                     child.disabled = True
                 if self.message:
-                    await self.message.edit(embed=self._embed(status), view=self)
+                    await self.message.edit(content=self._content(status=status), view=self)
                 return
             self.turn = "X"
             self._sync_buttons()
             if self.message:
-                await self.message.edit(embed=self._embed(), view=self)
+                await self.message.edit(content=self._content(), view=self)
             return
 
-        await interaction.response.edit_message(embed=self._embed(), view=self)
+        await interaction.response.edit_message(content=self._content(), view=self)
 
     async def _ai_move(self) -> None:
         empty = [(x, y) for y in range(3) for x in range(3) if not self.board[y][x]]
@@ -331,18 +379,22 @@ class TicTacToeView(discord.ui.View):
                     self.board[y][x] = ""
                     if mark == "O":
                         self.board[y][x] = "O"
+                        self._sync_buttons()
                         return
                 self.board[y][x] = ""
         if (1, 1) in empty:
             self.board[1][1] = "O"
+            self._sync_buttons()
             return
         x, y = random.choice(empty)
         self.board[y][x] = "O"
+        self._sync_buttons()
 
     async def on_timeout(self) -> None:
+        self._cancel_start_timer()
         for child in self.children:
             child.disabled = True
-        p2 = self._opponent_label()
+        p2 = self.player_o.mention if self.player_o and not self.vs_ai else "**AI**"
         await _inactive_warning(
             self.ctx,
             f"Stopped the tic-tac-toe game between {self.player_x.mention} and {p2} due to inactivity.",
@@ -353,20 +405,20 @@ class TicTacToeView(discord.ui.View):
 class Connect4Button(discord.ui.Button["Connect4View"]):
     def __init__(self, column: int) -> None:
         super().__init__(
-            style=discord.ButtonStyle.primary,
+            style=discord.ButtonStyle.secondary,
             label=str(column + 1),
             row=0,
             custom_id=f"c4:{column}",
         )
         self.column = column
 
-    async def callback(self) -> None:
+    async def callback(self, interaction: discord.Interaction) -> None:
         view = self.view
         if view is None or not isinstance(view, Connect4View):
             return
-        if not await view.interaction_check(self.interaction):
+        if not await view.interaction_check(interaction):
             return
-        await view.play_column(self.interaction, self.column)
+        await view.play_column(interaction, self.column)
 
 
 class Connect4View(discord.ui.View):
@@ -410,16 +462,18 @@ class Connect4View(discord.ui.View):
     def _current_player(self) -> discord.User:
         return self.player1 if self.turn == 1 else self.player2
 
-    def _embed(self, status: str = "") -> discord.Embed:
-        desc = (
-            f"{self.player1.mention} 🔴 vs {self.player2.mention} 🟡\n\n"
-            f"{self._board_text()}"
-        )
+    def _content(self, *, status: str = "") -> str:
+        lines = [
+            f"**{self.player1.display_name}** vs **{self.player2.display_name}**",
+            "",
+            self._board_text(),
+        ]
         if status:
-            desc += f"\n\n{status}"
+            lines.extend(["", status])
         elif not self.finished:
-            desc += f"\n\n{self._current_player().mention}, your turn"
-        return discord.Embed(title="Connect Four", description=desc, color=color.base)
+            marker = "🔴" if self.turn == 1 else "🟡"
+            lines.extend(["", f"{marker} {self._current_player().mention}, your turn."])
+        return "\n".join(lines)
 
     def _drop(self, column: int, player: int) -> int | None:
         for row in range(self.ROWS - 1, -1, -1):
@@ -469,7 +523,7 @@ class Connect4View(discord.ui.View):
             for child in self.children:
                 child.disabled = True
             await interaction.response.edit_message(
-                embed=self._embed(f"**{player.mention}** wins!"),
+                content=self._content(status=f"**{player.mention}** wins!"),
                 view=self,
             )
             return
@@ -478,11 +532,14 @@ class Connect4View(discord.ui.View):
             self.finished = True
             for child in self.children:
                 child.disabled = True
-            await interaction.response.edit_message(embed=self._embed("It's a **tie**!"), view=self)
+            await interaction.response.edit_message(
+                content=self._content(status="It's a **tie**!"),
+                view=self,
+            )
             return
 
         self.turn = 2 if self.turn == 1 else 1
-        await interaction.response.edit_message(embed=self._embed(), view=self)
+        await interaction.response.edit_message(content=self._content(), view=self)
 
     async def on_timeout(self) -> None:
         for child in self.children:
@@ -526,7 +583,7 @@ async def start_ttt(
         vs_ai=vs_ai,
         bot=ctx.bot,
     )
-    msg = await ctx.send(embed=view._embed(f"{ctx.author.mention}, your turn"), view=view)
+    msg = await ctx.send(content=view._content(starting=True), view=view)
     view.message = msg
 
 
@@ -537,5 +594,5 @@ async def start_connect4(ctx: "Context", *, opponent: discord.Member) -> None:
         return await ctx.fail("You can't play against yourself.")
 
     view = Connect4View(ctx=ctx, player1=ctx.author, player2=opponent, bot=ctx.bot)
-    msg = await ctx.send(embed=view._embed(f"{ctx.author.mention}, your turn"), view=view)
+    msg = await ctx.send(content=view._content(), view=view)
     view.message = msg
