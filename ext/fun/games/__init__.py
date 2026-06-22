@@ -671,7 +671,7 @@ async def start_rps(
         opponent = ctx.bot.user
         vs_ai = True
     elif ctx.guild is None:
-        return await ctx.fail("Mention an opponent or play against the bot.")
+        return await ctx.warn("Mention an opponent or play against the bot.")
     elif opponent.bot and opponent.id != ctx.bot.user.id:
         return await ctx.warn("You can't play against a bot.")
     if opponent.id == ctx.author.id:
@@ -692,7 +692,7 @@ async def start_ttt(
         vs_ai = True
         opponent = None
     elif ctx.guild is None:
-        return await ctx.fail("Mention an opponent or play against the bot.")
+        return await ctx.warn("Mention an opponent or play against the bot.")
     elif opponent.bot:
         return await ctx.warn("You can't play against a bot.")
     elif opponent.id == ctx.author.id:
@@ -719,7 +719,7 @@ async def start_connect4(
         vs_ai = True
         opponent = ctx.bot.user
     elif ctx.guild is None:
-        return await ctx.fail("Mention an opponent or play against the bot.")
+        return await ctx.warn("Mention an opponent or play against the bot.")
     elif opponent.bot and opponent.id != ctx.bot.user.id:
         return await ctx.warn("You can't play against a bot.")
     elif opponent.id == ctx.author.id:

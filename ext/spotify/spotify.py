@@ -45,7 +45,7 @@ class Spotify(Package):
     async def _require_linked(self, ctx: Context) -> bool:
         if await self.api.is_linked(ctx.author.id):
             return True
-        await ctx.fail("Connect Spotify first with `spotify login`.")
+        await ctx.warn("Connect Spotify first with `spotify login`.")
         return False
 
     async def _user_action(self, ctx: Context, method: str, endpoint: str, **kwargs) -> bool:
@@ -77,7 +77,7 @@ class Spotify(Package):
     async def _search_tracks(self, ctx: Context, query: str) -> None:
         result = await self.api.client_search(query)
         if not result or not result.get("tracks", {}).get("items"):
-            await ctx.fail(f"No results found for `{query}`.")
+            await ctx.warn(f"No results found for `{query}`.")
             return
         tracks = result["tracks"]["items"]
         entries = [_track_line(i, track) for i, track in enumerate(tracks[:5], 1)]
@@ -139,7 +139,7 @@ class Spotify(Package):
             result = await self.api.client_search(query, limit=1)
             items = (result or {}).get("tracks", {}).get("items", [])
             if not items:
-                return await ctx.fail(f"No track found for `{query}`.")
+                return await ctx.warn(f"No track found for `{query}`.")
             body["uris"] = [items[0]["uri"]]
             query = items[0]["name"]
         try:
@@ -161,7 +161,7 @@ class Spotify(Package):
                 result = await self.api.client_search(query, limit=1)
                 items = (result or {}).get("tracks", {}).get("items", [])
                 if not items:
-                    return await ctx.fail(f"No track found for `{query}`.")
+                    return await ctx.warn(f"No track found for `{query}`.")
                 uri = items[0]["uri"]
         try:
             await self.api.user_request(
@@ -207,7 +207,7 @@ class Spotify(Package):
             elif lowered in {"off", "false", "disable", "no"}:
                 state = False
             else:
-                return await ctx.fail("Use `on` or `off`.")
+                return await ctx.warn("Use `on` or `off`.")
         else:
             try:
                 playback = await self.api.user_request(ctx.author.id, "GET", "me/player")
@@ -242,7 +242,7 @@ class Spotify(Package):
         else:
             mode = mapping.get(mode.lower())
             if mode is None:
-                return await ctx.fail("Use `off`, `track`, or `context`.")
+                return await ctx.warn("Use `off`, `track`, or `context`.")
         try:
             await self.api.user_request(
                 ctx.author.id,
@@ -258,7 +258,7 @@ class Spotify(Package):
     @describe(seconds="Position in seconds")
     async def spotify_seek(self, ctx: Context, seconds: int) -> None:
         if seconds < 0:
-            return await ctx.fail("Seconds must be zero or greater.")
+            return await ctx.warn("Seconds must be zero or greater.")
         if not await self._require_linked(ctx):
             return
         try:
@@ -276,7 +276,7 @@ class Spotify(Package):
     @describe(percent="Volume from 0 to 100")
     async def spotify_volume(self, ctx: Context, percent: int) -> None:
         if percent < 0 or percent > 100:
-            return await ctx.fail("Volume must be between **0** and **100**.")
+            return await ctx.warn("Volume must be between **0** and **100**.")
         if not await self._require_linked(ctx):
             return
         try:
@@ -299,7 +299,7 @@ class Spotify(Package):
         except RuntimeError as exc:
             return await ctx.fail(str(exc))
         if not playback or not playback.get("item"):
-            return await ctx.fail("Nothing is playing on Spotify.")
+            return await ctx.warn("Nothing is playing on Spotify.")
         track_id = playback["item"]["id"]
         try:
             await self.api.user_request(
@@ -321,7 +321,7 @@ class Spotify(Package):
         except RuntimeError as exc:
             return await ctx.fail(str(exc))
         if not playback or not playback.get("item"):
-            return await ctx.fail("Nothing is playing on Spotify.")
+            return await ctx.warn("Nothing is playing on Spotify.")
         track_id = playback["item"]["id"]
         try:
             await self.api.user_request(
@@ -425,7 +425,7 @@ class Spotify(Package):
             return await ctx.fail(str(exc))
         devices = (data or {}).get("devices", [])
         if position < 1 or position > len(devices):
-            return await ctx.fail("Invalid device position.")
+            return await ctx.warn("Invalid device position.")
         device = devices[position - 1]
         try:
             await self.api.user_request(
@@ -447,14 +447,14 @@ class Spotify(Package):
         except RuntimeError as exc:
             return await ctx.fail(str(exc))
         if not playback or not playback.get("item"):
-            return await ctx.fail("Nothing is playing on Spotify.")
+            return await ctx.warn("Nothing is playing on Spotify.")
         item = playback["item"]
         query = f"{item['name']} {' '.join(a['name'] for a in item.get('artists', []))}"
         if not music_enabled:
-            return await ctx.fail("music is disabled")
+            return await ctx.warn("music is disabled")
         music = ctx.bot.get_cog("Music")
         if music is None:
-            return await ctx.fail("music cog isn't loaded")
+            return await ctx.warn("music cog isn't loaded")
         await music.play.callback(ctx, query=query, play_next=False)
 
     @spotify.command(name="search", description="Search for a track on Spotify")
@@ -468,7 +468,7 @@ class Spotify(Package):
         track_id = url_or_id.split("/")[-1].split("?")[0] if "/" in url_or_id else url_or_id
         track = await self.api.get_track(track_id)
         if not track:
-            await ctx.fail("Could not find that track.")
+            await ctx.warn("Could not find that track.")
             return
         artists = ", ".join(a["name"] for a in track["artists"])
         embed = discord.Embed(
@@ -489,7 +489,7 @@ class Spotify(Package):
         album_id = url_or_id.split("/")[-1].split("?")[0] if "/" in url_or_id else url_or_id
         album = await self.api.get_album(album_id)
         if not album:
-            await ctx.fail("Could not find that album.")
+            await ctx.warn("Could not find that album.")
             return
         artists = ", ".join(a["name"] for a in album["artists"])
         embed = discord.Embed(title=album["name"], description=f"By **{artists}**", color=color.base)

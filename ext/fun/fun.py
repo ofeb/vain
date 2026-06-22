@@ -73,9 +73,9 @@ class Fun(Package):
     async def roll(self, ctx: Context, sides: int = 6, count: int = 1) -> None:
         """Roll a dice."""
         if sides < 2 or sides > 100:
-            return await ctx.fail("Sides must be between 2 and 100")
+            return await ctx.warn("Sides must be between 2 and 100")
         if count < 1 or count > 10:
-            return await ctx.fail("Count must be between 1 and 10")
+            return await ctx.warn("Count must be between 1 and 10")
         
         results = [random.randint(1, sides) for _ in range(count)]
         total = sum(results)
@@ -110,7 +110,7 @@ class Fun(Package):
         """Choose from a list of options."""
         choices = [opt.strip() for opt in options.split(",")]
         if len(choices) < 2:
-            return await ctx.fail("Please provide at least 2 options")
+            return await ctx.warn("Please provide at least 2 options")
         
         result = random.choice(choices)
         embed = discord.Embed(
@@ -146,7 +146,7 @@ class Fun(Package):
         user = await self.bot.fetch_user(member.id)
         
         if not user.banner:
-            return await ctx.fail(f"{member.mention} doesn't have a banner")
+            return await ctx.warn(f"{member.mention} doesn't have a banner")
         
         embed = discord.Embed(
             title=f"{member.display_name}'s Banner",
@@ -299,7 +299,7 @@ class Fun(Package):
         if not url and ctx.message.attachments:
             url = ctx.message.attachments[0].url
         if not url:
-            return await ctx.fail("Provide an image URL or attach an image.")
+            return await ctx.warn("Provide an image URL or attach an image.")
 
         query = urllib.parse.quote(url)
         embed = discord.Embed(
@@ -399,11 +399,11 @@ class Fun(Package):
         url = f"https://api.lyrics.ovh/v1/{urllib.parse.quote(artist.strip())}/{urllib.parse.quote(title.strip())}"
         async with self.bot.session.get(url) as resp:
             if resp.status != 200:
-                return await ctx.fail("Could not find lyrics for that track.")
+                return await ctx.warn("Could not find lyrics for that track.")
             data = await resp.json()
         lyrics_text = data.get("lyrics")
         if not lyrics_text:
-            return await ctx.fail("Could not find lyrics for that track.")
+            return await ctx.warn("Could not find lyrics for that track.")
         embed = discord.Embed(
             title=f"{title.strip()} — {artist.strip()}",
             description=lyrics_text[:4000],
@@ -424,7 +424,7 @@ class Fun(Package):
         rounds: int = 1,
     ) -> None:
         if rounds < 1 or rounds > 3:
-            return await ctx.fail("Rounds must be between **1** and **3**.")
+            return await ctx.warn("Rounds must be between **1** and **3**.")
         await start_rps(ctx, opponent=member, rounds=rounds, vs_ai=member is None)
 
     @rockpaperscissors.autocomplete("member")
@@ -477,10 +477,10 @@ class Fun(Package):
     @describe(option1="First option", option2="Second option")
     async def wouldyourather(self, ctx: Context, option1: str, option2: str) -> None:
         if ctx.guild is None:
-            return await ctx.fail("This command can only be used in a server.")
+            return await ctx.warn("This command can only be used in a server.")
         me = ctx.guild.me or ctx.guild.get_member(ctx.bot.user.id)
         if me is None or not ctx.channel.permissions_for(me).add_reactions:
-            return await ctx.fail("I need **Add Reactions** permission in this channel.")
+            return await ctx.warn("I need **Add Reactions** permission in this channel.")
 
         embed = discord.Embed(
             title="Would You Rather?",

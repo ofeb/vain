@@ -121,10 +121,10 @@ class Music(MusicEvents, Package):
 
     async def _ensure_voice(self, ctx: Context) -> bool:
         if ctx.guild is None:
-            await ctx.fail("server only")
+            await ctx.warn("server only")
             return False
         if not ctx.author.voice or not ctx.author.voice.channel:
-            await ctx.fail("join a voice channel first")
+            await ctx.warn("join a voice channel first")
             return False
         if ctx.voice_client and ctx.voice_client.channel != ctx.author.voice.channel:
             await ctx.warn("i'm already in another voice channel")
@@ -234,7 +234,7 @@ class Music(MusicEvents, Package):
     async def _set_preset(self, ctx: Context, name: str, setting: str | None) -> None:
         player = ctx.voice_client
         if player is None:
-            return await ctx.fail("nothing playing")
+            return await ctx.warn("nothing playing")
         state = self._queue(ctx.guild.id)
         if setting and setting.lower() in {"off", "disable", "false", "none"}:
             state.active_preset = None
@@ -252,7 +252,7 @@ class Music(MusicEvents, Package):
             return
         track = await self._first_track(query)
         if track is None:
-            return await ctx.fail("no results")
+            return await ctx.warn("no results")
 
         state = self._queue(ctx.guild.id)
 
@@ -286,7 +286,7 @@ class Music(MusicEvents, Package):
     async def queue_view(self, ctx) -> None:
         state = self._queue(ctx.guild.id)
         if not state.tracks and not state.current:
-            return await ctx.fail("queue is empty")
+            return await ctx.warn("queue is empty")
         lines = [f"**now:** {state.current.title}"] if state.current else []
         lines.extend(f"`{i}.` **{t.title}** — {t.author}" for i, t in enumerate(state.tracks[:15], 1))
         await ctx.send(embed=discord.Embed(
@@ -300,7 +300,7 @@ class Music(MusicEvents, Package):
     async def queue_remove(self, ctx, position: int) -> None:
         state = self._queue(ctx.guild.id)
         if position < 1 or position > len(state.tracks):
-            return await ctx.fail(f"invalid position ({len(state.tracks)} tracks)")
+            return await ctx.warn(f"invalid position ({len(state.tracks)} tracks)")
         track = state.tracks.pop(position - 1)
         await ctx.success(f"removed **{track.title}**")
 
@@ -308,7 +308,7 @@ class Music(MusicEvents, Package):
     async def queue_shuffle(self, ctx) -> None:
         state = self._queue(ctx.guild.id)
         if len(state.tracks) < 2:
-            return await ctx.fail("not enough tracks")
+            return await ctx.warn("not enough tracks")
         random.shuffle(state.tracks)
         await ctx.success("shuffled")
 
@@ -322,7 +322,7 @@ class Music(MusicEvents, Package):
     async def queue_move(self, ctx, position: int, new_position: int) -> None:
         state = self._queue(ctx.guild.id)
         if not (1 <= position <= len(state.tracks) and 1 <= new_position <= len(state.tracks)):
-            return await ctx.fail("invalid position")
+            return await ctx.warn("invalid position")
         track = state.tracks.pop(position - 1)
         state.tracks.insert(new_position - 1, track)
         await ctx.success(f"moved **{track.title}** to `{new_position}`")
@@ -331,7 +331,7 @@ class Music(MusicEvents, Package):
     async def skip(self, ctx) -> None:
         player = ctx.voice_client
         if player is None or not player.is_playing:
-            return await ctx.fail("nothing playing")
+            return await ctx.warn("nothing playing")
         await player.stop()
         await self._play_next(ctx.guild.id, player)
         await ctx.success("skipped")
@@ -340,7 +340,7 @@ class Music(MusicEvents, Package):
     async def pause(self, ctx) -> None:
         player = ctx.voice_client
         if player is None or not player.is_playing:
-            return await ctx.fail("nothing playing")
+            return await ctx.warn("nothing playing")
         await player.pause()
         await ctx.success("paused")
 
@@ -348,7 +348,7 @@ class Music(MusicEvents, Package):
     async def resume(self, ctx) -> None:
         player = ctx.voice_client
         if player is None or not player.is_paused:
-            return await ctx.fail("not paused")
+            return await ctx.warn("not paused")
         await player.resume()
         await ctx.success("resumed")
 
@@ -369,10 +369,10 @@ class Music(MusicEvents, Package):
     @describe(volume="Volume from 0 to 200")
     async def volume(self, ctx, volume: int) -> None:
         if not 0 <= volume <= 200:
-            return await ctx.fail("volume must be 0–200")
+            return await ctx.warn("volume must be 0–200")
         player = ctx.voice_client
         if player is None:
-            return await ctx.fail("nothing playing")
+            return await ctx.warn("nothing playing")
         await player.set_volume(volume)
         self._queue(ctx.guild.id).volume = volume
         await ctx.success(f"volume **{volume}%**")
@@ -382,7 +382,7 @@ class Music(MusicEvents, Package):
     async def fastforward(self, ctx, position: int) -> None:
         player = ctx.voice_client
         if player is None or player.current is None:
-            return await ctx.fail("nothing playing")
+            return await ctx.warn("nothing playing")
         await player.seek(min(player.position + position * 1000, player.current.length))
         await ctx.success(f"+{position}s")
 
@@ -391,7 +391,7 @@ class Music(MusicEvents, Package):
     async def rewind(self, ctx, position: int) -> None:
         player = ctx.voice_client
         if player is None or player.current is None:
-            return await ctx.fail("nothing playing")
+            return await ctx.warn("nothing playing")
         await player.seek(max(player.position - position * 1000, 0))
         await ctx.success(f"-{position}s")
 
