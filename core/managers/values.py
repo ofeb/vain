@@ -159,7 +159,7 @@ class music:
     port: int = 3947
     password: str = "youshallnotpass"
     identifier: str = "bleed-node"
-    search_source: str = "dzsearch"  # deezer default like bleed; use ytsearch, scsearch, etc.
+    search_source: str = "dzsearch"  # deezer im p sure
 
 
 music_enabled: bool = False
