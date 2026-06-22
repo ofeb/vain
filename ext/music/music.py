@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+import re
 from typing import TYPE_CHECKING
 
 import discord
@@ -16,16 +17,20 @@ from .events import MusicEvents
 
 log = logging.getLogger("bleed.music")
 
+_SEARCH_PREFIX_RE = re.compile(r"^[a-z]+search:", re.I)
+
 if TYPE_CHECKING:
     from core.bleed import Bleed
 
 try:
     import lava_lyra as lyra
+    from lava_lyra.exceptions import TrackLoadError
 
     HAS_LYRA = True
 except ImportError:
     HAS_LYRA = False
     lyra = None
+    TrackLoadError = Exception
 
 
 class GuildQueue:
@@ -63,7 +68,7 @@ class Music(MusicEvents, Package):
                     host=nl.host,
                     port=nl.port,
                     password=nl.password,
-                    identifier=nl.identifier,
+                    identifier=nl.identifier(),
                     fallback=True,
                 ),
                 timeout=15,
@@ -87,13 +92,13 @@ class Music(MusicEvents, Package):
             await ctx.fail("join a voice channel first")
             return False
         if ctx.voice_client and ctx.voice_client.channel != ctx.author.voice.channel:
-            await ctx.fail("already in another voice channel")
+            await ctx.warn("i'm already in another voice channel")
             return False
         return True
 
     async def _player(self, ctx: Context):
         if not HAS_LYRA or self._node is None:
-            await ctx.fail("nodelink isn't running")
+            await ctx.warn("nodelink isn't running")
             return None
         if not await self._ensure_voice(ctx):
             return None
@@ -101,23 +106,58 @@ class Music(MusicEvents, Package):
             await ctx.author.voice.channel.connect(cls=lyra.Player, self_deaf=True)
         return ctx.voice_client
 
-    def _search_query(self, query: str) -> str:
+    def _is_direct_query(self, query: str) -> bool:
         query = query.strip()
-        if query.startswith(("http://", "https://")) or ":" in query.split(" ", 1)[0]:
-            return query
-        prefix = nl.search_source.strip()
-        if prefix and not query.lower().startswith(prefix.lower()):
-            return f"{prefix}:{query}"
-        return query
+        if not query:
+            return False
+        if query.startswith(("http://", "https://", "spotify:")):
+            return True
+        if _SEARCH_PREFIX_RE.match(query):
+            return True
+        head = query.split(" ", 1)[0]
+        return ":" in head and head.lower().endswith("search")
 
-    async def _first_track(self, query: str):
-        if self._node is None:
-            return None
-        results = await self._node.get_tracks(self._search_query(query))
+    def _pick_track(self, results):
         if not results:
             return None
         tracks = results.tracks if hasattr(results, "tracks") else results
         return tracks[0] if tracks else None
+
+    async def _load_query(self, query: str):
+        try:
+            results = await self._node.get_tracks(query)
+        except TrackLoadError as e:
+            log.debug("track load failed for %r: %s", query, e)
+            return None
+        except Exception as e:
+            log.debug("unexpected load error for %r: %s", query, e)
+            return None
+        return self._pick_track(results)
+
+    async def _first_track(self, query: str):
+        if self._node is None:
+            return None
+        query = query.strip()
+        if not query:
+            return None
+
+        if self._is_direct_query(query):
+            return await self._load_query(query)
+
+        for source in nl.search_sources:
+            search = f"{source}:{query}"
+            log.info("searching %s for %r", source, query)
+            track = await self._load_query(search)
+            if track:
+                log.info("resolved %r via %s", query, source)
+                return track
+
+        log.info(
+            "no results for %r (tried %s)",
+            query,
+            ", ".join(nl.search_sources),
+        )
+        return None
 
     async def _apply_preset(self, player, preset: str) -> None:
         if not HAS_LYRA:

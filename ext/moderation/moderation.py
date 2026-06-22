@@ -243,7 +243,7 @@ class ModerationCommands(Package):
     async def moveall(self, ctx, channel: discord.VoiceChannel):
         """move all members to another channel"""
         if not ctx.author.voice or not ctx.author.voice.channel:
-            return await ctx.fail("You must be in a **voice channel** to use this command")
+            return await ctx.warn("You must be in a **voice channel** to use this command")
 
         source = ctx.author.voice.channel
 
@@ -277,13 +277,13 @@ class ModerationCommands(Package):
     async def stripstaff(self, ctx, *, member: discord.Member):
         """strip staff roles from member"""
         if member.id == ctx.author.id:
-            return await ctx.fail("You cannot **strip yourself** of staff roles")
+            return await ctx.warn("You cannot **strip yourself** of staff roles")
 
         if member.id == ctx.guild.owner_id:
-            return await ctx.fail("You cannot strip the **server owner**")
+            return await ctx.warn("You cannot strip the **server owner**")
 
         if ctx.author.top_role <= member.top_role and ctx.author.id != ctx.guild.owner_id:
-            return await ctx.fail("Your top role must be **higher** than this member's top role")
+            return await ctx.warn("Your top role must be **higher** than this member's top role")
 
         rows = await self.db.fetch(
             """SELECT role_id FROM staff_roles WHERE guild_id = $1""",

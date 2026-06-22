@@ -304,7 +304,7 @@ class Snipe(commands.Cog):
             if ctx.message.reference:
                 message = await ctx.channel.fetch_message(ctx.message.reference.message_id)
             else:
-                await ctx.fail("You must reply or provide a message id")
+                await ctx.warn("You must reply or provide a message id")
                 return
 
         data = await self.bot.db.fetch(

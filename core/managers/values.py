@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from typing import Final
 
@@ -157,10 +158,19 @@ class api:
 
 class music:
     host: str = "127.0.0.1"
-    port: int = 3947
+    port: int = 2009
     password: str = "youshallnotpass"
-    identifier: str = "bleed-node"
-    search_source: str = "dzsearch"  # deezer im p sure
+    search_sources: tuple[str, ...] = (
+        "spsearch",
+        "dzsearch",
+        "scsearch",
+        "ytsearch",
+    )
+
+    @classmethod
+    def identifier(cls) -> str:
+        raw = f"bleed:{cls.host}:{cls.port}:{cls.password}".encode()
+        return hashlib.sha256(raw).hexdigest()[:16]
 
 
 music_enabled: bool = True

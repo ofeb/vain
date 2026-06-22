@@ -620,7 +620,7 @@ class Tickets(TicketsEvents, Package):
             return await ctx.fail("This is not a ticket channel.")
         settings = await self._settings(ctx.guild.id)
         if not await self._is_staff(ctx.author, settings):
-            return await ctx.fail("You cannot reopen this ticket.")
+            return await ctx.warn("You cannot reopen this ticket.")
         member = ctx.guild.get_member(int(ticket["user_id"]))
         if member:
             await ctx.channel.set_permissions(

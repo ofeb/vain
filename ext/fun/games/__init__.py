@@ -673,9 +673,9 @@ async def start_rps(
     elif ctx.guild is None:
         return await ctx.fail("Mention an opponent or play against the bot.")
     elif opponent.bot and opponent.id != ctx.bot.user.id:
-        return await ctx.fail("You can't play against a bot.")
+        return await ctx.warn("You can't play against a bot.")
     if opponent.id == ctx.author.id:
-        return await ctx.fail("You can't play against yourself.")
+        return await ctx.warn("You can't play against yourself.")
 
     view = RPSView(player1=ctx.author, player2=opponent, rounds=rounds, bot=ctx.bot)
     msg = await ctx.send(embed=view._embed(), view=view)
@@ -694,9 +694,9 @@ async def start_ttt(
     elif ctx.guild is None:
         return await ctx.fail("Mention an opponent or play against the bot.")
     elif opponent.bot:
-        return await ctx.fail("You can't play against a bot.")
+        return await ctx.warn("You can't play against a bot.")
     elif opponent.id == ctx.author.id:
-        return await ctx.fail("You can't play against yourself.")
+        return await ctx.warn("You can't play against yourself.")
 
     view = TicTacToeView(
         ctx=ctx,
@@ -721,9 +721,9 @@ async def start_connect4(
     elif ctx.guild is None:
         return await ctx.fail("Mention an opponent or play against the bot.")
     elif opponent.bot and opponent.id != ctx.bot.user.id:
-        return await ctx.fail("You can't play against a bot.")
+        return await ctx.warn("You can't play against a bot.")
     elif opponent.id == ctx.author.id:
-        return await ctx.fail("You can't play against yourself.")
+        return await ctx.warn("You can't play against yourself.")
 
     view = Connect4View(
         ctx=ctx,

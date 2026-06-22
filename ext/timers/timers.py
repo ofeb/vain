@@ -130,7 +130,7 @@ class Timers(Package):
     async def timer_list(self, ctx: Context) -> None:
         user_timers = {k: v for k, v in self._timers.items() if v["user_id"] == ctx.author.id}
         if not user_timers:
-            await ctx.fail("You have no active timers.")
+            await ctx.warn("You have no active timers.")
             return
 
         entries = []
@@ -167,7 +167,7 @@ class Timers(Package):
     async def timer_clear(self, ctx: Context) -> None:
         to_remove = [k for k, v in self._timers.items() if v["user_id"] == ctx.author.id]
         if not to_remove:
-            await ctx.fail("You have no active timers.")
+            await ctx.warn("You have no active timers.")
             return
 
         for tid in to_remove:

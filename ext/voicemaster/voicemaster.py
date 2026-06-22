@@ -670,7 +670,7 @@ class VoiceMaster(VoiceMasterEvents, Package):
     async def voicemaster_join(self, ctx: Context) -> None:
         """Join a voice channel."""
         if not ctx.author.voice:
-            return await ctx.fail("You're not in a voice channel")
+            return await ctx.warn("You're not in a voice channel")
         
         await ctx.success(f"You're in {ctx.author.voice.channel.name}")
 

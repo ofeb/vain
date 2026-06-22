@@ -122,7 +122,7 @@ class Spotify(Package):
     @spotify.command(name="logout", description="Disconnect your Spotify from our servers")
     async def spotify_logout(self, ctx: Context) -> None:
         if not await self.api.is_linked(ctx.author.id):
-            return await ctx.fail("You are not linked to Spotify.")
+            return await ctx.warn("You are not linked to Spotify.")
         await self.api.delete_tokens(ctx.author.id)
         await ctx.success("Disconnected your Spotify account.")
 

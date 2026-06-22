@@ -165,7 +165,7 @@ class Fun(Package):
         member2 = member2 or ctx.author
         
         if member1 == member2:
-            return await ctx.fail("You can't ship someone with themselves!")
+            return await ctx.warn("You can't ship someone with themselves!")
         
         combined_id = str(member1.id + member2.id)
         compatibility = int(combined_id[-2:]) % 100 + 1
