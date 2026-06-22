@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import random
 from typing import TYPE_CHECKING, Optional
 
@@ -29,7 +30,7 @@ def _rps_winner(a: str, b: str) -> int:
 
 async def _inactive_warning(ctx: "Context", label: str, message: discord.Message | None = None) -> None:
     target = message or ctx.message
-    with discord.utils.suppress(discord.HTTPException):
+    with contextlib.suppress(discord.HTTPException, discord.Forbidden):
         if target:
             await target.delete()
     await ctx.warn(label, delete_after=180)
@@ -164,7 +165,7 @@ class RPSView(discord.ui.View):
         for child in self.children:
             child.disabled = True
         if self.message:
-            with discord.utils.suppress(discord.HTTPException):
+            with contextlib.suppress(discord.HTTPException, discord.Forbidden):
                 await self.message.delete()
 
 

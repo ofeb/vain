@@ -11,8 +11,15 @@ class MemberConvert(Converter):
     """convert string to guild Member"""
     async def convert(self, ctx: Context, arg: str) -> discord.Member:
         try:
-            return await ctx.bot.fetch_user(int(arg.strip('<@!>')))
-        except Exception:
+            user_id = int(arg.strip("<@!>"))
+            member = ctx.guild.get_member(user_id)
+            if member is not None:
+                return member
+            try:
+                return await ctx.guild.fetch_member(user_id)
+            except discord.HTTPException:
+                pass
+        except (ValueError, TypeError):
             pass
         arg_low = arg.lower()
         for m in ctx.guild.members:

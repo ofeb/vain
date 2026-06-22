@@ -565,6 +565,8 @@ class Bleed(commands.AutoShardedBot):
     def _unwrap(err: Exception) -> Exception:
         while isinstance(err, (commands.CommandInvokeError, commands.HybridCommandError)):
             err = err.original
+        if isinstance(err, commands.ConversionError):
+            return err.original or err
         return err
 
     async def create_embed(self, template: str, **kw) -> PreparedScript:

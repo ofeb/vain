@@ -14,6 +14,7 @@ from core.discord.package import Package
 from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe, group
 from core.managers.values import color, emojis
+from core.tools.convert import MemberConvert
 
 from .games import start_connect4, start_rps, start_ttt
 
@@ -417,7 +418,7 @@ class Fun(Package):
     async def rockpaperscissors(
         self,
         ctx: Context,
-        member: discord.Member,
+        member: MemberConvert,
         rounds: int = 1,
     ) -> None:
         if rounds < 1 or rounds > 3:
@@ -430,7 +431,7 @@ class Fun(Package):
         aliases=["ttt", "tic-tac-toe"],
     )
     @describe(member="Opponent (leave empty to play against AI)")
-    async def tictactoe(self, ctx: Context, member: discord.Member = None) -> None:
+    async def tictactoe(self, ctx: Context, member: MemberConvert = None) -> None:
         await start_ttt(ctx, opponent=member, vs_ai=member is None)
 
     @hybrid(
@@ -439,7 +440,7 @@ class Fun(Package):
         aliases=["4inarow", "connectfour", "c4"],
     )
     @describe(member="Opponent to play against")
-    async def connect4(self, ctx: Context, member: discord.Member) -> None:
+    async def connect4(self, ctx: Context, member: MemberConvert) -> None:
         await start_connect4(ctx, opponent=member)
 
     @hybrid(
@@ -449,14 +450,21 @@ class Fun(Package):
     )
     @describe(option1="First option", option2="Second option")
     async def wouldyourather(self, ctx: Context, option1: str, option2: str) -> None:
+        me = ctx.guild.me or ctx.guild.get_member(ctx.bot.user.id)
+        if me is None or not ctx.channel.permissions_for(me).add_reactions:
+            return await ctx.fail("I need **Add Reactions** permission in this channel.")
+
         embed = discord.Embed(
             title="Would You Rather?",
             description=f"**1:** {option1}\n**2:** {option2}",
             color=color.base,
         )
         msg = await ctx.send(embed=embed)
-        await msg.add_reaction("1️⃣")
-        await msg.add_reaction("2️⃣")
+        try:
+            await msg.add_reaction("1️⃣")
+            await msg.add_reaction("2️⃣")
+        except (discord.Forbidden, discord.HTTPException):
+            await ctx.warn("Couldn't add reactions to the poll message.")
 
     @hybrid(
         name="quote",

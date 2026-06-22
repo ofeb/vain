@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import io
 import json
 import re
@@ -432,7 +433,7 @@ class Tickets(TicketsEvents, Package):
         if row["message_id"]:
             channel = ctx.guild.get_channel(int(row["channel_id"]))
             if isinstance(channel, discord.TextChannel):
-                with discord.utils.suppress(discord.HTTPException):
+                with contextlib.suppress(discord.HTTPException):
                     message = await channel.fetch_message(int(row["message_id"]))
                     await message.delete()
         await ctx.success(f"Removed panel **`{name}`**.")
@@ -455,7 +456,7 @@ class Tickets(TicketsEvents, Package):
         if panel["message_id"]:
             channel = ctx.guild.get_channel(int(panel["channel_id"]))
             if isinstance(channel, discord.TextChannel):
-                with discord.utils.suppress(discord.HTTPException):
+                with contextlib.suppress(discord.HTTPException):
                     message = await channel.fetch_message(int(panel["message_id"]))
                     await message.delete()
         await self._send_panel_message(ctx.guild, dict(panel), [dict(row) for row in options])
