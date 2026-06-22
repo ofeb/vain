@@ -114,6 +114,9 @@ class RPSView(discord.ui.View):
 
     async def _pick(self, interaction: discord.Interaction, choice: str) -> None:
         self.choices[interaction.user.id] = choice
+        if self.player2.bot and interaction.user.id == self.player1.id:
+            counter = {"rock": "paper", "paper": "scissors", "scissors": "rock"}
+            self.choices[self.player2.id] = counter[choice]
         await interaction.response.defer()
         if len(self.choices) < 2:
             if self.message:
@@ -373,23 +376,44 @@ class TicTacToeView(discord.ui.View):
         empty = [(x, y) for y in range(3) for x in range(3) if not self.board[y][x]]
         if not empty:
             return
-        for mark in ("O", "X"):
-            for x, y in empty:
-                self.board[y][x] = mark
-                if self._check_winner() == mark:
-                    self.board[y][x] = ""
-                    if mark == "O":
-                        self.board[y][x] = "O"
-                        self._sync_buttons()
-                        return
-                self.board[y][x] = ""
-        if (1, 1) in empty:
-            self.board[1][1] = "O"
-            self._sync_buttons()
-            return
-        x, y = random.choice(empty)
+        best_score = float("-inf")
+        best: tuple[int, int] | None = None
+        for x, y in empty:
+            self.board[y][x] = "O"
+            score = self._minimax(False, 0)
+            self.board[y][x] = ""
+            if score > best_score:
+                best_score = score
+                best = (x, y)
+        if best is None:
+            x, y = random.choice(empty)
+        else:
+            x, y = best
         self.board[y][x] = "O"
         self._sync_buttons()
+
+    def _minimax(self, is_max: bool, depth: int) -> int:
+        winner = self._check_winner()
+        if winner == "O":
+            return 10 - depth
+        if winner == "X":
+            return depth - 10
+        if winner == "tie":
+            return 0
+        empty = [(x, y) for y in range(3) for x in range(3) if not self.board[y][x]]
+        if is_max:
+            best = float("-inf")
+            for x, y in empty:
+                self.board[y][x] = "O"
+                best = max(best, self._minimax(False, depth + 1))
+                self.board[y][x] = ""
+            return best
+        best = float("inf")
+        for x, y in empty:
+            self.board[y][x] = "X"
+            best = min(best, self._minimax(True, depth + 1))
+            self.board[y][x] = ""
+        return best
 
     async def on_timeout(self) -> None:
         self._cancel_start_timer()
@@ -408,7 +432,7 @@ class Connect4Button(discord.ui.Button["Connect4View"]):
         super().__init__(
             style=discord.ButtonStyle.secondary,
             label=str(column + 1),
-            row=0 if column < 5 else 1,
+            row=column // 3,
             custom_id=f"c4:{column}",
         )
         self.column = column
@@ -433,12 +457,14 @@ class Connect4View(discord.ui.View):
         player1: discord.User,
         player2: discord.User,
         bot: Bleed,
+        vs_ai: bool = False,
     ) -> None:
         super().__init__(timeout=INACTIVITY_SECONDS)
         self.ctx = ctx
         self.player1 = player1
         self.player2 = player2
         self.bot = bot
+        self.vs_ai = vs_ai
         self.board = [[0] * self.COLS for _ in range(self.ROWS)]
         self.turn = 1
         self.message: discord.Message | None = None
@@ -464,8 +490,9 @@ class Connect4View(discord.ui.View):
         return self.player1 if self.turn == 1 else self.player2
 
     def _content(self, *, status: str = "") -> str:
+        p2_name = "AI" if self.vs_ai else self.player2.display_name
         lines = [
-            f"**{self.player1.display_name}** vs **{self.player2.display_name}**",
+            f"**{self.player1.display_name}** vs **{p2_name}**",
             "",
             self._board_text(),
         ]
@@ -504,6 +531,14 @@ class Connect4View(discord.ui.View):
         if self.finished:
             await interaction.response.send_message("This game is over.", ephemeral=True)
             return False
+        if self.vs_ai:
+            if interaction.user.id != self.player1.id:
+                await interaction.response.send_message("You are not in this game.", ephemeral=True)
+                return False
+            if self.turn != 1:
+                await interaction.response.send_message("Wait for the AI.", ephemeral=True)
+                return False
+            return True
         if interaction.user.id not in (self.player1.id, self.player2.id):
             await interaction.response.send_message("You are not in this game.", ephemeral=True)
             return False
@@ -512,23 +547,53 @@ class Connect4View(discord.ui.View):
             return False
         return True
 
-    async def play_column(self, interaction: discord.Interaction, column: int) -> None:
-        row = self._drop(column, self.turn)
-        if row is None:
-            await interaction.response.send_message("That column is full.", ephemeral=True)
-            return
+    def _valid_columns(self) -> list[int]:
+        return [c for c in range(self.COLS) if self.board[0][c] == 0]
 
-        player = self._current_player()
-        if self._check_win(row, column, self.turn):
+    def _win_at(self, row: int, col: int, player: int) -> bool:
+        directions = [(0, 1), (1, 0), (1, 1), (1, -1)]
+        for dr, dc in directions:
+            count = 1
+            for sign in (1, -1):
+                r, c = row + dr * sign, col + dc * sign
+                while 0 <= r < self.ROWS and 0 <= c < self.COLS and self.board[r][c] == player:
+                    count += 1
+                    r += dr * sign
+                    c += dc * sign
+            if count >= 4:
+                return True
+        return False
+
+    def _ai_column(self) -> int:
+        valid = self._valid_columns()
+        if not valid:
+            return 0
+        for col in valid:
+            row = self._drop(col, 2)
+            if row is not None and self._win_at(row, col, 2):
+                self.board[row][col] = 0
+                return col
+            if row is not None:
+                self.board[row][col] = 0
+        for col in valid:
+            row = self._drop(col, 1)
+            if row is not None and self._win_at(row, col, 1):
+                self.board[row][col] = 0
+                return col
+            if row is not None:
+                self.board[row][col] = 0
+        for col in (3, 2, 4, 1, 5, 0, 6):
+            if col in valid:
+                return col
+        return valid[0]
+
+    async def _after_move(self, interaction: discord.Interaction, *, status: str = "") -> None:
+        if status:
             self.finished = True
             for child in self.children:
                 child.disabled = True
-            await interaction.response.edit_message(
-                content=self._content(status=f"**{player.mention}** wins!"),
-                view=self,
-            )
+            await interaction.response.edit_message(content=self._content(status=status), view=self)
             return
-
         if self._board_full():
             self.finished = True
             for child in self.children:
@@ -538,9 +603,52 @@ class Connect4View(discord.ui.View):
                 view=self,
             )
             return
-
         self.turn = 2 if self.turn == 1 else 1
+        if self.vs_ai and self.turn == 2 and not self.finished:
+            await interaction.response.edit_message(content=self._content(), view=self)
+            col = self._ai_column()
+            row = self._drop(col, 2)
+            if row is None:
+                return
+            if self._win_at(row, col, 2):
+                self.finished = True
+                for child in self.children:
+                    child.disabled = True
+                if self.message:
+                    await self.message.edit(
+                        content=self._content(status="**AI** wins!"),
+                        view=self,
+                    )
+                return
+            if self._board_full():
+                self.finished = True
+                for child in self.children:
+                    child.disabled = True
+                if self.message:
+                    await self.message.edit(
+                        content=self._content(status="It's a **tie**!"),
+                        view=self,
+                    )
+                return
+            self.turn = 1
+            if self.message:
+                await self.message.edit(content=self._content(), view=self)
+            return
         await interaction.response.edit_message(content=self._content(), view=self)
+
+    async def play_column(self, interaction: discord.Interaction, column: int) -> None:
+        row = self._drop(column, self.turn)
+        if row is None:
+            await interaction.response.send_message("That column is full.", ephemeral=True)
+            return
+
+        player = self._current_player()
+        if self._check_win(row, column, self.turn):
+            winner = "**AI**" if self.vs_ai and self.turn == 2 else player.mention
+            await self._after_move(interaction, status=f"{winner} wins!")
+            return
+
+        await self._after_move(interaction)
 
     async def on_timeout(self) -> None:
         for child in self.children:
@@ -552,10 +660,19 @@ class Connect4View(discord.ui.View):
         )
 
 
-async def start_rps(ctx: "Context", *, opponent: discord.Member, rounds: int = 1) -> None:
-    if ctx.guild is None:
-        return await ctx.fail("This command can only be used in a server.")
-    if opponent.bot:
+async def start_rps(
+    ctx: "Context",
+    *,
+    opponent: discord.User | None,
+    rounds: int = 1,
+    vs_ai: bool = False,
+) -> None:
+    if vs_ai or opponent is None:
+        opponent = ctx.bot.user
+        vs_ai = True
+    elif ctx.guild is None:
+        return await ctx.fail("Mention an opponent or play against the bot.")
+    elif opponent.bot and opponent.id != ctx.bot.user.id:
         return await ctx.fail("You can't play against a bot.")
     if opponent.id == ctx.author.id:
         return await ctx.fail("You can't play against yourself.")
@@ -568,18 +685,18 @@ async def start_rps(ctx: "Context", *, opponent: discord.Member, rounds: int = 1
 async def start_ttt(
     ctx: "Context",
     *,
-    opponent: Optional[discord.Member],
+    opponent: Optional[discord.User],
     vs_ai: bool,
 ) -> None:
-    if ctx.guild is None:
-        return await ctx.fail("This command can only be used in a server.")
-    if not vs_ai:
-        if opponent is None:
-            return await ctx.fail("Mention an opponent or play against the AI.")
-        if opponent.bot:
-            return await ctx.fail("You can't play against a bot.")
-        if opponent.id == ctx.author.id:
-            return await ctx.fail("You can't play against yourself.")
+    if vs_ai or opponent is None:
+        vs_ai = True
+        opponent = None
+    elif ctx.guild is None:
+        return await ctx.fail("Mention an opponent or play against the bot.")
+    elif opponent.bot:
+        return await ctx.fail("You can't play against a bot.")
+    elif opponent.id == ctx.author.id:
+        return await ctx.fail("You can't play against yourself.")
 
     view = TicTacToeView(
         ctx=ctx,
@@ -592,14 +709,28 @@ async def start_ttt(
     view.message = msg
 
 
-async def start_connect4(ctx: "Context", *, opponent: discord.Member) -> None:
-    if ctx.guild is None:
-        return await ctx.fail("This command can only be used in a server.")
-    if opponent.bot:
+async def start_connect4(
+    ctx: "Context",
+    *,
+    opponent: discord.User | None,
+    vs_ai: bool = False,
+) -> None:
+    if vs_ai or opponent is None:
+        vs_ai = True
+        opponent = ctx.bot.user
+    elif ctx.guild is None:
+        return await ctx.fail("Mention an opponent or play against the bot.")
+    elif opponent.bot and opponent.id != ctx.bot.user.id:
         return await ctx.fail("You can't play against a bot.")
-    if opponent.id == ctx.author.id:
+    elif opponent.id == ctx.author.id:
         return await ctx.fail("You can't play against yourself.")
 
-    view = Connect4View(ctx=ctx, player1=ctx.author, player2=opponent, bot=ctx.bot)
+    view = Connect4View(
+        ctx=ctx,
+        player1=ctx.author,
+        player2=opponent,
+        bot=ctx.bot,
+        vs_ai=vs_ai,
+    )
     msg = await ctx.send(content=view._content(), view=view)
     view.message = msg

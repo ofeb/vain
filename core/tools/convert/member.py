@@ -44,14 +44,26 @@ class MemberConvert(Converter):
 
 
 class OptionalGameMember(MemberConvert):
-    """optional opponent for games; supports AI sentinel values"""
+    """optional opponent for games; omit or pass ai/0 to play the bot"""
 
-    async def convert(self, ctx: Context, arg: str | discord.Member | None) -> discord.Member | None:
+    async def convert(self, ctx: Context, arg: str | discord.Member | discord.User | None) -> discord.Member | discord.User | None:
         if arg is None:
             return None
-        if isinstance(arg, discord.Member):
+        if isinstance(arg, (discord.Member, discord.User)):
+            if isinstance(arg, discord.Member):
+                return arg
+            if ctx.guild is not None:
+                member = ctx.guild.get_member(arg.id)
+                if member is not None:
+                    return member
+                try:
+                    return await ctx.guild.fetch_member(arg.id)
+                except discord.HTTPException:
+                    raise CommandError(f"cant find member **{arg}**")
             return arg
         cleaned = str(arg).strip().lower()
-        if cleaned in {"", "0", "none", "ai"}:
+        if cleaned in {"", "0", "none", "ai", "bot"}:
             return None
+        if ctx.guild is None:
+            raise CommandError("mention an opponent or play against the bot in a server")
         return await super().convert(ctx, str(arg))

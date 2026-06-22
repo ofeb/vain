@@ -132,24 +132,6 @@ _COG_MAP: dict[str, str] = {
 
 _OWNER_COGS = frozenset({"Developer", "Jishaku", "Owner"})
 
-_CAT_EMOJIS: dict[str, str] = {
-    "Home": "\U0001f3e0",
-    "Server": "\U0001f4e1",
-    "Security": "\U0001f6e1\ufe0f",
-    "Moderation": "\U0001f6ae",
-    "Information": "\U0001f4ca",
-    "Utility": "\U0001f527",
-    "Fun": "\U0001f3b2",
-    "Miscellaneous": "\U0001f4ac",
-    "Music": "\U0001f3b5",
-    "Social": "\U0001f4e3",
-    "Rewards": "\U0001f3c6",
-    "Crypto": "\U0001fa99",
-    "Last.fm": "\U0001f3b6",
-    "Owner": "\U0001f512",
-    "Logs": "\U0001f4dd",
-}
-
 _BLURBS: dict[str, str] = {
     "Server": "Prefixes, starboard, autorole, reactions, logs, and server setup.",
     "Security": "Antinuke, antiraid, and automod protection modules.",
@@ -700,10 +682,8 @@ class HelpView(ui.View):
         prefix = getattr(self.ctx, "clean_prefix", None) or self.ctx.prefix or ";"
         if isinstance(prefix, list):
             prefix = prefix[0] if prefix else ";"
-        emoji = _CAT_EMOJIS.get(label, "")
-        title = f"{emoji} {label} Commands" if emoji else f"**{label} Commands**"
         e = Embed(
-            title=title,
+            title=f"**{label} Commands**",
             description=_fmt_commands(self.cats[label]),
             color=self.ctx.bot.color,
         )

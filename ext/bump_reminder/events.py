@@ -6,7 +6,7 @@ import discord
 
 from core.discord.package import Package
 
-from .bump_reminder import BUMP_COOLDOWN, DISBOARD_ID
+from .constants import BUMP_COOLDOWN, DISBOARD_ID
 
 
 class BumpReminderEvents:

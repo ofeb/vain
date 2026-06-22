@@ -5,9 +5,10 @@ import datetime
 from typing import TYPE_CHECKING, Optional
 
 import discord
-from core.discord.package import Package
+from core.discord.package import Package, tasks
 
-from .events import BumpReminderEvents, tasks
+from .constants import BUMP_COOLDOWN, DISBOARD_ID
+from .events import BumpReminderEvents
 
 from core.discord.ctx import Context
 from core.discord.hybrid import describe, hybrid, group
@@ -16,10 +17,6 @@ from core.managers.values import color
 
 if TYPE_CHECKING:
     from core.bleed import Bleed
-
-DISBOARD_ID = 302050872383242240
-BUMP_COOLDOWN = 7200
-
 
 class BumpReminder(BumpReminderEvents, Package):
     """Bump reminder commands to keep your server promoted."""

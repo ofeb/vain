@@ -16,7 +16,7 @@ from core.discord.autocomplete import guild_member_choices
 from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe, group
 from core.managers.values import color, emojis
-from core.tools.convert import MemberConvert, OptionalGameMember
+from core.tools.convert import OptionalGameMember
 
 from .games import start_connect4, start_rps, start_ttt
 
@@ -413,20 +413,19 @@ class Fun(Package):
 
     @hybrid(
         name="rockpaperscissors",
-        description="Play rock paper scissors with another member",
+        description="Play rock paper scissors with another member or the bot",
         aliases=["rps"],
-        guild_only=True,
     )
-    @describe(member="Opponent to play against", rounds="Number of rounds (1-3)")
+    @describe(member="Opponent (leave empty to play the bot)", rounds="Number of rounds (1-3)")
     async def rockpaperscissors(
         self,
         ctx: Context,
-        member: MemberConvert,
+        member: OptionalGameMember = None,
         rounds: int = 1,
     ) -> None:
         if rounds < 1 or rounds > 3:
             return await ctx.fail("Rounds must be between **1** and **3**.")
-        await start_rps(ctx, opponent=member, rounds=rounds)
+        await start_rps(ctx, opponent=member, rounds=rounds, vs_ai=member is None)
 
     @rockpaperscissors.autocomplete("member")
     async def rockpaperscissors_member_autocomplete(
@@ -434,15 +433,14 @@ class Fun(Package):
         interaction: discord.Interaction,
         current: str,
     ) -> list[app_commands.Choice[str]]:
-        return await guild_member_choices(interaction, current)
+        return await guild_member_choices(interaction, current, include_ai=True)
 
     @hybrid(
         name="tictactoe",
-        description="Play tic-tac-toe against another member or the AI",
+        description="Play tic-tac-toe against another member or the bot",
         aliases=["ttt", "tic-tac-toe"],
-        guild_only=True,
     )
-    @describe(member="Opponent (leave empty to play against AI)")
+    @describe(member="Opponent (leave empty to play the bot)")
     async def tictactoe(self, ctx: Context, member: OptionalGameMember = None) -> None:
         await start_ttt(ctx, opponent=member, vs_ai=member is None)
 
@@ -456,13 +454,12 @@ class Fun(Package):
 
     @hybrid(
         name="connect4",
-        description="Play connect four with another member",
+        description="Play connect four with another member or the bot",
         aliases=["4inarow", "connectfour", "c4"],
-        guild_only=True,
     )
-    @describe(member="Opponent to play against")
-    async def connect4(self, ctx: Context, member: MemberConvert) -> None:
-        await start_connect4(ctx, opponent=member)
+    @describe(member="Opponent (leave empty to play the bot)")
+    async def connect4(self, ctx: Context, member: OptionalGameMember = None) -> None:
+        await start_connect4(ctx, opponent=member, vs_ai=member is None)
 
     @connect4.autocomplete("member")
     async def connect4_member_autocomplete(
@@ -470,7 +467,7 @@ class Fun(Package):
         interaction: discord.Interaction,
         current: str,
     ) -> list[app_commands.Choice[str]]:
-        return await guild_member_choices(interaction, current)
+        return await guild_member_choices(interaction, current, include_ai=True)
 
     @hybrid(
         name="wouldyourather",

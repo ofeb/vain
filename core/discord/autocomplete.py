@@ -17,8 +17,8 @@ async def guild_member_choices(
     needle = (current or "").lower()
     choices: list[app_commands.Choice[str]] = []
 
-    if include_ai and (not needle or "ai" in needle):
-        choices.append(app_commands.Choice(name="AI opponent", value="0"))
+    if include_ai and (not needle or any(x in needle for x in ("ai", "bot"))):
+        choices.append(app_commands.Choice(name="Bot opponent", value="0"))
 
     for member in guild.members:
         if member.bot or member.id == interaction.user.id:
