@@ -38,7 +38,7 @@ class InformationCommands(Package):
             f"-# Commands » `{total_commands}`",
             f"-# Latency » `{latency}ms`",
             f"-# Uptime » {uptime}",
-            f"-# Servers » `{guilds:,}`",
+            f"-# Guilds » `{guilds:,}`",
             f"-# Users » `{users:,}`",
             f"-# Shards » `{shard_count}`",
             f"-# Python » `{platform.python_version()}`",
@@ -188,7 +188,7 @@ class InformationCommands(Package):
                 for sid, lat in self.bot.latencies:
                     if sid == shard_id:
                         latency = round(lat * 1000)
-            lines.append(f"**Shard {shard_id}** — `{len(guilds)}` servers, `{members:,}` users, `{latency}ms`")
+            lines.append(f"**Shard {shard_id}** — `{len(guilds)}` guilds, `{members:,}` users, `{latency}ms`")
         embed = discord.Embed(
             title="Shard Info",
             description="\n".join(lines) if lines else "Single-shard mode",

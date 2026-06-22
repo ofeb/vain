@@ -5,6 +5,7 @@ raises CommandError if no match found"""
 from discord.ext.commands import Converter, CommandError, Context
 from fast_string_match import closest_match
 import discord
+from discord import app_commands
 
 
 class MemberConvert(Converter):
@@ -44,9 +45,50 @@ class MemberConvert(Converter):
 
 
 class OptionalMember(Converter):
-    """optional member/user; slash autocomplete passes user ids as strings"""
+    """optional member/user in guilds, group chats, and dms"""
 
-    _EMPTY = frozenset({"", "0", "none", "ai", "bot"})
+    _EMPTY = frozenset({"", "0", "none", "me", "bot"})
+
+    @classmethod
+    async def autocomplete(
+        cls,
+        interaction: discord.Interaction,
+        current: str,
+        *,
+        include_me: bool = False,
+    ) -> list[app_commands.Choice[str]]:
+        from core.discord.autocomplete import guild_member_choices
+
+        return await guild_member_choices(interaction, current, include_me=include_me)
+
+    @staticmethod
+    def _channel_users(ctx: Context) -> list[discord.User]:
+        channel = ctx.channel
+        if isinstance(channel, discord.GroupChannel):
+            return [
+                recipient
+                for recipient in channel.recipients
+                if recipient.id != ctx.author.id and not recipient.bot
+            ]
+        if isinstance(channel, discord.DMChannel) and channel.recipient:
+            if channel.recipient.bot or channel.recipient.id == ctx.author.id:
+                return []
+            return [channel.recipient]
+        return []
+
+    @classmethod
+    def _resolve_user(cls, ctx: Context, arg: str) -> discord.User | None:
+        candidates = cls._channel_users(ctx)
+        if not candidates:
+            return None
+        arg_low = arg.lower()
+        for user in candidates:
+            if user.name.lower() == arg_low or user.display_name.lower() == arg_low:
+                return user
+        names = [user.display_name for user in candidates]
+        if match := closest_match(arg_low, names):
+            return discord.utils.get(candidates, display_name=match)
+        return None
 
     async def convert(
         self,
@@ -85,4 +127,6 @@ class OptionalMember(Converter):
             pass
         if ctx.guild is not None:
             return await MemberConvert().convert(ctx, cleaned)
+        if user := self._resolve_user(ctx, cleaned):
+            return user
         raise CommandError(f"cant find member **{arg}**")

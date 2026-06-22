@@ -33,18 +33,18 @@ def _inject_descriptions(fn: Callable[..., Any], params: dict[str, Any]) -> Call
 def _resolve_contexts(
     *,
     guild_only: bool = False,
-    servers: bool | None = None,
+    guilds: bool | None = None,
     dms: bool | None = None,
     groupchats: bool | None = None,
 ) -> tuple[bool, bool, bool]:
     """map flags to guilds dms private_channels booleans"""
     if guild_only:
         return True, False, False
-    explicit = any(v is not None for v in (servers, dms, groupchats))
+    explicit = any(v is not None for v in (guilds, dms, groupchats))
     if not explicit:
         return True, True, True
     return (
-        servers if servers is not None else True,
+        guilds if guilds is not None else True,
         dms if dms is not None else True,
         groupchats if groupchats is not None else True,
     )
@@ -132,7 +132,7 @@ def _pop_hybrid_attrs(attrs: dict) -> tuple[str | None, dict, bool, bool | None,
     example = attrs.pop("example", None)
     parameters = attrs.pop("parameters", {})
     guild_only = attrs.pop("guild_only", False)
-    servers = attrs.pop("servers", None)
+    guilds = attrs.pop("guilds", None)
     dms = attrs.pop("dms", None)
     groupchats = attrs.pop("groupchats", None)
     slash = attrs.pop("slash", True)
@@ -141,7 +141,7 @@ def _pop_hybrid_attrs(attrs: dict) -> tuple[str | None, dict, bool, bool | None,
     attrs.pop("cls", None)
     if not slash:
         attrs["with_app_command"] = False
-    return example, parameters, guild_only, servers, dms, groupchats, slash, is_group
+    return example, parameters, guild_only, guilds, dms, groupchats, slash, is_group
 
 
 def hybrid(name: str | None = None, **attrs: Any):
@@ -157,8 +157,8 @@ def hybrid(name: str | None = None, **attrs: Any):
 
 
 def _hybrid_command(name: str | None = None, **attrs: Any):
-    example, params, guild_only, servers, dms, groupchats, _, _ = _pop_hybrid_attrs(attrs)
-    guilds, _dms, _gcs = _resolve_contexts(guild_only=guild_only, servers=servers, dms=dms, groupchats=groupchats)
+    example, params, guild_only, guilds, dms, groupchats, _, _ = _pop_hybrid_attrs(attrs)
+    guilds, _dms, _gcs = _resolve_contexts(guild_only=guild_only, guilds=guilds, dms=dms, groupchats=groupchats)
 
     def deco(fn: Callable[..., Any]) -> commands.HybridCommand:
         prepared = _inject_descriptions(_wrap_callback(fn, guilds=guilds, dms=_dms, groupchats=_gcs), params)
@@ -171,8 +171,8 @@ def _hybrid_command(name: str | None = None, **attrs: Any):
 
 
 def _hybrid_group(name: str | None = None, **attrs: Any):
-    example, params, guild_only, servers, dms, groupchats, _, _ = _pop_hybrid_attrs(attrs)
-    guilds, _dms, _gcs = _resolve_contexts(guild_only=guild_only, servers=servers, dms=dms, groupchats=groupchats)
+    example, params, guild_only, guilds, dms, groupchats, _, _ = _pop_hybrid_attrs(attrs)
+    guilds, _dms, _gcs = _resolve_contexts(guild_only=guild_only, guilds=guilds, dms=dms, groupchats=groupchats)
 
     def deco(fn: Callable[..., Any]) -> commands.HybridGroup:
         prepared = _inject_descriptions(_wrap_callback(fn, guilds=guilds, dms=_dms, groupchats=_gcs), params)
@@ -185,14 +185,14 @@ def _hybrid_group(name: str | None = None, **attrs: Any):
             sub_example = kw.pop("example", None)
             sub_params = kw.pop("parameters", {})
             sub_guild_only = kw.pop("guild_only", False)
-            sub_servers = kw.pop("servers", None)
+            sub_servers = kw.pop("guilds", None)
             sub_dms = kw.pop("dms", None)
             sub_gcs = kw.pop("groupchats", None)
             if not kw.pop("slash", True):
                 kw["with_app_command"] = False
             kw.pop("dm_enabled", None)
             kw.pop("cls", None)
-            sg, sd, sc = _resolve_contexts(guild_only=sub_guild_only, servers=sub_servers, dms=sub_dms, groupchats=sub_gcs)
+            sg, sd, sc = _resolve_contexts(guild_only=sub_guild_only, guilds=sub_servers, dms=sub_dms, groupchats=sub_gcs)
 
             def sub_deco(sub_fn):
                 sub_prepared = _inject_descriptions(_wrap_callback(sub_fn, guilds=sg, dms=sd, groupchats=sc), sub_params)

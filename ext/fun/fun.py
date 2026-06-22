@@ -11,8 +11,6 @@ from discord import app_commands
 from discord.ext import commands
 
 from core.discord.package import Package
-
-from core.discord.autocomplete import guild_member_choices
 from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe, group
 from core.managers.values import color, emojis
@@ -425,7 +423,7 @@ class Fun(Package):
     ) -> None:
         if rounds < 1 or rounds > 3:
             return await ctx.warn("Rounds must be between **1** and **3**.")
-        await start_rps(ctx, opponent=member, rounds=rounds, vs_ai=member is None)
+        await start_rps(ctx, opponent=member, rounds=rounds, vs_me=member is None)
 
     @rockpaperscissors.autocomplete("member")
     async def rockpaperscissors_member_autocomplete(
@@ -433,7 +431,7 @@ class Fun(Package):
         interaction: discord.Interaction,
         current: str,
     ) -> list[app_commands.Choice[str]]:
-        return await guild_member_choices(interaction, current, include_ai=True)
+        return await OptionalMember.autocomplete(interaction, current, include_me=True)
 
     @hybrid(
         name="tictactoe",
@@ -442,7 +440,7 @@ class Fun(Package):
     )
     @describe(member="Opponent (leave empty to play the bot)")
     async def tictactoe(self, ctx, member: OptionalMember = None) -> None:
-        await start_ttt(ctx, opponent=member, vs_ai=member is None)
+        await start_ttt(ctx, opponent=member, vs_me=member is None)
 
     @tictactoe.autocomplete("member")
     async def tictactoe_member_autocomplete(
@@ -450,7 +448,7 @@ class Fun(Package):
         interaction: discord.Interaction,
         current: str,
     ) -> list[app_commands.Choice[str]]:
-        return await guild_member_choices(interaction, current, include_ai=True)
+        return await OptionalMember.autocomplete(interaction, current, include_me=True)
 
     @hybrid(
         name="connect4",
@@ -459,7 +457,7 @@ class Fun(Package):
     )
     @describe(member="Opponent (leave empty to play the bot)")
     async def connect4(self, ctx, member: OptionalMember = None) -> None:
-        await start_connect4(ctx, opponent=member, vs_ai=member is None)
+        await start_connect4(ctx, opponent=member, vs_me=member is None)
 
     @connect4.autocomplete("member")
     async def connect4_member_autocomplete(
@@ -467,7 +465,7 @@ class Fun(Package):
         interaction: discord.Interaction,
         current: str,
     ) -> list[app_commands.Choice[str]]:
-        return await guild_member_choices(interaction, current, include_ai=True)
+        return await OptionalMember.autocomplete(interaction, current, include_me=True)
 
     @hybrid(
         name="wouldyourather",

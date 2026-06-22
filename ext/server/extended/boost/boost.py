@@ -9,7 +9,7 @@ from discord.ext.commands import group
 
 from core.discord.package import Package
 from core.managers.converters import EmbedConverter
-from lib.classes.flags.servers import Parameters
+from lib.classes.flags.guilds import Parameters
 
 
 from core.managers.permissions import has_permissions

@@ -18,19 +18,63 @@ from .events import MusicEvents
 log = logging.getLogger("bleed.music")
 
 _SEARCH_PREFIX_RE = re.compile(r"^[a-z]+search:", re.I)
+_URL_HINT_RE = re.compile(
+    r"^(?:www\.|(?:open\.)?spotify\.com/|(?:music\.)?youtube\.com/|youtu\.be/|"
+    r"soundcloud\.com/|(?:www\.)?deezer\.com/|music\.apple\.com/)",
+    re.I,
+)
 
 if TYPE_CHECKING:
     from core.bleed import Bleed
 
 try:
     import lava_lyra as lyra
-    from lava_lyra.exceptions import NoNodesAvailable, NodeCreationError, TrackLoadError
+    from lava_lyra.enums import URLRegex
+    from lava_lyra.exceptions import (
+        NoNodesAvailable,
+        NodeCreationError,
+        NodeRestException,
+        TrackLoadError,
+    )
+
+    class BleedPlayer(lyra.Player):
+        async def play(
+            self,
+            track,
+            *,
+            start: int = 0,
+            end: int = 0,
+            ignore_if_playing: bool = False,
+        ):
+            if track.original is None and track.track_id:
+                track.original = track
+            try:
+                return await super().play(
+                    track,
+                    start=start,
+                    end=end,
+                    ignore_if_playing=ignore_if_playing,
+                )
+            except NodeRestException as exc:
+                if "Invalid query parameters" not in str(exc) or not track.track_id:
+                    raise
+                log.debug("retrying play with minimal payload after: %s", exc)
+                self._current = track
+                await self._node.send(
+                    method="PATCH",
+                    path=self._player_endpoint_uri,
+                    guild_id=self._guild.id,
+                    data={"track": {"encoded": track.track_id}, "position": start},
+                )
+                return track
 
     HAS_LYRA = True
 except ImportError:
     HAS_LYRA = False
     lyra = None
-    NoNodesAvailable = NodeCreationError = TrackLoadError = Exception
+    URLRegex = None
+    BleedPlayer = None
+    NoNodesAvailable = NodeCreationError = NodeRestException = TrackLoadError = Exception
 
 
 class GuildQueue:
@@ -138,17 +182,48 @@ class Music(MusicEvents, Package):
         if not await self._ensure_voice(ctx):
             return None
         if not ctx.voice_client:
-            await ctx.author.voice.channel.connect(cls=lyra.Player, self_deaf=True)
+            await ctx.author.voice.channel.connect(cls=BleedPlayer, self_deaf=True)
         return ctx.voice_client
 
-    def _is_direct_query(self, query: str) -> bool:
+    def _normalize_query(self, query: str) -> str:
         query = query.strip()
+        if not query:
+            return query
+        if query.startswith("//"):
+            return f"https:{query}"
+        if _URL_HINT_RE.match(query) and not query.startswith(("http://", "https://", "spotify:")):
+            return f"https://{query}"
+        return query
+
+    def _parse_play_flags(self, query: str, *, next: bool) -> tuple[str, bool]:
+        q = query.strip()
+        if q.lower().startswith("--next "):
+            return q[7:].strip(), True
+        if q.lower().endswith(" --next"):
+            return q[:-7].strip(), True
+        return q, next
+
+    def _is_direct_query(self, query: str) -> bool:
+        query = self._normalize_query(query)
         if not query:
             return False
         if query.startswith(("http://", "https://", "spotify:")):
             return True
         if _SEARCH_PREFIX_RE.match(query):
             return True
+        if HAS_LYRA and URLRegex is not None:
+            for pattern in (
+                URLRegex.BASE_URL,
+                URLRegex.SPOTIFY_URL,
+                URLRegex.YOUTUBE_URL,
+                URLRegex.YOUTUBE_PLAYLIST_URL,
+                URLRegex.SOUNDCLOUD_URL,
+                URLRegex.SOUNDCLOUD_PLAYLIST_URL,
+                URLRegex.AM_URL,
+                URLRegex.BILIBILI_URL,
+            ):
+                if pattern.match(query) or pattern.search(query):
+                    return True
         head = query.split(" ", 1)[0]
         return ":" in head and head.lower().endswith("search")
 
@@ -172,7 +247,7 @@ class Music(MusicEvents, Package):
     async def _first_track(self, query: str):
         if self._node is None:
             return None
-        query = query.strip()
+        query = self._normalize_query(query.strip())
         if not query:
             return None
 
@@ -227,7 +302,12 @@ class Music(MusicEvents, Package):
         else:
             state.current = None
             return
-        await player.play(track)
+        try:
+            await player.play(track)
+        except NodeRestException:
+            log.exception("auto-advance failed in guild %s", guild_id)
+            state.current = None
+            return
         if state.active_preset:
             await self._apply_preset(player, state.active_preset)
 
@@ -246,7 +326,8 @@ class Music(MusicEvents, Package):
 
     @hybrid(name="play", aliases=["p"], guild_only=True)
     @describe(query="Song name or URL", next="Play after the current track")
-    async def play(self, ctx, query: str, next: bool = False) -> None:
+    async def play(self, ctx, *, query: str, next: bool = False) -> None:
+        query, play_next = self._parse_play_flags(query, next=next)
         player = await self._player(ctx)
         if player is None:
             return
@@ -256,26 +337,30 @@ class Music(MusicEvents, Package):
 
         state = self._queue(ctx.guild.id)
 
-        if player.is_playing or player.current:
-            if next:
-                state.tracks.insert(0, track)
-            else:
-                state.tracks.append(track)
-            return await ctx.send(embed=discord.Embed(
-                title="queued",
+        try:
+            if player.is_playing or player.current:
+                if play_next:
+                    state.tracks.insert(0, track)
+                else:
+                    state.tracks.append(track)
+                return await ctx.send(embed=discord.Embed(
+                    title="queued",
+                    description=f"**{track.title}** — {track.author}",
+                    color=color.base,
+                ))
+
+            state.current = track
+            await player.play(track)
+            if state.active_preset:
+                await self._apply_preset(player, state.active_preset)
+            await ctx.send(embed=discord.Embed(
+                title="now playing",
                 description=f"**{track.title}** — {track.author}",
                 color=color.base,
             ))
-
-        state.current = track
-        await player.play(track)
-        if state.active_preset:
-            await self._apply_preset(player, state.active_preset)
-        await ctx.send(embed=discord.Embed(
-            title="now playing",
-            description=f"**{track.title}** — {track.author}",
-            color=color.base,
-        ))
+        except NodeRestException as exc:
+            log.error("play failed for %r: %s", query, exc)
+            return await ctx.fail(f"failed to play track: {exc}")
 
     @hybrid(name="queue", description="View all tracks queued", group=True, invoke_without_command=True, guild_only=True)
     async def queue(self, ctx) -> None:

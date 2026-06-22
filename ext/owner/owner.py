@@ -108,8 +108,8 @@ class Owner(commands.Cog):
             await ctx.success(f"Synced **{len(synced)}** commands globally")
 
     @owner.command(
-        name="servers",
-        description="List all servers the bot is in",
+        name="guilds",
+        description="List all guilds the bot is in",
         aliases=["guilds"],
     )
     async def owner_servers(self, ctx: Context) -> None:
@@ -121,7 +121,7 @@ class Owner(commands.Cog):
         pages = [entries[i:i + 15] for i in range(0, len(entries), 15)]
         page = 0
         embed = discord.Embed(
-            title=f"Servers ({len(self.bot.guilds)})",
+            title=f"Guilds ({len(self.bot.guilds)})",
             description="\n".join(pages[page]),
             color=color.base,
         )
@@ -221,10 +221,10 @@ class Owner(commands.Cog):
         await ctx.success(f"Synced **{len(synced)}** commands globally.")
 
     @hybrid(
-        name="servers",
-        description="List all servers the bot is in",
+        name="guilds",
+        description="List all guilds the bot is in",
     )
-    async def servers(self, ctx: Context) -> None:
+    async def guilds(self, ctx: Context) -> None:
         if not await self.bot.is_owner(ctx.author):
             return
         server_list = "\n".join(
@@ -232,8 +232,8 @@ class Owner(commands.Cog):
             for g in sorted(self.bot.guilds, key=lambda g: g.member_count, reverse=True)[:20]
         )
         embed = discord.Embed(
-            title=f"Servers ({len(self.bot.guilds)})",
-            description=server_list or "No servers.",
+            title=f"Guilds ({len(self.bot.guilds)})",
+            description=server_list or "No guilds.",
             color=color.base,
         )
         await ctx.send(embed=embed)

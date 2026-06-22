@@ -18,6 +18,24 @@ START_TIMEOUT_SECONDS = 30
 RPS_EMOJI = {"rock": "🪨", "paper": "📄", "scissors": "✂️"}
 RPS_BEATS = {"rock": "scissors", "paper": "rock", "scissors": "paper"}
 ZWSP = "\u200b"
+BOT_NAME = "Refrain"
+BOT_OPPONENT = "Me"
+
+
+def _is_bot_opponent(user: discord.User, bot: Bleed) -> bool:
+    return user.bot and user.id == bot.user.id
+
+
+def _opponent_label(user: discord.User, bot: Bleed) -> str:
+    return BOT_OPPONENT if _is_bot_opponent(user, bot) else user.display_name
+
+
+def _bot_win_status() -> str:
+    return "**I** win!"
+
+
+def _bot_thinking_line(*, emoji: str) -> str:
+    return f"{emoji} **{BOT_NAME}** is thinking..."
 
 
 def _rps_winner(a: str, b: str) -> int:
@@ -28,12 +46,17 @@ def _rps_winner(a: str, b: str) -> int:
     return 2
 
 
-async def _inactive_warning(ctx: "Context", label: str, message: discord.Message | None = None) -> None:
-    target = message or ctx.message
+async def _end_game(message: discord.Message | None, text: str) -> None:
+    if message is None:
+        return
     with contextlib.suppress(discord.HTTPException, discord.Forbidden):
-        if target:
-            await target.delete()
-    await ctx.warn(label, delete_after=180)
+        if message.embeds:
+            embed = message.embeds[0].copy()
+            embed.description = text
+            embed.set_footer(text="Game ended")
+            await message.edit(embed=embed, view=None)
+        else:
+            await message.edit(content=text, view=None)
 
 
 class RPSView(discord.ui.View):
@@ -56,15 +79,23 @@ class RPSView(discord.ui.View):
         self.message: discord.Message | None = None
         self.finished = False
 
+    @property
+    def _vs_bot(self) -> bool:
+        return _is_bot_opponent(self.player2, self.bot)
+
+    def _p2_display(self) -> str:
+        return _opponent_label(self.player2, self.bot)
+
     def _waiting_text(self) -> str:
         p1_done = self.player1.id in self.choices
         p2_done = self.player2.id in self.choices
+        p2 = f"**{self._p2_display()}**" if self._vs_bot else self.player2.mention
         if not p1_done and not p2_done:
-            return f"Waiting for {self.player1.mention} and {self.player2.mention} to make their choice"
+            return f"Waiting for {self.player1.mention} and {p2} to make their choice"
         if not p1_done:
             return f"Waiting for {self.player1.mention}"
         if not p2_done:
-            return f"Waiting for {self.player2.mention}"
+            return f"Waiting for {p2}"
         return "Revealing choices..."
 
     def _embed(self) -> discord.Embed:
@@ -74,12 +105,13 @@ class RPSView(discord.ui.View):
             if p1s > p2s:
                 winner = self.player1.mention
             elif p2s > p1s:
-                winner = self.player2.mention
+                winner = _bot_win_status() if self._vs_bot else self.player2.mention
             else:
                 winner = "Nobody"
+            p2_score = f"**{self._p2_display()}**" if self._vs_bot else self.player2.mention
             desc = (
                 f"**Final score**\n"
-                f"{self.player1.mention}: **{p1s}** — **{p2s}** :{self.player2.mention}\n"
+                f"{self.player1.mention}: **{p1s}** — **{p2s}** :{p2_score}\n"
                 f"**Winner:** {winner}"
             )
         else:
@@ -135,12 +167,14 @@ class RPSView(discord.ui.View):
 
         round_text = (
             f"{RPS_EMOJI[c1]} {self.player1.display_name}: **{c1.title()}**\n"
-            f"{RPS_EMOJI[c2]} {self.player2.display_name}: **{c2.title()}**\n"
+            f"{RPS_EMOJI[c2]} {self._p2_display()}: **{c2.title()}**\n"
         )
         if result == 0:
             round_text += "**Round tie!**"
         elif result == 1:
             round_text += f"**{self.player1.display_name}** wins the round!"
+        elif self._vs_bot:
+            round_text += "**I** win the round!"
         else:
             round_text += f"**{self.player2.display_name}** wins the round!"
 
@@ -167,9 +201,11 @@ class RPSView(discord.ui.View):
     async def on_timeout(self) -> None:
         for child in self.children:
             child.disabled = True
-        if self.message:
-            with contextlib.suppress(discord.HTTPException, discord.Forbidden):
-                await self.message.delete()
+        p2 = f"**{self._p2_display()}**" if self._vs_bot else self.player2.mention
+        await _end_game(
+            self.message,
+            f"Rock paper scissors between {self.player1.mention} and {p2} ended due to inactivity.",
+        )
 
 
 class TicTacToeButton(discord.ui.Button["TicTacToeView"]):
@@ -209,14 +245,14 @@ class TicTacToeView(discord.ui.View):
         ctx: "Context",
         player_x: discord.User,
         player_o: discord.User | None,
-        vs_ai: bool,
+        vs_me: bool,
         bot: Bleed,
     ) -> None:
         super().__init__(timeout=INACTIVITY_SECONDS)
         self.ctx = ctx
         self.player_x = player_x
         self.player_o = player_o
-        self.vs_ai = vs_ai
+        self.vs_me = vs_me
         self.bot = bot
         self.board = [["", "", ""] for _ in range(3)]
         self.turn = "X"
@@ -229,8 +265,8 @@ class TicTacToeView(discord.ui.View):
                 self.add_item(TicTacToeButton(x, y))
 
     def _player_o_name(self) -> str:
-        if self.vs_ai:
-            return "AI"
+        if self.vs_me:
+            return BOT_OPPONENT
         return self.player_o.display_name if self.player_o else "opponent"
 
     def _header(self) -> str:
@@ -242,7 +278,7 @@ class TicTacToeView(discord.ui.View):
     def _current_player(self) -> discord.User | None:
         if self.turn == "X":
             return self.player_x
-        return None if self.vs_ai else self.player_o
+        return None if self.vs_me else self.player_o
 
     def _content(self, *, status: str = "", starting: bool = False) -> str:
         lines = [self._header(), ""]
@@ -255,8 +291,8 @@ class TicTacToeView(discord.ui.View):
             current = self._current_player()
             if current:
                 lines.append(f"{self._turn_emoji()} {current.mention}, your turn.")
-            elif self.vs_ai and self.turn == "O":
-                lines.append("⭕ **AI** is thinking...")
+            elif self.vs_me and self.turn == "O":
+                lines.append(_bot_thinking_line(emoji="⭕"))
         return "\n".join(lines)
 
     def _check_winner(self) -> str | None:
@@ -294,18 +330,16 @@ class TicTacToeView(discord.ui.View):
         self.stop()
         for child in self.children:
             child.disabled = True
-        p2 = self.player_o.mention if self.player_o and not self.vs_ai else "**AI**"
-        await _inactive_warning(
-            self.ctx,
-            f"Stopped the tic-tac-toe game between {self.player_x.mention} and {p2} — no move in {START_TIMEOUT_SECONDS} seconds.",
+        await _end_game(
             self.message,
+            f"{self._header()}\n\nGame cancelled — no move in {START_TIMEOUT_SECONDS} seconds.",
         )
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if self.finished:
             await interaction.response.send_message("This game is over.", ephemeral=True)
             return False
-        if self.vs_ai:
+        if self.vs_me:
             if self.turn == "X" and interaction.user.id != self.player_x.id:
                 await interaction.response.send_message("It's not your turn.", ephemeral=True)
                 return False
@@ -334,8 +368,8 @@ class TicTacToeView(discord.ui.View):
             elif winner == "X":
                 status = f"**{self.player_x.mention}** wins!"
             else:
-                if self.vs_ai:
-                    status = "**AI** wins!"
+                if self.vs_me:
+                    status = _bot_win_status()
                 else:
                     status = f"**{self.player_o.mention}** wins!"
             self._sync_buttons()
@@ -347,16 +381,16 @@ class TicTacToeView(discord.ui.View):
         self.turn = "O" if self.turn == "X" else "X"
         self._sync_buttons()
 
-        if self.vs_ai and self.turn == "O":
+        if self.vs_me and self.turn == "O":
             await interaction.response.edit_message(content=self._content(), view=self)
-            await self._ai_move()
+            await self._me_move()
             winner = self._check_winner()
             if winner:
                 self.finished = True
                 if winner == "tie":
                     status = "It's a **tie**!"
                 elif winner == "O":
-                    status = "**AI** wins!"
+                    status = _bot_win_status() if self.vs_me else f"**{self.player_o.mention}** wins!"
                 else:
                     status = f"**{self.player_x.mention}** wins!"
                 for child in self.children:
@@ -372,7 +406,7 @@ class TicTacToeView(discord.ui.View):
 
         await interaction.response.edit_message(content=self._content(), view=self)
 
-    async def _ai_move(self) -> None:
+    async def _me_move(self) -> None:
         empty = [(x, y) for y in range(3) for x in range(3) if not self.board[y][x]]
         if not empty:
             return
@@ -419,11 +453,9 @@ class TicTacToeView(discord.ui.View):
         self._cancel_start_timer()
         for child in self.children:
             child.disabled = True
-        p2 = self.player_o.mention if self.player_o and not self.vs_ai else "**AI**"
-        await _inactive_warning(
-            self.ctx,
-            f"Stopped the tic-tac-toe game between {self.player_x.mention} and {p2} due to inactivity.",
+        await _end_game(
             self.message,
+            f"{self._header()}\n\nGame ended due to inactivity.",
         )
 
 
@@ -457,14 +489,14 @@ class Connect4View(discord.ui.View):
         player1: discord.User,
         player2: discord.User,
         bot: Bleed,
-        vs_ai: bool = False,
+        vs_me: bool = False,
     ) -> None:
         super().__init__(timeout=INACTIVITY_SECONDS)
         self.ctx = ctx
         self.player1 = player1
         self.player2 = player2
         self.bot = bot
-        self.vs_ai = vs_ai
+        self.vs_me = vs_me
         self.board = [[0] * self.COLS for _ in range(self.ROWS)]
         self.turn = 1
         self.message: discord.Message | None = None
@@ -490,7 +522,7 @@ class Connect4View(discord.ui.View):
         return self.player1 if self.turn == 1 else self.player2
 
     def _content(self, *, status: str = "") -> str:
-        p2_name = "AI" if self.vs_ai else self.player2.display_name
+        p2_name = BOT_OPPONENT if self.vs_me else self.player2.display_name
         lines = [
             f"**{self.player1.display_name}** vs **{p2_name}**",
             "",
@@ -499,8 +531,11 @@ class Connect4View(discord.ui.View):
         if status:
             lines.extend(["", status])
         elif not self.finished:
-            marker = "🔴" if self.turn == 1 else "🟡"
-            lines.extend(["", f"{marker} {self._current_player().mention}, your turn."])
+            if self.vs_me and self.turn == 2:
+                lines.extend(["", _bot_thinking_line(emoji="🟡")])
+            else:
+                marker = "🔴" if self.turn == 1 else "🟡"
+                lines.extend(["", f"{marker} {self._current_player().mention}, your turn."])
         return "\n".join(lines)
 
     def _drop(self, column: int, player: int) -> int | None:
@@ -531,12 +566,12 @@ class Connect4View(discord.ui.View):
         if self.finished:
             await interaction.response.send_message("This game is over.", ephemeral=True)
             return False
-        if self.vs_ai:
+        if self.vs_me:
             if interaction.user.id != self.player1.id:
                 await interaction.response.send_message("You are not in this game.", ephemeral=True)
                 return False
             if self.turn != 1:
-                await interaction.response.send_message("Wait for the AI.", ephemeral=True)
+                await interaction.response.send_message(f"Wait for **{BOT_NAME}**.", ephemeral=True)
                 return False
             return True
         if interaction.user.id not in (self.player1.id, self.player2.id):
@@ -564,7 +599,7 @@ class Connect4View(discord.ui.View):
                 return True
         return False
 
-    def _ai_column(self) -> int:
+    def _me_column(self) -> int:
         valid = self._valid_columns()
         if not valid:
             return 0
@@ -604,9 +639,9 @@ class Connect4View(discord.ui.View):
             )
             return
         self.turn = 2 if self.turn == 1 else 1
-        if self.vs_ai and self.turn == 2 and not self.finished:
+        if self.vs_me and self.turn == 2 and not self.finished:
             await interaction.response.edit_message(content=self._content(), view=self)
-            col = self._ai_column()
+            col = self._me_column()
             row = self._drop(col, 2)
             if row is None:
                 return
@@ -616,7 +651,7 @@ class Connect4View(discord.ui.View):
                     child.disabled = True
                 if self.message:
                     await self.message.edit(
-                        content=self._content(status="**AI** wins!"),
+                        content=self._content(status=_bot_win_status()),
                         view=self,
                     )
                 return
@@ -644,8 +679,8 @@ class Connect4View(discord.ui.View):
 
         player = self._current_player()
         if self._check_win(row, column, self.turn):
-            winner = "**AI**" if self.vs_ai and self.turn == 2 else player.mention
-            await self._after_move(interaction, status=f"{winner} wins!")
+            winner = _bot_win_status() if self.vs_me and self.turn == 2 else f"{player.mention} wins!"
+            await self._after_move(interaction, status=winner)
             return
 
         await self._after_move(interaction)
@@ -653,10 +688,10 @@ class Connect4View(discord.ui.View):
     async def on_timeout(self) -> None:
         for child in self.children:
             child.disabled = True
-        await _inactive_warning(
-            self.ctx,
-            f"Stopped the connect four game between {self.player1.mention} and {self.player2.mention} due to inactivity.",
+        await _end_game(
             self.message,
+            f"**{self.player1.display_name}** vs **{BOT_OPPONENT if self.vs_me else self.player2.display_name}**\n\n"
+            f"{self._board_text()}\n\nGame ended due to inactivity.",
         )
 
 
@@ -665,11 +700,11 @@ async def start_rps(
     *,
     opponent: discord.User | None,
     rounds: int = 1,
-    vs_ai: bool = False,
+    vs_me: bool = False,
 ) -> None:
-    if vs_ai or opponent is None:
+    if vs_me or opponent is None:
         opponent = ctx.bot.user
-        vs_ai = True
+        vs_me = True
     elif ctx.guild is None:
         return await ctx.warn("Mention an opponent or play against the bot.")
     elif opponent.bot and opponent.id != ctx.bot.user.id:
@@ -686,10 +721,10 @@ async def start_ttt(
     ctx: "Context",
     *,
     opponent: Optional[discord.User],
-    vs_ai: bool,
+    vs_me: bool,
 ) -> None:
-    if vs_ai or opponent is None:
-        vs_ai = True
+    if vs_me or opponent is None:
+        vs_me = True
         opponent = None
     elif ctx.guild is None:
         return await ctx.warn("Mention an opponent or play against the bot.")
@@ -701,8 +736,8 @@ async def start_ttt(
     view = TicTacToeView(
         ctx=ctx,
         player_x=ctx.author,
-        player_o=opponent if not vs_ai else None,
-        vs_ai=vs_ai,
+        player_o=opponent if not vs_me else None,
+        vs_me=vs_me,
         bot=ctx.bot,
     )
     msg = await ctx.send(content=view._content(starting=True), view=view)
@@ -713,10 +748,10 @@ async def start_connect4(
     ctx: "Context",
     *,
     opponent: discord.User | None,
-    vs_ai: bool = False,
+    vs_me: bool = False,
 ) -> None:
-    if vs_ai or opponent is None:
-        vs_ai = True
+    if vs_me or opponent is None:
+        vs_me = True
         opponent = ctx.bot.user
     elif ctx.guild is None:
         return await ctx.warn("Mention an opponent or play against the bot.")
@@ -730,7 +765,7 @@ async def start_connect4(
         player1=ctx.author,
         player2=opponent,
         bot=ctx.bot,
-        vs_ai=vs_ai,
+        vs_me=vs_me,
     )
     msg = await ctx.send(content=view._content(), view=view)
     view.message = msg

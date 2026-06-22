@@ -455,7 +455,7 @@ class Spotify(Package):
         music = ctx.bot.get_cog("Music")
         if music is None:
             return await ctx.warn("music cog isn't loaded")
-        await music.play.callback(ctx, query=query, play_next=False)
+        await music.play.callback(ctx, query=query, next=False)
 
     @spotify.command(name="search", description="Search for a track on Spotify")
     @describe(query="Track name to search for")

@@ -23,7 +23,7 @@ class CustomizeCommands(Package):
 
     async def _require_server_owner(self, ctx) -> bool:
         if ctx.guild is None:
-            await ctx.warn("this command only works in **servers**")
+            await ctx.warn("this command only works in **guilds**")
             return False
         if ctx.author.id != ctx.guild.owner_id:
             await ctx.warn("only the **server owner** can use this command")

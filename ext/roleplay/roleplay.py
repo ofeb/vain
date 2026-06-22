@@ -10,7 +10,6 @@ from discord.ext import commands
 from core.discord.package import Package
 from core.discord.ctx import Context
 from core.tools.convert import OptionalMember
-from core.discord.autocomplete import guild_member_choices
 from core.discord.hybrid import hybrid, describe
 from core.tools.human.text import ordinal
 
@@ -139,7 +138,7 @@ class RoleplayCommands(Package):
         interaction: discord.Interaction,
         current: str,
     ) -> list[app_commands.Choice[str]]:
-        return await guild_member_choices(interaction, current)
+        return await OptionalMember.autocomplete(interaction, current)
 
     async def _perform_action(
         self,
@@ -193,7 +192,7 @@ def _make_prefix_action(name: str):
         return await self._perform_action(ctx, name, member)
 
     async def member_autocomplete(interaction: discord.Interaction, current: str):
-        return await guild_member_choices(interaction, current)
+        return await OptionalMember.autocomplete(interaction, current)
 
     action.autocomplete("member")(member_autocomplete)
     action.__name__ = name

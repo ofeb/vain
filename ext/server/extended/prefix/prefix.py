@@ -109,7 +109,7 @@ class PrefixCommands(Package):
 
     @prefix.group(
         name="self",
-        description="Set personal prefix across all servers with bleed",
+        description="Set personal prefix across all guilds with bleed",
         example=",prefix self k!",
         invoke_without_command=True,
     )
