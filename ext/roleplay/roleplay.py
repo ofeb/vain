@@ -9,7 +9,7 @@ from discord.ext import commands
 
 from core.discord.package import Package
 from core.discord.ctx import Context
-wfrom core.discord.autocomplete import guild_member_choices
+from core.discord.autocomplete import guild_member_choices
 from core.discord.hybrid import hybrid, describe, command
 from core.tools.human.text import ordinal
 

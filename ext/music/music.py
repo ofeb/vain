@@ -313,7 +313,7 @@ class Music(MusicEvents, Package):
         self.queues.pop(ctx.guild.id, None)
         await ctx.success("disconnected")
 
-    @group(name="preset", description="Audio filter presets", invoke_without_command=True, guild_only=True)
+    @hybrid(name="preset", description="Audio filter presets", group=True, invoke_without_command=True, guild_only=True)
     async def preset(self, ctx: Context) -> None:
         await ctx.send_help(ctx.command)
 

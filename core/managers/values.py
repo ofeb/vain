@@ -163,7 +163,7 @@ class music:
     search_source: str = "dzsearch"  # deezer im p sure
 
 
-music_enabled: bool = False
+music_enabled: bool = True
 
 
 class lastfm_color:
