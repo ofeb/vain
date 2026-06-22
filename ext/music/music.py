@@ -24,13 +24,13 @@ if TYPE_CHECKING:
 
 try:
     import lava_lyra as lyra
-    from lava_lyra.exceptions import TrackLoadError
+    from lava_lyra.exceptions import NoNodesAvailable, NodeCreationError, TrackLoadError
 
     HAS_LYRA = True
 except ImportError:
     HAS_LYRA = False
     lyra = None
-    TrackLoadError = Exception
+    NoNodesAvailable = NodeCreationError = TrackLoadError = Exception
 
 
 class GuildQueue:
@@ -55,31 +55,66 @@ class Music(MusicEvents, Package):
         super().__init__(bot)
         self.queues: dict[int, GuildQueue] = {}
         self._node = None
+        self._node_lock = asyncio.Lock()
 
-    async def cog_load(self) -> None:
+    async def _connect_node(self) -> bool:
         if not music_enabled or not HAS_LYRA:
-            log.info("music cog skipped (enabled=%s, lyra=%s)", music_enabled, HAS_LYRA)
-            return
-        log.info("connecting to nodelink at %s:%s", nl.host, nl.port)
-        try:
-            self._node = await asyncio.wait_for(
-                lyra.NodePool.create_node(
-                    bot=self.bot,
-                    host=nl.host,
-                    port=nl.port,
-                    password=nl.password,
-                    identifier=nl.identifier(),
-                    fallback=True,
-                ),
-                timeout=15,
-            )
-            log.info("nodelink connected")
-        except asyncio.TimeoutError:
-            log.warning("nodelink connection timed out after 15s")
+            return False
+        if self._node is not None and self._node.is_connected:
+            return True
+        if not self.bot.is_ready():
+            return False
+
+        async with self._node_lock:
+            if self._node is not None and self._node.is_connected:
+                return True
+
+            try:
+                node = lyra.NodePool.get_node(identifier=nl.identifier())
+            except NoNodesAvailable:
+                node = None
+            else:
+                if not node.is_connected:
+                    await node.connect()
+                self._node = node
+                log.info("nodelink connected (existing node)")
+                return True
+
+            log.info("connecting to nodelink at %s:%s", nl.host, nl.port)
+            try:
+                self._node = await asyncio.wait_for(
+                    lyra.NodePool.create_node(
+                        bot=self.bot,
+                        host=nl.host,
+                        port=nl.port,
+                        password=nl.password,
+                        identifier=nl.identifier(),
+                        fallback=True,
+                        secure=False,
+                    ),
+                    timeout=15,
+                )
+                log.info("nodelink connected")
+                return True
+            except asyncio.TimeoutError:
+                log.warning("nodelink connection timed out after 15s")
+            except NodeCreationError as e:
+                if "already exists" in str(e).lower():
+                    try:
+                        self._node = lyra.NodePool.get_node(identifier=nl.identifier())
+                        if not self._node.is_connected:
+                            await self._node.connect()
+                        log.info("nodelink connected (existing node)")
+                        return True
+                    except Exception as inner:
+                        log.warning("nodelink reconnect failed: %s", inner)
+                else:
+                    log.warning("nodelink connection failed: %s", e)
+            except Exception as e:
+                log.warning("nodelink connection failed: %s", e)
+
             self._node = None
-        except Exception as e:
-            log.warning("nodelink connection failed: %s", e)
-            self._node = None
+            return False
 
     def _queue(self, guild_id: int) -> GuildQueue:
         return self.queues.setdefault(guild_id, GuildQueue())
@@ -97,7 +132,7 @@ class Music(MusicEvents, Package):
         return True
 
     async def _player(self, ctx: Context):
-        if not HAS_LYRA or self._node is None:
+        if not HAS_LYRA or not await self._connect_node():
             await ctx.warn("nodelink isn't running")
             return None
         if not await self._ensure_voice(ctx):

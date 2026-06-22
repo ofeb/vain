@@ -4,6 +4,10 @@ from core.discord.package import Package
 
 
 class MusicEvents(Package):
+    @Package.listener("on_ready")
+    async def _connect_nodelink_on_ready(self) -> None:
+        await self._connect_node()
+
     @Package.listener("on_lyra_track_end")
     async def _on_track_end(self, player, track, reason) -> None:
         if not player.guild:
