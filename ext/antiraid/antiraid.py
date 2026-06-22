@@ -3,7 +3,7 @@ from __future__ import annotations
 import contextlib
 from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 import discord
 from discord import Embed
@@ -15,6 +15,9 @@ from core.tools.convert import MemberConvert, StatusConvert
 from core.tools.flags import AntiRaidFlags
 
 from .models import AntiraidConfig, ModuleConfig
+
+if TYPE_CHECKING:
+    from core.bleed import Bleed
 
 from core.managers.permissions import has_permissions
 MASSJOIN_WINDOW = 10
@@ -574,5 +577,5 @@ class Antiraid(Package):
         await ctx.success(f"Antiraid configuration has been **reset**{suffix}.")
 
 
-async def setup(bot) -> None:
+async def setup(bot: Bleed) -> None:
     await bot.add_cog(Antiraid(bot))

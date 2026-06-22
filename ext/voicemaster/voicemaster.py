@@ -1,12 +1,20 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from core.bleed import Bleed
+
+
 import asyncio
 import contextlib
 from typing import Optional, Union
 
 import discord
 from discord import app_commands
-from discord.ext import commands, tasks
+from discord.ext import commands
+
+from core.discord.package import Package, tasks
 
 from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe, group
@@ -15,11 +23,11 @@ from .views import VoiceInterface
 from core.managers.permissions import has_permissions
 
 
-class VoiceControl(commands.Cog):
+class VoiceControl(Package):
     """Voice channel management system."""
 
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
+    def __init__(self, bot: Bleed):
+        super().__init__(bot)
         self._cooldowns: dict = {}
         self.bot.add_view(VoiceInterface(self))
 
@@ -705,7 +713,7 @@ class VoiceControl(commands.Cog):
         
         await ctx.success(f"Rejected {target.mention}")
 
-    @commands.Cog.listener()
+    @Package.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
         """Handle voice state updates for VoiceMaster."""
         if before.channel == after.channel:
@@ -763,5 +771,5 @@ class VoiceControl(commands.Cog):
                 pass
 
 
-async def setup(bot: commands.Bot):
+async def setup(bot: Bleed):
     await bot.add_cog(VoiceControl(bot))

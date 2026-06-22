@@ -2,23 +2,27 @@ from __future__ import annotations
 
 import io
 import os
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import aiohttp
 import discord
-from discord.ext import commands
+
+from core.discord.package import Package
 
 from core.discord.ctx import Context
 from core.discord.hybrid import describe, group
 from core.managers.permissions import has_permissions
 from core.managers.values import color
 
+if TYPE_CHECKING:
+    from core.bleed import Bleed
 
-class Socials(commands.Cog):
+
+class Socials(Package):
     """Social media feeds and notifications."""
 
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
+    def __init__(self, bot: Bleed):
+        super().__init__(bot)
         self._filters = {}
 
     async def _get_instagram_info(self, username: str) -> Optional[dict]:
@@ -236,5 +240,5 @@ class Socials(commands.Cog):
         await ctx.send(embed=embed)
 
 
-async def setup(bot: commands.Bot):
+async def setup(bot: Bleed):
     await bot.add_cog(Socials(bot))

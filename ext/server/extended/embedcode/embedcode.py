@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import TYPE_CHECKING
 
 import re
 
@@ -10,6 +11,10 @@ from core.discord.hybrid import describe
 from core.managers.permissions import has_permissions
 from core.managers.values import color, emojis
 
+
+
+if TYPE_CHECKING:
+    from core.bleed import Bleed
 
 class Embedcode(Package):
     """copy embed code from a message"""
@@ -108,7 +113,3 @@ class Embedcode(Package):
             lines.append(f"{{field: {field.name} | {field_text} | {str(field.inline).lower()}}}")
 
         return "\n".join(lines)
-
-
-async def setup(bot):
-    await bot.add_cog(Embedcode(bot))

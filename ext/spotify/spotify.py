@@ -1,16 +1,20 @@
 from __future__ import annotations
 
 import base64
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 from urllib.parse import quote_plus
 
 import aiohttp
 import discord
-from discord.ext import commands
+
+from core.discord.package import Package
 
 from core.discord.ctx import Context
 from core.discord.hybrid import describe, group, hybrid
 from core.managers.values import color
+
+if TYPE_CHECKING:
+    from core.bleed import Bleed
 
 CLIENT_ID = ""
 CLIENT_SECRET = ""
@@ -72,11 +76,11 @@ class SpotifyClient:
         return await self._request(f"artists/{artist_id}")
 
 
-class Spotify(commands.Cog):
+class Spotify(Package):
     """Spotify track lookup, search, and now playing."""
 
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
+    def __init__(self, bot: Bleed):
+        super().__init__(bot)
         self.client = SpotifyClient()
 
     @group(
@@ -279,5 +283,5 @@ class Spotify(commands.Cog):
         await ctx.send(embed=embed, view=view)
 
 
-async def setup(bot: commands.Bot):
+async def setup(bot: Bleed):
     await bot.add_cog(Spotify(bot))

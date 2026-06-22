@@ -177,11 +177,12 @@ class RoleplayCommands(Package):
 
 
 def _make_prefix_action(name: str):
-    @commands.command(
+    @hybrid(
         name=name,
         description=f"Roleplay: {name}",
     )
-    async def action(self, ctx: Context, *, member: Optional[discord.User] = None):
+    @describe(member="Member to roleplay with")
+    async def action(self, ctx: Context, member: Optional[discord.User] = None):
         return await self._perform_action(ctx, name, member)
 
     action.__name__ = name

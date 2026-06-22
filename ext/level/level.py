@@ -1,15 +1,20 @@
 from __future__ import annotations
 
 import random
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import discord
-from discord.ext import commands, tasks
+from discord.ext import tasks
+
+from core.discord.package import Package
 
 from core.discord.ctx import Context
 from core.discord.hybrid import describe, group, hybrid
 from core.managers.permissions import has_permissions
 from core.managers.values import color
+
+if TYPE_CHECKING:
+    from core.bleed import Bleed
 
 XP_PER_MESSAGE = 15
 XP_COOLDOWN = 60
@@ -29,14 +34,14 @@ def level_from_xp(xp: int) -> int:
     return level
 
 
-class Level(commands.Cog):
+class Level(Package):
     """XP tracking, level roles, and leaderboards."""
 
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
+    def __init__(self, bot: Bleed):
+        super().__init__(bot)
         self._cooldowns: dict[int, float] = {}
 
-    @commands.Cog.listener()
+    @Package.listener()
     async def on_message(self, message: discord.Message) -> None:
         if message.author.bot or not message.guild:
             return
@@ -240,5 +245,5 @@ class Level(commands.Cog):
             await ctx.fail("Configuration unavailable.")
 
 
-async def setup(bot: commands.Bot):
+async def setup(bot: Bleed):
     await bot.add_cog(Level(bot))

@@ -4,17 +4,19 @@ import asyncio
 from typing import TYPE_CHECKING
 
 import discord
-from discord.ext import commands
+
+from core.discord.package import Package
 
 if TYPE_CHECKING:
     from .counters import Counters
+    from core.bleed import Bleed
 
 
-class CountersEvents(commands.Cog):
+class CountersEvents(Package):
     """Counter event handlers."""
 
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
+    def __init__(self, bot: Bleed):
+        super().__init__(bot)
         self.rl_helper = {}
 
     async def ratelimit(self, key: str, rate: int, per: int) -> bool:
@@ -30,7 +32,7 @@ class CountersEvents(commands.Cog):
         self.rl_helper[key].append(now)
         return False
 
-    @commands.Cog.listener("on_member_join")
+    @Package.listener("on_member_join")
     async def on_member_counter_add(self, member: discord.Member) -> None:
         guild = member.guild
         counter = await self.bot.db.fetchrow(
@@ -47,7 +49,7 @@ class CountersEvents(commands.Cog):
                 await asyncio.sleep(10)
             await counter_channel.edit(name=f"{len(guild.members)} members")
 
-    @commands.Cog.listener("on_member_remove")
+    @Package.listener("on_member_remove")
     async def on_member_counter_remove(self, member: discord.Member) -> None:
         guild = member.guild
         counter = await self.bot.db.fetchrow(
@@ -64,7 +66,7 @@ class CountersEvents(commands.Cog):
                 await asyncio.sleep(10)
             await counter_channel.edit(name=f"{len(guild.members)} members")
 
-    @commands.Cog.listener("on_member_update")
+    @Package.listener("on_member_update")
     async def on_booster_counter_change(self, before: discord.Member, after: discord.Member) -> None:
         guild = after.guild
         booster_counter = await self.bot.db.fetchrow(
@@ -96,5 +98,5 @@ class CountersEvents(commands.Cog):
             await booster_counter_channel.edit(name=f"{num} boosters")
 
 
-async def setup(bot: commands.Bot):
+async def setup(bot: Bleed):
     await bot.add_cog(CountersEvents(bot))

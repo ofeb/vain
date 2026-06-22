@@ -1,11 +1,17 @@
-﻿"""base class for media repost handlers.
+﻿﻿"""base class for media repost handlers.
 provides download and send logic all platforms share.
 subclass this and implement fetch"""
 
-import discord
+from __future__ import annotations
+
+from typing import Optional, TYPE_CHECKING
+
 import aiohttp
+import discord
 from discord.ext.commands import Context
-from typing import Optional
+
+if TYPE_CHECKING:
+    from core.bleed import Bleed
 
 
 class BaseRepost:
@@ -13,7 +19,7 @@ class BaseRepost:
 
     platform: str = "unknown"
 
-    def __init__(self, bot):
+    def __init__(self, bot: Bleed):
         self.bot = bot
 
     async def fetch(self, url: str) -> Optional[dict]:

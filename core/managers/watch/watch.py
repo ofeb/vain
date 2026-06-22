@@ -3,13 +3,17 @@ watches dirs and reloads cogs on file change.
 wraps watchfiles to dispatch to discord.py"""
 
 from __future__ import annotations
+
 import asyncio, logging, os, sys
 from functools import wraps
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import List, Optional, Union, TYPE_CHECKING
 
 import discord
 from watchfiles import Change, awatch
+
+if TYPE_CHECKING:
+    from core.bleed import Bleed
 
 try:
     from discord.ext import commands
@@ -32,7 +36,7 @@ class Watcher:
 
     def __init__(
         self,
-        client: commands.Bot,
+        client: Bleed,
         path: Union[str, List[str]] = "ext",
         debug: bool = True,
         loop: asyncio.BaseEventLoop = None,

@@ -5,20 +5,22 @@ from collections import defaultdict
 from typing import TYPE_CHECKING
 
 import discord
-from discord.ext import commands
+
+from core.discord.package import Package
 
 if TYPE_CHECKING:
     from .autorole import Autorole
+    from core.bleed import Bleed
 
 
-class AutoroleEvents(commands.Cog):
+class AutoroleEvents(Package):
     """Autorole event handlers."""
 
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
+    def __init__(self, bot: Bleed):
+        super().__init__(bot)
         self.locks = defaultdict(asyncio.Lock)
 
-    @commands.Cog.listener("on_member_join")
+    @Package.listener("on_member_join")
     async def on_autorole(self, member: discord.Member) -> None:
         """Handle automatic role assignment on member join."""
         if await self.bot.object_cache.ratelimited(f"member_joins:{member.guild.id}", 1, 5) != 0:
@@ -54,7 +56,7 @@ class AutoroleEvents(commands.Cog):
                 to_delete,
             )
 
-    @commands.Cog.listener("on_raw_reaction_add")
+    @Package.listener("on_raw_reaction_add")
     async def on_reaction_role_assign(self, payload: discord.RawReactionActionEvent) -> None:
         """Handle reaction role assignment."""
         guild = self.bot.get_guild(payload.guild_id)
@@ -88,7 +90,7 @@ class AutoroleEvents(commands.Cog):
         async with self.locks[f"reaction_roles:{member.guild.id}"]:
             await member.add_roles(role, reason="Reaction Role")
 
-    @commands.Cog.listener("on_raw_reaction_remove")
+    @Package.listener("on_raw_reaction_remove")
     async def on_reaction_role_remove(self, payload: discord.RawReactionActionEvent) -> None:
         """Handle reaction role removal."""
         guild = self.bot.get_guild(payload.guild_id)
@@ -123,6 +125,6 @@ class AutoroleEvents(commands.Cog):
             await member.remove_roles(role, reason="Reaction Role")
 
 
-async def setup(bot: commands.Bot):
+async def setup(bot: Bleed):
     """Load the AutoroleEvents cog."""
     await bot.add_cog(AutoroleEvents(bot))

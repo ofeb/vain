@@ -1,18 +1,24 @@
 from __future__ import annotations
+
 import re
 from typing import TYPE_CHECKING
+
 import discord
 from discord.ext.commands import CommandError
+
 from core.discord.ctx import Context
 from core.discord.hybrid import describe, hybrid
 from core.discord.package import Package
 from core.managers.permissions import has_permissions
 from core.managers.values import color
+
 if TYPE_CHECKING:
     from core.bleed import Bleed
 
+
 class EmbedCommands(Package):
     """saved embed templates and management"""
+
     @hybrid(
         name="embed",
         description="Create and manage saved embed templates",
@@ -24,6 +30,7 @@ class EmbedCommands(Package):
     async def embed(self, ctx: Context) -> None:
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
+
     @embed.command(
         name="create",
         description="Save an embed script as a template",
@@ -47,6 +54,7 @@ class EmbedCommands(Package):
             ctx.author.id,
         )
         await ctx.success(f"Saved embed template **`{name}`**.")
+
     @embed.command(
         name="edit",
         description="Edit a saved embed template",
@@ -74,6 +82,7 @@ class EmbedCommands(Package):
             ctx.author.id,
         )
         await ctx.success(f"Updated embed template **`{name}`**.")
+
     @embed.command(name="list", description="List saved embed templates")
     async def embed_list(self, ctx: Context) -> None:
         rows = await self.db.fetch(
@@ -92,6 +101,7 @@ class EmbedCommands(Package):
             color=color.base,
         )
         await ctx.send(embed=embed)
+
     @embed.command(name="preview", description="Preview a saved embed or raw script")
     @describe(target="Template name or raw embed script")
     async def embed_preview(self, ctx: Context, *, target: str) -> None:
@@ -102,6 +112,7 @@ class EmbedCommands(Package):
         )
         script = row["script"] if row else target
         await self._send_embed_script(ctx, script)
+
     @embed.command(name="send", description="Send a saved embed template")
     @describe(name="Template name")
     async def embed_send(self, ctx: Context, name: str) -> None:
@@ -113,6 +124,7 @@ class EmbedCommands(Package):
         if not row:
             return await ctx.fail(f"No embed template named **`{name}`**.")
         await self._send_embed_script(ctx, row["script"])
+
     @embed.command(name="copy", description="Copy embed code from a message link")
     @describe(message="Discord message link")
     async def embed_copy(self, ctx: Context, *, message: str) -> None:
@@ -132,6 +144,7 @@ class EmbedCommands(Package):
         if len(code) > 2000:
             return await ctx.fail("Embed code is too long to send here.")
         await ctx.send(embed=discord.Embed(title="Embed Code", description=f"```{code}```", color=color.base))
+
     @embed.command(name="delete", description="Delete a saved embed template", aliases=["remove"])
     @describe(name="Template name")
     async def embed_delete(self, ctx: Context, name: str) -> None:
@@ -144,6 +157,7 @@ class EmbedCommands(Package):
         if result == "DELETE 0":
             return await ctx.fail(f"No embed template named **`{name}`**.")
         await ctx.success(f"Deleted embed template **`{name}`**.")
+
     @hybrid(
         name="editembed",
         description="Edit a saved embed template",
@@ -154,36 +168,38 @@ class EmbedCommands(Package):
     @has_permissions(manage_messages=True)
     async def editembed(self, ctx: Context, name: str, *, script: str) -> None:
         await self.embed_edit(ctx, name, script=script)
+
     def _parse_message_link(self, link: str) -> tuple[int, int]:
         pattern = r"discord(?:app)?\.com/channels/(\d+)/(\d+)/(\d+)"
         match = re.search(pattern, link)
         if not match:
             raise CommandError("Invalid message link.")
         return int(match.group(2)), int(match.group(3))
+
     def _embed_to_code(self, embed: discord.Embed) -> str:
         lines = ["{embed}"]
         if embed.title:
-            lines.append(f"{ title: {embed.title}} ")
+            lines.append(f"{{title: {embed.title}}}")
         if embed.description:
-            lines.append(f"{ description: {embed.description}} ")
+            lines.append(f"{{description: {embed.description}}}")
         if embed.color:
-            lines.append(f"{ color: #{embed.color.value:06x}} ")
+            lines.append(f"{{color: #{embed.color.value:06x}}}")
         if embed.author and embed.author.name:
             author_text = embed.author.name
             if embed.author.url:
                 author_text += f" | {embed.author.url}"
             if embed.author.icon_url:
                 author_text += f" | {embed.author.icon_url}"
-            lines.append(f"{ author: {author_text}} ")
+            lines.append(f"{{author: {author_text}}}")
         if embed.footer and embed.footer.text:
             footer_text = embed.footer.text
             if embed.footer.icon_url:
                 footer_text += f" | {embed.footer.icon_url}"
-            lines.append(f"{ footer: {footer_text}} ")
+            lines.append(f"{{footer: {footer_text}}}")
         if embed.image:
-            lines.append(f"{ image: {embed.image.url}} ")
+            lines.append(f"{{image: {embed.image.url}}}")
         if embed.thumbnail:
-            lines.append(f"{ thumbnail: {embed.thumbnail.url}} ")
+            lines.append(f"{{thumbnail: {embed.thumbnail.url}}}")
         for field in embed.fields:
-            lines.append(f"{ field: {field.name} | {field.value or ''} | {str(field.inline).lower()}} ")
+            lines.append(f"{{field: {field.name} | {field.value or ''} | {str(field.inline).lower()}}}")
         return "\n".join(lines)

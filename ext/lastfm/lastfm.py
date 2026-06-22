@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from core.bleed import Bleed
+
+
 import asyncio
 import base64
 import contextlib
@@ -65,7 +71,7 @@ _PLAYS_QUERY_USER_ID_PREFIX_RE = re.compile(r"^([0-9]{17,20})\s+(.+)$", re.DOTAL
 
 class Lastfm(Package):
 
-    def __init__(self, bot: commands.Bot) -> None:
+    def __init__(self, bot: Bleed) -> None:
         super().__init__(bot)
         self._api = LastFMApiClient(bot, lastfm_color=self._lastfm_color)
         self._library = LastFMLibraryStore(bot, self._api)
@@ -659,50 +665,25 @@ class Lastfm(Package):
         return await self.lastfm_now(ctx)
 
     @lastfm.command(name="login")
-    async def lastfm_login(self, ctx: Context) -> None:
+    async def lastfm_login(self, ctx: Context, username: str) -> None:
         """
-        Login and authenticate bored to use your account
+        Link your Last.fm username to bored
         """
-        api_key = api_values.lastfm.key
-        callback = lastfm_callback.url
-        if not api_key or not callback:
+        username = username.strip().lstrip("@")
+        if not username:
+            await ctx.warn("Provide your **Last.fm username**.")
+            return
+        if not getattr(self.bot, "db", None):
             await ctx.warn("Last.fm is not configured on this bot.")
             return
-        data = await self._signed_request({"method": "auth.getToken"})
-        token = self._text_value(data.get("token")) if data else None
-        if not token:
-            raise RuntimeError("internal lastfm upstream unavailable")
+        data = await self._request({"method": "user.getInfo", "user": username})
+        user_data = data.get("user") if data else None
+        if not user_data:
+            await ctx.warn(f"Could not find Last.fm user **{username}**.")
             return
-        if getattr(self.bot, "db", None):
-            await self.bot.db.set_lastfm_login(token, ctx.author.id)
-        callback_url = callback
-        auth_url = (
-            f"{LASTFM_AUTH}?api_key={api_key}"
-            f"&token={quote_plus(token)}"
-            f"&cb={quote_plus(callback_url)}"
-        )
-        embed = discord.Embed(
-            title="Connect your Last.fm account",
-            description=(
-                f"Authorize **bored** to use your Last.fm account [here]({auth_url}). "
-                "Run `lastfm update` after linking whenever you want to refresh the stored library "
-                "that powers whoknows, crowns, recommendations, and scoreboards.\n\n"
-                "If you want to remove your account, run `lastfm logout` and remove bored from "
-                "your [Last.fm applications](https://www.last.fm/settings/applications)."
-            ),
-            color=self._lastfm_color(),
-        )
-        embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
-        self._set_lastfm_footer(embed, "Reconnecting your account will not fix sync issues")
-        try:
-            await ctx.author.send(embed=embed)
-            asyncio.create_task(self._poll_lastfm_session(token, ctx.author.id))
-        except discord.Forbidden:
-            await ctx.warn("Please enable DMs so I can send your Last.fm login link.")
-            return
-        await ctx.success("Successfully **sent** your Last.fm login link.")
-        with contextlib.suppress(discord.HTTPException):
-            await ctx.message.add_reaction("📩")
+        actual = self._text_value(user_data.get("name")) or username
+        await self.bot.db.set_lastfm_user(ctx.author.id, actual, None)
+        await ctx.success(f"Linked your account to **[{actual}](https://www.last.fm/user/{quote_plus(actual)})**.")
 
     @lastfm.command(name="logout")
     async def lastfm_logout(self, ctx: Context) -> None:
@@ -2938,8 +2919,15 @@ class Lastfm(Package):
     @lastfm.command(name="lyrics")
     async def lastfm_lyrics(self, ctx: Context, *, query: str | None = None) -> None:
         """
-        Gets lyrics from Musixmatch for current song playing
+        Gets lyrics for the current song or a search query
         """
+        if query:
+            lyrics_command = self.bot.get_command("lyrics")
+            if lyrics_command:
+                await ctx.invoke(lyrics_command, query=query)
+                return
+            await self._send_lyrics(ctx, query)
+            return
         member, ok = await self._optional_mention_target_only(ctx, query)
         if not ok:
             return
@@ -2952,10 +2940,64 @@ class Lastfm(Package):
             return
         name = track.get("name", "")
         artist = track.get("artist", {}).get("#text") or ""
+        search = f"{artist} {name}".strip()
         lyrics_command = self.bot.get_command("lyrics")
-        if not lyrics_command:
-            raise RuntimeError("internal lyrics command unavailable")
-        await ctx.invoke(lyrics_command, query=f"{artist} {name}")
+        if lyrics_command:
+            await ctx.invoke(lyrics_command, query=search)
+            return
+        await self._send_lyrics(ctx, search)
+
+    async def _send_lyrics(self, ctx: Context, query: str) -> None:
+        artist, _, title = query.partition(" - ")
+        if not title.strip():
+            parts = query.rsplit(" ", 1)
+            if len(parts) == 2:
+                artist, title = parts[0], parts[1]
+            else:
+                artist, title = query, query
+        url = f"https://api.lyrics.ovh/v1/{quote_plus(artist.strip())}/{quote_plus(title.strip())}"
+        async with self.bot.session.get(url) as resp:
+            if resp.status != 200:
+                await ctx.warn("Could not find lyrics for that track.")
+                return
+            data = await resp.json()
+        lyrics = data.get("lyrics")
+        if not lyrics:
+            await ctx.warn("Could not find lyrics for that track.")
+            return
+        embed = discord.Embed(
+            title=f"{title.strip()} — {artist.strip()}",
+            description=lyrics[:4000],
+            color=self._lastfm_color(),
+        )
+        await ctx.send(embed=embed)
+
+    @Package.listener("on_message")
+    async def on_message_lastfm_custom(self, message: discord.Message) -> None:
+        if message.author.bot or not message.guild or not message.content:
+            return
+        if not getattr(self.bot, "db", None):
+            return
+        rows = await self.bot.db.list_lastfm_custom_commands(message.guild.id)
+        if not rows:
+            return
+        content = message.content.lower()
+        ctx = await self.bot.get_context(message)
+        if not ctx.valid:
+            return
+        for row in rows:
+            trigger = (row.get("command") or "").lower()
+            if not trigger or trigger not in content:
+                continue
+            owner_id = int(row["user_id"])
+            is_public = bool(row.get("public"))
+            if owner_id != message.author.id and not is_public:
+                continue
+            member = message.guild.get_member(owner_id)
+            if member is None:
+                continue
+            await self.lastfm_now(ctx, query=member.mention)
+            return
 
     @lastfm.command(name="update")
     async def lastfm_update(self, ctx: Context, *, parameters: str | None = None) -> None:
@@ -3249,5 +3291,5 @@ class Lastfm(Package):
         """
         await self.lastfm_customcommand_cleanup(ctx)
 
-async def setup(bot: commands.Bot) -> None:
+async def setup(bot: Bleed) -> None:
     await bot.add_cog(Lastfm(bot))

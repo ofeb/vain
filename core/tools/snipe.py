@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """in memory snipe message store.
 keeps last 100 deleted edited and reaction removed per channel.
 use add_entry then get_entry to retrieve"""
@@ -6,7 +8,12 @@ import asyncio
 import datetime
 import typing
 from collections import deque
+from typing import TYPE_CHECKING
+
 import discord
+
+if TYPE_CHECKING:
+    from core.bleed import Bleed
 
 
 class SnipeError(Exception):
@@ -19,7 +26,7 @@ class Snipe:
     indexed per channel with deque of max 100 entries.
     type is snipe editsnipe or reactionsnipe"""
 
-    def __init__(self, bot: discord.Client):
+    def __init__(self, bot: Bleed):
         self.bot = bot
         self.data: dict = {}
 

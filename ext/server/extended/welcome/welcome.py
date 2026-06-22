@@ -143,7 +143,6 @@ class WelcomeCommands(Package):
         if await self.db.get_antiraid_state(member.guild.id):
             return
 
-        from discord.ext.commands import Cog
         rate = await self.bot.object_cache.ratelimited(
             f"welcome_messages:{member.guild.id}", 1, 5
         )

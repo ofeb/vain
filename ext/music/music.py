@@ -5,14 +5,14 @@ import math
 from typing import TYPE_CHECKING, Optional
 
 import discord
-from discord.ext import commands, tasks
+from core.discord.package import Package, tasks
 
 from core.discord.ctx import Context
 from core.discord.hybrid import describe, group, hybrid
 from core.managers.values import color
 
 if TYPE_CHECKING:
-    pass
+    from core.bleed import Bleed
 
 try:
     import pomice
@@ -47,11 +47,11 @@ class MusicPlayer:
         return not self.current and not self.queue
 
 
-class Music(commands.Cog):
+class Music(Package):
     """Queue, playback, and music controls."""
 
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
+    def __init__(self, bot: Bleed):
+        super().__init__(bot)
         self.players: dict[int, MusicPlayer] = {}
         self.pomice_pool: pomice.NodePool = None
 
@@ -279,5 +279,5 @@ class Music(commands.Cog):
         return f"{minutes}m {sec}s"
 
 
-async def setup(bot: commands.Bot):
+async def setup(bot: Bleed):
     await bot.add_cog(Music(bot))

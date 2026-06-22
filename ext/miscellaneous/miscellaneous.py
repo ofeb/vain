@@ -24,11 +24,9 @@ class Miscellaneous(Package):
         super().__init__(bot)
         self.afk_users: dict[int, dict] = {}
         self.active_polls: list[dict] = []
-
     @hybrid(
         name="ping",
         description="Check the bot's response time",
-        guild_only=True,
     )
     async def ping(self, ctx: Context) -> None:
         latency = round(self.bot.latency * 1000)
@@ -37,7 +35,6 @@ class Miscellaneous(Package):
     @hybrid(
         name="uptime",
         description="Check how long the bot has been online",
-        guild_only=True,
     )
     async def uptime(self, ctx: Context) -> None:
         now = discord.utils.utcnow()
@@ -54,7 +51,6 @@ class Miscellaneous(Package):
     @hybrid(
         name="invite",
         description="Get the bot's invite link",
-        guild_only=True,
     )
     async def invite(self, ctx: Context) -> None:
         bot_id = self.bot.user.id if self.bot.user else "0"
@@ -68,14 +64,13 @@ class Miscellaneous(Package):
     @hybrid(
         name="afk",
         description="Set yourself as away from keyboard",
-        guild_only=True,
     )
     @describe(reason="Reason for going AFK")
     async def afk(self, ctx: Context, *, reason: str = "AFK") -> None:
         self.afk_users[ctx.author.id] = {
             "reason": reason,
             "since": discord.utils.utcnow(),
-            "guild_id": ctx.guild.id,
+            "guild_id": ctx.guild.id if ctx.guild else None,
         }
 
         try:
@@ -92,7 +87,7 @@ class Miscellaneous(Package):
         )
         await ctx.send(embed=embed)
 
-    @commands.Cog.listener()
+    @Package.listener()
     async def on_message(self, message: discord.Message) -> None:
         if message.author.bot or not message.guild:
             return
@@ -130,7 +125,6 @@ class Miscellaneous(Package):
     @hybrid(
         name="poll",
         description="Create a poll with upvote and downvote reactions",
-        guild_only=True,
     )
     @describe(question="The poll question")
     async def poll(self, ctx: Context, *, question: str) -> None:
@@ -147,7 +141,6 @@ class Miscellaneous(Package):
     @hybrid(
         name="quickpoll",
         description="Add upvote/downvote reactions to a message",
-        guild_only=True,
     )
     @describe(message_id="ID of the message to add reactions to")
     async def quickpoll(self, ctx: Context, message_id: str) -> None:
@@ -165,7 +158,6 @@ class Miscellaneous(Package):
         name="avatar",
         description="View a user's avatar",
         aliases=["av"],
-        guild_only=True,
     )
     @describe(user="User whose avatar to view")
     async def avatar(self, ctx: Context, *, user: discord.User = None) -> None:
@@ -183,7 +175,6 @@ class Miscellaneous(Package):
         aliases=["tr"],
         usage="(language) (text)",
         example="es hello world",
-        guild_only=True,
     )
     @describe(
         language="Target language code (e.g., en, es, fr, de, ja, ko, zh)",
@@ -290,7 +281,6 @@ class Miscellaneous(Package):
         name="userinfo",
         description="View information about a user",
         aliases=["ui", "whois"],
-        guild_only=True,
     )
     @describe(user="User to get info about")
     async def userinfo(self, ctx: Context, *, user: discord.Member = None) -> None:
@@ -311,7 +301,6 @@ class Miscellaneous(Package):
         name="color",
         description="Show a hex codes color in an embed",
         aliases=["colour"],
-        guild_only=True,
     )
     @describe(hex="Hex color code (e.g. #FF0000)")
     async def color_cmd(self, ctx: Context, *, hex: str) -> None:
@@ -331,7 +320,6 @@ class Miscellaneous(Package):
     @hybrid(
         name="charinfo",
         description="Get information about a character/symbol",
-        guild_only=True,
     )
     @describe(characters="Characters to get info about")
     async def charinfo(self, ctx: Context, *, characters: str) -> None:
@@ -349,7 +337,6 @@ class Miscellaneous(Package):
     @hybrid(
         name="randomhex",
         description="Generate a random hex (color)",
-        guild_only=True,
     )
     async def randomhex(self, ctx: Context) -> None:
         hex_val = f"{random.randint(0, 0xFFFFFF):06x}"
@@ -365,7 +352,6 @@ class Miscellaneous(Package):
         name="jumbo",
         description="Enlarge an emoji",
         aliases=["e", "enlarge", "enlargen"],
-        guild_only=True,
     )
     @describe(emoji="Emoji to enlarge")
     async def jumbo(self, ctx: Context, *, emoji: str) -> None:
@@ -387,7 +373,6 @@ class Miscellaneous(Package):
         name="addemote",
         description="Downloads emote and adds to server",
         aliases=["adde"],
-        guild_only=True,
     )
     @describe(emoji="Emoji or URL", characters="Name for the emote")
     async def addemote(self, ctx: Context, emoji: str, *, characters: str = None) -> None:

@@ -11,12 +11,13 @@ class EventDisableCommands(Package):
 
     @group(
         name="disableevent",
+        aliases=["de"],
         description="Disable a bot event in a channel",
         example=",disableevent repost #text",
         invoke_without_command=True,
     )
     @has_permissions(manage_channels=True)
-    async def disableevent(self, ctx, event: EventConverter, *, channel: TextChannel):
+    async def disableevent(self, ctx, channel: TextChannel, *, event: EventConverter):
         """block an event"""
         row = await self.db.fetchrow(
             """SELECT * FROM disabled_events WHERE guild_id = $1 AND event = $2""",

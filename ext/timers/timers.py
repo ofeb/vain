@@ -3,14 +3,17 @@ from __future__ import annotations
 import asyncio
 import datetime
 import uuid
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import discord
-from discord.ext import commands, tasks
+from core.discord.package import Package, tasks
 
 from core.discord.ctx import Context
 from core.discord.hybrid import describe, group, hybrid
 from core.managers.values import color
+
+if TYPE_CHECKING:
+    from core.bleed import Bleed
 
 
 def parse_duration(text: str) -> Optional[int]:
@@ -39,11 +42,11 @@ def parse_duration(text: str) -> Optional[int]:
     return total if total > 0 else None
 
 
-class Timers(commands.Cog):
+class Timers(Package):
     """Timed events, reminders, and scheduled tasks."""
 
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
+    def __init__(self, bot: Bleed):
+        super().__init__(bot)
         self._timers: dict[str, dict] = {}
         self._loop_running = False
 
@@ -187,5 +190,5 @@ class Timers(commands.Cog):
         return " ".join(parts)
 
 
-async def setup(bot: commands.Bot):
+async def setup(bot: Bleed):
     await bot.add_cog(Timers(bot))

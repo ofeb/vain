@@ -1,13 +1,13 @@
+from __future__ import annotations
 """Render FNBR shop rotations as a horizontal multi-column grid image."""
 
-from __future__ import annotations
 
 import asyncio
 import io
 import logging
 from dataclasses import dataclass
-from typing import Any
 
+import aiohttp
 from PIL import Image, ImageDraw, ImageFont
 
 log = logging.getLogger("bleed.fortnite.shop")
@@ -112,11 +112,15 @@ def _distribute_columns(sections: list[ShopSection], columns: int = 4) -> list[l
     return buckets
 
 
-async def _fetch_tile_image(http: Any, url: str) -> Image.Image | None:
-    if not url or url is False:
+async def _fetch_tile_image(url: str) -> Image.Image | None:
+    if not url:
         return None
     try:
-        data = await http.read("GET", url)
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+                if resp.status != 200:
+                    return None
+                data = await resp.read()
         return Image.open(io.BytesIO(data)).convert("RGBA")
     except Exception:
         return None
@@ -167,7 +171,7 @@ def _draw_section(
     return height
 
 
-async def render_shop_image(layout: ShopLayout, http: Any) -> bytes:
+async def render_shop_image(layout: ShopLayout) -> bytes:
     """Build a wide horizontal FNBR-style shop collage."""
     if not layout.sections:
         raise ValueError("shop has no sections")
@@ -192,7 +196,7 @@ async def render_shop_image(layout: ShopLayout, http: Any) -> bytes:
 
     urls = {tile.item_id: tile.image_url for section in layout.sections for tile in section.items}
     image_results = await asyncio.gather(
-        *(_fetch_tile_image(http, url) for url in urls.values()),
+        *(_fetch_tile_image(url) for url in urls.values()),
         return_exceptions=True,
     )
     images: dict[str, Image.Image | None] = {}

@@ -1,11 +1,16 @@
 from __future__ import annotations
+
 import json
 import re
 from typing import TYPE_CHECKING
+
 import discord
+
 from core.managers.values import color
+
 if TYPE_CHECKING:
     from ext.tickets.tickets import Tickets
+
 
 def _parse_emoji(value: str | None) -> discord.PartialEmoji | str | None:
     if not value:
@@ -15,6 +20,7 @@ def _parse_emoji(value: str | None) -> discord.PartialEmoji | str | None:
         animated = value.startswith("<a:")
         return discord.PartialEmoji(name=match.group(1), id=int(match.group(2)), animated=animated)
     return value
+
 
 class TicketOpenView(discord.ui.View):
     def __init__(self, cog: "Tickets", panel_id: int, options: list[dict], panel_type: str) -> None:
@@ -26,6 +32,7 @@ class TicketOpenView(discord.ui.View):
         else:
             for option in options[:25]:
                 self.add_item(TicketOpenButton(cog, panel_id, option))
+
 
 class TicketOpenButton(discord.ui.Button):
     def __init__(self, cog: "Tickets", panel_id: int, option: dict) -> None:
@@ -39,8 +46,10 @@ class TicketOpenButton(discord.ui.Button):
         self.cog = cog
         self.panel_id = panel_id
         self.option_id = int(option["id"])
+
     async def callback(self, interaction: discord.Interaction) -> None:
         await self.cog.open_ticket(interaction, self.panel_id, self.option_id)
+
 
 class TicketSelect(discord.ui.Select):
     def __init__(self, cog: "Tickets", panel_id: int, options: list[dict]) -> None:
@@ -64,22 +73,28 @@ class TicketSelect(discord.ui.Select):
         )
         self.cog = cog
         self.panel_id = panel_id
+
     async def callback(self, interaction: discord.Interaction) -> None:
         await self.cog.open_ticket(interaction, self.panel_id, int(self.values[0]))
+
 
 class TicketControlView(discord.ui.View):
     def __init__(self, cog: "Tickets") -> None:
         super().__init__(timeout=None)
         self.cog = cog
+
     @discord.ui.button(label="Claim", style=discord.ButtonStyle.primary, custom_id="ticket:claim")
     async def claim(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await self.cog.claim_ticket(interaction)
+
     @discord.ui.button(label="Close", style=discord.ButtonStyle.secondary, custom_id="ticket:close")
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await self.cog.close_ticket(interaction)
+
     @discord.ui.button(label="Delete", style=discord.ButtonStyle.danger, custom_id="ticket:delete")
     async def delete(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await self.cog.delete_ticket(interaction)
+
 
 class TicketFormModal(discord.ui.Modal):
     def __init__(
@@ -107,6 +122,7 @@ class TicketFormModal(discord.ui.Modal):
                     max_length=1024,
                 )
             )
+
     async def on_submit(self, interaction: discord.Interaction) -> None:
         answers = {
             key: child.value

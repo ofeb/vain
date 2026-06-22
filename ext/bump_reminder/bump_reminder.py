@@ -5,7 +5,7 @@ import datetime
 from typing import TYPE_CHECKING, Optional
 
 import discord
-from discord.ext import commands, tasks
+from core.discord.package import Package, tasks
 
 from core.discord.ctx import Context
 from core.discord.hybrid import describe, hybrid, group
@@ -13,17 +13,17 @@ from core.managers.permissions import has_permissions
 from core.managers.values import color
 
 if TYPE_CHECKING:
-    pass
+    from core.bleed import Bleed
 
 DISBOARD_ID = 302050872383242240
 BUMP_COOLDOWN = 7200
 
 
-class BumpReminder(commands.Cog):
+class BumpReminder(Package):
     """Bump reminder commands to keep your server promoted."""
 
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
+    def __init__(self, bot: Bleed):
+        super().__init__(bot)
         self._cache: dict[int, dict] = {}
 
     async def cog_load(self):
@@ -58,7 +58,7 @@ class BumpReminder(commands.Cog):
                         pass
                 self._cache[guild_id]["next_bump"] = now + datetime.timedelta(seconds=BUMP_COOLDOWN)
 
-    @commands.Cog.listener()
+    @Package.listener()
     async def on_message(self, message: discord.Message) -> None:
         if message.author.id != DISBOARD_ID or not message.guild:
             return
@@ -198,5 +198,5 @@ class BumpReminder(commands.Cog):
         await ctx.success(f"Reminder message set to: {message}")
 
 
-async def setup(bot: commands.Bot):
+async def setup(bot: Bleed):
     await bot.add_cog(BumpReminder(bot))

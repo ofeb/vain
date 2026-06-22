@@ -11,6 +11,7 @@ class CommandDisableCommands(Package):
 
     @group(
         name="disablecommand",
+        aliases=["dcmd"],
         description="Disable a command in a channel",
         invoke_without_command=True,
         example=",disablecommand @jon ping",

@@ -1,10 +1,18 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from core.bleed import Bleed
+
+
 from typing import Optional
 
 import aiohttp
 import discord
 from discord.ext import commands
+
+from core.discord.package import Package
 
 from core.discord.ctx import Context
 from core.discord.hybrid import describe, group, hybrid
@@ -14,11 +22,9 @@ SC_API_URL = "https://api-v2.soundcloud.com"
 DEFAULT_CLIENT_ID = "a3e059563d7fd3372b49b37f00a00bcf"
 
 
-class Soundcloud(commands.Cog):
+class Soundcloud(Package):
     """SoundCloud track lookup and playback."""
 
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
 
     async def _resolve(self, url: str) -> Optional[dict]:
         headers = {"User-Agent": "Mozilla/5.0"}
@@ -117,5 +123,5 @@ class Soundcloud(commands.Cog):
         await ctx.send(embed=embed)
 
 
-async def setup(bot: commands.Bot):
+async def setup(bot: Bleed):
     await bot.add_cog(Soundcloud(bot))

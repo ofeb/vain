@@ -11,12 +11,13 @@ class EventEnableCommands(Package):
 
     @group(
         name="enableevent",
+        aliases=["ee"],
         description="Enable a bot event in a channel",
         example=",enableevent repost #text",
         invoke_without_command=True,
     )
     @has_permissions(manage_channels=True)
-    async def enableevent(self, ctx, event: EventConverter, channel: TextChannel):
+    async def enableevent(self, ctx, channel: TextChannel, event: EventConverter):
         """enable event in channel"""
         stored = await self.db.fetchval(
             """SELECT channel_ids FROM disabled_events WHERE guild_id = $1 AND event = $2""",

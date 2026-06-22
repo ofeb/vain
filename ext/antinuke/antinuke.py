@@ -4,7 +4,7 @@ import asyncio
 import contextlib
 import json
 from datetime import datetime, timedelta
-from typing import Any, Iterable, Optional
+from typing import Any, Iterable, Optional, TYPE_CHECKING
 
 import discord
 from discord import Embed
@@ -17,6 +17,9 @@ from core.tools.flags import AntiNukeFlags
 from core.tools.permissions import DANGEROUS_PERMISSIONS, normalize_dangerous_permission
 
 from .models import AntinukeConfig, PermissionWatch
+
+if TYPE_CHECKING:
+    from core.bleed import Bleed
 
 SHORT_WINDOW = 60
 LONG_WINDOW = 20 * 60
@@ -1598,5 +1601,5 @@ class Antinuke(Package):
         return await ctx.success("Antinuke configuration has been **reset**.")
 
 
-async def setup(bot) -> None:
+async def setup(bot: Bleed) -> None:
     await bot.add_cog(Antinuke(bot))

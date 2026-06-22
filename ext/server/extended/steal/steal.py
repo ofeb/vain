@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 import discord
 from discord.ext.commands import group, CommandError
@@ -10,6 +10,10 @@ from core.discord.package import Package
 from core.managers.permissions import has_permissions
 from core.managers.values import color, emojis
 
+
+
+if TYPE_CHECKING:
+    from core.bleed import Bleed
 
 class StealPaginateView(discord.ui.View):
     def __init__(self, ctx, pages: list[discord.Embed], emojis_to_steal: list):
@@ -224,7 +228,3 @@ class Steal(Package):
         if not match:
             raise ValueError("Invalid message link")
         return int(match.group(2)), int(match.group(3))
-
-
-async def setup(bot):
-    await bot.add_cog(Steal(bot))

@@ -1,28 +1,37 @@
 from __future__ import annotations
+
 import io
 import json
 import re
 from typing import TYPE_CHECKING
+
 import discord
 from discord.ext import commands
+
 from core.discord.ctx import Context
 from core.discord.hybrid import group
 from core.discord.package import Package
 from core.managers.permissions import has_permissions
 from core.managers.values import color
+
 from .views import TicketControlView, TicketFormModal, TicketOpenView
+
 if TYPE_CHECKING:
     from core.bleed import Bleed
+
 DEFAULT_PANEL_SCRIPT = (
     "{embed}$v{title: Support Tickets}$v"
     "{description: Click a button below to open a ticket with our staff team.}$v"
     "{color: #2B2D31}"
 )
 
+
 class Tickets(Package):
     """ticket panel and lifecycle management"""
+
     async def cog_load(self) -> None:
         self.bot.add_view(TicketControlView(self))
+
     @Package.listener("on_ready")
     async def _restore_ticket_panels(self) -> None:
         if not getattr(self.bot, "db", None) or not self.bot.db.pool:
@@ -57,6 +66,7 @@ class Tickets(Package):
             if not options:
                 continue
             self.bot.add_view(TicketOpenView(self, int(row["panel_id"]), options, row["panel_type"]))
+
     async def _settings(self, guild_id: int) -> dict:
         row = await self.db.fetchrow(
             "SELECT * FROM ticket_settings WHERE guild_id = $1",
@@ -67,6 +77,7 @@ class Tickets(Package):
         await self.db.execute("INSERT INTO ticket_settings (guild_id) VALUES ($1) ON CONFLICT DO NOTHING", guild_id)
         row = await self.db.fetchrow("SELECT * FROM ticket_settings WHERE guild_id = $1", guild_id)
         return dict(row or {"guild_id": guild_id})
+
     async def _is_staff(self, member: discord.Member, settings: dict, extra_roles: list[int] | None = None) -> bool:
         if member.guild_permissions.manage_channels:
             return True
@@ -74,6 +85,7 @@ class Tickets(Package):
         if extra_roles:
             role_ids.update(extra_roles)
         return any(role.id in role_ids for role in member.roles)
+
     async def _render_panel_embed(self, guild: discord.Guild, script: str | None) -> discord.Embed:
         if script and script != DEFAULT_PANEL_SCRIPT:
             try:
@@ -89,6 +101,7 @@ class Tickets(Package):
             description="Click a button below to open a ticket.",
             color=color.base,
         )
+
     async def _send_panel_message(self, guild: discord.Guild, panel: dict, options: list[dict]) -> discord.Message:
         channel = guild.get_channel(int(panel["channel_id"]))
         if not channel or not isinstance(channel, discord.TextChannel):
@@ -103,6 +116,7 @@ class Tickets(Package):
             message.id,
         )
         return message
+
     async def open_ticket(self, interaction: discord.Interaction, panel_id: int, option_id: int) -> None:
         if not interaction.guild or not isinstance(interaction.user, discord.Member):
             return
@@ -110,6 +124,7 @@ class Tickets(Package):
         if interaction.user.id in (settings.get("blacklist_user_ids") or []):
             await interaction.response.send_message("You are **blacklisted** from opening tickets.", ephemeral=True)
             return
+
         option = await self.db.fetchrow(
             "SELECT * FROM ticket_options WHERE id = $1 AND panel_id = $2 AND active = TRUE",
             option_id,
@@ -118,6 +133,7 @@ class Tickets(Package):
         if not option:
             await interaction.response.send_message("That ticket option is unavailable.", ephemeral=True)
             return
+
         open_count = await self.db.fetchval(
             "SELECT COUNT(*) FROM tickets WHERE guild_id = $1 AND user_id = $2 AND status = 'open'",
             interaction.guild.id,
@@ -130,6 +146,7 @@ class Tickets(Package):
                 ephemeral=True,
             )
             return
+
         if option.get("form_id"):
             form = await self.db.fetchrow(
                 "SELECT questions FROM ticket_forms WHERE id = $1 AND guild_id = $2",
@@ -144,8 +161,10 @@ class Tickets(Package):
                     TicketFormModal(self, panel_id, option_id, questions)
                 )
                 return
+
         await interaction.response.defer(ephemeral=True)
         await self.create_ticket_channel(interaction, panel_id, option_id, None)
+
     async def create_ticket_channel(
         self,
         interaction: discord.Interaction,
@@ -163,8 +182,10 @@ class Tickets(Package):
             else:
                 await interaction.response.send_message("Ticket option no longer exists.", ephemeral=True)
             return
+
         category_id = option.get("category_id") or settings.get("category_id")
         category = interaction.guild.get_channel(int(category_id)) if category_id else None
+
         name_format = settings.get("channel_name_format") or "ticket-{user}"
         channel_name = (
             name_format.replace("{user}", interaction.user.name.lower())
@@ -172,6 +193,7 @@ class Tickets(Package):
             .replace("{option}", str(option.get("name") or "ticket"))
         )
         channel_name = re.sub(r"[^a-z0-9-]", "-", channel_name.lower())[:100]
+
         overwrites = {
             interaction.guild.default_role: discord.PermissionOverwrite(view_channel=False),
             interaction.user: discord.PermissionOverwrite(
@@ -197,12 +219,14 @@ class Tickets(Package):
                     send_messages=True,
                     read_message_history=True,
                 )
+
         channel = await interaction.guild.create_text_channel(
             name=channel_name or f"ticket-{interaction.user.id}",
             category=category if isinstance(category, discord.CategoryChannel) else None,
             overwrites=overwrites,
             reason=f"Ticket opened by {interaction.user}",
         )
+
         ticket_id = await self.db.fetchval(
             """
             INSERT INTO tickets (guild_id, channel_id, user_id, option_id, panel_id, form_answers, status)
@@ -216,6 +240,7 @@ class Tickets(Package):
             panel_id,
             json.dumps(answers or {}),
         )
+
         greeting = settings.get("greeting_message") or (
             f"{interaction.user.mention}, thanks for opening a ticket.\n"
             f"**Type:** {option.get('label') or option.get('name')}\n"
@@ -224,15 +249,18 @@ class Tickets(Package):
         if answers:
             answer_lines = "\n".join(f"**{key}:** {value}" for key, value in answers.items())
             greeting += f"\n\n**Responses**\n{answer_lines}"
+
         embed = discord.Embed(description=greeting, color=color.base)
         embed.set_author(name=str(option.get("label") or option.get("name")))
         view = TicketControlView(self)
         self.bot.add_view(view)
         await channel.send(content=interaction.user.mention, embed=embed, view=view)
+
         if interaction.response.is_done():
             await interaction.followup.send(f"Created {channel.mention}", ephemeral=True)
         else:
             await interaction.response.send_message(f"Created {channel.mention}", ephemeral=True)
+
         log_channel_id = settings.get("log_channel_id")
         if log_channel_id:
             log_channel = interaction.guild.get_channel(int(log_channel_id))
@@ -244,9 +272,11 @@ class Tickets(Package):
                     timestamp=discord.utils.utcnow(),
                 )
                 await log_channel.send(embed=log_embed)
+
     async def _ticket_row(self, channel_id: int) -> dict | None:
         row = await self.db.fetchrow("SELECT * FROM tickets WHERE channel_id = $1", channel_id)
         return dict(row) if row else None
+
     async def claim_ticket(self, interaction: discord.Interaction) -> None:
         if not interaction.guild or not isinstance(interaction.user, discord.Member) or not interaction.channel:
             return
@@ -279,6 +309,7 @@ class Tickets(Package):
         if isinstance(channel, discord.TextChannel):
             await channel.send(f"{interaction.user.mention} claimed this ticket.")
         await interaction.response.send_message("You claimed this ticket.", ephemeral=True)
+
     async def close_ticket(self, interaction: discord.Interaction) -> None:
         if not interaction.guild or not isinstance(interaction.user, discord.Member) or not interaction.channel:
             return
@@ -310,6 +341,7 @@ class Tickets(Package):
         close_message = settings.get("close_message") or "This ticket has been closed."
         await channel.send(embed=discord.Embed(description=close_message, color=color.base))
         await interaction.response.send_message("Ticket closed.", ephemeral=True)
+
     async def delete_ticket(self, interaction: discord.Interaction) -> None:
         if not interaction.guild or not isinstance(interaction.user, discord.Member) or not interaction.channel:
             return
@@ -349,11 +381,13 @@ class Tickets(Package):
             await interaction.followup.send("Ticket deleted.", ephemeral=True)
         else:
             await interaction.response.send_message("Ticket deleted.", ephemeral=True)
+
     @group(name="tickets", aliases=["ticket"], invoke_without_command=True, guild_only=True)
     @has_permissions(manage_guild=True)
     async def tickets(self, ctx: Context) -> None:
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
+
     @tickets.command(name="setup")
     async def tickets_setup(
         self,
@@ -373,10 +407,12 @@ class Tickets(Package):
             log_channel.id if log_channel else None,
         )
         await ctx.success(f"Ticket system configured with category {category.mention}.")
+
     @tickets.group(name="panels", invoke_without_command=True)
     async def tickets_panels(self, ctx: Context) -> None:
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
+
     @tickets_panels.command(name="add")
     async def tickets_panels_add(
         self,
@@ -402,6 +438,7 @@ class Tickets(Package):
         )
         await self._send_panel_message(ctx.guild, dict(row), [])
         await ctx.success(f"Created panel **`{name}`** in {channel.mention}. Add options with `tickets options add`.")
+
     @tickets_panels.command(name="list")
     async def tickets_panels_list(self, ctx: Context) -> None:
         rows = await self.db.fetch(
@@ -416,6 +453,7 @@ class Tickets(Package):
             for row in rows
         ]
         await ctx.send(embed=discord.Embed(title="Ticket Panels", description="\n".join(lines), color=color.base))
+
     @tickets_panels.command(name="remove", aliases=["delete"])
     async def tickets_panels_remove(self, ctx: Context, name: str) -> None:
         row = await self.db.fetchrow(
@@ -432,6 +470,7 @@ class Tickets(Package):
                     message = await channel.fetch_message(int(row["message_id"]))
                     await message.delete()
         await ctx.success(f"Removed panel **`{name}`**.")
+
     @tickets.command(name="resend")
     async def tickets_resend(self, ctx: Context, name: str) -> None:
         panel = await self.db.fetchrow(
@@ -455,10 +494,12 @@ class Tickets(Package):
                     await message.delete()
         await self._send_panel_message(ctx.guild, dict(panel), [dict(row) for row in options])
         await ctx.success(f"Resent panel **`{name}`**.")
+
     @tickets.group(name="options", invoke_without_command=True)
     async def tickets_options(self, ctx: Context) -> None:
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
+
     @tickets_options.command(name="add")
     async def tickets_options_add(
         self,
@@ -490,6 +531,7 @@ class Tickets(Package):
             description,
         )
         await self.tickets_resend(ctx, panel)
+
     @tickets_options.command(name="remove", aliases=["delete"])
     async def tickets_options_remove(self, ctx: Context, panel: str, name: str) -> None:
         panel_row = await self.db.fetchrow(
@@ -507,6 +549,7 @@ class Tickets(Package):
         if result == "DELETE 0":
             return await ctx.fail(f"No option named **`{name}`** on that panel.")
         await self.tickets_resend(ctx, panel)
+
     @tickets_options.command(name="list")
     async def tickets_options_list(self, ctx: Context, panel: str) -> None:
         panel_row = await self.db.fetchrow(
@@ -529,10 +572,12 @@ class Tickets(Package):
             for row in rows
         ]
         await ctx.send(embed=discord.Embed(title=f"Options for {panel}", description="\n".join(lines), color=color.base))
+
     @tickets.group(name="forms", invoke_without_command=True)
     async def tickets_forms(self, ctx: Context) -> None:
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
+
     @tickets_forms.command(name="create", aliases=["add"])
     async def tickets_forms_create(self, ctx: Context, name: str, *, questions: str) -> None:
         parsed = []
@@ -555,6 +600,7 @@ class Tickets(Package):
             json.dumps(parsed),
         )
         await ctx.success(f"Saved form **`{name}`** with **{len(parsed)}** question(s).")
+
     @tickets_forms.command(name="list")
     async def tickets_forms_list(self, ctx: Context) -> None:
         rows = await self.db.fetch(
@@ -570,6 +616,7 @@ class Tickets(Package):
                 questions = json.loads(questions)
             lines.append(f"**`{row['name']}`** — {len(questions)} question(s)")
         await ctx.send(embed=discord.Embed(title="Ticket Forms", description="\n".join(lines), color=color.base))
+
     @tickets_forms.command(name="remove", aliases=["delete"])
     async def tickets_forms_remove(self, ctx: Context, name: str) -> None:
         result = await self.db.execute(
@@ -580,6 +627,7 @@ class Tickets(Package):
         if result == "DELETE 0":
             return await ctx.fail(f"No form named **`{name}`**.")
         await ctx.success(f"Removed form **`{name}`**.")
+
     @tickets.command(name="claim")
     async def tickets_claim(self, ctx: Context) -> None:
         ticket = await self._ticket_row(ctx.channel.id)
@@ -587,6 +635,7 @@ class Tickets(Package):
             return await ctx.fail("This is not a ticket channel.")
         interaction = _FakeInteraction(ctx)
         await self.claim_ticket(interaction)
+
     @tickets.command(name="close")
     async def tickets_close(self, ctx: Context, *, reason: str = None) -> None:
         ticket = await self._ticket_row(ctx.channel.id)
@@ -596,6 +645,7 @@ class Tickets(Package):
         await self.close_ticket(interaction)
         if reason:
             await ctx.channel.send(f"**Reason:** {reason}")
+
     @tickets.command(name="reopen")
     async def tickets_reopen(self, ctx: Context) -> None:
         ticket = await self._ticket_row(ctx.channel.id)
@@ -619,6 +669,7 @@ class Tickets(Package):
             ticket["id"],
         )
         await ctx.success("Reopened this ticket.")
+
     @tickets.command(name="delete")
     async def tickets_delete(self, ctx: Context) -> None:
         ticket = await self._ticket_row(ctx.channel.id)
@@ -626,6 +677,7 @@ class Tickets(Package):
             return await ctx.fail("This is not a ticket channel.")
         interaction = _FakeInteraction(ctx)
         await self.delete_ticket(interaction)
+
     @tickets.command(name="add")
     async def tickets_add(self, ctx: Context, member: discord.Member) -> None:
         ticket = await self._ticket_row(ctx.channel.id)
@@ -638,6 +690,7 @@ class Tickets(Package):
             read_message_history=True,
         )
         await ctx.success(f"Added {member.mention} to this ticket.")
+
     @tickets.command(name="remove")
     async def tickets_remove(self, ctx: Context, member: discord.Member) -> None:
         ticket = await self._ticket_row(ctx.channel.id)
@@ -645,6 +698,7 @@ class Tickets(Package):
             return await ctx.fail("This is not a ticket channel.")
         await ctx.channel.set_permissions(member, overwrite=None)
         await ctx.success(f"Removed {member.mention} from this ticket.")
+
     @tickets.group(name="blacklist", invoke_without_command=True)
     async def tickets_blacklist(self, ctx: Context, member: discord.Member = None) -> None:
         if member is None:
@@ -660,6 +714,7 @@ class Tickets(Package):
             ids,
         )
         await ctx.success(f"Blacklisted {member.mention} from opening tickets.")
+
     @tickets_blacklist.command(name="remove")
     async def tickets_blacklist_remove(self, ctx: Context, member: discord.Member) -> None:
         settings = await self._settings(ctx.guild.id)
@@ -670,6 +725,7 @@ class Tickets(Package):
             ids,
         )
         await ctx.success(f"Removed {member.mention} from the ticket blacklist.")
+
     @tickets_blacklist.command(name="list")
     async def tickets_blacklist_list(self, ctx: Context) -> None:
         settings = await self._settings(ctx.guild.id)
@@ -681,6 +737,7 @@ class Tickets(Package):
             description=" ".join(f"<@{user_id}>" for user_id in ids),
             color=color.base,
         ))
+
     @tickets.command(name="support")
     async def tickets_support(self, ctx: Context, *roles: discord.Role) -> None:
         if not roles:
@@ -697,6 +754,7 @@ class Tickets(Package):
         )
         await ctx.success("Updated ticket support roles.")
 
+
 class _FakeInteraction:
     def __init__(self, ctx: Context) -> None:
         self.guild = ctx.guild
@@ -705,16 +763,20 @@ class _FakeInteraction:
         self.response = self
         self._ctx = ctx
         self._done = False
+
     def is_done(self) -> bool:
         return self._done
+
     async def send_message(self, content: str, *, ephemeral: bool = False) -> None:
         self._done = True
         if ephemeral:
             await self._ctx.send(content, delete_after=10)
         else:
             await self._ctx.send(content)
+
     async def defer(self, *, ephemeral: bool = False) -> None:
         self._done = True
+
 
 async def setup(bot: Bleed) -> None:
     await bot.add_cog(Tickets(bot))
