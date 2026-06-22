@@ -130,6 +130,3 @@ class InformationEvents(Package):
         
         await info_channel.send(embed=embed)
 
-
-async def setup(bot: Bleed):
-    await bot.add_cog(InformationEvents(bot))

@@ -1,84 +1,80 @@
 from __future__ import annotations
 
-import contextlib
-from collections import defaultdict
-from datetime import datetime, timedelta, timezone
-
 import discord
-from discord.ext import commands
-from discord.ext.commands import Cog
-from asyncio import Lock
+
+from core.discord.package import Package
 
 
-class AntiraidEvents(Cog):
-    """supplementary antiraid event handlers."""
+class AntiraidEvents:
+    @Package.listener()
+    async def on_member_join(self, member: discord.Member) -> None:
+        if member.guild is None:
+            return
 
-    def __init__(self: "AntiraidEvents", bot: discord.Client):
-        self.bot = bot
-        self._locks = defaultdict(Lock)
+        if await self.db.consume_antiraid_whitelist(member.guild.id, member.id):
+            return
 
-    async def _evaluate_member(
-        self, member: discord.Member, guild: discord.Guild, config: object
-    ) -> tuple[bool, str | None, str | None]:
-        bypass = set(getattr(config, "whitelist", []) or [])
-        active = getattr(config, "raid_active", False)
-        puntil = getattr(config, "punish_until", None)
+        now = datetime.now(timezone.utc)
+        cfg = await self._cached_config(member.guild.id)
+        log = self.join_log[member.guild.id]
+        log.append((now, member.id))
+        cutoff = now - timedelta(seconds=MASSJOIN_WINDOW)
+        while log and log[0][0] < cutoff:
+            log.popleft()
 
-        if active and member.id not in bypass:
-            if puntil and datetime.now(timezone.utc) > puntil:
-                await self.bot.db.execute(
-                    "UPDATE antiraid_config SET raid_active = FALSE, punish_until = NULL WHERE guild_id = $1",
-                    guild.id,
-                )
-            else:
-                m_action = getattr(config, "massjoin_action", None) or "ban"
-                return True, m_action, "raid in progress"
-        if member.id in bypass:
-            return False, None, None
-        naccts = getattr(config, "newaccounts_enabled", False)
-        if naccts and member.created_at < datetime.now(timezone.utc) - timedelta(
-            days=getattr(config, "newaccounts_threshold", 7)
+        if cfg.punish_until and cfg.punish_until <= now:
+            cfg = await self._set_punish_window(member.guild.id, None)
+
+        if (
+            cfg.raid_active
+            and cfg.massjoin.enabled
+            and cfg.massjoin.punish_new
+            and cfg.punish_until
+            and cfg.punish_until > now
         ):
-            na_action = getattr(config, "newaccounts_action", None) or "ban"
-            return True, na_action, "new account"
-        avi = getattr(config, "avatar_enabled", False)
-        if avi and not member.avatar:
-            av_action = getattr(config, "avatar_action", None) or "kick"
-            return True, av_action, "no avatar"
-
-        return False, None, None
-
-    @Cog.listener("on_member_join")
-    async def _on_join_eval(self, member: discord.Member) -> None:
-        guild = member.guild
-
-        async def _check() -> bool:
-            row = await self.bot.db.fetchrow(
-                "SELECT * FROM antiraid_config WHERE guild_id = $1", guild.id
+            await self._sanction_member(
+                member,
+                cfg.massjoin.action or "ban",
+                reason="antiraid: massjoin window active",
             )
-            if not row:
-                return False
-            result = False
-            async with self._locks[f"antiraid:{guild.id}"]:
-                doit, action, reason = await self._evaluate_member(member, guild, row)
-                if doit and action:
-                    with contextlib.suppress(discord.Forbidden, discord.HTTPException):
-                        if action == "ban":
-                            await member.ban(reason=f"antiraid-events: {reason}")
-                        else:
-                            await member.kick(reason=f"antiraid-events: {reason}")
-                    result = True
-            return result
+            return
 
-        handled = await _check()
-        if not handled and not member.pending:
-            self.bot.dispatch("member_agree", member)
+        if cfg.massjoin.enabled and len(log) >= cfg.massjoin.threshold and not cfg.raid_active:
+            await self._toggle_raid(member.guild.id, True)
+            if cfg.massjoin.lock_channels:
+                await self._disable_chat(member.guild)
+            if cfg.massjoin.punish_new:
+                await self._set_punish_window(
+                    member.guild.id,
+                    now + timedelta(minutes=10),
+                )
 
-    @Cog.listener("on_member_update")
-    async def _on_accept(self, before: discord.Member, after: discord.Member) -> None:
-        if before.pending and not after.pending:
-            self.bot.dispatch("member_agree", after)
+            for target in await self._build_member_list(member.guild, log):
+                await self._sanction_member(
+                    target,
+                    cfg.massjoin.action or "ban",
+                    reason="antiraid: massjoin limit hit",
+                )
+            log.clear()
 
+        if member.bot:
+            return
 
-async def setup(bot: discord.Client) -> None:
-    await bot.add_cog(AntiraidEvents(bot))
+        cfg = await self._cached_config(member.guild.id)
+        if cfg.avatar.enabled and member.avatar is None:
+            await self._sanction_member(
+                member,
+                cfg.avatar.action or "kick",
+                reason="antiraid: no avatar",
+            )
+            return
+
+        if cfg.newaccounts.enabled:
+            age = now - member.created_at
+            if age < timedelta(days=cfg.newaccounts.threshold):
+                await self._sanction_member(
+                    member,
+                    cfg.newaccounts.action or "ban",
+                    reason="antiraid: account too new",
+                )
+

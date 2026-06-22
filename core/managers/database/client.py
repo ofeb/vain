@@ -1628,6 +1628,8 @@ class Database:
 
     async def set_guild_customize(self, guild_id: int, key: str, value: dict) -> None:
         """Set guild customize emoji/color"""
+        if key not in {"emoji", "color", "voicemaster_emoji"}:
+            raise ValueError(f"invalid guild customize key: {key}")
         await self.execute(
             f"""
             INSERT INTO guild_customize (guild_id, {key}, updated_at)
@@ -1637,7 +1639,14 @@ class Database:
                 updated_at = CURRENT_TIMESTAMP
             """,
             guild_id,
-            self._encode(value),
+            value,
+        )
+
+    async def reset_guild_customize(self, guild_id: int) -> None:
+        """Remove all stored guild customize overrides."""
+        await self.execute(
+            "DELETE FROM guild_customize WHERE guild_id = $1",
+            guild_id,
         )
 
     async def get_user_customize(self, user_id: int, guild_id: int) -> dict:
@@ -1656,6 +1665,8 @@ class Database:
 
     async def set_user_customize(self, user_id: int, guild_id: int, key: str, value: dict) -> None:
         """Set user customize emoji/color"""
+        if key not in {"emoji", "color"}:
+            raise ValueError(f"invalid user customize key: {key}")
         await self.execute(
             f"""
             INSERT INTO user_customize (user_id, guild_id, {key}, updated_at)
@@ -1666,7 +1677,15 @@ class Database:
             """,
             user_id,
             guild_id,
-            self._encode(value),
+            value,
+        )
+
+    async def reset_user_customize(self, user_id: int, guild_id: int) -> None:
+        """Remove all stored user customize overrides."""
+        await self.execute(
+            "DELETE FROM user_customize WHERE user_id = $1 AND guild_id = $2",
+            user_id,
+            guild_id,
         )
 
     async def get_emoji(self, guild_id: int, user_id: int = None) -> dict:

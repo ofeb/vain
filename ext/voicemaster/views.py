@@ -10,7 +10,7 @@ from discord.utils import format_dt
 from core.managers.values import emojis, color
 
 if TYPE_CHECKING:
-    from .voicemaster import VoiceControl
+    from .voicemaster import VoiceMaster
 
 
 PANEL_EMOJIS: dict[str, str] = {
@@ -199,7 +199,7 @@ class ActivitySelection(ui.Select):
 class VoiceInterface(ui.View):
     """The persistent VoiceMaster button panel."""
 
-    def __init__(self, cog: "VoiceControl") -> None:
+    def __init__(self, cog: "VoiceMaster") -> None:
         self.cog = cog
         super().__init__(timeout=None)
 

@@ -404,4 +404,7 @@ class Clownboard(commands.Cog):
 
 async def setup(bot: commands.Bot):
     """Load the Clownboard cog."""
+    from .events import ClownboardEvents
+
     await bot.add_cog(Clownboard(bot))
+    await bot.add_cog(ClownboardEvents(bot))

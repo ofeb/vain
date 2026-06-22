@@ -22,6 +22,8 @@ from discord.ext import commands
 
 from core.discord.ctx import Context
 from core.discord.package import Package
+
+from .events import LastfmEvents
 from core.managers.values import emojis, api as api_values, lastfm_color as lastfm_color_config, lastfm_callback
 from core.tools.guild_members import collect_guild_members
 from core.tools import embed as embed_builder
@@ -69,7 +71,7 @@ _PLAYS_QUERY_USER_MENTION_PREFIX_RE = re.compile(r"^<@!?([0-9]{17,20})>\s*(.*)$"
 _PLAYS_QUERY_USER_ID_PREFIX_RE = re.compile(r"^([0-9]{17,20})\s+(.+)$", re.DOTALL)
 
 
-class Lastfm(Package):
+class Lastfm(LastfmEvents, Package):
 
     def __init__(self, bot: Bleed) -> None:
         super().__init__(bot)
@@ -2971,34 +2973,6 @@ class Lastfm(Package):
             color=self._lastfm_color(),
         )
         await ctx.send(embed=embed)
-
-    @Package.listener("on_message")
-    async def on_message_lastfm_custom(self, message: discord.Message) -> None:
-        if message.author.bot or not message.guild or not message.content:
-            return
-        if not getattr(self.bot, "db", None):
-            return
-        rows = await self.bot.db.list_lastfm_custom_commands(message.guild.id)
-        if not rows:
-            return
-        content = message.content.lower()
-        ctx = await self.bot.get_context(message)
-        if not ctx.valid:
-            return
-        for row in rows:
-            trigger = (row.get("command") or "").lower()
-            if not trigger or trigger not in content:
-                continue
-            owner_id = int(row["user_id"])
-            is_public = bool(row.get("public"))
-            if owner_id != message.author.id and not is_public:
-                continue
-            member = message.guild.get_member(owner_id)
-            if member is None:
-                continue
-            await self.lastfm_now(ctx, query=member.mention)
-            return
-
     @lastfm.command(name="update")
     async def lastfm_update(self, ctx: Context, *, parameters: str | None = None) -> None:
         """
@@ -3290,6 +3264,5 @@ class Lastfm(Package):
         Clean up custom commands from absent members
         """
         await self.lastfm_customcommand_cleanup(ctx)
-
 async def setup(bot: Bleed) -> None:
     await bot.add_cog(Lastfm(bot))

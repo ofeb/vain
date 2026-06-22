@@ -696,7 +696,6 @@ class SuggestCommands(Package):
                 return True
         return False
 
-    @commands.Cog.listener("on_raw_reaction_add")
     async def suggest_reaction_add(self, payload: discord.RawReactionActionEvent) -> None:
         if not payload.guild_id or not payload.user_id:
             return
@@ -740,7 +739,6 @@ class SuggestCommands(Package):
         with contextlib.suppress(discord.HTTPException, discord.NotFound):
             await channel.get_partial_message(payload.message_id).remove_reaction(opposite, member)
 
-    @commands.Cog.listener("on_raw_reaction_remove")
     async def suggest_reaction_remove(self, payload: discord.RawReactionActionEvent) -> None:
         if not payload.guild_id or not payload.user_id:
             return

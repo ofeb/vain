@@ -1,22 +1,17 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime, timedelta
-from typing import TYPE_CHECKING
+from datetime import datetime
 
 import discord
-from discord import Embed, utils
-from discord.ext import commands
-from discord.ext.commands import Cog
 from asyncio import Lock
 
-if TYPE_CHECKING:
-    from .moderation import Moderation
+from core.discord.package import Package
 
 
-class ModerationEvents(Cog):
-    def __init__(self: "ModerationEvents", bot: discord.Client):
-        self.bot = bot
+class ModerationEvents(Package):
+    def __init__(self, bot):
+        super().__init__(bot)
         self.locks = defaultdict(Lock)
         self.mute_cache = {}
 
@@ -40,7 +35,7 @@ class ModerationEvents(Cog):
         
         return False
 
-    @Cog.listener("on_member_join")
+    @Package.listener("on_member_join")
     async def on_mute_restore(self, member: discord.Member):
         mute_data = await self.bot.db.fetchrow(
             "SELECT * FROM mutes WHERE user_id = $1 AND guild_id = $2",
@@ -60,7 +55,7 @@ class ModerationEvents(Cog):
         if mute_role:
             await member.add_roles(mute_role, reason="Mute restored on rejoin")
 
-    @Cog.listener("on_message")
+    @Package.listener("on_message")
     async def on_mute_check(self, message: discord.Message):
         if message.author.bot or not message.guild:
             return
@@ -81,7 +76,7 @@ class ModerationEvents(Cog):
                 except discord.Forbidden:
                     pass
 
-    @Cog.listener("on_member_update")
+    @Package.listener("on_member_update")
     async def on_role_change_log(self, before: discord.Member, after: discord.Member):
         if before.roles == after.roles:
             return
@@ -99,7 +94,7 @@ class ModerationEvents(Cog):
         added_roles = set(after.roles) - set(before.roles)
         removed_roles = set(before.roles) - set(after.roles)
         
-        embed = Embed(
+        embed = discord.Embed(
             title="Role Changes",
             description=f"Roles updated for {after.mention}",
             color=0xFFFF00
@@ -121,7 +116,7 @@ class ModerationEvents(Cog):
         
         await log_channel.send(embed=embed)
 
-    @Cog.listener("on_member_ban")
+    @Package.listener("on_member_ban")
     async def on_ban_log(self, guild: discord.Guild, user: discord.User):
         config = await self.bot.db.fetchrow(
             """SELECT * FROM moderation_config WHERE guild_id = $1""", guild.id
@@ -135,7 +130,7 @@ class ModerationEvents(Cog):
         
         async for entry in guild.audit_logs(limit=5, action=discord.AuditLogAction.ban):
             if entry.target.id == user.id:
-                embed = Embed(
+                embed = discord.Embed(
                     title="Member Banned",
                     description=f"{user.name} was banned by {entry.user.mention}",
                     color=0xFF0000
@@ -145,7 +140,7 @@ class ModerationEvents(Cog):
                 await log_channel.send(embed=embed)
                 break
 
-    @Cog.listener("on_member_unban")
+    @Package.listener("on_member_unban")
     async def on_unban_log(self, guild: discord.Guild, user: discord.User):
         config = await self.bot.db.fetchrow(
             """SELECT * FROM moderation_config WHERE guild_id = $1""", guild.id
@@ -159,7 +154,7 @@ class ModerationEvents(Cog):
         
         async for entry in guild.audit_logs(limit=5, action=discord.AuditLogAction.unban):
             if entry.target.id == user.id:
-                embed = Embed(
+                embed = discord.Embed(
                     title="Member Unbanned",
                     description=f"{user.name} was unbanned by {entry.user.mention}",
                     color=0x00FF00
@@ -167,6 +162,3 @@ class ModerationEvents(Cog):
                 await log_channel.send(embed=embed)
                 break
 
-
-async def setup(bot: discord.Client):
-    await bot.add_cog(ModerationEvents(bot))

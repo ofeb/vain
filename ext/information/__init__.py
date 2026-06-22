@@ -31,4 +31,7 @@ class Information(
 
 async def setup(bot) -> None:
     """load information extension"""
+    from .events import InformationEvents
+
     await bot.add_cog(Information(bot))
+    await bot.add_cog(InformationEvents(bot))

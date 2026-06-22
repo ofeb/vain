@@ -13,13 +13,15 @@ from discord.ext import commands
 from core.discord.ctx import Context
 from core.discord.hybrid import describe, hybrid, group
 from core.discord.package import Package
+
+from .events import MiscellaneousEvents
 from core.managers.values import color
 
 if TYPE_CHECKING:
     from core.bleed import Bleed
 
 
-class Miscellaneous(Package):
+class Miscellaneous(MiscellaneousEvents, Package):
     def __init__(self, bot: Bleed):
         super().__init__(bot)
         self.afk_users: dict[int, dict] = {}
@@ -86,42 +88,6 @@ class Miscellaneous(Package):
             color=color.base,
         )
         await ctx.send(embed=embed)
-
-    @Package.listener()
-    async def on_message(self, message: discord.Message) -> None:
-        if message.author.bot or not message.guild:
-            return
-
-        ctx = await self.bot.get_context(message)
-        if not ctx.valid:
-            return
-
-        mentioned_afk = []
-        for user in message.mentions:
-            afk_data = self.afk_users.get(user.id)
-            if afk_data and afk_data["guild_id"] == message.guild.id:
-                ago = discord.utils.utcnow() - afk_data["since"]
-                minutes = int(ago.total_seconds() // 60)
-                mentioned_afk.append(f"{user.display_name} is AFK (**{afk_data['reason']}**) — {minutes}m ago")
-
-        if mentioned_afk:
-            await message.channel.send("\n".join(mentioned_afk), delete_after=8)
-
-        afk_data = self.afk_users.pop(message.author.id, None)
-        if afk_data and afk_data["guild_id"] == message.guild.id:
-            try:
-                nickname = message.author.display_name
-                if nickname.startswith("[AFK] "):
-                    nickname = nickname[6:]
-                if message.guild.me.guild_permissions.manage_nicknames:
-                    await message.author.edit(nick=nickname)
-            except Exception:
-                pass
-            await message.channel.send(
-                f"Welcome back {message.author.mention}! Removed your AFK.",
-                delete_after=5,
-            )
-
     @hybrid(
         name="poll",
         description="Create a poll with upvote and downvote reactions",
@@ -400,7 +366,5 @@ class Miscellaneous(Package):
             await ctx.fail("I don't have permission to manage emojis.")
         except Exception as e:
             await ctx.fail(f"Failed: {str(e)[:100]}")
-
-
 async def setup(bot: Bleed):
     await bot.add_cog(Miscellaneous(bot))

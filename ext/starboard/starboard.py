@@ -404,4 +404,7 @@ class Starboard(commands.Cog):
 
 async def setup(bot: commands.Bot):
     """Load the Starboard cog."""
+    from .events import StarboardEvents
+
     await bot.add_cog(Starboard(bot))
+    await bot.add_cog(StarboardEvents(bot))

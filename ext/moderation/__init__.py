@@ -45,4 +45,7 @@ class Moderation(
 
 async def setup(bot) -> None:
     """load moderation extension"""
+    from .events import ModerationEvents
+
     await bot.add_cog(Moderation(bot))
+    await bot.add_cog(ModerationEvents(bot))

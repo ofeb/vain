@@ -72,6 +72,25 @@ class CustomizeCommands(Package):
             bio = f"{bio}\nhttps://bleed.bot/"
         return bio
 
+    async def _reset_server_profile(self, ctx) -> list[str]:
+        """Clear per-server bot nickname, avatar, banner, and bio."""
+        warnings: list[str] = []
+        me = ctx.guild.me
+        reason = f"customize reset by {ctx.author}"
+        for label, kwargs in (
+            ("nickname", {"nick": None}),
+            ("avatar", {"avatar": None}),
+            ("banner", {"banner": None}),
+            ("bio", {"bio": None}),
+        ):
+            try:
+                await me.edit(reason=reason, **kwargs)
+            except discord.Forbidden:
+                warnings.append(f"missing permission to reset my **{label}**")
+            except discord.HTTPException:
+                warnings.append(f"failed to reset my **{label}**")
+        return warnings
+
     @group(
         name="customize",
         aliases=["customization"],
@@ -92,9 +111,13 @@ class CustomizeCommands(Package):
         """Reset all server customizations."""
         if not await self._require_server_owner(ctx):
             return
-        await self.db.set_guild_customize(ctx.guild.id, "emoji", {})
-        await self.db.set_guild_customize(ctx.guild.id, "color", {})
-        await self.db.set_guild_customize(ctx.guild.id, "voicemaster_emoji", {})
+        await self.db.reset_guild_customize(ctx.guild.id)
+        warnings = await self._reset_server_profile(ctx)
+        if warnings:
+            return await ctx.warn(
+                "reset all **server** customizations, but "
+                + "; ".join(warnings)
+            )
         return await ctx.success("reset all **server** customizations")
 
     @customize.command(
@@ -652,8 +675,7 @@ class CustomizeCommands(Package):
     )
     async def customize_self_reset(self, ctx):
         """Reset all your personal customizations."""
-        await self.db.set_user_customize(ctx.author.id, ctx.guild.id, "emoji", {})
-        await self.db.set_user_customize(ctx.author.id, ctx.guild.id, "color", {})
+        await self.db.reset_user_customize(ctx.author.id, ctx.guild.id)
         return await ctx.success("reset all your **personal** customizations")
 
     @customize_self.group(

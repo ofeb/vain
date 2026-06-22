@@ -480,4 +480,7 @@ class Fun(Package):
 
 
 async def setup(bot: Bleed):
+    from .events import FunEvents
+
     await bot.add_cog(Fun(bot))
+    await bot.add_cog(FunEvents(bot))

@@ -5,7 +5,9 @@ import datetime
 from typing import TYPE_CHECKING, Optional
 
 import discord
-from core.discord.package import Package, tasks
+from core.discord.package import Package
+
+from .events import BumpReminderEvents, tasks
 
 from core.discord.ctx import Context
 from core.discord.hybrid import describe, hybrid, group
@@ -19,7 +21,7 @@ DISBOARD_ID = 302050872383242240
 BUMP_COOLDOWN = 7200
 
 
-class BumpReminder(Package):
+class BumpReminder(BumpReminderEvents, Package):
     """Bump reminder commands to keep your server promoted."""
 
     def __init__(self, bot: Bleed):
@@ -57,25 +59,6 @@ class BumpReminder(Package):
                     except Exception:
                         pass
                 self._cache[guild_id]["next_bump"] = now + datetime.timedelta(seconds=BUMP_COOLDOWN)
-
-    @Package.listener()
-    async def on_message(self, message: discord.Message) -> None:
-        if message.author.id != DISBOARD_ID or not message.guild:
-            return
-
-        guild_id = message.guild.id
-        if guild_id not in self._cache:
-            return
-
-        if "Bump done" in message.content or "bump done" in message.content:
-            self._cache[guild_id]["last_bump"] = discord.utils.utcnow()
-            self._cache[guild_id]["next_bump"] = discord.utils.utcnow() + datetime.timedelta(seconds=BUMP_COOLDOWN)
-            self._cache[guild_id]["bump_channel_id"] = message.channel.id
-
-            channel = self.bot.get_channel(self._cache[guild_id]["channel_id"])
-            if channel:
-                await channel.send("Bump successful! Next bump available in 2 hours.")
-
     @group(
         name="bumpreminder",
         description="Configure the bump reminder system",
@@ -196,7 +179,5 @@ class BumpReminder(Package):
             self._cache[ctx.guild.id] = {}
         self._cache[ctx.guild.id]["remind_message"] = message
         await ctx.success(f"Reminder message set to: {message}")
-
-
 async def setup(bot: Bleed):
     await bot.add_cog(BumpReminder(bot))
