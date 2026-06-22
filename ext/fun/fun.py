@@ -16,7 +16,7 @@ from core.discord.autocomplete import guild_member_choices
 from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe, group
 from core.managers.values import color, emojis
-from core.tools.convert import OptionalGameMember
+from core.tools.convert import OptionalMember
 
 from .games import start_connect4, start_rps, start_ttt
 
@@ -419,8 +419,8 @@ class Fun(Package):
     @describe(member="Opponent (leave empty to play the bot)", rounds="Number of rounds (1-3)")
     async def rockpaperscissors(
         self,
-        ctx: Context,
-        member: OptionalGameMember = None,
+        ctx,
+        member: OptionalMember = None,
         rounds: int = 1,
     ) -> None:
         if rounds < 1 or rounds > 3:
@@ -441,7 +441,7 @@ class Fun(Package):
         aliases=["ttt", "tic-tac-toe"],
     )
     @describe(member="Opponent (leave empty to play the bot)")
-    async def tictactoe(self, ctx: Context, member: OptionalGameMember = None) -> None:
+    async def tictactoe(self, ctx, member: OptionalMember = None) -> None:
         await start_ttt(ctx, opponent=member, vs_ai=member is None)
 
     @tictactoe.autocomplete("member")
@@ -458,7 +458,7 @@ class Fun(Package):
         aliases=["4inarow", "connectfour", "c4"],
     )
     @describe(member="Opponent (leave empty to play the bot)")
-    async def connect4(self, ctx: Context, member: OptionalGameMember = None) -> None:
+    async def connect4(self, ctx, member: OptionalMember = None) -> None:
         await start_connect4(ctx, opponent=member, vs_ai=member is None)
 
     @connect4.autocomplete("member")

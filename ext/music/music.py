@@ -157,7 +157,7 @@ class Music(MusicEvents, Package):
 
     @hybrid(name="play", aliases=["p"], guild_only=True)
     @describe(query="Song name or URL", next="Play after the current track")
-    async def play(self, ctx: Context, query: str, next: bool = False) -> None:
+    async def play(self, ctx, query: str, next: bool = False) -> None:
         player = await self._player(ctx)
         if player is None:
             return
@@ -189,12 +189,12 @@ class Music(MusicEvents, Package):
         ))
 
     @hybrid(name="queue", description="View all tracks queued", group=True, invoke_without_command=True, guild_only=True)
-    async def queue(self, ctx: Context) -> None:
+    async def queue(self, ctx) -> None:
         if ctx.invoked_subcommand is None:
             await self.queue_view(ctx)
 
     @queue.command(name="view", description="View all tracks queued", aliases=["list"])
-    async def queue_view(self, ctx: Context) -> None:
+    async def queue_view(self, ctx) -> None:
         state = self._queue(ctx.guild.id)
         if not state.tracks and not state.current:
             return await ctx.fail("queue is empty")
@@ -208,7 +208,7 @@ class Music(MusicEvents, Package):
 
     @queue.command(name="remove", description="Remove a track from the queue")
     @describe(position="Track position in the queue")
-    async def queue_remove(self, ctx: Context, position: int) -> None:
+    async def queue_remove(self, ctx, position: int) -> None:
         state = self._queue(ctx.guild.id)
         if position < 1 or position > len(state.tracks):
             return await ctx.fail(f"invalid position ({len(state.tracks)} tracks)")
@@ -216,7 +216,7 @@ class Music(MusicEvents, Package):
         await ctx.success(f"removed **{track.title}**")
 
     @queue.command(name="shuffle", description="Shuffle the queue")
-    async def queue_shuffle(self, ctx: Context) -> None:
+    async def queue_shuffle(self, ctx) -> None:
         state = self._queue(ctx.guild.id)
         if len(state.tracks) < 2:
             return await ctx.fail("not enough tracks")
@@ -224,13 +224,13 @@ class Music(MusicEvents, Package):
         await ctx.success("shuffled")
 
     @queue.command(name="empty", description="Empty the queue", aliases=["clear"])
-    async def queue_empty(self, ctx: Context) -> None:
+    async def queue_empty(self, ctx) -> None:
         self._queue(ctx.guild.id).tracks.clear()
         await ctx.success("cleared queue")
 
     @queue.command(name="move", description="Move a track to a different position in the queue")
     @describe(position="Current position", new_position="New position")
-    async def queue_move(self, ctx: Context, position: int, new_position: int) -> None:
+    async def queue_move(self, ctx, position: int, new_position: int) -> None:
         state = self._queue(ctx.guild.id)
         if not (1 <= position <= len(state.tracks) and 1 <= new_position <= len(state.tracks)):
             return await ctx.fail("invalid position")
@@ -239,7 +239,7 @@ class Music(MusicEvents, Package):
         await ctx.success(f"moved **{track.title}** to `{new_position}`")
 
     @hybrid(name="skip", guild_only=True)
-    async def skip(self, ctx: Context) -> None:
+    async def skip(self, ctx) -> None:
         player = ctx.voice_client
         if player is None or not player.is_playing:
             return await ctx.fail("nothing playing")
@@ -248,7 +248,7 @@ class Music(MusicEvents, Package):
         await ctx.success("skipped")
 
     @hybrid(name="pause", guild_only=True)
-    async def pause(self, ctx: Context) -> None:
+    async def pause(self, ctx) -> None:
         player = ctx.voice_client
         if player is None or not player.is_playing:
             return await ctx.fail("nothing playing")
@@ -256,7 +256,7 @@ class Music(MusicEvents, Package):
         await ctx.success("paused")
 
     @hybrid(name="resume", guild_only=True)
-    async def resume(self, ctx: Context) -> None:
+    async def resume(self, ctx) -> None:
         player = ctx.voice_client
         if player is None or not player.is_paused:
             return await ctx.fail("not paused")
@@ -264,21 +264,21 @@ class Music(MusicEvents, Package):
         await ctx.success("resumed")
 
     @hybrid(name="shuffle", guild_only=True)
-    async def shuffle(self, ctx: Context) -> None:
+    async def shuffle(self, ctx) -> None:
         state = self._queue(ctx.guild.id)
         state.loop_queue = not state.loop_queue
         await ctx.success(f"queue loop **{'on' if state.loop_queue else 'off'}**")
 
     @hybrid(name="repeat", guild_only=True)
     @describe(option="on or off")
-    async def repeat(self, ctx: Context, option: str | None = None) -> None:
+    async def repeat(self, ctx, option: str | None = None) -> None:
         state = self._queue(ctx.guild.id)
         state.loop = (not state.loop) if option is None else option.lower() in {"on", "true", "yes", "enable"}
         await ctx.success(f"repeat **{'on' if state.loop else 'off'}**")
 
     @hybrid(name="volume", guild_only=True)
     @describe(volume="Volume from 0 to 200")
-    async def volume(self, ctx: Context, volume: int) -> None:
+    async def volume(self, ctx, volume: int) -> None:
         if not 0 <= volume <= 200:
             return await ctx.fail("volume must be 0–200")
         player = ctx.voice_client
@@ -290,7 +290,7 @@ class Music(MusicEvents, Package):
 
     @hybrid(name="fastforward", guild_only=True)
     @describe(position="Seconds to fast forward")
-    async def fastforward(self, ctx: Context, position: int) -> None:
+    async def fastforward(self, ctx, position: int) -> None:
         player = ctx.voice_client
         if player is None or player.current is None:
             return await ctx.fail("nothing playing")
@@ -299,7 +299,7 @@ class Music(MusicEvents, Package):
 
     @hybrid(name="rewind", guild_only=True)
     @describe(position="Seconds to rewind")
-    async def rewind(self, ctx: Context, position: int) -> None:
+    async def rewind(self, ctx, position: int) -> None:
         player = ctx.voice_client
         if player is None or player.current is None:
             return await ctx.fail("nothing playing")
@@ -307,18 +307,18 @@ class Music(MusicEvents, Package):
         await ctx.success(f"-{position}s")
 
     @hybrid(name="disconnect", aliases=["dc", "leave"], guild_only=True)
-    async def disconnect(self, ctx: Context) -> None:
+    async def disconnect(self, ctx) -> None:
         if ctx.voice_client:
             await ctx.voice_client.disconnect(force=True)
         self.queues.pop(ctx.guild.id, None)
         await ctx.success("disconnected")
 
     @hybrid(name="preset", description="Audio filter presets", group=True, invoke_without_command=True, guild_only=True)
-    async def preset(self, ctx: Context) -> None:
+    async def preset(self, ctx) -> None:
         await ctx.send_help(ctx.command)
 
     @preset.command(name="active", description="Show the active audio preset")
-    async def preset_active(self, ctx: Context) -> None:
+    async def preset_active(self, ctx) -> None:
         active = self._queue(ctx.guild.id).active_preset
         if not active:
             return await ctx.info("no active preset")
@@ -328,7 +328,7 @@ class Music(MusicEvents, Package):
 for _preset_name in Music.PRESETS:
     @Music.preset.command(name=_preset_name, description=f"Toggle the {_preset_name} audio preset")
     @describe(setting="on or off")
-    async def _preset_cmd(self, ctx: Context, setting: str | None = None, *, _name: str = _preset_name) -> None:
+    async def _preset_cmd(self, ctx, setting: str | None = None, *, _name: str = _preset_name) -> None:
         await self._set_preset(ctx, _name, setting)
 
     _preset_cmd.__name__ = f"preset_{_preset_name.replace('8d', 'eightd')}"

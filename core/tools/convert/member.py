@@ -43,10 +43,16 @@ class MemberConvert(Converter):
         raise CommandError(f"cant find member **{arg}**")
 
 
-class OptionalGameMember(MemberConvert):
-    """optional opponent for games; omit or pass ai/0 to play the bot"""
+class OptionalMember(Converter):
+    """optional member/user; slash autocomplete passes user ids as strings"""
 
-    async def convert(self, ctx: Context, arg: str | discord.Member | discord.User | None) -> discord.Member | discord.User | None:
+    _EMPTY = frozenset({"", "0", "none", "ai", "bot"})
+
+    async def convert(
+        self,
+        ctx: Context,
+        arg: str | discord.Member | discord.User | None,
+    ) -> discord.Member | discord.User | None:
         if arg is None:
             return None
         if isinstance(arg, (discord.Member, discord.User)):
@@ -61,9 +67,22 @@ class OptionalGameMember(MemberConvert):
                 except discord.HTTPException:
                     raise CommandError(f"cant find member **{arg}**")
             return arg
-        cleaned = str(arg).strip().lower()
-        if cleaned in {"", "0", "none", "ai", "bot"}:
+        cleaned = str(arg).strip()
+        if cleaned.lower() in self._EMPTY:
             return None
-        if ctx.guild is None:
-            raise CommandError("mention an opponent or play against the bot in a server")
-        return await super().convert(ctx, str(arg))
+        try:
+            user_id = int(cleaned.strip("<@!>"))
+            if ctx.guild is not None:
+                member = ctx.guild.get_member(user_id)
+                if member is not None:
+                    return member
+                try:
+                    return await ctx.guild.fetch_member(user_id)
+                except discord.HTTPException:
+                    pass
+            return await ctx.bot.fetch_user(user_id)
+        except (ValueError, TypeError):
+            pass
+        if ctx.guild is not None:
+            return await MemberConvert().convert(ctx, cleaned)
+        raise CommandError(f"cant find member **{arg}**")

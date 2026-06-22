@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from io import BytesIO
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import discord
 from discord import app_commands
@@ -9,8 +9,9 @@ from discord.ext import commands
 
 from core.discord.package import Package
 from core.discord.ctx import Context
+from core.tools.convert import OptionalMember
 from core.discord.autocomplete import guild_member_choices
-from core.discord.hybrid import hybrid, describe, command
+from core.discord.hybrid import hybrid, describe
 from core.tools.human.text import ordinal
 
 from .media import fetch_action_gif
@@ -114,7 +115,7 @@ class RoleplayCommands(Package):
         self,
         ctx,
         action: str,
-        member: Optional[discord.User] = None,
+        member: OptionalMember = None,
     ):
         return await self._perform_action(ctx, action, member)
 
@@ -132,11 +133,19 @@ class RoleplayCommands(Package):
         ][:25]
         return [app_commands.Choice(name=name, value=name) for name in matches]
 
+    @roleplay.autocomplete("member")
+    async def roleplay_member_autocomplete(
+        self,
+        interaction: discord.Interaction,
+        current: str,
+    ) -> list[app_commands.Choice[str]]:
+        return await guild_member_choices(interaction, current)
+
     async def _perform_action(
         self,
         ctx: Context,
         action: str,
-        member: discord.User | None = None,
+        member: discord.Member | discord.User | None = None,
     ):
         action = action.lower().strip()
         if action not in ACTION_MAP:
@@ -180,17 +189,15 @@ class RoleplayCommands(Package):
 def _make_prefix_action(name: str):
     @hybrid(name=name)
     @describe(member="Member to roleplay with")
-    async def action(self, ctx, member: Optional[discord.User] = None):
+    async def action(self, ctx, member: OptionalMember = None):
         return await self._perform_action(ctx, name, member)
 
-    @action.autocomplete("member")
-    async def member_autocomplete(self, interaction: discord.Interaction, current: str):
+    async def member_autocomplete(interaction: discord.Interaction, current: str):
         return await guild_member_choices(interaction, current)
 
+    action.autocomplete("member")(member_autocomplete)
     action.__name__ = name
     action.__qualname__ = f"RoleplayCommands.{name}"
-    member_autocomplete.__name__ = f"{name}_member_autocomplete"
-    member_autocomplete.__qualname__ = f"RoleplayCommands.{name}_member_autocomplete"
     return action
 
 
