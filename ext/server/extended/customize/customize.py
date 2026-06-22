@@ -42,7 +42,7 @@ class CustomizeCommands(Package):
 
             attachment = ctx.message.attachments[0]
             if not attachment.content_type or not attachment.content_type.startswith("image/"):
-                await ctx.fail("uploaded file must be a **valid image**")
+                await ctx.warn("uploaded file must be a **valid image**")
                 return None
             return await attachment.read()
 
@@ -58,7 +58,7 @@ class CustomizeCommands(Package):
                         await ctx.fail("failed to fetch that image")
                         return None
                     if "image/" not in content_type:
-                        await ctx.fail("that url must point to a **valid image**")
+                        await ctx.warn("that url must point to a **valid image**")
                         return None
                     return await response.read()
         except (aiohttp.ClientError, ValueError):

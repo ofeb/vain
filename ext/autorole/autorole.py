@@ -54,7 +54,7 @@ class Autorole(commands.Cog):
             ctx.guild.id,
         )
         if not role_ids:
-            await ctx.fail("There are no auto roles setup")
+            await ctx.warn("There are no auto roles setup")
             return
         
         roles = [

@@ -66,7 +66,7 @@ class Giveaway(commands.Cog):
             if ctx.message.reference:
                 message = await ctx.channel.fetch_message(ctx.message.reference.message_id)
             if not message:
-                await ctx.fail("A message link is required")
+                await ctx.warn("A message link is required")
                 return
         
         giveaway = await self.bot.db.fetchrow(
@@ -74,15 +74,15 @@ class Giveaway(commands.Cog):
             message.id,
         )
         if not giveaway:
-            await ctx.fail("That is not a giveaway")
+            await ctx.warn("That is not a giveaway")
             return
         
         if not giveaway["win_message_id"]:
-            await ctx.fail("That giveaway isn't over yet")
+            await ctx.warn("That giveaway isn't over yet")
             return
         
         if winners < 1:
-            await ctx.fail("Winner count must be an integer higher than 1")
+            await ctx.warn("Winner count must be higher than 1")
             return
         
         entries = [
@@ -110,7 +110,7 @@ class Giveaway(commands.Cog):
             if ctx.message.reference:
                 message = await ctx.channel.fetch_message(ctx.message.reference.message_id)
             if not message:
-                await ctx.fail("A message link is required")
+                await ctx.warn("A message link is required")
                 return
         
         giveaway = await self.bot.db.fetchrow(
@@ -118,7 +118,7 @@ class Giveaway(commands.Cog):
             message.id,
         )
         if not giveaway:
-            await ctx.fail("That is not a giveaway")
+            await ctx.warn("That is not a giveaway")
             return
         
         self.bot.dispatch("giveaway_end", ctx.guild, message.channel, giveaway)
@@ -153,7 +153,7 @@ class Giveaway(commands.Cog):
             if ctx.message.reference:
                 message = await ctx.channel.fetch_message(ctx.message.reference.message_id)
             if not message:
-                await ctx.fail("A message link is required")
+                await ctx.warn("A message link is required")
                 return
         
         try:
@@ -163,7 +163,7 @@ class Giveaway(commands.Cog):
                 message.id,
             )
         except Exception:
-            await ctx.fail("That is not a giveaway")
+            await ctx.warn("That is not a giveaway")
             return
         
         giveaway = await self.bot.db.fetchrow(
@@ -209,11 +209,11 @@ class Giveaway(commands.Cog):
             if ctx.message.reference:
                 message = await ctx.channel.fetch_message(ctx.message.reference.message_id)
             if not message:
-                await ctx.fail("A message link is required")
+                await ctx.warn("A message link is required")
                 return
         
         if not prize:
-            await ctx.fail("A prize is required")
+            await ctx.warn("A prize is required")
             return
         
         giveaway = await self.bot.db.fetchrow(
@@ -221,7 +221,7 @@ class Giveaway(commands.Cog):
             message.id,
         )
         if not giveaway:
-            await ctx.fail("That is not a giveaway")
+            await ctx.warn("That is not a giveaway")
             return
         
         embed = message.embeds[0]
@@ -252,11 +252,11 @@ class Giveaway(commands.Cog):
             if ctx.message.reference:
                 message = await ctx.channel.fetch_message(ctx.message.reference.message_id)
             if not message:
-                await ctx.fail("A message link is required")
+                await ctx.warn("A message link is required")
                 return
         
         if not duration:
-            await ctx.fail("A duration is required")
+            await ctx.warn("A duration is required")
             return
         
         end_time = datetime.now() + timedelta(seconds=duration)
@@ -267,7 +267,7 @@ class Giveaway(commands.Cog):
                 message.id,
             )
         except Exception:
-            await ctx.fail("That is not a giveaway")
+            await ctx.warn("That is not a giveaway")
             return
         
         giveaway = await self.bot.db.fetchrow(
@@ -312,7 +312,7 @@ class Giveaway(commands.Cog):
     ) -> None:
         """Start a new giveaway."""
         if not prize:
-            await ctx.fail("A prize is required")
+            await ctx.warn("A prize is required")
             return
         
         channel = channel or ctx.channel

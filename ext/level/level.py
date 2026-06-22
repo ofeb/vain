@@ -91,7 +91,7 @@ class Level(LevelEvents, Package):
                 ctx.guild.id,
             )
             if not rows:
-                await ctx.fail("No rankings available yet.")
+                await ctx.warn("No rankings available yet.")
                 return
 
             entries = []
@@ -122,7 +122,7 @@ class Level(LevelEvents, Package):
                 ctx.guild.id,
             )
             if not rows:
-                await ctx.fail("No reward roles configured.")
+                await ctx.warn("No reward roles configured.")
                 return
 
             entries = []

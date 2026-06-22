@@ -9,7 +9,7 @@ from discord.ext import commands
 
 from core.discord.package import Package
 from core.discord.ctx import Context
-from core.tools.convert import OptionalMember
+from core.tools.convert import OptionalMemberParam
 from core.discord.hybrid import hybrid, describe
 from core.tools.human.text import ordinal
 
@@ -114,7 +114,7 @@ class RoleplayCommands(Package):
         self,
         ctx,
         action: str,
-        member: OptionalMember = None,
+        member: OptionalMemberParam = None,
     ):
         return await self._perform_action(ctx, action, member)
 
@@ -131,14 +131,6 @@ class RoleplayCommands(Package):
             if needle in name
         ][:25]
         return [app_commands.Choice(name=name, value=name) for name in matches]
-
-    @roleplay.autocomplete("member")
-    async def roleplay_member_autocomplete(
-        self,
-        interaction: discord.Interaction,
-        current: str,
-    ) -> list[app_commands.Choice[str]]:
-        return await OptionalMember.autocomplete(interaction, current)
 
     async def _perform_action(
         self,
@@ -188,13 +180,9 @@ class RoleplayCommands(Package):
 def _make_prefix_action(name: str):
     @hybrid(name=name)
     @describe(member="Member to roleplay with")
-    async def action(self, ctx, member: OptionalMember = None):
+    async def action(self, ctx, member: OptionalMemberParam = None):
         return await self._perform_action(ctx, name, member)
 
-    async def member_autocomplete(interaction: discord.Interaction, current: str):
-        return await OptionalMember.autocomplete(interaction, current)
-
-    action.autocomplete("member")(member_autocomplete)
     action.__name__ = name
     action.__qualname__ = f"RoleplayCommands.{name}"
     return action

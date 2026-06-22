@@ -356,7 +356,7 @@ class VoiceMaster(VoiceMasterEvents, Package):
                         pass
             await ctx.success("VoiceMaster configuration reset")
         else:
-            await ctx.fail("Server is not configured")
+            await ctx.warn("The server is not configured")
 
     @voicemaster.command(name="unset", aliases=["remove"])
     @has_permissions(manage_guild=True)
@@ -370,7 +370,7 @@ class VoiceMaster(VoiceMasterEvents, Package):
         if row:
             await ctx.success("VoiceMaster configuration removed. Channels were kept.")
         else:
-            await ctx.fail("Server is not configured")
+            await ctx.warn("The server is not configured")
 
     @voicemaster.command(name="category")
     @has_permissions(manage_guild=True)
@@ -384,7 +384,7 @@ class VoiceMaster(VoiceMasterEvents, Package):
             )
             await ctx.success(f"Set {channel.name} as the voice category")
         except Exception:
-            await ctx.fail("Server is not configured")
+            await ctx.warn("The server is not configured")
 
     @voicemaster.command(name="category private", slash=False)
     @has_permissions(manage_guild=True)
@@ -398,7 +398,7 @@ class VoiceMaster(VoiceMasterEvents, Package):
             )
             await ctx.success(f"Set {channel.name} as the private category")
         except Exception:
-            await ctx.fail("Server is not configured")
+            await ctx.warn("The server is not configured")
 
     @voicemaster.command(name="default")
     async def voicemaster_default(self, ctx: Context) -> None:
@@ -409,7 +409,7 @@ class VoiceMaster(VoiceMasterEvents, Package):
         )
         
         if not config:
-            return await ctx.fail("Server is not configured")
+            return await ctx.warn("The server is not configured")
         
         embed = discord.Embed(title="VoiceMaster Defaults", color=color.base)
         embed.add_field(name="Bitrate", value=f"{config.get('bitrate', 64000) // 1000}kbps", inline=True)
@@ -428,7 +428,7 @@ class VoiceMaster(VoiceMasterEvents, Package):
             )
             await ctx.success(f"Interface sending {'enabled' if setting else 'disabled'}")
         except Exception:
-            await ctx.fail("Server is not configured")
+            await ctx.warn("The server is not configured")
 
     @voicemaster.command(name="default role", slash=False)
     @has_permissions(manage_guild=True, manage_roles=True)
@@ -442,7 +442,7 @@ class VoiceMaster(VoiceMasterEvents, Package):
             )
             await ctx.success(f"Set {role.mention} as default role")
         except Exception:
-            await ctx.fail("Server is not configured")
+            await ctx.warn("The server is not configured")
 
     @voicemaster.command(name="default bitrate", slash=False)
     @has_permissions(manage_guild=True)
@@ -456,7 +456,7 @@ class VoiceMaster(VoiceMasterEvents, Package):
             )
             await ctx.success(f"Set default bitrate to {bitrate}kbps")
         except Exception:
-            await ctx.fail("Server is not configured")
+            await ctx.warn("The server is not configured")
 
     @voicemaster.command(name="default name", slash=False)
     @has_permissions(manage_guild=True)
@@ -470,7 +470,7 @@ class VoiceMaster(VoiceMasterEvents, Package):
             )
             await ctx.success(f"Set default name to {name}")
         except Exception:
-            await ctx.fail("Server is not configured")
+            await ctx.warn("The server is not configured")
 
     @voicemaster.command(name="default region", slash=False)
     @has_permissions(manage_guild=True)
@@ -484,7 +484,7 @@ class VoiceMaster(VoiceMasterEvents, Package):
             )
             await ctx.success(f"Set default region to {region}")
         except Exception:
-            await ctx.fail("Server is not configured")
+            await ctx.warn("The server is not configured")
 
     @voicemaster.command(name="configuration")
     async def voicemaster_configuration(self, ctx: Context) -> None:
@@ -561,10 +561,10 @@ class VoiceMaster(VoiceMasterEvents, Package):
     async def voicemaster_transfer(self, ctx: Context, member: discord.Member) -> None:
         """Transfer ownership of your channel to another member."""
         if member == ctx.author or member.bot:
-            return await ctx.fail("Invalid member")
+            return await ctx.warn("Invalid member")
         
         if not member.voice or member.voice.channel != ctx.author.voice.channel:
-            return await ctx.fail(f"{member} is not in your channel")
+            return await ctx.warn(f"{member} is not in your channel")
         
         await self.bot.db.execute(
             "UPDATE voicemaster_channels SET owner_id = $2 WHERE channel_id = $1",
@@ -584,7 +584,7 @@ class VoiceMaster(VoiceMasterEvents, Package):
     async def voicemaster_name(self, ctx: Context, name: str) -> None:
         """Rename your voice channel."""
         if len(name) > 100:
-            return await ctx.fail("Name too long (max 100 characters)")
+            return await ctx.warn("Name too long (max 100 characters)")
         
         try:
             await ctx.author.voice.channel.edit(
@@ -600,7 +600,7 @@ class VoiceMaster(VoiceMasterEvents, Package):
     async def voicemaster_limit(self, ctx: Context, limit: int) -> None:
         """Set a member limit to your voice channel."""
         if limit < 0 or limit > 99:
-            return await ctx.fail("Limit must be between 0 and 99")
+            return await ctx.warn("Limit must be between 0 and 99")
         
         await ctx.author.voice.channel.edit(
             user_limit=limit,
@@ -647,11 +647,11 @@ class VoiceMaster(VoiceMasterEvents, Package):
         )
         
         if not config:
-            return await ctx.fail("Server not configured")
+            return await ctx.warn("Server not configured")
         
         interface = ctx.guild.get_channel(config["interface_id"])
         if not interface:
-            return await ctx.fail("Interface channel not found")
+            return await ctx.warn("Interface channel not found")
         
         await interface.send(embed=self._interface_embed(ctx.guild), view=VoiceInterface(self))
         await ctx.success("Interface resent")

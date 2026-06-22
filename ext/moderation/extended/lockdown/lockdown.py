@@ -67,7 +67,7 @@ class Lockdown(Package):
                 )
 
         if not locked:
-            return await ctx.fail("no channels were locked")
+            return await ctx.warn("no channels were locked")
 
         return await ctx.success(f"**{len(locked)}** channels locked — {reason}")
 
@@ -114,7 +114,7 @@ class Lockdown(Package):
             ctx.guild.id, channel.id,
         )
         if existing:
-            return await ctx.fail(f"{channel.mention} is already **ignored**")
+            return await ctx.warn(f"{channel.mention} is already **ignored**")
 
         await self.db.execute(
             """INSERT INTO lockdown_ignore (guild_id, channel_id) VALUES ($1, $2)""",
@@ -135,7 +135,7 @@ class Lockdown(Package):
             ctx.guild.id, channel.id,
         )
         if deleted == "DELETE 0":
-            return await ctx.fail(f"{channel.mention} is not **ignored**")
+            return await ctx.warn(f"{channel.mention} is not **ignored**")
         return await ctx.success(f"{channel.mention} is no longer **ignored** during lockdown all")
 
     @lockdown_ignore.command(
@@ -151,7 +151,7 @@ class Lockdown(Package):
             ctx.guild.id,
         )
         if not rows:
-            return await ctx.fail("no channels are **ignored** from lockdown")
+            return await ctx.warn("no channels are **ignored** from lockdown")
 
         lines = []
         for row in rows:
@@ -214,7 +214,7 @@ class Lockdown(Package):
         )
 
         if not unlocked:
-            return await ctx.fail("no channels are currently **locked**")
+            return await ctx.warn("no channels are currently **locked**")
 
         return await ctx.success(f"**{len(unlocked)}** channels unlocked — {reason}")
 

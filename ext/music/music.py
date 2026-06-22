@@ -227,13 +227,66 @@ class Music(MusicEvents, Package):
         head = query.split(" ", 1)[0]
         return ":" in head and head.lower().endswith("search")
 
-    def _pick_track(self, results):
+    @staticmethod
+    def _track_source(track) -> str:
+        track_type = getattr(track, "track_type", None)
+        if track_type is not None:
+            value = track_type.value if hasattr(track_type, "value") else str(track_type)
+            if value and value.lower() not in {"other"}:
+                return value.lower()
+        info = getattr(track, "info", None) or {}
+        return str(info.get("sourceName", "")).lower()
+
+    def _score_track(self, query: str, track) -> float:
+        q = query.lower().strip()
+        title = (track.title or "").lower()
+        author = (track.author or "").lower()
+        combined = f"{title} {author}".strip()
+        if not q:
+            return 0.0
+
+        score = 0.0
+        if q == title or q == combined:
+            score += 200
+        elif q in combined or combined in q:
+            score += 120
+
+        q_tokens = [t for t in q.split() if len(t) >= 2]
+        if not q_tokens:
+            return score
+
+        hits = sum(1 for token in q_tokens if token in title or token in author)
+        score += hits * 15
+        if hits == len(q_tokens):
+            score += 40
+
+        source = self._track_source(track)
+        if source == "deezer":
+            score += 25
+        elif source == "spotify":
+            score -= 10
+
+        return score
+
+    def _pick_track(self, results, pick_query: str | None = None):
         if not results:
             return None
         tracks = results.tracks if hasattr(results, "tracks") else results
-        return tracks[0] if tracks else None
+        if not tracks:
+            return None
+        if not pick_query or len(tracks) == 1:
+            return tracks[0]
+        ranked = sorted(
+            tracks,
+            key=lambda track: self._score_track(pick_query, track),
+            reverse=True,
+        )
+        best = ranked[0]
+        if self._score_track(pick_query, best) <= 0:
+            return tracks[0]
+        return best
 
-    async def _load_query(self, query: str):
+    async def _load_query(self, query: str, *, pick_query: str | None = None):
         try:
             results = await self._node.get_tracks(query)
         except TrackLoadError as e:
@@ -242,7 +295,30 @@ class Music(MusicEvents, Package):
         except Exception as e:
             log.debug("unexpected load error for %r: %s", query, e)
             return None
-        return self._pick_track(results)
+        return self._pick_track(results, pick_query)
+
+    async def _resolve_deezer_uri(self, track):
+        uri = (getattr(track, "uri", None) or "").strip()
+        if "deezer.com/track/" not in uri:
+            return track
+        direct = await self._load_query(uri)
+        if direct:
+            log.debug("reloaded deezer track from %s", uri)
+            return direct
+        return track
+
+    async def _finalize_track(self, track, *, query: str | None = None):
+        source = self._track_source(track)
+        if source == "deezer":
+            return await self._resolve_deezer_uri(track)
+        if source == "spotify" and query:
+            fallback = await self._load_query(
+                f"dzsearch:{track.title} {track.author}",
+                pick_query=query,
+            )
+            if fallback:
+                return await self._resolve_deezer_uri(fallback)
+        return track
 
     async def _first_track(self, query: str):
         if self._node is None:
@@ -252,15 +328,27 @@ class Music(MusicEvents, Package):
             return None
 
         if self._is_direct_query(query):
-            return await self._load_query(query)
+            track = await self._load_query(query)
+            if track:
+                return await self._finalize_track(track, query=query)
+            return None
 
         for source in nl.search_sources:
             search = f"{source}:{query}"
             log.info("searching %s for %r", source, query)
-            track = await self._load_query(search)
-            if track:
-                log.info("resolved %r via %s", query, source)
-                return track
+            track = await self._load_query(search, pick_query=query)
+            if track is None:
+                continue
+            track = await self._finalize_track(track, query=query)
+            log.info(
+                "resolved %r via %s -> %s — %s (%s)",
+                query,
+                source,
+                track.title,
+                track.author,
+                track.uri,
+            )
+            return track
 
         log.info(
             "no results for %r (tried %s)",

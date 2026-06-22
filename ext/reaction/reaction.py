@@ -132,7 +132,7 @@ class Reaction(commands.Cog):
                 if channel := ctx.guild.get_channel(int(record.trigger)):
                     rows.append(f"{channel.mention} - {''.join(r for r in record.response)}")
         if len(rows) == 0:
-            await ctx.fail("No Auto Channel Reactions found")
+            await ctx.warn("No Auto Channel Reactions found")
             return
         rows = [f"`{i}` {row}" for i, row in enumerate(rows, start=1)]
         embed = discord.Embed(color=color.base, title="Auto Channel Reactions")

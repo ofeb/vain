@@ -40,7 +40,7 @@ class EmbedCommands(Package):
     async def embed_create(self, ctx: Context, name: str, *, script: str) -> None:
         name = name.lower().strip()
         if not re.fullmatch(r"[a-z0-9_-]{1,50}", name):
-            return await ctx.fail("Name must be **1-50** characters: letters, numbers, `_`, `-`.")
+            return await ctx.warn("Name must be **1-50** characters: letters, numbers, `_`, `-`.")
         await self.db.execute(
             """
             INSERT INTO saved_embeds (guild_id, name, script, author_id)
@@ -69,7 +69,7 @@ class EmbedCommands(Package):
             name,
         )
         if not row:
-            return await ctx.fail(f"No embed template named **`{name}`**.")
+            return await ctx.warn(f"No embed template named **`{name}`**.")
         await self.db.execute(
             """
             UPDATE saved_embeds
@@ -90,7 +90,7 @@ class EmbedCommands(Package):
             ctx.guild.id,
         )
         if not rows:
-            return await ctx.fail("No saved embed templates yet.")
+            return await ctx.warn("No saved embed templates yet.")
         lines = [
             f"**`{row['name']}`** — <@{row['author_id']}> ({discord.utils.format_dt(row['updated_at'], style='R')})"
             for row in rows
@@ -122,7 +122,7 @@ class EmbedCommands(Package):
             name.lower().strip(),
         )
         if not row:
-            return await ctx.fail(f"No embed template named **`{name}`**.")
+            return await ctx.warn(f"No embed template named **`{name}`**.")
         await self._send_embed_script(ctx, row["script"])
 
     @embed.command(name="copy", description="Copy embed code from a message link")
@@ -131,18 +131,18 @@ class EmbedCommands(Package):
         channel_id, message_id = self._parse_message_link(message)
         channel = ctx.guild.get_channel(channel_id)
         if not channel:
-            return await ctx.fail("Could not find that channel.")
+            return await ctx.warn("Could not find that channel.")
         try:
             msg = await channel.fetch_message(message_id)
         except discord.NotFound:
-            return await ctx.fail("Message not found.")
+            return await ctx.warn("Message not found.")
         except discord.HTTPException:
-            return await ctx.fail("Could not fetch that message.")
+            return await ctx.warn("Could not fetch that message.")
         if not msg.embeds:
-            return await ctx.fail("That message has no embeds.")
+            return await ctx.warn("That message has no embeds.")
         code = self._embed_to_code(msg.embeds[0])
         if len(code) > 2000:
-            return await ctx.fail("Embed code is too long to send here.")
+            return await ctx.warn("Embed code is too long to send here.")
         await ctx.send(embed=discord.Embed(title="Embed Code", description=f"```{code}```", color=color.base))
 
     @embed.command(name="delete", description="Delete a saved embed template", aliases=["remove"])
@@ -155,7 +155,7 @@ class EmbedCommands(Package):
             name,
         )
         if result == "DELETE 0":
-            return await ctx.fail(f"No embed template named **`{name}`**.")
+            return await ctx.warn(f"No embed template named **`{name}`**.")
         await ctx.success(f"Deleted embed template **`{name}`**.")
 
     @hybrid(

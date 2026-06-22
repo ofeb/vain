@@ -184,7 +184,7 @@ class Fortnite(Package):
                 return await ctx.fail(f"Could not fetch the Fortnite shop: {exc}")
 
             if not layout.sections:
-                return await ctx.fail("The shop is currently empty.")
+                return await ctx.warn("The shop is currently empty.")
 
             from .shop_renderer import render_shop_image
 
@@ -214,7 +214,7 @@ class Fortnite(Package):
         async with ctx.typing():
             cosmetic = await self.fetch_fortnite_cosmetic(name)
         if not cosmetic:
-            return await ctx.fail(f"No cosmetics found matching `{name}`.")
+            return await ctx.warn(f"No cosmetics found matching `{name}`.")
 
         embed = discord.Embed(title=cosmetic.name, color=color.base)
         embed.add_field(name="Type", value=cosmetic.type_name, inline=True)

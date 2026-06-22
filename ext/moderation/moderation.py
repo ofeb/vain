@@ -248,10 +248,10 @@ class ModerationCommands(Package):
         source = ctx.author.voice.channel
 
         if source.id == channel.id:
-            return await ctx.fail("Source and destination **cannot** be the same")
+            return await ctx.warn("Source and destination **cannot** be the same")
 
         if not ctx.guild.me.guild_permissions.move_members:
-            return await ctx.fail("I don't have the **Move Members** permission")
+            return await ctx.warn("I don't have the **Move Members** permission")
 
         moved = 0
         failed = 0

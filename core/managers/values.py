@@ -161,10 +161,10 @@ class music:
     port: int = 2009
     password: str = "youshallnotpass"
     search_sources: tuple[str, ...] = (
-        "spsearch",
         "dzsearch",
         "scsearch",
         "ytsearch",
+        "spsearch",
     )
 
     @classmethod

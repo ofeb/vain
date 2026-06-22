@@ -14,7 +14,7 @@ from core.discord.package import Package
 from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe, group
 from core.managers.values import color, emojis
-from core.tools.convert import OptionalMember
+from core.tools.convert import OptionalMemberParam
 
 from .games import start_connect4, start_rps, start_ttt
 
@@ -418,20 +418,12 @@ class Fun(Package):
     async def rockpaperscissors(
         self,
         ctx,
-        member: OptionalMember = None,
+        member: OptionalMemberParam = None,
         rounds: int = 1,
     ) -> None:
         if rounds < 1 or rounds > 3:
             return await ctx.warn("Rounds must be between **1** and **3**.")
         await start_rps(ctx, opponent=member, rounds=rounds, vs_me=member is None)
-
-    @rockpaperscissors.autocomplete("member")
-    async def rockpaperscissors_member_autocomplete(
-        self,
-        interaction: discord.Interaction,
-        current: str,
-    ) -> list[app_commands.Choice[str]]:
-        return await OptionalMember.autocomplete(interaction, current, include_me=True)
 
     @hybrid(
         name="tictactoe",
@@ -439,16 +431,8 @@ class Fun(Package):
         aliases=["ttt", "tic-tac-toe"],
     )
     @describe(member="Opponent (leave empty to play the bot)")
-    async def tictactoe(self, ctx, member: OptionalMember = None) -> None:
+    async def tictactoe(self, ctx, member: OptionalMemberParam = None) -> None:
         await start_ttt(ctx, opponent=member, vs_me=member is None)
-
-    @tictactoe.autocomplete("member")
-    async def tictactoe_member_autocomplete(
-        self,
-        interaction: discord.Interaction,
-        current: str,
-    ) -> list[app_commands.Choice[str]]:
-        return await OptionalMember.autocomplete(interaction, current, include_me=True)
 
     @hybrid(
         name="connect4",
@@ -456,16 +440,8 @@ class Fun(Package):
         aliases=["4inarow", "connectfour", "c4"],
     )
     @describe(member="Opponent (leave empty to play the bot)")
-    async def connect4(self, ctx, member: OptionalMember = None) -> None:
+    async def connect4(self, ctx, member: OptionalMemberParam = None) -> None:
         await start_connect4(ctx, opponent=member, vs_me=member is None)
-
-    @connect4.autocomplete("member")
-    async def connect4_member_autocomplete(
-        self,
-        interaction: discord.Interaction,
-        current: str,
-    ) -> list[app_commands.Choice[str]]:
-        return await OptionalMember.autocomplete(interaction, current, include_me=True)
 
     @hybrid(
         name="wouldyourather",

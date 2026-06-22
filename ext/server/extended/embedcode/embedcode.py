@@ -44,13 +44,13 @@ class Embedcode(Package):
             return await ctx.fail("Could not fetch message")
 
         if not msg.embeds:
-            return await ctx.fail("That message has no embeds")
+            return await ctx.warn("That message has no embeds")
 
         embed = msg.embeds[0]
         code = self._embed_to_code(embed)
 
         if len(code) > 2000:
-            return await ctx.fail("Embed code is too long to send. Check your DMs.")
+            return await ctx.warn("Embed code is too long to send. Check your DMs.")
 
         try:
             await ctx.author.send(
@@ -62,13 +62,13 @@ class Embedcode(Package):
             )
             await ctx.success("Embed code sent to your DMs!")
         except discord.Forbidden:
-            await ctx.fail("Could not DM you. Check your privacy settings.")
+            await ctx.warn("Could not DM you. Check your privacy settings.")
 
     def _parse_message_link(self, link: str) -> tuple[int, int]:
         pattern = r'discord(?:app)?\.com/channels/(\d+)/(\d+)/(\d+)'
         match = re.search(pattern, link)
         if not match:
-            raise CommandError("Invalid message link. Use a Discord message link.")
+            raise CommandError("Invalid message link. Use a **Discord message link**.")
         return int(match.group(2)), int(match.group(3))
 
     def _embed_to_code(self, embed: discord.Embed) -> str:

@@ -161,17 +161,17 @@ class Steal(Package):
                 channel_id, message_id = self._parse_message_link(target)
                 channel = ctx.guild.get_channel(channel_id)
                 if not channel:
-                    return await ctx.fail("Could not find that channel")
+                    return await ctx.warn("Could not find that channel")
                 message = await channel.fetch_message(message_id)
                 emojis_found = _parse_emoji(message.content)
                 for embed in message.embeds:
                     if embed.description:
                         emojis_found.extend(_parse_emoji(embed.description))
             except Exception:
-                return await ctx.fail("No emojis found in that message")
+                return await ctx.warn("No emojis found in that message")
 
         if not emojis_found:
-            return await ctx.fail("No emojis found")
+            return await ctx.warn("No emojis found")
 
         stolen = []
         for emoji_data in emojis_found:
@@ -201,7 +201,7 @@ class Steal(Package):
                     emojis_found.extend(_parse_emoji(embed.description))
 
         if not emojis_found:
-            return await ctx.fail("No custom emojis found in the last 100 messages")
+            return await ctx.warn("No custom emojis found in the last 100 messages")
 
         unique = {}
         for e in emojis_found:

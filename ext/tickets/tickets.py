@@ -599,7 +599,7 @@ class Tickets(TicketsEvents, Package):
     async def tickets_claim(self, ctx: Context) -> None:
         ticket = await self._ticket_row(ctx.channel.id)
         if not ticket:
-            return await ctx.fail("This is not a ticket channel.")
+            return await ctx.warn("This is not a ticket channel.")
         interaction = _FakeInteraction(ctx)
         await self.claim_ticket(interaction)
 
@@ -607,7 +607,7 @@ class Tickets(TicketsEvents, Package):
     async def tickets_close(self, ctx: Context, *, reason: str = None) -> None:
         ticket = await self._ticket_row(ctx.channel.id)
         if not ticket:
-            return await ctx.fail("This is not a ticket channel.")
+            return await ctx.warn("This is not a ticket channel.")
         interaction = _FakeInteraction(ctx)
         await self.close_ticket(interaction)
         if reason:
@@ -617,7 +617,7 @@ class Tickets(TicketsEvents, Package):
     async def tickets_reopen(self, ctx: Context) -> None:
         ticket = await self._ticket_row(ctx.channel.id)
         if not ticket:
-            return await ctx.fail("This is not a ticket channel.")
+            return await ctx.warn("This is not a ticket channel.")
         settings = await self._settings(ctx.guild.id)
         if not await self._is_staff(ctx.author, settings):
             return await ctx.warn("You cannot reopen this ticket.")
@@ -641,7 +641,7 @@ class Tickets(TicketsEvents, Package):
     async def tickets_delete(self, ctx: Context) -> None:
         ticket = await self._ticket_row(ctx.channel.id)
         if not ticket:
-            return await ctx.fail("This is not a ticket channel.")
+            return await ctx.warn("This is not a ticket channel.")
         interaction = _FakeInteraction(ctx)
         await self.delete_ticket(interaction)
 
@@ -649,7 +649,7 @@ class Tickets(TicketsEvents, Package):
     async def tickets_add(self, ctx: Context, member: discord.Member) -> None:
         ticket = await self._ticket_row(ctx.channel.id)
         if not ticket:
-            return await ctx.fail("This is not a ticket channel.")
+            return await ctx.warn("This is not a ticket channel.")
         await ctx.channel.set_permissions(
             member,
             view_channel=True,
@@ -662,7 +662,7 @@ class Tickets(TicketsEvents, Package):
     async def tickets_remove(self, ctx: Context, member: discord.Member) -> None:
         ticket = await self._ticket_row(ctx.channel.id)
         if not ticket:
-            return await ctx.fail("This is not a ticket channel.")
+            return await ctx.warn("This is not a ticket channel.")
         await ctx.channel.set_permissions(member, overwrite=None)
         await ctx.success(f"Removed {member.mention} from this ticket.")
 

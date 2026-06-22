@@ -197,7 +197,7 @@ class Miscellaneous(MiscellaneousEvents, Package):
 
         lang_lower = language.lower()
         if lang_lower not in lang_codes:
-            await ctx.fail(
+            await ctx.warn(
                 f"Invalid language code `{language}`. Use `{ctx.clean_prefix}translate list` to see all supported languages."
             )
             return
@@ -274,7 +274,7 @@ class Miscellaneous(MiscellaneousEvents, Package):
         try:
             color_val = int(hex_clean, 16)
         except ValueError:
-            return await ctx.fail("Invalid hex color code.")
+            return await ctx.warn("Invalid hex color code.")
 
         embed = discord.Embed(
             title=f"Color: #{hex_clean.upper()}",
@@ -324,7 +324,7 @@ class Miscellaneous(MiscellaneousEvents, Package):
         import re
         match = re.match(r"<(a?):(\w+):(\d+)>", emoji)
         if not match:
-            return await ctx.fail("Provide a valid custom emoji.")
+            return await ctx.warn("Provide a valid custom emoji.")
 
         animated = match.group(1) == "a"
         ext = "gif" if animated else "png"
@@ -352,7 +352,7 @@ class Miscellaneous(MiscellaneousEvents, Package):
             url = emoji
             name = characters or "emote"
         else:
-            return await ctx.fail("Provide a valid emoji or image URL.")
+            return await ctx.warn("Provide a valid emoji or image URL.")
 
         try:
             async with aiohttp.ClientSession() as session:
@@ -363,7 +363,7 @@ class Miscellaneous(MiscellaneousEvents, Package):
             emote = await ctx.guild.create_custom_emoji(name=name, image=data)
             await ctx.success(f"Created emoji {emote}")
         except discord.Forbidden:
-            await ctx.fail("I don't have permission to manage emojis.")
+            await ctx.warn("I don't have permission to manage emojis.")
         except Exception as e:
             await ctx.fail(f"Failed: {str(e)[:100]}")
 async def setup(bot: Bleed):

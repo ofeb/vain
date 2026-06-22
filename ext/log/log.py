@@ -243,7 +243,7 @@ async def setup(bot: Bleed):
             if event == "all":
                 events = list(EVENT_TYPES.keys())
             elif event not in EVENT_TYPES:
-                return await ctx.fail(f"Invalid event type. Valid: {', '.join(f'`{e}`' for e in EVENT_TYPES)}")
+                return await ctx.warn(f"Invalid event type. Valid: {', '.join(f'`{e}`' for e in EVENT_TYPES)}")
             else:
                 events = [event]
 
@@ -278,7 +278,7 @@ async def setup(bot: Bleed):
 
         event = event.lower()
         if event not in EVENT_TYPES:
-            return await ctx.fail(f"Invalid event type. Valid: {', '.join(f'`{e}`' for e in EVENT_TYPES)}")
+            return await ctx.warn(f"Invalid event type. Valid: {', '.join(f'`{e}`' for e in EVENT_TYPES)}")
 
         await self.db.execute(
             "UPDATE log_config SET events = array_remove(events, $1) WHERE guild_id = $2 AND channel_id = $3",
@@ -299,13 +299,13 @@ async def setup(bot: Bleed):
 
         event = event.lower()
         if event not in EVENT_TYPES:
-            return await ctx.fail(f"Invalid event type. Valid: {', '.join(f'`{e}`' for e in EVENT_TYPES)}")
+            return await ctx.warn(f"Invalid event type. Valid: {', '.join(f'`{e}`' for e in EVENT_TYPES)}")
 
         hex_color = hex_color.strip("#")
         try:
             int(hex_color, 16)
         except ValueError:
-            return await ctx.fail("Invalid hex color code")
+            return await ctx.warn("Invalid hex color code")
 
         await self.db.execute(
             """INSERT INTO log_event_colors (guild_id, channel_id, event, color)
@@ -330,7 +330,7 @@ async def setup(bot: Bleed):
             ctx.guild.id, channel.id,
         )
         if not rows:
-            return await ctx.fail(f"No custom colors set for {channel.mention}")
+            return await ctx.warn(f"No custom colors set for {channel.mention}")
 
         lines = [f"`{row[0]}` — `#{row[1]}`" for row in rows]
         numbered = [f"`{i}` {ln}" for i, ln in enumerate(lines, start=1)]
@@ -357,7 +357,7 @@ async def setup(bot: Bleed):
             ctx.guild.id, target.id,
         )
         if existing:
-            return await ctx.fail(f"{target.mention} is already **ignored** from logging")
+            return await ctx.warn(f"{target.mention} is already **ignored** from logging")
 
         target_type = "member" if isinstance(target, discord.Member) else "channel"
         await self.db.execute(
@@ -381,7 +381,7 @@ async def setup(bot: Bleed):
             ctx.guild.id, target.id,
         )
         if deleted == "DELETE 0":
-            return await ctx.fail(f"{target.mention} is not **ignored**")
+            return await ctx.warn(f"{target.mention} is not **ignored**")
         return await ctx.success(f"{target.mention} is no longer **ignored** from logging")
 
     @log_ignore.command(
@@ -396,7 +396,7 @@ async def setup(bot: Bleed):
             ctx.guild.id,
         )
         if not rows:
-            return await ctx.fail("No members or channels are **ignored** from logging")
+            return await ctx.warn("No members or channels are **ignored** from logging")
 
         lines = []
         for row in rows:
@@ -408,7 +408,7 @@ async def setup(bot: Bleed):
                 lines.append(f"{obj.mention} ({row[1]})")
 
         if not lines:
-            return await ctx.fail("No valid ignored entries found")
+            return await ctx.warn("No valid ignored entries found")
 
         numbered = [f"`{i}` {ln}" for i, ln in enumerate(lines, start=1)]
         return await ctx.paginate(
@@ -430,7 +430,7 @@ async def setup(bot: Bleed):
             ctx.guild.id,
         )
         if not rows:
-            return await ctx.fail("No logging configuration found")
+            return await ctx.warn("No logging configuration found")
 
         lines = []
         for row in rows:
@@ -440,7 +440,7 @@ async def setup(bot: Bleed):
                 lines.append(f"{channel.mention} — {events_str}")
 
         if not lines:
-            return await ctx.fail("No valid logging channels found")
+            return await ctx.warn("No valid logging channels found")
 
         numbered = [f"`{i}` {ln}" for i, ln in enumerate(lines, start=1)]
         return await ctx.paginate(

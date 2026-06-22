@@ -233,7 +233,7 @@ class Snipe(commands.Cog):
         try:
             snipe_data = await self.bot.snipes.get_entry(ctx.channel, type="editsnipe", index=index)
         except SnipeError:
-            return await ctx.fail("There is nothing to snipe")
+            return await ctx.warn("There is nothing to snipe")
 
         total = snipe_data[1]
         store = self.bot.snipes
@@ -266,7 +266,7 @@ class Snipe(commands.Cog):
         try:
             snipe_data = await self.bot.snipes.get_entry(ctx.channel, type="reactionsnipe", index=index)
         except SnipeError:
-            return await ctx.fail("There is nothing to snipe")
+            return await ctx.warn("There is nothing to snipe")
 
         snipe = snipe_data[0]
         total = snipe_data[1]

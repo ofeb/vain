@@ -2,10 +2,10 @@
 each file handles one discord object type.
 from core.tools.convert import MemberConvert RoleConvert"""
 
-from .member import MemberConvert, OptionalMember
+from .member import MemberConvert, OptionalMember, OptionalMemberParam
 from .role import RoleConvert
 from .channel import ChannelConvert
 from .color import ColorConvert
 from .status import StatusConvert
 
-__all__ = ["MemberConvert", "OptionalMember", "RoleConvert", "ChannelConvert", "ColorConvert", "StatusConvert"]
+__all__ = ["MemberConvert", "OptionalMember", "OptionalMemberParam", "RoleConvert", "ChannelConvert", "ColorConvert", "StatusConvert"]

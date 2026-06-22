@@ -75,7 +75,7 @@ class Socials(Package):
         elif action.lower() in ("remove", "unfollow", "del", "delete"):
             await ctx.success(f"Stopped tracking **@{handle}**.")
         else:
-            await ctx.fail("Use `add` or `remove`.")
+            await ctx.warn("Use `add` or `remove`.")
 
     @socials.command(
         name="twitch",
@@ -89,7 +89,7 @@ class Socials(Package):
         elif action.lower() in ("remove", "unfollow", "del", "delete"):
             await ctx.success(f"Stopped tracking **{channel}**.")
         else:
-            await ctx.fail("Use `add` or `remove`.")
+            await ctx.warn("Use `add` or `remove`.")
 
     @socials.command(
         name="youtube",
@@ -104,7 +104,7 @@ class Socials(Package):
         elif action.lower() in ("remove", "unfollow", "del", "delete"):
             await ctx.success(f"Stopped tracking **{channel}**.")
         else:
-            await ctx.fail("Use `add` or `remove`.")
+            await ctx.warn("Use `add` or `remove`.")
 
     @socials.command(
         name="tiktok",
@@ -119,7 +119,7 @@ class Socials(Package):
         elif action.lower() in ("remove", "unfollow", "del", "delete"):
             await ctx.success(f"Stopped tracking **@{username}**.")
         else:
-            await ctx.fail("Use `add` or `remove`.")
+            await ctx.warn("Use `add` or `remove`.")
 
     @socials.command(
         name="list",
