@@ -21,7 +21,7 @@ from .managers.watch import Watcher
 from .managers.guard import Guard
 from .tools.embed import PreparedScript, Script, parse
 from .tools.snipe import Snipe
-from .managers.values import token, bot, color, database, redis, emojis
+from .managers.values import token, bot, color, database, redis, emojis, music_enabled
 
 log = logging.getLogger("bleed")
 
@@ -81,6 +81,8 @@ def _discover_extensions(ext_dir: str = "ext") -> tuple[str, ...]:
                 found.append(".".join(child.relative_to(Path(".")).with_suffix("").parts))
 
     found.sort()
+    if not music_enabled:
+        found = [ext for ext in found if ext != "ext.music"]
     log.debug(f"discovered {len(found)} extensions: {', '.join(found)}")
     return tuple(found)
 
@@ -496,7 +498,7 @@ class Bleed(commands.AutoShardedBot):
             await self._sync_guild_commands()
             self._guild_slash_synced = True
 
-        await self.change_presence(status=discord.Status.online, activity=discord.CustomActivity(name="🔗 discord.gg/bleed"))
+        await self.change_presence(status=discord.Status.online, activity=discord.CustomActivity(name="🔗 discord.gg/percsbio for the best biolink"))
 
     async def on_guild_join(self, guild: discord.Guild) -> None:
         await self._sync_guild_commands(guild=guild)

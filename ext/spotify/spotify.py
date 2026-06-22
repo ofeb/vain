@@ -1,195 +1,499 @@
 from __future__ import annotations
 
-import base64
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 from urllib.parse import quote_plus
 
-import aiohttp
 import discord
+from discord.ext import commands
 
 from core.discord.package import Package
-
 from core.discord.ctx import Context
 from core.discord.hybrid import describe, group, hybrid
-from core.managers.values import color
+from core.managers.values import color, emojis, music_enabled
+
+from .api import SpotifyUserAPI, redirect_uri
 
 if TYPE_CHECKING:
     from core.bleed import Bleed
 
-CLIENT_ID = ""
-CLIENT_SECRET = ""
-TOKEN_URL = "https://accounts.spotify.com/api/token"
-API_URL = "https://api.spotify.com/v1"
+TOP_DURATIONS = {
+    "week": "short_term",
+    "month": "medium_term",
+    "year": "long_term",
+    "all": "long_term",
+}
 
 
-class SpotifyClient:
-    def __init__(self):
-        self._token = None
+def _format_ms(ms: int) -> str:
+    minutes, seconds = divmod(ms // 1000, 60)
+    return f"{minutes}:{seconds:02d}"
 
-    async def _get_token(self) -> Optional[str]:
-        if not CLIENT_ID or not CLIENT_SECRET:
-            return None
-        auth = base64.b64encode(f"{CLIENT_ID}:{CLIENT_SECRET}".encode()).decode()
-        headers = {"Authorization": f"Basic {auth}"}
-        data = {"grant_type": "client_credentials"}
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.post(TOKEN_URL, headers=headers, data=data, timeout=10) as resp:
-                    if resp.status != 200:
-                        return None
-                    result = await resp.json()
-                    self._token = result.get("access_token")
-                    return self._token
-            except Exception:
-                return None
 
-    async def _request(self, endpoint: str, params: dict = None) -> Optional[dict]:
-        token = await self._get_token()
-        if not token:
-            return None
-        headers = {"Authorization": f"Bearer {token}"}
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.get(f"{API_URL}/{endpoint}", headers=headers, params=params, timeout=10) as resp:
-                    if resp.status != 200:
-                        return None
-                    return await resp.json()
-            except Exception:
-                return None
-
-    async def search_tracks(self, query: str, limit: int = 5) -> Optional[dict]:
-        return await self._request("search", {"q": query, "type": "track", "limit": limit})
-
-    async def search_albums(self, query: str, limit: int = 5) -> Optional[dict]:
-        return await self._request("search", {"q": query, "type": "album", "limit": limit})
-
-    async def search_artists(self, query: str, limit: int = 5) -> Optional[dict]:
-        return await self._request("search", {"q": query, "type": "artist", "limit": limit})
-
-    async def get_track(self, track_id: str) -> Optional[dict]:
-        return await self._request(f"tracks/{track_id}")
-
-    async def get_album(self, album_id: str) -> Optional[dict]:
-        return await self._request(f"albums/{album_id}")
-
-    async def get_artist(self, artist_id: str) -> Optional[dict]:
-        return await self._request(f"artists/{artist_id}")
+def _track_line(index: int, track: dict) -> str:
+    artists = ", ".join(a["name"] for a in track.get("artists", []))
+    return f"`{index}.` **{track['name']}** — {artists} ({_format_ms(track.get('duration_ms', 0))})"
 
 
 class Spotify(Package):
-    """Spotify track lookup, search, and now playing."""
+    """Spotify search and playback controls."""
 
     def __init__(self, bot: Bleed):
         super().__init__(bot)
-        self.client = SpotifyClient()
+        self.api = SpotifyUserAPI(self.db)
+        self._login_states: dict[int, str] = {}
+
+    async def _require_linked(self, ctx: Context) -> bool:
+        if await self.api.is_linked(ctx.author.id):
+            return True
+        await ctx.fail("Connect Spotify first with `spotify login`.")
+        return False
+
+    async def _user_action(self, ctx: Context, method: str, endpoint: str, **kwargs) -> bool:
+        if not await self._require_linked(ctx):
+            return False
+        try:
+            await self.api.user_request(ctx.author.id, method, endpoint, **kwargs)
+        except RuntimeError as exc:
+            await ctx.fail(str(exc))
+            return False
+        return True
 
     @group(
         name="spotify",
-        description="Search and display Spotify tracks",
+        description="Control your music on Spotify or search for a track",
         invoke_without_command=True,
         aliases=["sp"],
     )
-    async def spotify(self, ctx: Context, *, query: str) -> None:
-        result = await self.client.search_tracks(query)
+    async def spotify(self, ctx: Context, *, track: str | None = None) -> None:
+        """Control your music on Spotify through commands or search for a track."""
+        if ctx.invoked_subcommand is not None:
+            return
+        if track is None:
+            return await ctx.send_help(ctx.command)
+        if await self.api.is_linked(ctx.author.id):
+            return await self.spotify_play.callback(ctx, query=track)
+        return await self._search_tracks(ctx, track)
+
+    async def _search_tracks(self, ctx: Context, query: str) -> None:
+        result = await self.api.client_search(query)
         if not result or not result.get("tracks", {}).get("items"):
             await ctx.fail(f"No results found for `{query}`.")
             return
-
         tracks = result["tracks"]["items"]
-        entries = []
-        for i, track in enumerate(tracks[:5], 1):
-            artists = ", ".join(a["name"] for a in track["artists"])
-            duration = f"{track['duration_ms'] // 60000}:{(track['duration_ms'] % 60000) // 1000:02d}"
-            entries.append(f"`{i}.` **{track['name']}** — {artists} ({duration})")
-
+        entries = [_track_line(i, track) for i, track in enumerate(tracks[:5], 1)]
         embed = discord.Embed(
             title=f"Spotify Search — {query}",
             description="\n".join(entries),
             color=color.base,
         )
-        embed.set_footer(text="Powered by Spotify")
+        embed.set_footer(text="Use `spotify login` to control playback")
         await ctx.send(embed=embed)
 
-    @spotify.command(
-        name="search",
-        description="Search for a track on Spotify",
+    @spotify.command(name="login", description="Grant bleed access to your Spotify account")
+    async def spotify_login(self, ctx: Context, *, code: str | None = None) -> None:
+        if not self.api._client_configured():
+            return await ctx.fail("Spotify API credentials are not configured.")
+
+        if code is None:
+            state = self.api.new_state()
+            self._login_states[ctx.author.id] = state
+            url = self.api.build_login_url(state=state)
+            embed = discord.Embed(
+                title="Spotify Login",
+                description=(
+                    "Authorize bleed to control your Spotify account.\n\n"
+                    f"**1.** [Click here to authorize]({url})\n"
+                    f"**2.** Copy the full redirect URL or authorization code\n"
+                    f"**3.** Run `{ctx.clean_prefix}spotify login <code>`\n\n"
+                    f"Redirect URI: `{redirect_uri()}`"
+                ),
+                color=color.base,
+            )
+            return await ctx.send(embed=embed)
+
+        try:
+            payload = await self.api.exchange_code(code)
+            await self.api.save_tokens(ctx.author.id, payload)
+        except RuntimeError as exc:
+            return await ctx.fail(str(exc))
+        self._login_states.pop(ctx.author.id, None)
+        await ctx.success("Spotify account linked.")
+
+    @spotify.command(name="logout", description="Disconnect your Spotify from our servers")
+    async def spotify_logout(self, ctx: Context) -> None:
+        if not await self.api.is_linked(ctx.author.id):
+            return await ctx.fail("You are not linked to Spotify.")
+        await self.api.delete_tokens(ctx.author.id)
+        await ctx.success("Disconnected your Spotify account.")
+
+    @spotify.command(name="play", description="Immediately skip to the requested song")
+    @describe(query="Track name or Spotify URI")
+    async def spotify_play(self, ctx: Context, *, query: str) -> None:
+        if not await self._require_linked(ctx):
+            return
+        body: dict = {}
+        if query.startswith("spotify:") or "open.spotify.com" in query:
+            track_id = query.split("/")[-1].split("?")[0] if "/" in query else query.split(":")[-1]
+            body["uris"] = [query if query.startswith("spotify:") else f"spotify:track:{track_id}"]
+        else:
+            result = await self.api.client_search(query, limit=1)
+            items = (result or {}).get("tracks", {}).get("items", [])
+            if not items:
+                return await ctx.fail(f"No track found for `{query}`.")
+            body["uris"] = [items[0]["uri"]]
+            query = items[0]["name"]
+        try:
+            await self.api.user_request(ctx.author.id, "PUT", "me/player/play", json=body)
+        except RuntimeError as exc:
+            return await ctx.fail(str(exc))
+        await ctx.success(f"Playing **{query}** on Spotify.")
+
+    @spotify.command(name="queue", description="Queue a song")
+    @describe(query="Track name or Spotify URI")
+    async def spotify_queue(self, ctx: Context, *, query: str) -> None:
+        if not await self._require_linked(ctx):
+            return
+        uri = query
+        if not query.startswith("spotify:"):
+            if "open.spotify.com" in query:
+                uri = f"spotify:track:{query.split('/')[-1].split('?')[0]}"
+            else:
+                result = await self.api.client_search(query, limit=1)
+                items = (result or {}).get("tracks", {}).get("items", [])
+                if not items:
+                    return await ctx.fail(f"No track found for `{query}`.")
+                uri = items[0]["uri"]
+        try:
+            await self.api.user_request(
+                ctx.author.id,
+                "POST",
+                "me/player/queue",
+                params={"uri": uri},
+            )
+        except RuntimeError as exc:
+            return await ctx.fail(str(exc))
+        await ctx.success("Queued track on Spotify.")
+
+    @spotify.command(name="pause", description="Pause the current song")
+    async def spotify_pause(self, ctx: Context) -> None:
+        if await self._user_action(ctx, "PUT", "me/player/pause"):
+            await ctx.success("Paused Spotify playback.")
+
+    @spotify.command(name="resume", description="Resume the current song")
+    async def spotify_resume(self, ctx: Context) -> None:
+        if await self._user_action(ctx, "PUT", "me/player/play"):
+            await ctx.success("Resumed Spotify playback.")
+
+    @spotify.command(name="next", description="Skip to the next song")
+    async def spotify_next(self, ctx: Context) -> None:
+        if await self._user_action(ctx, "POST", "me/player/next"):
+            await ctx.success("Skipped to the next track.")
+
+    @spotify.command(name="previous", description="Skip to the previous song")
+    async def spotify_previous(self, ctx: Context) -> None:
+        if await self._user_action(ctx, "POST", "me/player/previous"):
+            await ctx.success("Skipped to the previous track.")
+
+    @spotify.command(name="shuffle", description="Toggle playback shuffle")
+    @describe(option="on or off")
+    async def spotify_shuffle(self, ctx: Context, option: str | None = None) -> None:
+        if not await self._require_linked(ctx):
+            return
+        state = None
+        if option is not None:
+            lowered = option.lower()
+            if lowered in {"on", "true", "enable", "yes"}:
+                state = True
+            elif lowered in {"off", "false", "disable", "no"}:
+                state = False
+            else:
+                return await ctx.fail("Use `on` or `off`.")
+        else:
+            try:
+                playback = await self.api.user_request(ctx.author.id, "GET", "me/player")
+            except RuntimeError as exc:
+                return await ctx.fail(str(exc))
+            state = not bool((playback or {}).get("shuffle_state"))
+        try:
+            await self.api.user_request(
+                ctx.author.id,
+                "PUT",
+                "me/player/shuffle",
+                params={"state": str(state).lower()},
+            )
+        except RuntimeError as exc:
+            return await ctx.fail(str(exc))
+        await ctx.success(f"Shuffle **{'enabled' if state else 'disabled'}**.")
+
+    @spotify.command(name="repeat", description="Repeat the current song")
+    @describe(mode="off, track, or context")
+    async def spotify_repeat(self, ctx: Context, mode: str | None = None) -> None:
+        if not await self._require_linked(ctx):
+            return
+        mapping = {"off": "off", "track": "track", "song": "track", "context": "context", "queue": "context"}
+        if mode is None:
+            try:
+                playback = await self.api.user_request(ctx.author.id, "GET", "me/player")
+            except RuntimeError as exc:
+                return await ctx.fail(str(exc))
+            current = (playback or {}).get("repeat_state", "off")
+            order = ["off", "context", "track"]
+            mode = order[(order.index(current) + 1) % len(order)]
+        else:
+            mode = mapping.get(mode.lower())
+            if mode is None:
+                return await ctx.fail("Use `off`, `track`, or `context`.")
+        try:
+            await self.api.user_request(
+                ctx.author.id,
+                "PUT",
+                "me/player/repeat",
+                params={"state": mode},
+            )
+        except RuntimeError as exc:
+            return await ctx.fail(str(exc))
+        await ctx.success(f"Repeat mode set to **{mode}**.")
+
+    @spotify.command(name="seek", description="Seek to position in current song")
+    @describe(seconds="Position in seconds")
+    async def spotify_seek(self, ctx: Context, seconds: int) -> None:
+        if seconds < 0:
+            return await ctx.fail("Seconds must be zero or greater.")
+        if not await self._require_linked(ctx):
+            return
+        try:
+            await self.api.user_request(
+                ctx.author.id,
+                "PUT",
+                "me/player/seek",
+                params={"position_ms": seconds * 1000},
+            )
+        except RuntimeError as exc:
+            return await ctx.fail(str(exc))
+        await ctx.success(f"Seeked to **{seconds}s**.")
+
+    @spotify.command(name="volume", description="Adjust current player volume")
+    @describe(percent="Volume from 0 to 100")
+    async def spotify_volume(self, ctx: Context, percent: int) -> None:
+        if percent < 0 or percent > 100:
+            return await ctx.fail("Volume must be between **0** and **100**.")
+        if not await self._require_linked(ctx):
+            return
+        try:
+            await self.api.user_request(
+                ctx.author.id,
+                "PUT",
+                "me/player/volume",
+                params={"volume_percent": percent},
+            )
+        except RuntimeError as exc:
+            return await ctx.fail(str(exc))
+        await ctx.success(f"Volume set to **{percent}%**.")
+
+    @spotify.command(name="like", description="Like your current playing song on Spotify")
+    async def spotify_like(self, ctx: Context) -> None:
+        if not await self._require_linked(ctx):
+            return
+        try:
+            playback = await self.api.user_request(ctx.author.id, "GET", "me/player/currently-playing")
+        except RuntimeError as exc:
+            return await ctx.fail(str(exc))
+        if not playback or not playback.get("item"):
+            return await ctx.fail("Nothing is playing on Spotify.")
+        track_id = playback["item"]["id"]
+        try:
+            await self.api.user_request(
+                ctx.author.id,
+                "PUT",
+                f"me/tracks",
+                params={"ids": track_id},
+            )
+        except RuntimeError as exc:
+            return await ctx.fail(str(exc))
+        await ctx.success(f"Liked **{playback['item']['name']}**.")
+
+    @spotify.command(name="unlike", description="Unlike your current playing song on Spotify")
+    async def spotify_unlike(self, ctx: Context) -> None:
+        if not await self._require_linked(ctx):
+            return
+        try:
+            playback = await self.api.user_request(ctx.author.id, "GET", "me/player/currently-playing")
+        except RuntimeError as exc:
+            return await ctx.fail(str(exc))
+        if not playback or not playback.get("item"):
+            return await ctx.fail("Nothing is playing on Spotify.")
+        track_id = playback["item"]["id"]
+        try:
+            await self.api.user_request(
+                ctx.author.id,
+                "DELETE",
+                "me/tracks",
+                params={"ids": track_id},
+            )
+        except RuntimeError as exc:
+            return await ctx.fail(str(exc))
+        await ctx.success(f"Unliked **{playback['item']['name']}**.")
+
+    @spotify.command(name="toptracks", description="Show top tracks for the specified time frame")
+    @describe(duration="week, month, year, or all")
+    async def spotify_toptracks(self, ctx: Context, duration: str = "month") -> None:
+        if not await self._require_linked(ctx):
+            return
+        time_range = TOP_DURATIONS.get(duration.lower(), "medium_term")
+        try:
+            data = await self.api.user_request(
+                ctx.author.id,
+                "GET",
+                "me/top/tracks",
+                params={"time_range": time_range, "limit": 10},
+            )
+        except RuntimeError as exc:
+            return await ctx.fail(str(exc))
+        items = (data or {}).get("items", [])
+        if not items:
+            return await ctx.warn("No top tracks found.")
+        lines = [_track_line(i, track) for i, track in enumerate(items, 1)]
+        embed = discord.Embed(
+            title=f"Top Tracks — {duration}",
+            description="\n".join(lines),
+            color=color.base,
+        )
+        await ctx.send(embed=embed)
+
+    @spotify.command(name="topartists", description="Show top artists for the specified time frame")
+    @describe(duration="week, month, year, or all")
+    async def spotify_topartists(self, ctx: Context, duration: str = "month") -> None:
+        if not await self._require_linked(ctx):
+            return
+        time_range = TOP_DURATIONS.get(duration.lower(), "medium_term")
+        try:
+            data = await self.api.user_request(
+                ctx.author.id,
+                "GET",
+                "me/top/artists",
+                params={"time_range": time_range, "limit": 10},
+            )
+        except RuntimeError as exc:
+            return await ctx.fail(str(exc))
+        items = (data or {}).get("items", [])
+        if not items:
+            return await ctx.warn("No top artists found.")
+        lines = [f"`{i}.` **{artist['name']}**" for i, artist in enumerate(items, 1)]
+        embed = discord.Embed(
+            title=f"Top Artists — {duration}",
+            description="\n".join(lines),
+            color=color.base,
+        )
+        await ctx.send(embed=embed)
+
+    @spotify.group(
+        name="device",
+        description="Change the device that youre listening to Spotify with",
+        invoke_without_command=True,
     )
+    async def spotify_device(self, ctx: Context) -> None:
+        if ctx.invoked_subcommand is not None:
+            return
+        await self.spotify_device_list(ctx)
+
+    @spotify_device.command(name="list", description="List all current devices connected to your Spotify account")
+    async def spotify_device_list(self, ctx: Context) -> None:
+        if not await self._require_linked(ctx):
+            return
+        try:
+            data = await self.api.user_request(ctx.author.id, "GET", "me/player/devices")
+        except RuntimeError as exc:
+            return await ctx.fail(str(exc))
+        devices = (data or {}).get("devices", [])
+        if not devices:
+            return await ctx.warn("No active Spotify devices found.")
+        lines = []
+        for index, device in enumerate(devices, 1):
+            active = " (active)" if device.get("is_active") else ""
+            lines.append(f"`{index}.` **{device['name']}** — {device.get('type', 'device')}{active}")
+        embed = discord.Embed(title="Spotify Devices", description="\n".join(lines), color=color.base)
+        await ctx.send(embed=embed)
+
+    @spotify_device.command(name="set", description="Switch to a device by position")
+    @describe(position="Device number from device list")
+    async def spotify_device_set(self, ctx: Context, position: int) -> None:
+        if not await self._require_linked(ctx):
+            return
+        try:
+            data = await self.api.user_request(ctx.author.id, "GET", "me/player/devices")
+        except RuntimeError as exc:
+            return await ctx.fail(str(exc))
+        devices = (data or {}).get("devices", [])
+        if position < 1 or position > len(devices):
+            return await ctx.fail("Invalid device position.")
+        device = devices[position - 1]
+        try:
+            await self.api.user_request(
+                ctx.author.id,
+                "PUT",
+                "me/player",
+                json={"device_ids": [device["id"]], "play": True},
+            )
+        except RuntimeError as exc:
+            return await ctx.fail(str(exc))
+        await ctx.success(f"Transferred playback to **{device['name']}**.")
+
+    @spotify.command(name="vc", description="Play your current track in a voice channel")
+    async def spotify_vc(self, ctx: Context) -> None:
+        if not await self._require_linked(ctx):
+            return
+        try:
+            playback = await self.api.user_request(ctx.author.id, "GET", "me/player/currently-playing")
+        except RuntimeError as exc:
+            return await ctx.fail(str(exc))
+        if not playback or not playback.get("item"):
+            return await ctx.fail("Nothing is playing on Spotify.")
+        item = playback["item"]
+        query = f"{item['name']} {' '.join(a['name'] for a in item.get('artists', []))}"
+        if not music_enabled:
+            return await ctx.fail("music is disabled")
+        music = ctx.bot.get_cog("Music")
+        if music is None:
+            return await ctx.fail("music cog isn't loaded")
+        await music.play.callback(ctx, query=query, play_next=False)
+
+    @spotify.command(name="search", description="Search for a track on Spotify")
     @describe(query="Track name to search for")
     async def spotify_search(self, ctx: Context, *, query: str) -> None:
-        await self.spotify.callback(ctx, query=query)
+        await self._search_tracks(ctx, query)
 
-    @spotify.command(
-        name="track",
-        description="Get details about a Spotify track",
-    )
+    @spotify.command(name="track", description="Get details about a Spotify track")
     @describe(url_or_id="Spotify track URL or ID")
     async def spotify_track(self, ctx: Context, url_or_id: str) -> None:
         track_id = url_or_id.split("/")[-1].split("?")[0] if "/" in url_or_id else url_or_id
-        track = await self.client.get_track(track_id)
+        track = await self.api.get_track(track_id)
         if not track:
             await ctx.fail("Could not find that track.")
             return
-
         artists = ", ".join(a["name"] for a in track["artists"])
-        duration = f"{track['duration_ms'] // 60000}:{(track['duration_ms'] % 60000) // 1000:02d}"
         embed = discord.Embed(
             title=track["name"],
             description=f"By **{artists}**\nAlbum: {track['album']['name']}",
             color=color.base,
         )
-        embed.add_field(name="Duration", value=duration, inline=True)
+        embed.add_field(name="Duration", value=_format_ms(track["duration_ms"]), inline=True)
         embed.add_field(name="Popularity", value=f"{track['popularity']}/100", inline=True)
-        embed.add_field(name="Release Date", value=track["album"]["release_date"], inline=True)
         embed.add_field(name="Listen on Spotify", value=f"[Open]({track['external_urls']['spotify']})", inline=True)
         if track["album"]["images"]:
             embed.set_thumbnail(url=track["album"]["images"][0]["url"])
         await ctx.send(embed=embed)
 
-    @spotify.command(
-        name="artist",
-        description="Get details about a Spotify artist",
-    )
-    @describe(name="Artist name to search for")
-    async def spotify_artist(self, ctx: Context, *, name: str) -> None:
-        result = await self.client.search_artists(name)
-        if not result or not result.get("artists", {}).get("items"):
-            await ctx.fail(f"No artist found for `{name}`.")
-            return
-
-        artist = result["artists"]["items"][0]
-        embed = discord.Embed(
-            title=artist["name"],
-            description=f"{artist.get('followers', {}).get('total', 0):,} followers",
-            color=color.base,
-        )
-        genres = artist.get("genres", [])
-        if genres:
-            embed.add_field(name="Genres", value=", ".join(g[:5] for g in genres[:3]).title(), inline=True)
-        embed.add_field(name="Popularity", value=f"{artist['popularity']}/100", inline=True)
-        embed.add_field(name="Open on Spotify", value=f"[Link]({artist['external_urls']['spotify']})", inline=True)
-        if artist["images"]:
-            embed.set_thumbnail(url=artist["images"][0]["url"])
-        await ctx.send(embed=embed)
-
-    @spotify.command(
-        name="album",
-        description="Get details about a Spotify album",
-    )
+    @spotify.command(name="album", description="Get details about a Spotify album")
     @describe(url_or_id="Spotify album URL or ID")
     async def spotify_album(self, ctx: Context, url_or_id: str) -> None:
         album_id = url_or_id.split("/")[-1].split("?")[0] if "/" in url_or_id else url_or_id
-        album = await self.client.get_album(album_id)
+        album = await self.api.get_album(album_id)
         if not album:
             await ctx.fail("Could not find that album.")
             return
-
         artists = ", ".join(a["name"] for a in album["artists"])
-        embed = discord.Embed(
-            title=album["name"],
-            description=f"By **{artists}**",
-            color=color.base,
-        )
-        embed.add_field(name="Tracks", value=album["total_tracks"], inline=True)
+        embed = discord.Embed(title=album["name"], description=f"By **{artists}**", color=color.base)
+        embed.add_field(name="Tracks", value=str(album["total_tracks"]), inline=True)
         embed.add_field(name="Release Date", value=album["release_date"], inline=True)
         embed.add_field(name="Open on Spotify", value=f"[Link]({album['external_urls']['spotify']})", inline=True)
         if album["images"]:
@@ -224,18 +528,10 @@ class Spotify(Package):
             description="Open Spotify album results for your query.",
             color=color.base,
         )
-        embed.set_author(
-            name=ctx.author.display_name,
-            icon_url=ctx.author.display_avatar.url,
-        )
+        embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
         view = discord.ui.View(timeout=None)
         view.add_item(
-            discord.ui.Button(
-                style=discord.ButtonStyle.link,
-                emoji="🟢",
-                label="Spotify",
-                url=url,
-            )
+            discord.ui.Button(style=discord.ButtonStyle.link, emoji="🟢", label="Spotify", url=url)
         )
         await ctx.send(embed=embed, view=view)
 
@@ -267,18 +563,10 @@ class Spotify(Package):
             description="Open Spotify track results for your query.",
             color=color.base,
         )
-        embed.set_author(
-            name=ctx.author.display_name,
-            icon_url=ctx.author.display_avatar.url,
-        )
+        embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
         view = discord.ui.View(timeout=None)
         view.add_item(
-            discord.ui.Button(
-                style=discord.ButtonStyle.link,
-                emoji="🟢",
-                label="Spotify",
-                url=url,
-            )
+            discord.ui.Button(style=discord.ButtonStyle.link, emoji="🟢", label="Spotify", url=url)
         )
         await ctx.send(embed=embed, view=view)
 

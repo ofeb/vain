@@ -51,7 +51,7 @@ class InformationCommands(Package):
         view.add_item(discord.ui.Button(
             label="Website",
             style=discord.ButtonStyle.link,
-            url="https://bleed.bot",
+            url="https://percs.cc",
             emoji="\U0001f310",
         ))
         if bot.user:

@@ -20,8 +20,8 @@ _DEFAULT_OWNER_IDS: Final[tuple[int, ...]] = (
 class bot:
     prefix: str = ","
     owners: tuple[int, ...] = _DEFAULT_OWNER_IDS
-    support: str = "https://discord.gg/bleed"
-    website: str = "https://bleed.bot"
+    support: str = "https://discord.gg/percsbio"
+    website: str = "https://percs.cc"
     docs: str = "https://docs.bleed.bot"
     status: str = "online"
     activity_type: str = "none"
@@ -155,10 +155,14 @@ class api:
 
 
 class music:
-    enabled: bool = False
-    lavalink_host: str = "127.0.0.1"
-    lavalink_port: int = 2333
-    lavalink_password: str = "youshallnotpass"
+    host: str = "127.0.0.1"
+    port: int = 3947
+    password: str = "youshallnotpass"
+    identifier: str = "bleed-node"
+    search_source: str = "dzsearch"  # deezer default like bleed; use ytsearch, scsearch, etc.
+
+
+music_enabled: bool = False
 
 
 class lastfm_color:

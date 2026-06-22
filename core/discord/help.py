@@ -720,7 +720,7 @@ class HelpView(ui.View):
             description=(
                 f"> Use `{p}help <command>` for help on a specific command.\n"
                 f"> Parameters in `(...)` are required, `[...]` are optional.\n\n"
-                f"> Join the [support server](https://discord.gg/bleed) for more support."
+                f"> Join the [support server](https://discord.gg/percsbio) for more support."
             ),
         )
         if self.ctx.bot.user:

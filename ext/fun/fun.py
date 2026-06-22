@@ -7,14 +7,16 @@ from typing import TYPE_CHECKING
 
 import aiohttp
 import discord
+from discord import app_commands
 from discord.ext import commands
 
 from core.discord.package import Package
 
+from core.discord.autocomplete import guild_member_choices
 from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe, group
 from core.managers.values import color, emojis
-from core.tools.convert import MemberConvert
+from core.tools.convert import MemberConvert, OptionalGameMember
 
 from .games import start_connect4, start_rps, start_ttt
 
@@ -413,6 +415,7 @@ class Fun(Package):
         name="rockpaperscissors",
         description="Play rock paper scissors with another member",
         aliases=["rps"],
+        guild_only=True,
     )
     @describe(member="Opponent to play against", rounds="Number of rounds (1-3)")
     async def rockpaperscissors(
@@ -425,23 +428,49 @@ class Fun(Package):
             return await ctx.fail("Rounds must be between **1** and **3**.")
         await start_rps(ctx, opponent=member, rounds=rounds)
 
+    @rockpaperscissors.autocomplete("member")
+    async def rockpaperscissors_member_autocomplete(
+        self,
+        interaction: discord.Interaction,
+        current: str,
+    ) -> list[app_commands.Choice[str]]:
+        return await guild_member_choices(interaction, current)
+
     @hybrid(
         name="tictactoe",
         description="Play tic-tac-toe against another member or the AI",
         aliases=["ttt", "tic-tac-toe"],
+        guild_only=True,
     )
     @describe(member="Opponent (leave empty to play against AI)")
-    async def tictactoe(self, ctx: Context, member: MemberConvert = None) -> None:
+    async def tictactoe(self, ctx: Context, member: OptionalGameMember = None) -> None:
         await start_ttt(ctx, opponent=member, vs_ai=member is None)
+
+    @tictactoe.autocomplete("member")
+    async def tictactoe_member_autocomplete(
+        self,
+        interaction: discord.Interaction,
+        current: str,
+    ) -> list[app_commands.Choice[str]]:
+        return await guild_member_choices(interaction, current, include_ai=True)
 
     @hybrid(
         name="connect4",
         description="Play connect four with another member",
         aliases=["4inarow", "connectfour", "c4"],
+        guild_only=True,
     )
     @describe(member="Opponent to play against")
     async def connect4(self, ctx: Context, member: MemberConvert) -> None:
         await start_connect4(ctx, opponent=member)
+
+    @connect4.autocomplete("member")
+    async def connect4_member_autocomplete(
+        self,
+        interaction: discord.Interaction,
+        current: str,
+    ) -> list[app_commands.Choice[str]]:
+        return await guild_member_choices(interaction, current)
 
     @hybrid(
         name="wouldyourather",
@@ -450,6 +479,8 @@ class Fun(Package):
     )
     @describe(option1="First option", option2="Second option")
     async def wouldyourather(self, ctx: Context, option1: str, option2: str) -> None:
+        if ctx.guild is None:
+            return await ctx.fail("This command can only be used in a server.")
         me = ctx.guild.me or ctx.guild.get_member(ctx.bot.user.id)
         if me is None or not ctx.channel.permissions_for(me).add_reactions:
             return await ctx.fail("I need **Add Reactions** permission in this channel.")

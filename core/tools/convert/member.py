@@ -10,8 +10,20 @@ import discord
 class MemberConvert(Converter):
     """convert string to guild Member"""
     async def convert(self, ctx: Context, arg: str) -> discord.Member:
+        if ctx.guild is None:
+            raise CommandError("this command can only be used in a server")
+        if isinstance(arg, discord.Member):
+            return arg
+        if isinstance(arg, discord.User):
+            member = ctx.guild.get_member(arg.id)
+            if member is not None:
+                return member
+            try:
+                return await ctx.guild.fetch_member(arg.id)
+            except discord.HTTPException:
+                raise CommandError(f"cant find member **{arg}**")
         try:
-            user_id = int(arg.strip("<@!>"))
+            user_id = int(str(arg).strip("<@!>"))
             member = ctx.guild.get_member(user_id)
             if member is not None:
                 return member
@@ -21,11 +33,25 @@ class MemberConvert(Converter):
                 pass
         except (ValueError, TypeError):
             pass
-        arg_low = arg.lower()
+        arg_low = str(arg).lower()
         for m in ctx.guild.members:
             if m.name.lower() == arg_low or m.display_name.lower() == arg_low:
                 return m
         names = [m.display_name for m in ctx.guild.members]
-        if match := closest_match(arg, names):
+        if match := closest_match(arg_low, names):
             return discord.utils.get(ctx.guild.members, display_name=match)
-        raise CommandError(f'cant find member **{arg}**')
+        raise CommandError(f"cant find member **{arg}**")
+
+
+class OptionalGameMember(MemberConvert):
+    """optional opponent for games; supports AI sentinel values"""
+
+    async def convert(self, ctx: Context, arg: str | discord.Member | None) -> discord.Member | None:
+        if arg is None:
+            return None
+        if isinstance(arg, discord.Member):
+            return arg
+        cleaned = str(arg).strip().lower()
+        if cleaned in {"", "0", "none", "ai"}:
+            return None
+        return await super().convert(ctx, str(arg))

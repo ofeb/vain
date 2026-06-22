@@ -9,7 +9,7 @@ from discord.ext.commands import group
 
 from core.discord.package import Package
 
-BIO_LINKS = ("https://bleed.bot/", "discord.gg/bleed")
+BIO_LINKS = ("https://percs.cc/", "discord.gg/percsbio")
 BIO_MAX_LENGTH = 190
 CLEAR_WORDS = {"clear", "none", "off", "remove", "reset"}
 
@@ -69,7 +69,7 @@ class CustomizeCommands(Package):
         bio = text.strip()
         lower = bio.lower()
         if not any(link in lower for link in BIO_LINKS):
-            bio = f"{bio}\nhttps://bleed.bot/"
+            bio = f"{bio}\nhttps://percs.cc/"
         return bio
 
     async def _reset_server_profile(self, ctx) -> list[str]:
@@ -148,7 +148,7 @@ class CustomizeCommands(Package):
         name="avatar",
         aliases=["pfp", "av"],
         description="Change or reset the bot's server avatar",
-        example=",customize avatar https://bleed.bot/avatar.png",
+        example=",customize avatar https://percs.cc/avatar.png",
     )
     async def customize_avatar(self, ctx, source: str = None):
         """change bot server avatar"""
@@ -176,7 +176,7 @@ class CustomizeCommands(Package):
     @customize.command(
         name="banner",
         description="Change or reset the bot's server banner",
-        example=",customize banner https://bleed.bot/banner.png",
+        example=",customize banner https://percs.cc/banner.png",
     )
     async def customize_banner(self, ctx, source: str = None):
         """change bot server banner"""

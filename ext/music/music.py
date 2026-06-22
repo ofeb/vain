@@ -1,283 +1,340 @@
 from __future__ import annotations
 
-import asyncio
-import math
-from typing import TYPE_CHECKING, Optional
+import random
+from typing import TYPE_CHECKING
 
 import discord
-from core.discord.package import Package, tasks
 
+from core.discord.package import Package
 from core.discord.ctx import Context
 from core.discord.hybrid import describe, group, hybrid
-from core.managers.values import color
+from core.managers.values import color, music as nl, music_enabled
+
+from .events import MusicEvents
 
 if TYPE_CHECKING:
     from core.bleed import Bleed
 
 try:
-    import pomice
-    HAS_POMICE = True
+    import lava_lyra as lyra
+
+    HAS_LYRA = True
 except ImportError:
-    HAS_POMICE = False
+    HAS_LYRA = False
+    lyra = None
 
 
-class MusicPlayer:
-    def __init__(self, ctx: Context):
-        self.ctx = ctx
-        self.queue: list[pomice.Track] = []
-        self.current: Optional[pomice.Track] = None
+class GuildQueue:
+    __slots__ = ("tracks", "current", "loop", "loop_queue", "volume", "active_preset")
+
+    def __init__(self) -> None:
+        self.tracks: list = []
+        self.current = None
         self.loop = False
         self.loop_queue = False
         self.volume = 100
-
-    async def add_track(self, track: pomice.Track) -> None:
-        self.queue.append(track)
-
-    def skip(self) -> Optional[pomice.Track]:
-        if self.queue:
-            return self.queue.pop(0)
-        return None
-
-    def clear(self) -> None:
-        self.queue.clear()
-        self.current = None
-
-    @property
-    def is_empty(self) -> bool:
-        return not self.current and not self.queue
+        self.active_preset: str | None = None
 
 
-class Music(Package):
-    """Queue, playback, and music controls."""
+class Music(MusicEvents, Package):
+    PRESETS = (
+        "vaporwave", "karaoke", "nightcore", "boost", "flat",
+        "chipmunk", "piano", "metal", "vibrato", "8d", "soft",
+    )
 
     def __init__(self, bot: Bleed):
         super().__init__(bot)
-        self.players: dict[int, MusicPlayer] = {}
-        self.pomice_pool: pomice.NodePool = None
+        self.queues: dict[int, GuildQueue] = {}
+        self._node = None
 
-    async def cog_load(self):
-        if not HAS_POMICE:
+    async def cog_load(self) -> None:
+        if not music_enabled or not HAS_LYRA:
             return
-        self.pomice_pool = pomice.NodePool()
         try:
-            await self.pomice_pool.create_node(
+            self._node = await lyra.NodePool.create_node(
                 bot=self.bot,
-                host="127.0.0.1",
-                port=2333,
-                password="youshallnotpass",
-                identifier="bleed-node",
+                host=nl.host,
+                port=nl.port,
+                password=nl.password,
+                identifier=nl.identifier,
+                fallback=True,
             )
         except Exception:
-            pass
+            self._node = None
 
-    def _get_player(self, ctx: Context) -> Optional[MusicPlayer]:
-        return self.players.get(ctx.guild.id)
+    def _queue(self, guild_id: int) -> GuildQueue:
+        return self.queues.setdefault(guild_id, GuildQueue())
 
     async def _ensure_voice(self, ctx: Context) -> bool:
+        if ctx.guild is None:
+            await ctx.fail("server only")
+            return False
         if not ctx.author.voice or not ctx.author.voice.channel:
-            await ctx.fail("You need to be in a voice channel first.")
+            await ctx.fail("join a voice channel first")
             return False
-
-        player = self._get_player(ctx)
-        if player and player.ctx.voice_client and player.ctx.voice_client.channel != ctx.author.voice.channel:
-            await ctx.fail("I'm already playing in a different voice channel.")
+        if ctx.voice_client and ctx.voice_client.channel != ctx.author.voice.channel:
+            await ctx.fail("already in another voice channel")
             return False
-
         return True
 
-    @group(
-        name="play",
-        description="Play a song from YouTube or other supported sources",
-        invoke_without_command=True,
-        aliases=["p"],
-    )
-    async def play(self, ctx: Context, *, query: str) -> None:
+    async def _player(self, ctx: Context):
+        if not HAS_LYRA or self._node is None:
+            await ctx.fail("nodelink isn't running")
+            return None
         if not await self._ensure_voice(ctx):
+            return None
+        if not ctx.voice_client:
+            await ctx.author.voice.channel.connect(cls=lyra.Player, self_deaf=True)
+        return ctx.voice_client
+
+    def _search_query(self, query: str) -> str:
+        query = query.strip()
+        if query.startswith(("http://", "https://")) or ":" in query.split(" ", 1)[0]:
+            return query
+        prefix = nl.search_source.strip()
+        if prefix and not query.lower().startswith(prefix.lower()):
+            return f"{prefix}:{query}"
+        return query
+
+    async def _first_track(self, query: str):
+        if self._node is None:
+            return None
+        results = await self._node.get_tracks(self._search_query(query))
+        if not results:
+            return None
+        tracks = results.tracks if hasattr(results, "tracks") else results
+        return tracks[0] if tracks else None
+
+    async def _apply_preset(self, player, preset: str) -> None:
+        if not HAS_LYRA:
             return
-
-        if not HAS_POMICE:
-            await ctx.fail("Lavalink is not available. Music playback requires Lavalink/pomice.")
+        preset = preset.lower()
+        if preset == "flat":
+            await player.remove_filters()
             return
-
-        try:
-            results = await self.pomice_pool.get_tracks(query)
-            if not results:
-                await ctx.fail("No results found.")
-                return
-
-            track = results[0]
-            player = self._get_player(ctx)
-            if not player:
-                player = MusicPlayer(ctx)
-                self.players[ctx.guild.id] = player
-
-            if not ctx.voice_client:
-                await ctx.author.voice.channel.connect(cls=pomice.Player)
-                player.ctx = ctx
-
-            player.add_track(track)
-
-            embed = discord.Embed(
-                title="Added to Queue",
-                description=f"[{track.title}]({track.uri}) by **{track.author}**",
-                color=color.base,
-            )
-            embed.add_field(name="Duration", value=self._format_duration(track.length), inline=True)
-            embed.set_thumbnail(url=track.thumbnail)
-            await ctx.send(embed=embed)
-        except Exception as e:
-            await ctx.fail(f"Playback error: {str(e)[:100]}")
-
-    @play.command(
-        name="now",
-        description="Show the currently playing track",
-        aliases=["np", "current"],
-    )
-    async def play_now(self, ctx: Context) -> None:
-        player = self._get_player(ctx)
-        if not player or not player.current:
-            await ctx.fail("Nothing is currently playing.")
-            return
-
-        track = player.current
-        embed = discord.Embed(
-            title="Now Playing",
-            description=f"[{track.title}]({track.uri}) by **{track.author}**",
-            color=color.base,
-        )
-        embed.add_field(name="Duration", value=self._format_duration(track.length), inline=True)
-        embed.set_thumbnail(url=track.thumbnail)
-        await ctx.send(embed=embed)
-
-    @play.command(
-        name="queue",
-        description="View the music queue",
-        aliases=["q"],
-    )
-    async def play_queue(self, ctx: Context) -> None:
-        player = self._get_player(ctx)
-        if not player or not player.queue:
-            await ctx.fail("The queue is empty.")
-            return
-
-        entries = []
-        total_duration = 0
-        for i, track in enumerate(player.queue[:15], 1):
-            total_duration += track.length
-            entries.append(f"`{i}.` **{track.title}** — {track.author} ({self._format_duration(track.length)})")
-
-        embed = discord.Embed(
-            title=f"Queue ({len(player.queue)} tracks)",
-            description="\n".join(entries),
-            color=color.base,
-        )
-        embed.add_field(name="Total Duration", value=self._format_duration(total_duration), inline=True)
-        await ctx.send(embed=embed)
-
-    @play.command(
-        name="skip",
-        description="Skip the current track",
-        aliases=["s"],
-    )
-    async def play_skip(self, ctx: Context) -> None:
-        player = self._get_player(ctx)
-        if not player or not player.current:
-            await ctx.fail("Nothing is playing to skip.")
-            return
-        await ctx.success("Skipped the current track.")
-
-    @play.command(
-        name="stop",
-        description="Stop playback and clear the queue",
-    )
-    async def play_stop(self, ctx: Context) -> None:
-        player = self._get_player(ctx)
-        if not player:
-            await ctx.fail("Nothing is playing.")
-            return
-        player.clear()
-        if ctx.voice_client:
-            await ctx.voice_client.disconnect()
-        self.players.pop(ctx.guild.id, None)
-        await ctx.success("Stopped playback and cleared the queue.")
-
-    @play.command(
-        name="pause",
-        description="Pause or resume playback",
-    )
-    async def play_pause(self, ctx: Context) -> None:
-        player = self._get_player(ctx)
-        if not player or not ctx.voice_client:
-            await ctx.fail("Nothing is playing.")
-            return
-        if ctx.voice_client.is_paused():
-            await ctx.voice_client.resume()
-            await ctx.success("Resumed playback.")
+        if preset == "nightcore":
+            f = lyra.Timescale(tag="nightcore", speed=1.2, pitch=1.2, rate=1.0)
+        elif preset == "vaporwave":
+            f = lyra.Timescale(tag="vaporwave", speed=0.85, pitch=0.9, rate=1.0)
+        elif preset == "chipmunk":
+            f = lyra.Timescale(tag="chipmunk", speed=1.3, pitch=1.4, rate=1.0)
+        elif preset == "boost":
+            f = lyra.Equalizer(tag="boost", levels=[(0, 0.2), (1, 0.15), (2, 0.1)])
+        elif preset == "soft":
+            f = lyra.Equalizer(tag="soft", levels=[(0, -0.1), (1, -0.05)])
         else:
-            await ctx.voice_client.pause()
-            await ctx.success("Paused playback.")
+            f = lyra.Timescale(tag=preset, speed=1.0, pitch=1.0, rate=1.0)
+        await player.add_filter(f)
 
-    @play.command(
-        name="volume",
-        description="Set the playback volume (0-200)",
-    )
-    async def play_volume(self, ctx: Context, level: int) -> None:
-        if level < 0 or level > 200:
-            await ctx.fail("Volume must be between 0 and 200.")
+    async def _play_next(self, guild_id: int, player) -> None:
+        state = self._queue(guild_id)
+        if state.loop and state.current:
+            track = state.current
+        elif state.tracks:
+            track = state.tracks.pop(0)
+            if state.loop_queue:
+                state.tracks.append(track)
+            state.current = track
+        else:
+            state.current = None
             return
-        player = self._get_player(ctx)
-        if player and ctx.voice_client:
-            await ctx.voice_client.set_volume(level)
-            player.volume = level
-        await ctx.success(f"Volume set to **{level}%**.")
+        await player.play(track)
+        if state.active_preset:
+            await self._apply_preset(player, state.active_preset)
 
-    @play.command(
-        name="loop",
-        description="Toggle track loop",
-        aliases=["repeat"],
-    )
-    async def play_loop(self, ctx: Context) -> None:
-        player = self._get_player(ctx)
-        if not player:
-            await ctx.fail("Nothing is playing.")
+    async def _set_preset(self, ctx: Context, name: str, setting: str | None) -> None:
+        player = ctx.voice_client
+        if player is None:
+            return await ctx.fail("nothing playing")
+        state = self._queue(ctx.guild.id)
+        if setting and setting.lower() in {"off", "disable", "false", "none"}:
+            state.active_preset = None
+            await player.remove_filters()
+            return await ctx.success(f"disabled **{name}**")
+        state.active_preset = name
+        await self._apply_preset(player, name)
+        await ctx.success(f"enabled **{name}**")
+
+    @hybrid(name="play", description="Play a song", aliases=["p"], guild_only=True)
+    @describe(query="Song name or URL", play_next="Play after the current track")
+    async def play(self, ctx: Context, *, query: str, play_next: bool = False) -> None:
+        player = await self._player(ctx)
+        if player is None:
             return
-        player.loop = not player.loop
-        await ctx.success(f"Loop {'enabled' if player.loop else 'disabled'}.")
+        track = await self._first_track(query)
+        if track is None:
+            return await ctx.fail("no results")
 
-    @play.command(
-        name="shuffle",
-        description="Shuffle the queue",
-    )
-    async def play_shuffle(self, ctx: Context) -> None:
-        player = self._get_player(ctx)
-        if not player or len(player.queue) < 2:
-            await ctx.fail("Not enough tracks in queue to shuffle.")
-            return
-        import random
-        random.shuffle(player.queue)
-        await ctx.success("Shuffled the queue.")
+        state = self._queue(ctx.guild.id)
 
-    @play.command(
-        name="remove",
-        description="Remove a track from the queue by position",
-        aliases=["rm"],
-    )
-    async def play_remove(self, ctx: Context, position: int) -> None:
-        player = self._get_player(ctx)
-        if not player or position < 1 or position > len(player.queue):
-            await ctx.fail(f"Invalid position. Queue has {len(player.queue)} tracks.")
-            return
-        track = player.queue.pop(position - 1)
-        await ctx.success(f"Removed **{track.title}** from the queue.")
+        if player.is_playing or player.current:
+            if play_next:
+                state.tracks.insert(0, track)
+            else:
+                state.tracks.append(track)
+            return await ctx.send(embed=discord.Embed(
+                title="queued",
+                description=f"**{track.title}** — {track.author}",
+                color=color.base,
+            ))
 
-    def _format_duration(self, ms: int) -> str:
-        seconds = math.ceil(ms / 1000)
-        minutes, sec = divmod(seconds, 60)
-        hours, minutes = divmod(minutes, 60)
-        if hours:
-            return f"{hours}h {minutes}m {sec}s"
-        return f"{minutes}m {sec}s"
+        state.current = track
+        await player.play(track)
+        if state.active_preset:
+            await self._apply_preset(player, state.active_preset)
+        await ctx.send(embed=discord.Embed(
+            title="now playing",
+            description=f"**{track.title}** — {track.author}",
+            color=color.base,
+        ))
+
+    @group(name="queue", description="View all tracks queued", invoke_without_command=True, guild_only=True)
+    async def queue(self, ctx: Context) -> None:
+        if ctx.invoked_subcommand is None:
+            await self.queue_view(ctx)
+
+    @queue.command(name="view", description="View all tracks queued", aliases=["list"])
+    async def queue_view(self, ctx: Context) -> None:
+        state = self._queue(ctx.guild.id)
+        if not state.tracks and not state.current:
+            return await ctx.fail("queue is empty")
+        lines = [f"**now:** {state.current.title}"] if state.current else []
+        lines.extend(f"`{i}.` **{t.title}** — {t.author}" for i, t in enumerate(state.tracks[:15], 1))
+        await ctx.send(embed=discord.Embed(
+            title=f"queue ({len(state.tracks)})",
+            description="\n".join(lines),
+            color=color.base,
+        ))
+
+    @queue.command(name="remove", description="Remove a track from the queue")
+    @describe(position="Track position in the queue")
+    async def queue_remove(self, ctx: Context, position: int) -> None:
+        state = self._queue(ctx.guild.id)
+        if position < 1 or position > len(state.tracks):
+            return await ctx.fail(f"invalid position ({len(state.tracks)} tracks)")
+        track = state.tracks.pop(position - 1)
+        await ctx.success(f"removed **{track.title}**")
+
+    @queue.command(name="shuffle", description="Shuffle the queue")
+    async def queue_shuffle(self, ctx: Context) -> None:
+        state = self._queue(ctx.guild.id)
+        if len(state.tracks) < 2:
+            return await ctx.fail("not enough tracks")
+        random.shuffle(state.tracks)
+        await ctx.success("shuffled")
+
+    @queue.command(name="empty", description="Empty the queue", aliases=["clear"])
+    async def queue_empty(self, ctx: Context) -> None:
+        self._queue(ctx.guild.id).tracks.clear()
+        await ctx.success("cleared queue")
+
+    @queue.command(name="move", description="Move a track to a different position in the queue")
+    @describe(position="Current position", new_position="New position")
+    async def queue_move(self, ctx: Context, position: int, new_position: int) -> None:
+        state = self._queue(ctx.guild.id)
+        if not (1 <= position <= len(state.tracks) and 1 <= new_position <= len(state.tracks)):
+            return await ctx.fail("invalid position")
+        track = state.tracks.pop(position - 1)
+        state.tracks.insert(new_position - 1, track)
+        await ctx.success(f"moved **{track.title}** to `{new_position}`")
+
+    @hybrid(name="skip", description="Skip the current track", guild_only=True)
+    async def skip(self, ctx: Context) -> None:
+        player = ctx.voice_client
+        if player is None or not player.is_playing:
+            return await ctx.fail("nothing playing")
+        await player.stop()
+        await self._play_next(ctx.guild.id, player)
+        await ctx.success("skipped")
+
+    @hybrid(name="pause", description="Pause playback", guild_only=True)
+    async def pause(self, ctx: Context) -> None:
+        player = ctx.voice_client
+        if player is None or not player.is_playing:
+            return await ctx.fail("nothing playing")
+        await player.pause()
+        await ctx.success("paused")
+
+    @hybrid(name="resume", description="Resume playback", guild_only=True)
+    async def resume(self, ctx: Context) -> None:
+        player = ctx.voice_client
+        if player is None or not player.is_paused:
+            return await ctx.fail("not paused")
+        await player.resume()
+        await ctx.success("resumed")
+
+    @hybrid(name="shuffle", description="Toggle queue loop shuffle", guild_only=True)
+    async def shuffle(self, ctx: Context) -> None:
+        state = self._queue(ctx.guild.id)
+        state.loop_queue = not state.loop_queue
+        await ctx.success(f"queue loop **{'on' if state.loop_queue else 'off'}**")
+
+    @hybrid(name="repeat", description="Toggle track repeat", guild_only=True)
+    @describe(option="on or off")
+    async def repeat(self, ctx: Context, option: str | None = None) -> None:
+        state = self._queue(ctx.guild.id)
+        state.loop = (not state.loop) if option is None else option.lower() in {"on", "true", "yes", "enable"}
+        await ctx.success(f"repeat **{'on' if state.loop else 'off'}**")
+
+    @hybrid(name="volume", description="Set playback volume", guild_only=True)
+    @describe(volume="Volume from 0 to 200")
+    async def volume(self, ctx: Context, volume: int) -> None:
+        if not 0 <= volume <= 200:
+            return await ctx.fail("volume must be 0–200")
+        player = ctx.voice_client
+        if player is None:
+            return await ctx.fail("nothing playing")
+        await player.set_volume(volume)
+        self._queue(ctx.guild.id).volume = volume
+        await ctx.success(f"volume **{volume}%**")
+
+    @hybrid(name="fastforward", description="Fast forward the current track", guild_only=True)
+    @describe(position="Seconds to fast forward")
+    async def fastforward(self, ctx: Context, position: int) -> None:
+        player = ctx.voice_client
+        if player is None or player.current is None:
+            return await ctx.fail("nothing playing")
+        await player.seek(min(player.position + position * 1000, player.current.length))
+        await ctx.success(f"+{position}s")
+
+    @hybrid(name="rewind", description="Rewind the current track", guild_only=True)
+    @describe(position="Seconds to rewind")
+    async def rewind(self, ctx: Context, position: int) -> None:
+        player = ctx.voice_client
+        if player is None or player.current is None:
+            return await ctx.fail("nothing playing")
+        await player.seek(max(player.position - position * 1000, 0))
+        await ctx.success(f"-{position}s")
+
+    @hybrid(name="disconnect", description="Disconnect from the voice channel", guild_only=True, aliases=["dc", "leave"])
+    async def disconnect(self, ctx: Context) -> None:
+        if ctx.voice_client:
+            await ctx.voice_client.disconnect(force=True)
+        self.queues.pop(ctx.guild.id, None)
+        await ctx.success("disconnected")
+
+    @group(name="preset", description="Audio filter presets", invoke_without_command=True, guild_only=True)
+    async def preset(self, ctx: Context) -> None:
+        await ctx.send_help(ctx.command)
+
+    @preset.command(name="active", description="Show the active audio preset")
+    async def preset_active(self, ctx: Context) -> None:
+        active = self._queue(ctx.guild.id).active_preset
+        if not active:
+            return await ctx.info("no active preset")
+        await ctx.info(f"active: **{active}**")
+
+
+for _preset_name in Music.PRESETS:
+    @Music.preset.command(name=_preset_name, description=f"Toggle the {_preset_name} audio preset")
+    @describe(setting="on or off")
+    async def _preset_cmd(self, ctx: Context, setting: str | None = None, *, _name: str = _preset_name) -> None:
+        await self._set_preset(ctx, _name, setting)
+
+    _preset_cmd.__name__ = f"preset_{_preset_name.replace('8d', 'eightd')}"
 
 
 async def setup(bot: Bleed):
+    if not music_enabled:
+        return
     await bot.add_cog(Music(bot))

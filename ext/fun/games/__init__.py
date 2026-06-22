@@ -553,6 +553,8 @@ class Connect4View(discord.ui.View):
 
 
 async def start_rps(ctx: "Context", *, opponent: discord.Member, rounds: int = 1) -> None:
+    if ctx.guild is None:
+        return await ctx.fail("This command can only be used in a server.")
     if opponent.bot:
         return await ctx.fail("You can't play against a bot.")
     if opponent.id == ctx.author.id:
@@ -569,6 +571,8 @@ async def start_ttt(
     opponent: Optional[discord.Member],
     vs_ai: bool,
 ) -> None:
+    if ctx.guild is None:
+        return await ctx.fail("This command can only be used in a server.")
     if not vs_ai:
         if opponent is None:
             return await ctx.fail("Mention an opponent or play against the AI.")
@@ -589,6 +593,8 @@ async def start_ttt(
 
 
 async def start_connect4(ctx: "Context", *, opponent: discord.Member) -> None:
+    if ctx.guild is None:
+        return await ctx.fail("This command can only be used in a server.")
     if opponent.bot:
         return await ctx.fail("You can't play against a bot.")
     if opponent.id == ctx.author.id:

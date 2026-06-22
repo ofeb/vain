@@ -4,6 +4,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
+import asyncpg
 import discord
 from discord import Embed, utils
 from asyncio import Lock
@@ -20,11 +21,18 @@ class InformationEvents(Package):
         self.locks = defaultdict(Lock)
         self.joined_cache = {}
 
+    async def _fetch_config(self, guild_id: int):
+        try:
+            return await self.bot.db.fetchrow(
+                """SELECT * FROM information_config WHERE guild_id = $1""",
+                guild_id,
+            )
+        except asyncpg.UndefinedTableError:
+            return None
+
     @Package.listener("on_member_join")
     async def on_join_info(self, member: discord.Member):
-        config = await self.bot.db.fetchrow(
-            """SELECT * FROM information_config WHERE guild_id = $1""", member.guild.id
-        )
+        config = await self._fetch_config(member.guild.id)
         if not config or not config.get('join_info_enabled', False):
             return
         
@@ -48,9 +56,7 @@ class InformationEvents(Package):
 
     @Package.listener("on_member_remove")
     async def on_leave_info(self, member: discord.Member):
-        config = await self.bot.db.fetchrow(
-            """SELECT * FROM information_config WHERE guild_id = $1""", member.guild.id
-        )
+        config = await self._fetch_config(member.guild.id)
         if not config or not config.get('leave_info_enabled', False):
             return
         
@@ -79,9 +85,7 @@ class InformationEvents(Package):
         if before.author.bot:
             return
         
-        config = await self.bot.db.fetchrow(
-            """SELECT * FROM information_config WHERE guild_id = $1""", after.guild.id
-        )
+        config = await self._fetch_config(after.guild.id)
         if not config or not config.get('edit_info_enabled', False):
             return
         
@@ -109,9 +113,7 @@ class InformationEvents(Package):
         if message.author.bot:
             return
         
-        config = await self.bot.db.fetchrow(
-            """SELECT * FROM information_config WHERE guild_id = $1""", message.guild.id
-        )
+        config = await self._fetch_config(message.guild.id)
         if not config or not config.get('delete_info_enabled', False):
             return
         

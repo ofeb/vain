@@ -1183,3 +1183,21 @@ CREATE TABLE IF NOT EXISTS roleplay.actions (
     amount INT NOT NULL DEFAULT 1,
     PRIMARY KEY (action, giver, receiver)
 );
+
+CREATE TABLE IF NOT EXISTS information_config (
+    guild_id BIGINT PRIMARY KEY,
+    info_channel BIGINT,
+    join_info_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    leave_info_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    edit_info_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    delete_info_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS spotify_tokens (
+    user_id BIGINT PRIMARY KEY,
+    access_token TEXT NOT NULL,
+    refresh_token TEXT NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
