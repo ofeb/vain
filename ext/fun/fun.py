@@ -3,7 +3,7 @@ from __future__ import annotations
 import random
 import re
 import urllib.parse
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import aiohttp
 import discord
@@ -14,7 +14,6 @@ from core.discord.package import Package
 from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe, group
 from core.managers.values import color, emojis
-from core.tools.convert import OptionalMemberParam
 
 from .games import start_connect4, start_rps, start_ttt
 
@@ -418,7 +417,7 @@ class Fun(Package):
     async def rockpaperscissors(
         self,
         ctx,
-        member: OptionalMemberParam = None,
+        member: Optional[discord.User] = None,
         rounds: int = 1,
     ) -> None:
         if rounds < 1 or rounds > 3:
@@ -431,7 +430,7 @@ class Fun(Package):
         aliases=["ttt", "tic-tac-toe"],
     )
     @describe(member="Opponent (leave empty to play the bot)")
-    async def tictactoe(self, ctx, member: OptionalMemberParam = None) -> None:
+    async def tictactoe(self, ctx, member: Optional[discord.User] = None) -> None:
         await start_ttt(ctx, opponent=member, vs_me=member is None)
 
     @hybrid(
@@ -440,7 +439,7 @@ class Fun(Package):
         aliases=["4inarow", "connectfour", "c4"],
     )
     @describe(member="Opponent (leave empty to play the bot)")
-    async def connect4(self, ctx, member: OptionalMemberParam = None) -> None:
+    async def connect4(self, ctx, member: Optional[discord.User] = None) -> None:
         await start_connect4(ctx, opponent=member, vs_me=member is None)
 
     @hybrid(
