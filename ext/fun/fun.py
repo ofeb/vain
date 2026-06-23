@@ -412,6 +412,9 @@ class Fun(Package):
         name="rockpaperscissors",
         description="Play rock paper scissors with another member or the bot",
         aliases=["rps"],
+        guilds=True,
+        dms=True,
+        groupchats=True,
     )
     @describe(member="Opponent (leave empty to play the bot)", rounds="Number of rounds (1-3)")
     async def rockpaperscissors(
@@ -428,6 +431,9 @@ class Fun(Package):
         name="tictactoe",
         description="Play tic-tac-toe against another member or the bot",
         aliases=["ttt", "tic-tac-toe"],
+        guilds=True,
+        dms=True,
+        groupchats=True,
     )
     @describe(member="Opponent (leave empty to play the bot)")
     async def tictactoe(self, ctx, member: Optional[discord.User] = None) -> None:
@@ -437,6 +443,9 @@ class Fun(Package):
         name="connect4",
         description="Play connect four with another member or the bot",
         aliases=["4inarow", "connectfour", "c4"],
+        guilds=True,
+        dms=True,
+        groupchats=True,
     )
     @describe(member="Opponent (leave empty to play the bot)")
     async def connect4(self, ctx, member: Optional[discord.User] = None) -> None:

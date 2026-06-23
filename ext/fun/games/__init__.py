@@ -38,6 +38,37 @@ def _bot_thinking_line(*, emoji: str) -> str:
     return f"{emoji} **{BOT_NAME}** is thinking..."
 
 
+async def _resolve_user(
+    ctx: "Context",
+    user: discord.User | discord.Member | int,
+) -> discord.User:
+    if isinstance(user, discord.User):
+        return user
+    return await ctx.bot.fetch_user(int(user))
+
+
+async def _validate_opponent(ctx: "Context", opponent: discord.User) -> str | None:
+    if opponent.id == ctx.author.id:
+        return "You can't play against yourself."
+    if opponent.bot and opponent.id != ctx.bot.user.id:
+        return "You can't play against a bot."
+
+    channel = ctx.channel
+    if isinstance(channel, discord.DMChannel):
+        if channel.recipient is None or opponent.id != channel.recipient.id:
+            return "That member isn't in this conversation."
+    elif isinstance(channel, discord.GroupChannel):
+        if opponent.id not in {user.id for user in channel.recipients}:
+            return "That member isn't in this group."
+    elif ctx.guild is not None:
+        if ctx.guild.get_member(opponent.id) is None:
+            try:
+                await ctx.guild.fetch_member(opponent.id)
+            except discord.HTTPException:
+                return "That member isn't in this server."
+    return None
+
+
 def _rps_winner(a: str, b: str) -> int:
     if a == b:
         return 0
@@ -705,12 +736,10 @@ async def start_rps(
     if vs_me or opponent is None:
         opponent = ctx.bot.user
         vs_me = True
-    elif ctx.guild is None:
-        return await ctx.warn("Mention an opponent or play against the bot.")
-    elif opponent.bot and opponent.id != ctx.bot.user.id:
-        return await ctx.warn("You can't play against a bot.")
-    if opponent.id == ctx.author.id:
-        return await ctx.warn("You can't play against yourself.")
+    else:
+        opponent = await _resolve_user(ctx, opponent)
+        if err := await _validate_opponent(ctx, opponent):
+            return await ctx.warn(err)
 
     view = RPSView(player1=ctx.author, player2=opponent, rounds=rounds, bot=ctx.bot)
     msg = await ctx.send(embed=view._embed(), view=view)
@@ -726,12 +755,10 @@ async def start_ttt(
     if vs_me or opponent is None:
         vs_me = True
         opponent = None
-    elif ctx.guild is None:
-        return await ctx.warn("Mention an opponent or play against the bot.")
-    elif opponent.bot:
-        return await ctx.warn("You can't play against a bot.")
-    elif opponent.id == ctx.author.id:
-        return await ctx.warn("You can't play against yourself.")
+    else:
+        opponent = await _resolve_user(ctx, opponent)
+        if err := await _validate_opponent(ctx, opponent):
+            return await ctx.warn(err)
 
     view = TicTacToeView(
         ctx=ctx,
@@ -753,12 +780,10 @@ async def start_connect4(
     if vs_me or opponent is None:
         vs_me = True
         opponent = ctx.bot.user
-    elif ctx.guild is None:
-        return await ctx.warn("Mention an opponent or play against the bot.")
-    elif opponent.bot and opponent.id != ctx.bot.user.id:
-        return await ctx.warn("You can't play against a bot.")
-    elif opponent.id == ctx.author.id:
-        return await ctx.warn("You can't play against yourself.")
+    else:
+        opponent = await _resolve_user(ctx, opponent)
+        if err := await _validate_opponent(ctx, opponent):
+            return await ctx.warn(err)
 
     view = Connect4View(
         ctx=ctx,
