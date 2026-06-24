@@ -8,6 +8,31 @@ if TYPE_CHECKING:
     from core.bleed import Bleed
 
 
+def is_group_chat(channel: discord.abc.MessageableChannel | None) -> bool:
+    if channel is None:
+        return False
+    if isinstance(channel, discord.GroupChannel):
+        return True
+    channel_type = getattr(channel, "type", None)
+    return channel_type in {
+        discord.ChannelType.group,
+        getattr(discord.ChannelType, "group_dm", None),
+    }
+
+
+def group_channel_id(channel: discord.abc.MessageableChannel | None) -> int | None:
+    return channel.id if is_group_chat(channel) else None
+
+
+def guild_scope_id(
+    channel: discord.abc.MessageableChannel | None,
+    guild: discord.Guild | None,
+) -> int | None:
+    if guild is None or is_group_chat(channel):
+        return None
+    return guild.id
+
+
 async def _bump_global(db: Any, user_id: int, column: str) -> None:
     await db.execute(
         f"""
@@ -99,26 +124,24 @@ async def record_ttt_game(
             await _bump(
                 db,
                 guild_id=guild_id,
-                channel_id=None,
+                channel_id=channel_id,
                 user_id=player_x_id,
                 column="losses",
                 bot_id=bot_id,
             )
             if channel_id:
                 await _bump_channel(db, channel_id, bot_id, "wins")
-                await _bump_channel(db, channel_id, player_x_id, "losses")
             return
         if winner == "X":
             await _bump(
                 db,
                 guild_id=guild_id,
-                channel_id=None,
+                channel_id=channel_id,
                 user_id=player_x_id,
                 column="wins",
                 bot_id=bot_id,
             )
             if channel_id and bot_id:
-                await _bump_channel(db, channel_id, player_x_id, "wins")
                 await _bump_channel(db, channel_id, bot_id, "losses")
             return
 
@@ -207,7 +230,7 @@ async def fetch_ttt_leaderboard(
 
 
 def default_leaderboard_scope(channel: discord.abc.MessageableChannel | None) -> str:
-    if isinstance(channel, discord.GroupChannel):
+    if is_group_chat(channel):
         return "group"
     if isinstance(channel, discord.abc.GuildChannel):
         return "guild"
@@ -277,6 +300,6 @@ async def build_leaderboard_pages(
             lines.append(f"`{offset}` **{name}** - `{wins}` wins")
         embed = discord.Embed(title=title, description="\n".join(lines))
         embed.set_author(name=author.display_name, icon_url=author.display_avatar.url)
-        embed.set_footer(text=f"Page {page_num}/{total_pages} ({len(rows)} entries)")
+        embed.set_footer(text=f"Page {page_num}/{total_pages} ({len(rows)} {'entry' if len(rows) == 1 else 'entries'})")
         pages.append(embed)
     return pages

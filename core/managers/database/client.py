@@ -15,6 +15,7 @@ from asyncpg import Connection, Pool, Record as BaseRecord, create_pool
 from asyncpg.exceptions import InvalidCatalogNameError
 from discord.ext.commands import Context, check
 from ..values import database
+from ..app_emojis import default_emoji
 from ..filetypes import POSTGRES_DB_FILE, ensure_storage_files
 
 log = getLogger(__name__)
@@ -1696,26 +1697,26 @@ class Database:
             guild_id,
         )
 
-    async def get_emoji(self, guild_id: int, user_id: int = None) -> dict:
+    async def get_emoji(self, guild_id: int | None, user_id: int | None = None) -> dict:
         """Get emojis with guild/user override"""
-        default_emoji = {
-            "success": "<:embeds_approve:1511705992323272745>",
-            "warn": "<:embeds_warn:1511705997918343168>",
-            "deny": "<:embeds_deny:1511705993283633253>",
-            "cooldown": "<:embeds_cooldown:1511705992755417129>",
-            "loading": "<a:embeds_loading:1511705994823077988>",
+        default_emoji_map = {
+            "success": default_emoji("approve", "<:embeds_approve:1511705992323272745>"),
+            "warn": default_emoji("warn", "<:embeds_warn:1511705997918343168>"),
+            "deny": default_emoji("deny", "<:embeds_deny:1511705993283633253>"),
+            "cooldown": default_emoji("cooldown", "<:embeds_cooldown:1511705992755417129>"),
+            "loading": default_emoji("loading", "<a:embeds_loading:1511705994823077988>"),
             "info": "<:interface_information:1511705999550185646>",
         }
 
-        guild_settings = await self.get_guild_customize(guild_id)
-        guild_emoji = guild_settings.get("emoji", {})
+        result = dict(default_emoji_map)
 
-        result = {**default_emoji, **guild_emoji}
+        if guild_id:
+            guild_settings = await self.get_guild_customize(guild_id)
+            result.update(guild_settings.get("emoji", {}))
 
-        if user_id:
+        if user_id is not None and guild_id is not None:
             user_settings = await self.get_user_customize(user_id, guild_id)
-            user_emoji = user_settings.get("emoji", {})
-            result.update(user_emoji)
+            result.update(user_settings.get("emoji", {}))
 
         return result
 

@@ -4,7 +4,7 @@ import hashlib
 from pathlib import Path
 from typing import Final
 
-from .app_emojis import prime_emoji_environment
+from .app_emojis import default_emoji, prime_emoji_environment
 
 repo_root: Final[Path] = Path(__file__).resolve().parents[2]
 root: Final[Path] = repo_root
@@ -33,11 +33,11 @@ class bot:
 
 
 class emojis:
-    approve: str = "<:embeds_approve:1511705992323272745>"
-    warn: str = "<:embeds_warn:1511705997918343168>"
-    deny: str = "<:embeds_deny:1511705993283633253>"
-    loading: str = "<a:embeds_loading:1511705994823077988>"
-    cooldown: str = "<:embeds_cooldown:1511705992755417129>"
+    approve: str = default_emoji("approve", "<:embeds_approve:1511705992323272745>")
+    warn: str = default_emoji("warn", "<:embeds_warn:1511705997918343168>")
+    deny: str = default_emoji("deny", "<:embeds_deny:1511705993283633253>")
+    loading: str = default_emoji("loading", "<a:embeds_loading:1511705994823077988>")
+    cooldown: str = default_emoji("cooldown", "<:embeds_cooldown:1511705992755417129>")
     add: str = "<:embeds_add:1511705992469942292>"
     remove: str = "<:embeds_remove:1511705995850551357>"
     lastfm: str = "<:embeds_lastfm:1511705994458300618>"

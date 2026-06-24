@@ -28,6 +28,7 @@ from .ttt_stats import (
     default_leaderboard_scope,
     fetch_ttt_leaderboard,
     fetch_ttt_stats,
+    is_group_chat,
 )
 
 if TYPE_CHECKING:
@@ -57,7 +58,7 @@ class Fun(Package):
             rows = await fetch_ttt_leaderboard(self.bot.db, guild_id=ctx.guild.id)
             title = "Most Tic-Tac-Toe wins"
         elif selected == "group":
-            if not isinstance(ctx.channel, discord.GroupChannel):
+            if not is_group_chat(ctx.channel):
                 return await ctx.warn("Group leaderboard can only be used in a group chat.")
             rows = await fetch_ttt_leaderboard(self.bot.db, channel_id=ctx.channel.id)
             title = "Most Tic-Tac-Toe wins"
@@ -70,7 +71,7 @@ class Fun(Package):
             author=ctx.author,
             title=title,
         )
-        if len(pages) == 1:
+        if not rows:
             await ctx.send(embed=pages[0])
             return
         view = PaginateView(ctx, pages)

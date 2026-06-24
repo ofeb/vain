@@ -10,7 +10,8 @@ from typing import Any, Optional
 import discord
 from discord.ext import commands
 
-from core.managers.values import color, emojis, lastfm_color
+from core.managers.app_emojis import format_embed_emoji
+from core.managers.values import color, emojis, lastfm_color, lastfm_color
 
 
 class Cache:
@@ -85,7 +86,7 @@ class Context(commands.Context):
         if self._custom_emoji is None:
             try:
                 self._custom_emoji = await self.bot.db.get_emoji(
-                    self.guild.id if self.guild else 0,
+                    self.guild.id if self.guild else None,
                     self.author.id if self.guild else None,
                 )
             except Exception:
@@ -97,7 +98,8 @@ class Context(commands.Context):
                     "loading": emojis.loading,
                     "info": emojis.interface.information,
                 }
-        return self._custom_emoji.get(key, getattr(emojis, key, emojis.approve))
+        raw = self._custom_emoji.get(key, getattr(emojis, key, emojis.approve))
+        return format_embed_emoji(self.bot, raw, fallback_key=key)
 
     async def _get_color(self, key: str) -> int:
         """Get color with guild/user customization override"""
