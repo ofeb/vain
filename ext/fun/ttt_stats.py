@@ -14,23 +14,51 @@ def is_group_chat(channel: discord.abc.MessageableChannel | None) -> bool:
     if isinstance(channel, discord.GroupChannel):
         return True
     channel_type = getattr(channel, "type", None)
-    return channel_type in {
-        discord.ChannelType.group,
-        getattr(discord.ChannelType, "group_dm", None),
-    }
+    if channel_type == discord.ChannelType.group:
+        return True
+    group_dm = getattr(discord.ChannelType, "group_dm", None)
+    if group_dm is not None and channel_type == group_dm:
+        return True
+    if isinstance(channel, discord.DMChannel):
+        recipients = getattr(channel, "recipients", None) or []
+        if len(recipients) > 1:
+            return True
+    return False
+
+
+def is_direct_message(channel: discord.abc.MessageableChannel | None) -> bool:
+    if channel is None:
+        return False
+    if isinstance(channel, discord.DMChannel) and not is_group_chat(channel):
+        return True
+    return getattr(channel, "type", None) == discord.ChannelType.private
+
+
+def scope_ids(
+    channel: discord.abc.MessageableChannel | None,
+    guild: discord.Guild | None,
+) -> tuple[int | None, int | None]:
+    """return guild_id and group channel_id for stat storage."""
+    if channel is None:
+        return (guild.id if guild else None, None)
+    if guild is not None and not is_group_chat(channel):
+        return guild.id, None
+    if is_group_chat(channel) or (guild is None and not is_direct_message(channel)):
+        return None, channel.id
+    return None, None
 
 
 def group_channel_id(channel: discord.abc.MessageableChannel | None) -> int | None:
-    return channel.id if is_group_chat(channel) else None
+    _guild_id, channel_id = scope_ids(channel, None)
+    return channel_id
 
 
 def guild_scope_id(
     channel: discord.abc.MessageableChannel | None,
     guild: discord.Guild | None,
 ) -> int | None:
-    if guild is None or is_group_chat(channel):
-        return None
-    return guild.id
+    guild_id, _channel_id = scope_ids(channel, guild)
+    return guild_id
 
 
 async def _bump_global(db: Any, user_id: int, column: str) -> None:
@@ -131,6 +159,8 @@ async def record_ttt_game(
             )
             if channel_id:
                 await _bump_channel(db, channel_id, bot_id, "wins")
+            elif guild_id:
+                await _bump_guild(db, guild_id, bot_id, "wins")
             return
         if winner == "X":
             await _bump(
@@ -143,6 +173,8 @@ async def record_ttt_game(
             )
             if channel_id and bot_id:
                 await _bump_channel(db, channel_id, bot_id, "losses")
+            elif guild_id and bot_id:
+                await _bump_guild(db, guild_id, bot_id, "losses")
             return
 
     winner_id = player_x_id if winner == "X" else player_o_id
@@ -202,6 +234,7 @@ async def fetch_ttt_leaderboard(
             """,
             channel_id,
             limit,
+            cached=False,
         )
     elif guild_id is None:
         rows = await db.fetch(
@@ -213,6 +246,7 @@ async def fetch_ttt_leaderboard(
             LIMIT $1
             """,
             limit,
+            cached=False,
         )
     else:
         rows = await db.fetch(
@@ -225,6 +259,7 @@ async def fetch_ttt_leaderboard(
             """,
             guild_id,
             limit,
+            cached=False,
         )
     return [{"user_id": int(row["user_id"]), "wins": int(row["wins"] or 0)} for row in rows]
 
@@ -234,7 +269,28 @@ def default_leaderboard_scope(channel: discord.abc.MessageableChannel | None) ->
         return "group"
     if isinstance(channel, discord.abc.GuildChannel):
         return "guild"
+    if channel is not None and getattr(channel, "guild", None) is None and not is_direct_message(channel):
+        return "group"
     return "global"
+
+
+async def leaderboard_rows(
+    db: Any,
+    channel: discord.abc.MessageableChannel | None,
+    guild: discord.Guild | None,
+    *,
+    scope: str,
+) -> list[dict[str, int]]:
+    guild_id, channel_id = scope_ids(channel, guild)
+    if scope == "group":
+        if channel_id is None:
+            return []
+        return await fetch_ttt_leaderboard(db, channel_id=channel_id)
+    if scope == "guild":
+        if guild_id is None:
+            return []
+        return await fetch_ttt_leaderboard(db, guild_id=guild_id)
+    return await fetch_ttt_leaderboard(db)
 
 
 async def user_display(bot: Bleed, user_id: int) -> str:

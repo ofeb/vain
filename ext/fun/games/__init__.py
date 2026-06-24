@@ -32,7 +32,7 @@ def _opponent_label(user: discord.User, bot: Bleed) -> str:
 
 
 def _bot_win_status() -> str:
-    return "**I** win!"
+    return f"**{BOT_OPPONENT}** wins!"
 
 
 def _bot_thinking_line(*, emoji: str) -> str:
@@ -364,20 +364,32 @@ class TicTacToeView(discord.ui.View):
         return None
 
     async def _record_stats(self, winner: str) -> None:
-        from ext.fun.ttt_stats import guild_scope_id, group_channel_id, record_ttt_game
+        import logging
 
-        guild_id = guild_scope_id(self.ctx.channel, self.ctx.guild)
-        channel_id = group_channel_id(self.ctx.channel)
+        from ext.fun.ttt_stats import record_ttt_game, scope_ids
+
+        log = logging.getLogger("bleed.ttt")
+        channel = self.message.channel if self.message else self.ctx.channel
+        guild = getattr(channel, "guild", None) or self.ctx.guild
+        guild_id, channel_id = scope_ids(channel, guild)
         player_o_id = self.bot.user.id if self.vs_me else (self.player_o.id if self.player_o else None)
-        await record_ttt_game(
-            self.bot,
-            guild_id=guild_id,
-            channel_id=channel_id,
-            player_x_id=self.player_x.id,
-            player_o_id=player_o_id,
-            vs_me=self.vs_me,
-            winner=winner,
-        )
+        try:
+            await record_ttt_game(
+                self.bot,
+                guild_id=guild_id,
+                channel_id=channel_id,
+                player_x_id=self.player_x.id,
+                player_o_id=player_o_id,
+                vs_me=self.vs_me,
+                winner=winner,
+            )
+        except Exception:
+            log.exception(
+                "failed to record ttt stats (guild=%s channel=%s winner=%s)",
+                guild_id,
+                channel_id,
+                winner,
+            )
 
     def _sync_buttons(self) -> None:
         for child in self.children:

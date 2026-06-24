@@ -26,9 +26,9 @@ from .ttt_stats import (
     build_leaderboard_pages,
     build_stats_embed,
     default_leaderboard_scope,
-    fetch_ttt_leaderboard,
     fetch_ttt_stats,
-    is_group_chat,
+    leaderboard_rows,
+    scope_ids,
 )
 
 if TYPE_CHECKING:
@@ -52,19 +52,17 @@ class Fun(Package):
         selected = (scope or default_leaderboard_scope(ctx.channel)).strip().lower()
         if selected not in {"global", "guild", "group"}:
             return await ctx.warn("Scope must be **global**, **guild**, or **group**.")
-        if selected == "guild":
-            if ctx.guild is None:
-                return await ctx.warn("Guild leaderboard can only be used in a server.")
-            rows = await fetch_ttt_leaderboard(self.bot.db, guild_id=ctx.guild.id)
-            title = "Most Tic-Tac-Toe wins"
-        elif selected == "group":
-            if not is_group_chat(ctx.channel):
-                return await ctx.warn("Group leaderboard can only be used in a group chat.")
-            rows = await fetch_ttt_leaderboard(self.bot.db, channel_id=ctx.channel.id)
-            title = "Most Tic-Tac-Toe wins"
-        else:
-            rows = await fetch_ttt_leaderboard(self.bot.db)
-            title = "Most Tic-Tac-Toe wins"
+        if selected == "guild" and ctx.guild is None:
+            return await ctx.warn("Guild leaderboard can only be used in a server.")
+        if selected == "group" and scope_ids(ctx.channel, ctx.guild)[1] is None:
+            return await ctx.warn("Group leaderboard can only be used in a group chat.")
+        rows = await leaderboard_rows(
+            self.bot.db,
+            ctx.channel,
+            ctx.guild,
+            scope=selected,
+        )
+        title = "Most Tic-Tac-Toe wins"
         pages = await build_leaderboard_pages(
             self.bot,
             rows=rows,
