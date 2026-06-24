@@ -209,7 +209,7 @@ async def fetch_ttt_leaderboard(
 def default_leaderboard_scope(channel: discord.abc.MessageableChannel | None) -> str:
     if isinstance(channel, discord.GroupChannel):
         return "group"
-    if isinstance(channel, discord.GuildChannel):
+    if isinstance(channel, discord.abc.GuildChannel):
         return "guild"
     return "global"
 
