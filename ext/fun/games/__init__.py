@@ -39,6 +39,16 @@ def _bot_thinking_line(*, emoji: str) -> str:
     return f"{emoji} **{BOT_NAME}** is thinking..."
 
 
+async def _warn_interaction(ctx: "Context", interaction: discord.Interaction, message: str) -> None:
+    emoji = await ctx._get_emoji("warn")
+    color_value = await ctx._get_color("warn")
+    embed = discord.Embed(
+        color=color_value,
+        description=f"{emoji} {interaction.user.mention}: {message}",
+    )
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
 async def _resolve_user(
     ctx: "Context",
     user: discord.User | discord.Member | int,
@@ -101,12 +111,14 @@ class RPSView(discord.ui.View):
     def __init__(
         self,
         *,
+        ctx: "Context",
         player1: discord.User,
         player2: discord.User,
         rounds: int,
         bot: Bleed,
     ) -> None:
         super().__init__(timeout=INACTIVITY_SECONDS)
+        self.ctx = ctx
         self.player1 = player1
         self.player2 = player2
         self.rounds = max(1, min(3, rounds))
@@ -163,10 +175,10 @@ class RPSView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id not in (self.player1.id, self.player2.id):
-            await interaction.response.send_message("You are not in this game.", ephemeral=True)
+            await _warn_interaction(self.ctx, interaction, "You are not in this game.")
             return False
         if interaction.user.id in self.choices:
-            await interaction.response.send_message("You already picked.", ephemeral=True)
+            await _warn_interaction(self.ctx, interaction, "You already picked.")
             return False
         return True
 
@@ -379,22 +391,22 @@ class TicTacToeView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if self.finished:
-            await interaction.response.send_message("This game is over.", ephemeral=True)
+            await _warn_interaction(self.ctx, interaction, "This game is over.")
             return False
         if self.vs_me:
             if self.turn == "X" and interaction.user.id != self.player_x.id:
-                await interaction.response.send_message("It's not your turn.", ephemeral=True)
+                await _warn_interaction(self.ctx, interaction, "It's not your turn.")
                 return False
         else:
             current = self._current_player()
             if current is None or interaction.user.id != current.id:
-                await interaction.response.send_message("It's not your turn.", ephemeral=True)
+                await _warn_interaction(self.ctx, interaction, "It's not your turn.")
                 return False
         return True
 
     async def handle_click(self, interaction: discord.Interaction, x: int, y: int) -> None:
         if self.board[y][x]:
-            await interaction.response.send_message("That cell is taken.", ephemeral=True)
+            await _warn_interaction(self.ctx, interaction, "That cell is taken.")
             return
 
         if not self._started:
@@ -625,21 +637,21 @@ class Connect4View(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if self.finished:
-            await interaction.response.send_message("This game is over.", ephemeral=True)
+            await _warn_interaction(self.ctx, interaction, "This game is over.")
             return False
         if self.vs_me:
             if interaction.user.id != self.player1.id:
-                await interaction.response.send_message("You are not in this game.", ephemeral=True)
+                await _warn_interaction(self.ctx, interaction, "You are not in this game.")
                 return False
             if self.turn != 1:
-                await interaction.response.send_message(f"Wait for **{BOT_NAME}**.", ephemeral=True)
+                await _warn_interaction(self.ctx, interaction, f"Wait for **{BOT_NAME}**.")
                 return False
             return True
         if interaction.user.id not in (self.player1.id, self.player2.id):
-            await interaction.response.send_message("You are not in this game.", ephemeral=True)
+            await _warn_interaction(self.ctx, interaction, "You are not in this game.")
             return False
         if interaction.user.id != self._current_player().id:
-            await interaction.response.send_message("It's not your turn.", ephemeral=True)
+            await _warn_interaction(self.ctx, interaction, "It's not your turn.")
             return False
         return True
 
@@ -728,7 +740,7 @@ class Connect4View(discord.ui.View):
     async def play_column(self, interaction: discord.Interaction, column: int) -> None:
         row = self._drop(column, self.turn)
         if row is None:
-            await interaction.response.send_message("That column is full.", ephemeral=True)
+            await _warn_interaction(self.ctx, interaction, "That column is full.")
             return
 
         self._last_move = (row, column)
@@ -768,7 +780,7 @@ async def start_rps(
         if err := await _validate_opponent(ctx, opponent):
             return await ctx.warn(err)
 
-    view = RPSView(player1=ctx.author, player2=opponent, rounds=rounds, bot=ctx.bot)
+    view = RPSView(ctx=ctx, player1=ctx.author, player2=opponent, rounds=rounds, bot=ctx.bot)
     msg = await ctx.send(embed=view._embed(), view=view)
     view.message = msg
 
