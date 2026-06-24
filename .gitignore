@@ -9,5 +9,8 @@ venv/
 .env.*
 !.env.example
 myenv/
-inspiration for bot/*
-.gitignore
+core/storage/*.redis
+core/storage/*.redis.tmp
+core/storage/postgres.db
+core/storage/postgres.db-wal
+core/storage/postgres.db-shm

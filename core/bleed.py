@@ -17,12 +17,13 @@ from discord.ext.commands import HybridCommand, HybridGroup
 from .discord.ctx import Cache, Context
 from .discord.help import BleedHelp
 from .managers.database.client import Database
-from .managers.redis.client import BleedCache
+from .managers.redis import BleedCache, FileBleedCache, RedisClient
 from .managers.watch import Watcher
 from .managers.guard import Guard
 from .tools.embed import PreparedScript, Script, parse
 from .tools.snipe import Snipe
 from .managers.values import token, bot, color, database, redis, emojis, music_enabled
+from .managers.storage_paths import CACHE_REDIS_FILE, ensure_storage_files
 
 log = logging.getLogger("bleed")
 
@@ -153,7 +154,7 @@ class Bleed(commands.AutoShardedBot):
     def __init__(self) -> None:
         self.color: int = color.base
         self.db = Database()
-        self.redis: Optional[BleedCache] = None
+        self.redis: RedisClient | None = None
         self._bleed_help = BleedHelp()
         self.object_cache = Cache(self)
         self.guard = Guard()
@@ -299,6 +300,8 @@ class Bleed(commands.AutoShardedBot):
         started = time.perf_counter()
         log.info("setup process started")
 
+        ensure_storage_files()
+
         log.info("connecting database")
         await self.db.connect()
         log.info("database connected (%.1fs)", time.perf_counter() - started)
@@ -309,14 +312,15 @@ class Bleed(commands.AutoShardedBot):
         log.info("schema migration finished (%.1fs)", time.perf_counter() - migration_started)
 
         if redis.enabled:
-            log.info("connecting redis")
+            log.info("connecting redis at %s", redis.url)
             try:
                 self.redis = await BleedCache.from_url(redis.url)
                 log.info("redis connected")
             except Exception as e:
                 log.warning(f"redis failed: {e}")
         else:
-            log.info("redis disabled")
+            log.info("redis disabled, using file store at %s", CACHE_REDIS_FILE)
+            self.redis = await FileBleedCache.open(CACHE_REDIS_FILE)
 
         self.add_check(self._global_check)
         self.tree.on_error = self._slash_error
@@ -338,6 +342,10 @@ class Bleed(commands.AutoShardedBot):
 
     async def _run_schema_migration(self) -> None:
         """Execute schema.sql to ensure all tables exist"""
+        if not database.enabled:
+            log.info("schema applied to postgres.db during database connect")
+            return
+
         schema_path = Path(__file__).parent / "managers" / "database" / "models" / "schema.sql"
         if not schema_path.exists():
             log.warning(f"schema.sql not found at {schema_path}")

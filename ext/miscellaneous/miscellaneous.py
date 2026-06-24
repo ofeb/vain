@@ -16,6 +16,7 @@ from core.discord.package import Package
 
 from .events import MiscellaneousEvents
 from core.managers.values import color
+from ..information.lookup import GOOGLE_FOOTER_ICON
 
 if TYPE_CHECKING:
     from core.bleed import Bleed
@@ -141,6 +142,9 @@ class Miscellaneous(MiscellaneousEvents, Package):
         aliases=["tr"],
         usage="(language) (text)",
         example="es hello world",
+        guilds=True,
+        dms=True,
+        groupchats=True,
     )
     @describe(
         language="Target language code (e.g., en, es, fr, de, ja, ko, zh)",
@@ -222,22 +226,19 @@ class Miscellaneous(MiscellaneousEvents, Package):
 
             translated = "".join(part[0] for part in data[0] if part[0])
             detected_lang = data[2] if len(data) > 2 else "auto"
+            detected_name = lang_codes.get(detected_lang, detected_lang.title())
+            target_name = lang_codes[lang_lower]
 
             embed = discord.Embed(
-                title="Translate",
+                title=f"Translated from {detected_name} to {target_name}",
+                description=f"```{translated[:1000]}```",
                 color=color.base,
             )
-            embed.add_field(
-                name=f"Detected ({detected_lang})",
-                value=f"```{text[:1000]}```",
-                inline=False,
+            embed.set_author(
+                name=ctx.author.display_name,
+                icon_url=ctx.author.display_avatar.url,
             )
-            embed.add_field(
-                name=f"{lang_codes[lang_lower]} ({lang_lower})",
-                value=f"```{translated[:1000]}```",
-                inline=False,
-            )
-            embed.set_footer(text=f"Requested by {ctx.author.display_name}")
+            embed.set_footer(text="Google Translate", icon_url=GOOGLE_FOOTER_ICON)
             await ctx.send(embed=embed)
 
         except Exception as e:

@@ -8,6 +8,7 @@ from .app_emojis import prime_emoji_environment
 
 repo_root: Final[Path] = Path(__file__).resolve().parents[2]
 root: Final[Path] = repo_root
+storage: Final[Path] = root / "core" / "storage"
 
 prime_emoji_environment()
 
@@ -94,7 +95,7 @@ class redis:
 
 class api:
     google_perspective: str = ""
-    weather: str = ""
+    openweathermap: str = "caa6d1f353a1f24663e101a62cbdc148"
     fnbr: str = ""
     cloudconvert: str = ""
     clever: str = ""

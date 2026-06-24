@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Optional
 import discord
 
 from core.managers.values import color
+from .connect4_board import render_connect4_board
 
 if TYPE_CHECKING:
     from core.bleed import Bleed
@@ -53,12 +54,18 @@ async def _validate_opponent(ctx: "Context", opponent: discord.User) -> str | No
     if opponent.bot and opponent.id != ctx.bot.user.id:
         return "You can't play against a bot."
 
+    # slash member pickers already scope to the current conversation
+    if ctx.interaction is not None and ctx.guild is None:
+        return None
+
     channel = ctx.channel
     if isinstance(channel, discord.DMChannel):
         if channel.recipient is None or opponent.id != channel.recipient.id:
             return "That member isn't in this conversation."
     elif isinstance(channel, discord.GroupChannel):
-        if opponent.id not in {user.id for user in channel.recipients}:
+        allowed = {user.id for user in channel.recipients}
+        allowed.add(ctx.author.id)
+        if opponent.id not in allowed:
             return "That member isn't in this group."
     elif ctx.guild is not None:
         if ctx.guild.get_member(opponent.id) is None:
@@ -213,6 +220,7 @@ class RPSView(discord.ui.View):
         needed = (self.rounds // 2) + 1
         if self.scores[self.player1.id] >= needed or self.scores[self.player2.id] >= needed or self.current_round >= self.rounds:
             self.finished = True
+            self.stop()
             for child in self.children:
                 child.disabled = True
             embed = self._embed()
@@ -230,6 +238,9 @@ class RPSView(discord.ui.View):
             await self.message.edit(embed=embed, view=None if self.finished else self)
 
     async def on_timeout(self) -> None:
+        if self.finished:
+            return
+        self.stop()
         for child in self.children:
             child.disabled = True
         p2 = f"**{self._p2_display()}**" if self._vs_bot else self.player2.mention
@@ -394,6 +405,8 @@ class TicTacToeView(discord.ui.View):
         winner = self._check_winner()
         if winner:
             self.finished = True
+            self._cancel_start_timer()
+            self.stop()
             if winner == "tie":
                 status = "It's a **tie**!"
             elif winner == "X":
@@ -418,6 +431,7 @@ class TicTacToeView(discord.ui.View):
             winner = self._check_winner()
             if winner:
                 self.finished = True
+                self.stop()
                 if winner == "tie":
                     status = "It's a **tie**!"
                 elif winner == "O":
@@ -481,7 +495,10 @@ class TicTacToeView(discord.ui.View):
         return best
 
     async def on_timeout(self) -> None:
+        if self.finished:
+            return
         self._cancel_start_timer()
+        self.stop()
         for child in self.children:
             child.disabled = True
         await _end_game(
@@ -532,42 +549,55 @@ class Connect4View(discord.ui.View):
         self.turn = 1
         self.message: discord.Message | None = None
         self.finished = False
+        self._last_move: tuple[int, int] | None = None
         for col in range(self.COLS):
             self.add_item(Connect4Button(col))
-
-    def _piece(self, cell: int) -> str:
-        if cell == 1:
-            return "🔴"
-        if cell == 2:
-            return "🟡"
-        return "⬛"
-
-    def _board_text(self) -> str:
-        lines = []
-        for row in self.board:
-            lines.append("".join(self._piece(c) for c in row))
-        lines.append("".join("⬜" for _ in range(self.COLS)))
-        return "\n".join(lines)
 
     def _current_player(self) -> discord.User:
         return self.player1 if self.turn == 1 else self.player2
 
-    def _content(self, *, status: str = "") -> str:
+    def _embed(self, *, status: str = "") -> discord.Embed:
         p2_name = BOT_OPPONENT if self.vs_me else self.player2.display_name
-        lines = [
-            f"**{self.player1.display_name}** vs **{p2_name}**",
-            "",
-            self._board_text(),
-        ]
+        embed = discord.Embed(
+            title="Connect Four",
+            description=f"**{self.player1.display_name}** vs **{p2_name}**",
+            color=color.base,
+        )
         if status:
-            lines.extend(["", status])
+            embed.add_field(name="Result", value=status, inline=False)
         elif not self.finished:
             if self.vs_me and self.turn == 2:
-                lines.extend(["", _bot_thinking_line(emoji="🟡")])
+                embed.add_field(name="Turn", value=_bot_thinking_line(emoji="🟡"), inline=False)
             else:
                 marker = "🔴" if self.turn == 1 else "🟡"
-                lines.extend(["", f"{marker} {self._current_player().mention}, your turn."])
-        return "\n".join(lines)
+                embed.add_field(
+                    name="Turn",
+                    value=f"{marker} {self._current_player().mention}, pick a column.",
+                    inline=False,
+                )
+        embed.set_image(url="attachment://connect4.jpg")
+        return embed
+
+    def _attachment(self) -> discord.File:
+        buf = render_connect4_board(self.board, last_move=self._last_move)
+        return discord.File(buf, filename="connect4.jpg")
+
+    async def _edit_board(
+        self,
+        interaction: discord.Interaction | None,
+        *,
+        status: str = "",
+    ) -> None:
+        embed = self._embed(status=status)
+        file = self._attachment()
+        view = None if self.finished else self
+        if interaction is not None and interaction.response.is_done():
+            if self.message:
+                await self.message.edit(embed=embed, attachments=[file], view=view)
+        elif interaction is not None:
+            await interaction.response.edit_message(embed=embed, attachments=[file], view=view)
+        elif self.message:
+            await self.message.edit(embed=embed, attachments=[file], view=view)
 
     def _drop(self, column: int, player: int) -> int | None:
         for row in range(self.ROWS - 1, -1, -1):
@@ -656,51 +686,44 @@ class Connect4View(discord.ui.View):
     async def _after_move(self, interaction: discord.Interaction, *, status: str = "") -> None:
         if status:
             self.finished = True
+            self.stop()
             for child in self.children:
                 child.disabled = True
-            await interaction.response.edit_message(content=self._content(status=status), view=self)
+            await self._edit_board(interaction, status=status)
             return
         if self._board_full():
             self.finished = True
+            self.stop()
             for child in self.children:
                 child.disabled = True
-            await interaction.response.edit_message(
-                content=self._content(status="It's a **tie**!"),
-                view=self,
-            )
+            await self._edit_board(interaction, status="It's a **tie**!")
             return
         self.turn = 2 if self.turn == 1 else 1
         if self.vs_me and self.turn == 2 and not self.finished:
-            await interaction.response.edit_message(content=self._content(), view=self)
+            await self._edit_board(interaction)
             col = self._me_column()
             row = self._drop(col, 2)
             if row is None:
                 return
+            self._last_move = (row, col)
             if self._win_at(row, col, 2):
                 self.finished = True
+                self.stop()
                 for child in self.children:
                     child.disabled = True
-                if self.message:
-                    await self.message.edit(
-                        content=self._content(status=_bot_win_status()),
-                        view=self,
-                    )
+                await self._edit_board(None, status=_bot_win_status())
                 return
             if self._board_full():
                 self.finished = True
+                self.stop()
                 for child in self.children:
                     child.disabled = True
-                if self.message:
-                    await self.message.edit(
-                        content=self._content(status="It's a **tie**!"),
-                        view=self,
-                    )
+                await self._edit_board(None, status="It's a **tie**!")
                 return
             self.turn = 1
-            if self.message:
-                await self.message.edit(content=self._content(), view=self)
+            await self._edit_board(None)
             return
-        await interaction.response.edit_message(content=self._content(), view=self)
+        await self._edit_board(interaction)
 
     async def play_column(self, interaction: discord.Interaction, column: int) -> None:
         row = self._drop(column, self.turn)
@@ -708,6 +731,7 @@ class Connect4View(discord.ui.View):
             await interaction.response.send_message("That column is full.", ephemeral=True)
             return
 
+        self._last_move = (row, column)
         player = self._current_player()
         if self._check_win(row, column, self.turn):
             winner = _bot_win_status() if self.vs_me and self.turn == 2 else f"{player.mention} wins!"
@@ -717,12 +741,15 @@ class Connect4View(discord.ui.View):
         await self._after_move(interaction)
 
     async def on_timeout(self) -> None:
+        if self.finished:
+            return
+        self.stop()
         for child in self.children:
             child.disabled = True
+        p2 = BOT_OPPONENT if self.vs_me else self.player2.display_name
         await _end_game(
             self.message,
-            f"**{self.player1.display_name}** vs **{BOT_OPPONENT if self.vs_me else self.player2.display_name}**\n\n"
-            f"{self._board_text()}\n\nGame ended due to inactivity.",
+            f"**{self.player1.display_name}** vs **{p2}**\n\nGame ended due to inactivity.",
         )
 
 
@@ -792,5 +819,5 @@ async def start_connect4(
         bot=ctx.bot,
         vs_me=vs_me,
     )
-    msg = await ctx.send(content=view._content(), view=view)
+    msg = await ctx.send(embed=view._embed(), file=view._attachment(), view=view)
     view.message = msg

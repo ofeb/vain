@@ -3,15 +3,29 @@ from __future__ import annotations
 import platform
 from typing import TYPE_CHECKING
 
+import aiohttp
 import discord
+from discord.ext import commands
 
 from core.discord.ctx import Context
 from core.discord.hybrid import describe, hybrid
 from core.discord.package import Package
-from core.managers.values import color
+from core.discord.views.paginate import PaginateView
+from core.managers.values import api, color
+
+from .lookup import (
+    build_define_embed,
+    build_urban_embed,
+    build_weather_embed,
+    fetch_dictionary,
+    fetch_urban_dictionary,
+    fetch_weather,
+)
 
 if TYPE_CHECKING:
     from core.bleed import Bleed
+
+_CONTEXTS = dict(guilds=True, dms=True, groupchats=True)
 
 
 class InformationCommands(Package):
@@ -195,3 +209,98 @@ class InformationCommands(Package):
             color=color.base,
         )
         await ctx.send(embed=embed)
+
+    @hybrid(
+        name="weather",
+        description="Get weather information for a location",
+        example=",weather Cork",
+        **_CONTEXTS,
+    )
+    @describe(location="City or location name")
+    async def weather(self, ctx: Context, *, location: str) -> None:
+        if not api.openweathermap:
+            return await ctx.warn("OpenWeatherMap API key is not configured.")
+        try:
+            async with aiohttp.ClientSession() as session:
+                data = await fetch_weather(session, location)
+            embed = build_weather_embed(data, ctx.author)
+            await ctx.send(embed=embed)
+        except ValueError as exc:
+            await ctx.warn(str(exc))
+        except aiohttp.ClientError:
+            await ctx.fail("Could not reach the weather service.")
+
+    @hybrid(
+        name="define",
+        description="Get the definition of a word",
+        example=",define vet",
+        **_CONTEXTS,
+    )
+    @describe(word="Word to define")
+    async def define(self, ctx: Context, *, word: str) -> None:
+        try:
+            async with aiohttp.ClientSession() as session:
+                entry = await fetch_dictionary(session, word)
+            await ctx.send(embed=build_define_embed(entry, ctx.author))
+        except ValueError as exc:
+            await ctx.warn(str(exc))
+        except aiohttp.ClientError:
+            await ctx.fail("Could not reach the dictionary service.")
+
+    @hybrid(
+        name="urbandictionary",
+        description="Get the definition of a word or slang from Urban Dictionary",
+        aliases=["ud", "urban"],
+        example=",urbandictionary chav",
+        **_CONTEXTS,
+    )
+    @describe(word="Word or slang to look up")
+    async def urbandictionary(self, ctx: Context, *, word: str) -> None:
+        try:
+            async with aiohttp.ClientSession() as session:
+                results = await fetch_urban_dictionary(session, word)
+        except ValueError as exc:
+            return await ctx.warn(str(exc))
+        except aiohttp.ClientError:
+            return await ctx.fail("Could not reach Urban Dictionary.")
+
+        total = min(len(results), 10)
+        pages = [
+            build_urban_embed(entry, author=ctx.author, page=index + 1, total=total)
+            for index, entry in enumerate(results[:10])
+        ]
+        view = PaginateView(ctx, pages)
+        await view.start()
+
+    @hybrid(
+        name="seen",
+        description="See when a member was last seen in the server",
+        example=",seen @member",
+        guild_only=True,
+    )
+    @describe(member="Member to check")
+    @commands.cooldown(1, 2, commands.BucketType.user)
+    async def seen(self, ctx: Context, member: discord.Member | None = None) -> None:
+        member = member or ctx.author
+        cache = getattr(self.bot, "member_last_seen", {})
+        last = cache.get((ctx.guild.id, member.id))
+        now = discord.utils.utcnow()
+
+        if member.status is not discord.Status.offline:
+            label = "now"
+        elif last is not None and (now - last).total_seconds() < 60:
+            label = "now"
+        elif last is not None:
+            label = discord.utils.format_dt(last, style="R")
+        else:
+            label = "a while ago"
+
+        embed = discord.Embed(
+            description=f"**{member.display_name}** was last seen {label}",
+        )
+        await ctx.send(embed=embed)
+
+    @seen.error
+    async def seen_error(self, ctx: Context, error: commands.CommandError) -> None:
+        if isinstance(error, commands.CommandOnCooldown):
+            await ctx.warn(f"Slow down — try again in **{error.retry_after:.1f}s**.")

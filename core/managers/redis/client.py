@@ -126,6 +126,17 @@ class BleedCache(Redis):
     async def getstr(self, key) -> str:
         return (await self.get(key)).decode("utf-8")
 
+    async def random(self, key: str) -> str | None:
+        result = await self.srandmember(key)
+        if isinstance(result, bytes):
+            return result.decode("utf-8")
+        if isinstance(result, list):
+            if not result:
+                return None
+            item = result[0]
+            return item.decode("utf-8") if isinstance(item, bytes) else item
+        return result
+
     def get_semaphore(self, ident: str, count: int) -> Semaphore:
         """get or create semaphore for resource"""
         key = f"sem:{xxh3_64_hexdigest(ident)}"

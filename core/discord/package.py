@@ -9,7 +9,7 @@ from .mixin import Mixin
 if TYPE_CHECKING:
     from core.bleed import Bleed
     from core.managers.database.client import Database
-    from core.managers.redis.client import BleedCache
+    from core.managers.redis import RedisClient
     from core.managers.guard import Guard
 
 
@@ -28,7 +28,7 @@ class Package(Mixin):
         return self.bot.db
 
     @property
-    def redis(self) -> BleedCache | None:
+    def redis(self) -> RedisClient | None:
         return self.bot.redis
 
     @property

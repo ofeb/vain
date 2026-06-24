@@ -20,6 +20,14 @@ class InformationEvents(Package):
         super().__init__(bot)
         self.locks = defaultdict(Lock)
         self.joined_cache = {}
+        if not hasattr(bot, "member_last_seen"):
+            bot.member_last_seen = {}
+
+    @Package.listener("on_message")
+    async def on_member_seen(self, message: discord.Message) -> None:
+        if message.author.bot or message.guild is None:
+            return
+        self.bot.member_last_seen[(message.guild.id, message.author.id)] = message.created_at
 
     async def _fetch_config(self, guild_id: int):
         try:
