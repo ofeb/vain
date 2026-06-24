@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import asyncio
 import contextlib
+import copy
 import datetime
 import logging
 import time
@@ -409,6 +410,12 @@ class Bleed(commands.AutoShardedBot):
             log.warning(f"guild sync failed for {guild.name}: {e}")
 
     async def get_context(self, origin, /, *, cls=Context) -> Context:
+        if isinstance(origin, discord.Message):
+            prefixes = await self._get_prefix(self, origin)
+            rewritten = rewrite_linked_prefix(origin.content, prefixes)
+            if rewritten is not None:
+                origin = copy.copy(origin)
+                origin._update({"content": rewritten})
         return await super().get_context(origin, cls=cls)
 
     async def _global_check(self, ctx: Context) -> bool:
@@ -585,10 +592,6 @@ class Bleed(commands.AutoShardedBot):
         self._seen_message_ids.add(msg.id)
         if len(self._seen_message_ids) > 5000:
             self._seen_message_ids.clear()
-        prefixes = await self._get_prefix(self, msg)
-        rewritten = rewrite_linked_prefix(msg.content, prefixes)
-        if rewritten is not None:
-            msg.content = rewritten
         ctx = await self.get_context(msg)
         if msg.guild:
             self.dispatch("context", ctx)
@@ -599,10 +602,6 @@ class Bleed(commands.AutoShardedBot):
     async def on_message_edit(self, before: discord.Message, after: discord.Message) -> None:
         if before.content == after.content or after.author.bot or not self.is_ready():
             return
-        prefixes = await self._get_prefix(self, after)
-        rewritten = rewrite_linked_prefix(after.content, prefixes)
-        if rewritten is not None:
-            after.content = rewritten
         ctx = await self.get_context(after)
         await self.invoke(ctx)
 
