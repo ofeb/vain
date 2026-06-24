@@ -8,6 +8,46 @@ from core.managers.permissions import has_permissions
 from .views import embed_script_from_message, sync_stored_pagination
 
 
+async def _ensure_paginator_row(package: Package, ctx, message: Message) -> tuple[list[str], int]:
+    """return stored pages for a message, registering it from the live message when needed."""
+    row = await package.db.fetchrow(
+        """
+        SELECT pages, current_page
+        FROM pagination
+        WHERE guild_id = $1 AND channel_id = $2 AND message_id = $3
+        """,
+        ctx.guild.id,
+        message.channel.id,
+        message.id,
+    )
+    if row:
+        return list(row["pages"] or []), int(row["current_page"] or 0)
+
+    if message.author.id != package.bot.user.id:
+        raise CommandError("that message isnt a paginator")
+
+    try:
+        code = embed_script_from_message(message)
+    except ValueError:
+        raise CommandError("cant edit that message")
+
+    pages = [code]
+    await package.db.execute(
+        """
+        INSERT INTO pagination (guild_id, message_id, channel_id, creator_id, pages)
+        VALUES($1, $2, $3, $4, $5)
+        ON CONFLICT (guild_id, channel_id, message_id) DO UPDATE
+        SET pages = EXCLUDED.pages, creator_id = EXCLUDED.creator_id, current_page = 0
+        """,
+        ctx.guild.id,
+        message.id,
+        message.channel.id,
+        ctx.author.id,
+        pages,
+    )
+    return pages, 0
+
+
 class PaginationCommands(Package):
     """embed pagination commands"""
 
@@ -25,21 +65,8 @@ class PaginationCommands(Package):
     @has_permissions(manage_messages=True)
     async def pagination_add(self, ctx, message: Message, *, embed_code: EmbedConverter):
         """add new page"""
-        row = await self.db.fetchrow(
-            """
-            SELECT pages, current_page
-            FROM pagination
-            WHERE guild_id = $1 AND channel_id = $2 AND message_id = $3
-            """,
-            ctx.guild.id,
-            message.channel.id,
-            message.id,
-        )
-        if not row:
-            raise CommandError("that message isnt a paginator")
-        pages = list(row["pages"] or [])
-        pages.append(embed_code)
-        current_page = int(row["current_page"] or 0)
+        pages, current_page = await _ensure_paginator_row(self, ctx, message)
+        pages.append(str(embed_code))
         await self.db.execute(
             """
             UPDATE pagination SET pages = $1
@@ -176,6 +203,8 @@ class PaginationCommands(Package):
     @has_permissions(manage_messages=True)
     async def pagination_set(self, ctx, message: Message):
         """convert embed to paginator"""
+        if message.author.id != self.bot.user.id:
+            raise CommandError("that message must be sent by me")
         try:
             code = embed_script_from_message(message)
         except ValueError:

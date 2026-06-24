@@ -7,7 +7,7 @@ import discord
 from discord import ui
 
 from core.managers.values import emojis
-from core.tools.embed import Script, to_code
+from core.tools.embed import Script, maybe_wrap_embed_script, to_code
 
 if TYPE_CHECKING:
     from core.bleed import Bleed
@@ -228,6 +228,29 @@ async def register_stored_paginations(bot: Bleed) -> None:
 
 
 def embed_script_from_message(message: discord.Message) -> str:
-    if not message.embeds:
-        raise ValueError("message has no embed")
-    return to_code(message.embeds[0], message.content)
+    if message.embeds:
+        return to_code(message.embeds[0], message.content)
+
+    content = message.content or ""
+    if not content.strip() and not message.components:
+        raise ValueError("message has no content or embed")
+
+    if content.strip():
+        wrapped = maybe_wrap_embed_script(content)
+        if wrapped.startswith("{") and not wrapped.lower().startswith("{embed}"):
+            code = f"{{embed}}$v{wrapped}"
+        else:
+            code = wrapped
+    else:
+        code = "{embed}"
+
+    for component in message.components:
+        children = (
+            [component]
+            if isinstance(component, discord.Button)
+            else getattr(component, "children", [])
+        )
+        for button in children:
+            if isinstance(button, discord.Button) and button.url:
+                code += f"$v{{button: {button.label or ''} && {button.url}}}"
+    return code
