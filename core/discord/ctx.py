@@ -192,6 +192,19 @@ class Context(commands.Context):
             **kw,
         )
 
+    async def cooldown(self, message: str, **kw):
+        """send a cooldown reply with bleed styling"""
+        emoji = await self._get_emoji("cooldown")
+        color_value = await self._get_color("cooldown")
+        return await self._send_embed_response(
+            self._message_embed(
+                self._strip_self_mention(message),
+                emoji=emoji,
+                color_value=color_value,
+            ),
+            **kw,
+        )
+
     async def warning(self, message: str, **kw):
         """legacy alias for warn"""
         return await self.warn(message, **kw)

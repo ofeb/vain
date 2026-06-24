@@ -14,10 +14,14 @@ from core.discord.views.paginate import PaginateView
 from core.managers.values import color
 
 from .lookup import (
+    build_cashapp_embed,
     build_define_embed,
+    build_github_embed,
     build_urban_embed,
     build_weather_embed,
+    fetch_cashapp_profile,
     fetch_dictionary,
+    fetch_github_profile,
     fetch_urban_dictionary,
     fetch_weather,
 )
@@ -233,6 +237,49 @@ class InformationCommands(Package):
             await ctx.fail("Could not reach the weather service.")
 
     @hybrid(
+        name="cashapp",
+        description="Retrieve simple CashApp profile information",
+        example=",cashapp $jonathan",
+        **_CONTEXTS,
+    )
+    @describe(username="Cash App cashtag")
+    async def cashapp(self, ctx: Context, *, username: str) -> None:
+        try:
+            async with aiohttp.ClientSession() as session:
+                profile = await fetch_cashapp_profile(session, username)
+            await ctx.send(embed=build_cashapp_embed(profile, ctx.author))
+        except ValueError as exc:
+            await ctx.warn(str(exc))
+        except aiohttp.ClientError:
+            await ctx.fail("Could not reach Cash App.")
+
+    @hybrid(
+        name="github",
+        description="Gets profile information on the given Github user",
+        aliases=["git", "gh"],
+        example=",github jonathan",
+        **_CONTEXTS,
+    )
+    @describe(username="GitHub username")
+    @commands.cooldown(1, 4.5, commands.BucketType.guild)
+    async def github(self, ctx: Context, *, username: str) -> None:
+        try:
+            async with aiohttp.ClientSession() as session:
+                profile = await fetch_github_profile(session, username)
+            await ctx.send(embed=build_github_embed(profile, ctx.author))
+        except ValueError as exc:
+            await ctx.warn(str(exc))
+        except aiohttp.ClientError:
+            await ctx.fail("Could not reach GitHub.")
+
+    @github.error
+    async def github_error(self, ctx: Context, error: commands.CommandError) -> None:
+        if isinstance(error, commands.CommandOnCooldown):
+            await ctx.cooldown(
+                f"Please wait **{error.retry_after:.2f} seconds** before using this command again"
+            )
+
+    @hybrid(
         name="define",
         description="Get the definition of a word",
         example=",define vet",
@@ -305,4 +352,6 @@ class InformationCommands(Package):
     @seen.error
     async def seen_error(self, ctx: Context, error: commands.CommandError) -> None:
         if isinstance(error, commands.CommandOnCooldown):
-            await ctx.warn(f"Slow down — try again in **{error.retry_after:.1f}s**.")
+            await ctx.cooldown(
+                f"Please wait **{error.retry_after:.2f} seconds** before using this command again"
+            )

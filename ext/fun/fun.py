@@ -13,12 +13,22 @@ from discord.ext import commands
 from core.discord.package import Package
 from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe, group
+from core.discord.views.paginate import PaginateView
 from core.managers.values import color, emojis
 
 from .games import start_connect4, start_rps, start_ttt
+from .search import build_ddg_search_pages, fetch_ddg_results
+from .ttt_stats import (
+    build_leaderboard_pages,
+    build_stats_embed,
+    fetch_ttt_leaderboard,
+    fetch_ttt_stats,
+)
 
 if TYPE_CHECKING:
     from core.bleed import Bleed
+
+_CONTEXTS = dict(guilds=True, dms=True, groupchats=True)
 
 
 class Fun(Package):
@@ -238,37 +248,47 @@ class Fun(Package):
         )
         await ctx.send(embed=embed)
 
+    async def _run_ddg_search(self, ctx: Context, search: str) -> None:
+        try:
+            async with aiohttp.ClientSession() as session:
+                results = await fetch_ddg_results(session, search)
+            if not results:
+                return await ctx.warn("No results found for that search.")
+            pages = build_ddg_search_pages(results, ctx.author)
+            view = PaginateView(ctx, pages)
+            await view.start()
+        except aiohttp.ClientError:
+            await ctx.fail("Could not reach DuckDuckGo.")
+
     @hybrid(
         name="google",
         description="Search the largest search engine on the internet",
         aliases=["g"],
+        example=",google how to get a girlfriend",
+        **_CONTEXTS,
     )
     @describe(search="Search query")
+    @commands.cooldown(1, 5, commands.BucketType.user)
     async def google(self, ctx: Context, *, search: str) -> None:
-        query = urllib.parse.quote(search)
-        embed = discord.Embed(
-            title="Google Search",
-            description=f"[Search for **{search}** on Google](https://www.google.com/search?q={query})",
-            color=color.base,
-        )
-        embed.set_footer(text="Google", icon_url="https://www.google.com/favicon.ico")
-        await ctx.send(embed=embed)
+        await self._run_ddg_search(ctx, search)
+
+    @google.error
+    async def google_error(self, ctx: Context, error: commands.CommandError) -> None:
+        if isinstance(error, commands.CommandOnCooldown):
+            await ctx.cooldown(
+                f"Please wait **{error.retry_after:.2f} seconds** before using this command again"
+            )
 
     @hybrid(
         name="duckduckgo",
         description="Search the DuckDuckGo search engine",
         aliases=["ddg"],
+        example=",duckduckgo how to get a girlfriend",
+        **_CONTEXTS,
     )
     @describe(search="Search query")
     async def duckduckgo(self, ctx: Context, *, search: str) -> None:
-        query = urllib.parse.quote(search)
-        embed = discord.Embed(
-            title="DuckDuckGo Search",
-            description=f"[Search for **{search}** on DuckDuckGo](https://duckduckgo.com/?q={query})",
-            color=color.base,
-        )
-        embed.set_footer(text="DuckDuckGo", icon_url="https://duckduckgo.com/favicon.ico")
-        await ctx.send(embed=embed)
+        await self._run_ddg_search(ctx, search)
 
     @hybrid(
         name="duckduckgoimage",
@@ -429,15 +449,67 @@ class Fun(Package):
 
     @hybrid(
         name="tictactoe",
-        description="Play tic-tac-toe against another member or the bot",
+        description="Play tic-tac-toe with somebody!",
         aliases=["ttt", "tic-tac-toe"],
-        guilds=True,
-        dms=True,
-        groupchats=True,
+        group=True,
+        invoke_without_command=True,
+        example=",tictactoe jonathan",
+        **_CONTEXTS,
     )
     @describe(member="Opponent (leave empty to play the bot)")
-    async def tictactoe(self, ctx, member: Optional[discord.User] = None) -> None:
+    async def tictactoe(self, ctx: Context, member: Optional[discord.User] = None) -> None:
         await start_ttt(ctx, opponent=member, vs_me=member is None)
+
+    @tictactoe.command(
+        name="statistics",
+        aliases=["stats"],
+        description="View tic-tac-toe statistics of a member",
+        example=",tictactoe statistics jonathan",
+    )
+    @describe(member="Member to view (defaults to you)")
+    async def tictactoe_statistics(
+        self,
+        ctx: Context,
+        member: Optional[discord.User] = None,
+    ) -> None:
+        target = member or ctx.author
+        stats = await fetch_ttt_stats(self.bot.db, target.id)
+        await ctx.send(embed=build_stats_embed(target, stats))
+
+    @tictactoe.command(
+        name="leaderboard",
+        aliases=["lb"],
+        description="View the most tic-tac-toe wins",
+        example=",tictactoe leaderboard",
+    )
+    @describe(scope="global or guild (defaults to global)")
+    async def tictactoe_leaderboard(
+        self,
+        ctx: Context,
+        scope: Optional[str] = None,
+    ) -> None:
+        selected = (scope or "global").strip().lower()
+        if selected not in {"global", "guild"}:
+            return await ctx.warn("Scope must be **global** or **guild**.")
+        if selected == "guild":
+            if ctx.guild is None:
+                return await ctx.warn("Guild leaderboard can only be used in a server.")
+            rows = await fetch_ttt_leaderboard(self.bot.db, guild_id=ctx.guild.id)
+            title = "Most Tic-Tac-Toe wins"
+        else:
+            rows = await fetch_ttt_leaderboard(self.bot.db, guild_id=None)
+            title = "Most Tic-Tac-Toe wins"
+        pages = await build_leaderboard_pages(
+            self.bot,
+            rows=rows,
+            author=ctx.author,
+            title=title,
+        )
+        if len(pages) == 1:
+            await ctx.send(embed=pages[0])
+            return
+        view = PaginateView(ctx, pages)
+        await view.start()
 
     @hybrid(
         name="connect4",

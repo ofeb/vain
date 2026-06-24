@@ -569,6 +569,16 @@ CREATE TABLE IF NOT EXISTS tictactoe (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS tictactoe_guild (
+    guild_id BIGINT,
+    user_id BIGINT,
+    wins INT DEFAULT 0,
+    losses INT DEFAULT 0,
+    ties INT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, user_id)
+);
+
 CREATE TABLE IF NOT EXISTS birthday (
     user_id BIGINT,
     guild_id BIGINT,

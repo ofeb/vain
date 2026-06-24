@@ -21,6 +21,8 @@ from .managers.redis import BleedCache, FileBleedCache, RedisClient
 from .managers.watch import Watcher
 from .managers.guard import Guard
 from .tools.embed import PreparedScript, Script, parse
+from .tools.errors import Ratelimited
+from .tools.ratelimit import global_ratelimit
 from .tools.snipe import Snipe
 from .managers.values import token, bot, color, database, redis, emojis, music_enabled
 from .managers.filetypes import CACHE_REDIS_FILE, ensure_storage_files
@@ -410,12 +412,14 @@ class Bleed(commands.AutoShardedBot):
 
     async def _global_check(self, ctx: Context) -> bool:
         """runs before every command"""
-        if ctx.guild is None:
+        if ctx.command is None:
             return True
 
         owner = await self.is_owner(ctx.author)
+        cmd_name = ctx.command.qualified_name.lower()
+        is_help = cmd_name == "help"
 
-        if not owner:
+        if ctx.guild is not None and not owner:
             blacklisted = await self.remember(
                 f"blacklist:{ctx.guild.id}:{ctx.author.id}",
                 _ACCESS_TTL,
@@ -424,13 +428,7 @@ class Bleed(commands.AutoShardedBot):
             if bool(blacklisted):
                 raise commands.CheckFailure("youre **blacklisted** from using this bot")
 
-        if ctx.command is None:
-            return True
-
-        cmd_name = ctx.command.qualified_name.lower()
-        is_help = cmd_name == "help"
-
-        if not is_help and not owner:
+        if ctx.guild is not None and not is_help and not owner:
             rows = await self.remember(
                 f"restrict:{ctx.guild.id}:{cmd_name}",
                 _ACCESS_TTL,
@@ -452,17 +450,17 @@ class Bleed(commands.AutoShardedBot):
             if disabled and (ctx.author.id in disabled.object_ids or ctx.channel.id in disabled.object_ids):
                 raise commands.CheckFailure(f"`{ctx.command.qualified_name}` is disabled here")
 
-        me = ctx.channel.permissions_for(ctx.guild.me)
-        need = ("send_messages",) if is_help else ("send_messages", "embed_links", "attach_files")
-        missing = [p for p in need if not getattr(me, p)]
-        if missing:
-            raise commands.BotMissingPermissions(missing)
+        if ctx.guild is not None:
+            me = ctx.channel.permissions_for(ctx.guild.me)
+            need = ("send_messages",) if is_help else ("send_messages", "embed_links", "attach_files")
+            missing = [p for p in need if not getattr(me, p)]
+            if missing:
+                raise commands.BotMissingPermissions(missing)
 
-        if not owner and not is_help and self.redis:
-            from .tools.ratelimit import ratelimiter
-            retry = ratelimiter(f"cmds:{ctx.author.id}", ctx.author.id, rate=2, per=4)
+        if not owner and not is_help:
+            retry = global_ratelimit(ctx.author.id)
             if retry:
-                raise commands.CommandOnCooldown(None, retry, commands.BucketType.user)
+                raise Ratelimited(retry)
 
         return True
 
@@ -472,6 +470,14 @@ class Bleed(commands.AutoShardedBot):
         cmd = self._resolve_slash_command(inter)
         if cmd is None:
             return True
+        if ctx.command is None:
+            ctx.command = cmd
+        try:
+            await self._global_check(ctx)
+        except Ratelimited:
+            raise
+        except commands.CheckFailure as e:
+            raise app_commands.CheckFailure(str(e)) from e
         try:
             return await cmd.can_run(ctx)
         except commands.CommandError as e:
@@ -484,8 +490,34 @@ class Bleed(commands.AutoShardedBot):
             return
         send = inter.followup.send if inter.response.is_done() else inter.response.send_message
         msg = str(err) or "something went wrong"
+        if isinstance(orig, Ratelimited):
+            ctx = await self.get_context(inter, cls=Context)
+            emoji = await ctx._get_emoji("cooldown")
+            color_value = await ctx._get_color("cooldown")
+            embed = discord.Embed(
+                color=color_value,
+                description=(
+                    f"{emoji} {inter.user.mention}: Please wait "
+                    f"**{orig.retry_after:.2f} seconds** before using any command again"
+                ),
+            )
+            with contextlib.suppress(discord.HTTPException):
+                await send(embed=embed, ephemeral=True)
+            return
         if isinstance(err, app_commands.CommandOnCooldown):
-            msg = f"slow down, try again in **{err.retry_after:.1f}s**"
+            ctx = await self.get_context(inter, cls=Context)
+            emoji = await ctx._get_emoji("cooldown")
+            color_value = await ctx._get_color("cooldown")
+            embed = discord.Embed(
+                color=color_value,
+                description=(
+                    f"{emoji} {inter.user.mention}: Please wait "
+                    f"**{err.retry_after:.2f} seconds** before using this command again"
+                ),
+            )
+            with contextlib.suppress(discord.HTTPException):
+                await send(embed=embed, ephemeral=True)
+            return
         with contextlib.suppress(discord.HTTPException):
             await send(content=msg, ephemeral=True)
 
@@ -573,6 +605,18 @@ class Bleed(commands.AutoShardedBot):
         if isinstance(err, commands.MissingRequiredArgument):
             with contextlib.suppress(discord.HTTPException):
                 await ctx.send_help()
+            return
+        if isinstance(err, Ratelimited):
+            with contextlib.suppress(discord.HTTPException):
+                await ctx.cooldown(
+                    f"Please wait **{err.retry_after:.2f} seconds** before using any command again"
+                )
+            return
+        if isinstance(err, commands.CommandOnCooldown):
+            with contextlib.suppress(discord.HTTPException):
+                await ctx.cooldown(
+                    f"Please wait **{err.retry_after:.2f} seconds** before using this command again"
+                )
             return
         if isinstance(err, commands.CommandError):
             with contextlib.suppress(discord.HTTPException):

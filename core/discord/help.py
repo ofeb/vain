@@ -540,8 +540,15 @@ def _cooldown_label(cmd: Command) -> str | None:
     if per is None:
         return None
     if float(per).is_integer():
-        return f"{int(per)} seconds"
-    return f"{per:g} seconds"
+        label = f"{int(per)} seconds"
+    else:
+        label = f"{per:g} seconds"
+    buckets = getattr(cmd, "_buckets", ())
+    if any(getattr(bucket, "type", None) == commands.BucketType.guild for bucket in buckets):
+        label += " per guild"
+    elif any(getattr(bucket, "type", None) == commands.BucketType.user for bucket in buckets):
+        label += " per user"
+    return label
 
 
 def _information(cmd: Command) -> dict[str, str]:

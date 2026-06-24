@@ -363,6 +363,20 @@ class TicTacToeView(discord.ui.View):
             return "tie"
         return None
 
+    async def _record_stats(self, winner: str) -> None:
+        from ext.fun.ttt_stats import record_ttt_game
+
+        guild_id = self.ctx.guild.id if self.ctx.guild else None
+        player_o_id = self.bot.user.id if self.vs_me else (self.player_o.id if self.player_o else None)
+        await record_ttt_game(
+            self.bot,
+            guild_id=guild_id,
+            player_x_id=self.player_x.id,
+            player_o_id=player_o_id,
+            vs_me=self.vs_me,
+            winner=winner,
+        )
+
     def _sync_buttons(self) -> None:
         for child in self.children:
             if isinstance(child, TicTacToeButton):
@@ -419,6 +433,7 @@ class TicTacToeView(discord.ui.View):
             self.finished = True
             self._cancel_start_timer()
             self.stop()
+            await self._record_stats(winner)
             if winner == "tie":
                 status = "It's a **tie**!"
             elif winner == "X":
@@ -444,6 +459,7 @@ class TicTacToeView(discord.ui.View):
             if winner:
                 self.finished = True
                 self.stop()
+                await self._record_stats(winner)
                 if winner == "tie":
                     status = "It's a **tie**!"
                 elif winner == "O":
