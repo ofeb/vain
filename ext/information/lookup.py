@@ -6,8 +6,6 @@ from typing import Any
 import aiohttp
 import discord
 
-from core.managers.values import api
-
 WEATHER_COLOR = 0x3498DB
 DEFINE_COLOR = 0xE8E8E6
 UD_FOOTER_ICON = "https://www.urbandictionary.com/favicon-32x32.png"
@@ -19,9 +17,12 @@ def _title_case_weather(text: str) -> str:
 
 
 async def fetch_weather(session: aiohttp.ClientSession, location: str) -> dict[str, Any]:
-    if not api.openweathermap:
+    from core.managers.values import api
+
+    api_key = api.openweathermap.strip()
+    if not api_key:
         raise ValueError("OpenWeatherMap API key is not configured.")
-    params = {"q": location, "appid": api.openweathermap, "units": "metric"}
+    params = {"q": location, "appid": api_key, "units": "metric"}
     async with session.get("https://api.openweathermap.org/data/2.5/weather", params=params) as resp:
         data = await resp.json(content_type=None)
         if resp.status != 200:

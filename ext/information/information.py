@@ -11,7 +11,7 @@ from core.discord.ctx import Context
 from core.discord.hybrid import describe, hybrid
 from core.discord.package import Package
 from core.discord.views.paginate import PaginateView
-from core.managers.values import api, color
+from core.managers.values import color
 
 from .lookup import (
     build_define_embed,
@@ -218,7 +218,9 @@ class InformationCommands(Package):
     )
     @describe(location="City or location name")
     async def weather(self, ctx: Context, *, location: str) -> None:
-        if not api.openweathermap:
+        from core.managers.values import api
+
+        if not api.openweathermap.strip():
             return await ctx.warn("OpenWeatherMap API key is not configured.")
         try:
             async with aiohttp.ClientSession() as session:

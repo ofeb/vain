@@ -105,7 +105,6 @@ class api:
     openrouter: str = ""
     serpapi: str = ""
     kraken: str = ""
-    reshare: str = ""
     transcribe_url: str = "http://127.0.0.1:8789/"
     soundcloud_client_id: str = ""
     spotify_client_id: str = "78ecc85f9b5941a182fb265371d0976c"
