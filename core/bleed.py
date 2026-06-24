@@ -338,6 +338,10 @@ class Bleed(commands.AutoShardedBot):
         await self._load_extensions()
         log.info("extensions finished (%.1fs)", time.perf_counter() - extensions_started)
 
+        from ext.server.extended.pagination.views import register_stored_paginations
+
+        await register_stored_paginations(self)
+
         log.info("syncing global slash commands")
         sync_started = time.perf_counter()
         await self._sync_global_commands()

@@ -12,7 +12,7 @@ from discord.ext import commands
 from core.discord.package import Package
 from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe, linked_family
-from core.discord.views.paginate import PaginateView
+from core.discord.views.paginate import send_pages
 from core.managers.values import color, emojis
 
 from .games import start_connect4, start_rps, start_ttt
@@ -72,8 +72,7 @@ class Fun(Package):
         if not rows:
             await ctx.send(embed=pages[0])
             return
-        view = PaginateView(ctx, pages)
-        await view.start()
+        await send_pages(ctx, pages)
 
     @hybrid(
         name="8ball",
@@ -295,8 +294,7 @@ class Fun(Package):
             if not results:
                 return await ctx.warn("No results found for that search.")
             pages = build_ddg_search_pages(results, ctx.author)
-            view = PaginateView(ctx, pages)
-            await view.start()
+            await send_pages(ctx, pages)
         except aiohttp.ClientError:
             await ctx.fail("Could not reach DuckDuckGo.")
 
@@ -307,8 +305,7 @@ class Fun(Package):
             if not images:
                 return await ctx.warn("No images found for that search.")
             pages = build_image_search_pages(images, ctx.author, query=search, source=source)
-            view = PaginateView(ctx, pages)
-            await view.start()
+            await send_pages(ctx, pages)
         except aiohttp.ClientError:
             await ctx.fail("Could not fetch image results.")
 

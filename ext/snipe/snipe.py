@@ -8,6 +8,7 @@ from discord.ext import commands
 
 from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe
+from core.discord.views.paginate import PaginateView
 from core.managers.values import color, emojis
 from core.managers.permissions import has_permissions
 from core.tools.snipe import SnipeError
@@ -16,94 +17,19 @@ if TYPE_CHECKING:
     from .events import SnipeEvents
 
 
-class SnipePaginateView(discord.ui.View):
+class SnipePaginateView(PaginateView):
     def __init__(self, ctx: Context, pages: list[discord.Embed], snipe_type: str, snipe_store):
-        super().__init__(timeout=60.0)
-        self.ctx = ctx
-        self.pages = pages
+        super().__init__(ctx, pages)
         self.snipe_type = snipe_type
         self.snipe_store = snipe_store
-        self.index = 0
-        self.message: discord.Message | None = None
-
-    def _current(self) -> dict:
-        return {"embed": self.pages[self.index], "view": self}
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id == self.ctx.author.id:
-            return True
-        await interaction.response.send_message(
-            embed=discord.Embed(
-                color=color.warn,
-                description=f"{emojis.warn} {interaction.user.mention}: You're not the **author** of this embed!",
-            ),
-            ephemeral=True,
+        remove_btn = discord.ui.Button(
+            style=discord.ButtonStyle.danger,
+            emoji=discord.PartialEmoji.from_str(emojis.remove),
         )
-        return False
+        remove_btn.callback = self._remove_cb
+        self.add_item(remove_btn)
 
-    async def on_timeout(self) -> None:
-        if self.message is not None:
-            try:
-                await self.message.edit(view=None)
-            except discord.HTTPException:
-                pass
-
-    @discord.ui.button(
-        style=discord.ButtonStyle.primary,
-        emoji=discord.PartialEmoji.from_str(emojis.paginator.previous),
-    )
-    async def prev_btn(self, interaction: discord.Interaction, _: discord.ui.Button):
-        self.index = (self.index - 1) % len(self.pages)
-        await interaction.response.edit_message(**self._current())
-
-    @discord.ui.button(
-        style=discord.ButtonStyle.primary,
-        emoji=discord.PartialEmoji.from_str(emojis.paginator.next),
-    )
-    async def next_btn(self, interaction: discord.Interaction, _: discord.ui.Button):
-        self.index = (self.index + 1) % len(self.pages)
-        await interaction.response.edit_message(**self._current())
-
-    @discord.ui.button(
-        style=discord.ButtonStyle.secondary,
-        emoji=discord.PartialEmoji.from_str(emojis.paginator.navigate),
-    )
-    async def goto_btn(self, interaction: discord.Interaction, _: discord.ui.Button):
-        modal = discord.ui.Modal(title="Skip to page")
-        page_input = discord.ui.TextInput(
-            label="Page number",
-            placeholder=f"1-{len(self.pages)}",
-            required=True,
-            max_length=4,
-        )
-        modal.add_item(page_input)
-
-        async def on_submit(modal_inter: discord.Interaction):
-            raw = str(page_input.value).strip()
-            if not raw.isdigit():
-                await modal_inter.response.send_message(
-                    embed=discord.Embed(color=color.warn, description=f"{emojis.warn} Provide a **valid page number**."),
-                    ephemeral=True,
-                )
-                return
-            page_number = int(raw)
-            if page_number < 1 or page_number > len(self.pages):
-                await modal_inter.response.send_message(
-                    embed=discord.Embed(color=color.warn, description=f"{emojis.warn} That page is **out of range**."),
-                    ephemeral=True,
-                )
-                return
-            self.index = page_number - 1
-            await modal_inter.response.edit_message(**self._current())
-
-        modal.on_submit = on_submit
-        await interaction.response.send_modal(modal)
-
-    @discord.ui.button(
-        style=discord.ButtonStyle.danger,
-        emoji=discord.PartialEmoji.from_str(emojis.remove),
-    )
-    async def remove_btn(self, interaction: discord.Interaction, _: discord.ui.Button):
+    async def _remove_cb(self, interaction: discord.Interaction) -> None:
         try:
             await self.snipe_store.delete_entry(self.ctx.channel, self.snipe_type, self.index + 1)
             del self.pages[self.index]
@@ -129,24 +55,10 @@ class SnipePaginateView(discord.ui.View):
             return
 
         self.index = min(self.index, len(self.pages) - 1)
-        await interaction.response.edit_message(**self._current())
-
-    @discord.ui.button(
-        style=discord.ButtonStyle.danger,
-        emoji=discord.PartialEmoji.from_str(emojis.paginator.cancel),
-    )
-    async def cancel_btn(self, interaction: discord.Interaction, _: discord.ui.Button):
-        await interaction.response.defer()
-        if interaction.message is not None:
-            try:
-                await interaction.message.delete()
-            except discord.HTTPException:
-                pass
-        self.stop()
-
-    async def start(self) -> discord.Message:
-        self.message = await self.ctx.send(**self._current())
-        return self.message
+        payload = self._current()
+        if not self.pages:
+            payload["view"] = None
+        await interaction.response.edit_message(**payload)
 
 
 def _build_snipe_embed(snipe: dict, index: int, total: int, snipe_type: str) -> discord.Embed:

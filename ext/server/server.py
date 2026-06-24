@@ -6,7 +6,7 @@ from discord.ext.commands import command, group
 import discord
 from core.discord.hybrid import hybrid
 from core.discord.package import Package
-from core.discord.views.paginate import PaginateView
+from core.discord.views.paginate import send_pages
 from core.tools.embed import BadEmbed, ParseError, PreparedScript, parse
 
 
@@ -181,8 +181,7 @@ class ServerCommands(Package):
             page.set_footer(text=f"Use {ctx.clean_prefix}variables <category> for more details")
             pages.append(page)
 
-        view = PaginateView(ctx, pages)
-        view.message = await ctx.send(embed=pages[0], view=view)
+        await send_pages(ctx, pages)
 
     @hybrid(
         name="serverinfo",

@@ -4,7 +4,7 @@ from typing import Iterable, Sequence
 
 import discord
 
-from core.discord.views.paginate import PaginateView
+from core.discord.views.paginate import PaginateView, needs_pagination, send_pages
 
 
 def _copy_embed(embed: discord.Embed) -> discord.Embed:
@@ -54,8 +54,9 @@ class Paginator:
         ctx,
         pages: Sequence[discord.Embed | str] | Iterable[discord.Embed | str],
         *,
-        timeout: float = 60.0,
+        timeout: float | None = None,
         start_index: int = 0,
+        owner_only: bool = True,
         **kwargs,
     ) -> None:
         if isinstance(pages, list):
@@ -65,27 +66,16 @@ class Paginator:
         self.ctx = ctx
         self.timeout = timeout
         self.start_index = start_index
+        self.owner_only = owner_only
         self.kwargs = kwargs
         self.message: discord.Message | None = None
 
     async def start(self) -> discord.Message:
-        if not self.pages:
-            self.message = await self.ctx.search("nothing to show")
-            return self.message
-
-        if len(self.pages) == 1:
-            page = self.pages[0]
-            payload = {"embed": page} if isinstance(page, discord.Embed) else {
-                "content": str(page)
-            }
-            self.message = await self.ctx.send(**payload)
-            return self.message
-
-        view = PaginateView(
+        self.message = await send_pages(
             self.ctx,
             self.pages,
-            timeout=self.timeout,
             start_index=self.start_index,
+            owner_only=self.owner_only,
+            timeout=self.timeout,
         )
-        self.message = await view.start()
         return self.message

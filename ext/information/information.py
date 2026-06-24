@@ -10,7 +10,7 @@ from discord.ext import commands
 from core.discord.ctx import Context
 from core.discord.hybrid import describe, hybrid
 from core.discord.package import Package
-from core.discord.views.paginate import PaginateView
+from core.discord.views.paginate import send_pages
 from core.managers.values import color
 
 from .lookup import (
@@ -318,8 +318,7 @@ class InformationCommands(Package):
             build_urban_embed(entry, author=ctx.author, page=index + 1, total=total)
             for index, entry in enumerate(results[:10])
         ]
-        view = PaginateView(ctx, pages)
-        await view.start()
+        await send_pages(ctx, pages)
 
     @hybrid(
         name="seen",

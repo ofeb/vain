@@ -1,11 +1,5 @@
-from discord.ext.commands import Cog
+from __future__ import annotations
+
 from .pagination import PaginationCommands
 
-
-class Pagination(PaginationCommands, Cog):
-    """pagination cog"""
-
-
-async def setup(bot):
-    """load pagination cog"""
-    await bot.add_cog(Pagination(bot))
+__all__ = ["PaginationCommands"]

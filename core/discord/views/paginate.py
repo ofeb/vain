@@ -8,6 +8,12 @@ from discord.ext.commands import Context
 
 from core.managers.values import color, emojis
 
+Page = Union[discord.Embed, str]
+
+
+def needs_pagination(pages: list[Page]) -> bool:
+    return len(pages) > 1
+
 
 def _warning_embed(user: discord.abc.User, message: str) -> discord.Embed:
     return discord.Embed(
@@ -59,28 +65,32 @@ class PaginateView(discord.ui.View):
     def __init__(
         self,
         ctx: Context,
-        pages: List[Union[discord.Embed, str]],
+        pages: List[Page],
         *,
-        timeout: float = 60.0,
+        timeout: float | None = None,
         start_index: int = 0,
+        owner_only: bool = True,
     ) -> None:
         super().__init__(timeout=timeout)
         self.ctx = ctx
         self.pages = pages
         self.index = min(max(start_index, 0), max(len(self.pages) - 1, 0))
         self.message: discord.Message | None = None
+        self.owner_only = owner_only
 
     def _current(self) -> dict[str, Any]:
         raw = self.pages[self.index]
-        payload: dict[str, Any] = {"view": self}
+        payload: dict[str, Any] = {"view": self if needs_pagination(self.pages) else None}
         if isinstance(raw, discord.Embed):
             payload["embed"] = raw
+            payload["content"] = None
         else:
             payload["content"] = str(raw)
+            payload["embed"] = None
         return payload
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id == self.ctx.author.id:
+        if not self.owner_only or interaction.user.id == self.ctx.author.id:
             return True
         await interaction.response.send_message(
             embed=_warning_embed(
@@ -132,5 +142,59 @@ class PaginateView(discord.ui.View):
         self.stop()
 
     async def start(self) -> discord.Message:
-        self.message = await self.ctx.send(**self._current())
+        if not self.pages:
+            self.message = await self.ctx.send("nothing to show")
+            return self.message
+        payload = self._current()
+        if not needs_pagination(self.pages):
+            payload.pop("view", None)
+        self.message = await self.ctx.send(**payload)
         return self.message
+
+    async def attach(self, message: discord.Message) -> discord.Message:
+        payload = self._current()
+        if not needs_pagination(self.pages):
+            payload["view"] = None
+        self.message = await message.edit(**payload)
+        return self.message
+
+
+async def send_pages(
+    ctx: Context,
+    pages: List[Page],
+    *,
+    message: discord.Message | None = None,
+    start_index: int = 0,
+    owner_only: bool = True,
+    timeout: float | None = None,
+) -> discord.Message:
+    """send or attach paginated embeds; skip buttons when there is only one page."""
+    pages = list(pages)
+    if not pages:
+        if message is not None:
+            return await message.edit(content="nothing to show", embed=None, view=None)
+        return await ctx.send("nothing to show")
+
+    if not needs_pagination(pages):
+        page = pages[0]
+        payload: dict[str, Any] = {"view": None}
+        if isinstance(page, discord.Embed):
+            payload["embed"] = page
+            payload["content"] = None
+        else:
+            payload["content"] = str(page)
+            payload["embed"] = None
+        if message is not None:
+            return await message.edit(**payload)
+        return await ctx.send(**payload)
+
+    view = PaginateView(
+        ctx,
+        pages,
+        timeout=timeout,
+        start_index=start_index,
+        owner_only=owner_only,
+    )
+    if message is not None:
+        return await view.attach(message)
+    return await view.start()

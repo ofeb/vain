@@ -1,79 +1,43 @@
 from __future__ import annotations
 
 import re
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
+import aiohttp
 import discord
-from discord.ext.commands import group, CommandError
+from discord.ext.commands import CommandError, group
 
 from core.discord.package import Package
+from core.discord.views.paginate import PaginateView, needs_pagination
 from core.managers.permissions import has_permissions
 from core.managers.values import color, emojis
 
-
-
 if TYPE_CHECKING:
-    from core.bleed import Bleed
+    from core.discord.ctx import Context
 
-class StealPaginateView(discord.ui.View):
-    def __init__(self, ctx, pages: list[discord.Embed], emojis_to_steal: list):
-        super().__init__(timeout=60.0)
-        self.ctx = ctx
-        self.pages = pages
+
+class StealPaginateView(PaginateView):
+    def __init__(self, ctx: Context, pages: list[discord.Embed], emojis_to_steal: list):
+        super().__init__(ctx, pages)
         self.emojis_to_steal = emojis_to_steal
-        self.index = 0
-        self.message: Optional[discord.Message] = None
-
-    def _current(self) -> dict:
-        return {"embed": self.pages[self.index], "view": self}
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id == self.ctx.author.id:
-            return True
-        await interaction.response.send_message(
-            embed=discord.Embed(
-                color=color.warn,
-                description=f"{emojis.warn} {interaction.user.mention}: You're not the **author** of this embed!",
-            ),
-            ephemeral=True,
+        steal_btn = discord.ui.Button(
+            style=discord.ButtonStyle.secondary,
+            emoji="✂",
+            label="Steal",
         )
-        return False
+        steal_btn.callback = self._steal_cb
+        self.add_item(steal_btn)
 
-    async def on_timeout(self) -> None:
-        if self.message is not None:
-            try:
-                await self.message.edit(view=None)
-            except discord.HTTPException:
-                pass
-
-    @discord.ui.button(
-        style=discord.ButtonStyle.primary,
-        emoji=discord.PartialEmoji.from_str(emojis.paginator.previous),
-    )
-    async def prev_btn(self, interaction: discord.Interaction, _: discord.ui.Button):
-        self.index = (self.index - 1) % len(self.pages)
-        await interaction.response.edit_message(**self._current())
-
-    @discord.ui.button(
-        style=discord.ButtonStyle.primary,
-        emoji=discord.PartialEmoji.from_str(emojis.paginator.next),
-    )
-    async def next_btn(self, interaction: discord.Interaction, _: discord.ui.Button):
-        self.index = (self.index + 1) % len(self.pages)
-        await interaction.response.edit_message(**self._current())
-
-    @discord.ui.button(
-        style=discord.ButtonStyle.secondary,
-        emoji="✂",
-        label="Steal",
-    )
-    async def steal_btn(self, interaction: discord.Interaction, _: discord.ui.Button):
+    async def _steal_cb(self, interaction: discord.Interaction) -> None:
         emoji_data = self.emojis_to_steal[self.index]
         try:
             if emoji_data.get("url"):
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(emoji_data["url"]) as resp:
+                        image_data = await resp.read()
                 emoji = await interaction.guild.create_custom_emoji(
                     name=emoji_data["name"],
-                    image=await self._fetch_image(emoji_data["url"]),
+                    image=image_data,
                 )
                 await interaction.response.send_message(
                     embed=discord.Embed(
@@ -99,38 +63,15 @@ class StealPaginateView(discord.ui.View):
                 ephemeral=True,
             )
 
-    async def _fetch_image(self, url: str) -> bytes:
-        import aiohttp
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as resp:
-                return await resp.read()
-
-    @discord.ui.button(
-        style=discord.ButtonStyle.danger,
-        emoji=discord.PartialEmoji.from_str(emojis.paginator.cancel),
-    )
-    async def cancel_btn(self, interaction: discord.Interaction, _: discord.ui.Button):
-        await interaction.response.defer()
-        if interaction.message is not None:
-            try:
-                await interaction.message.delete()
-            except discord.HTTPException:
-                pass
-        self.stop()
-
-    async def start(self) -> discord.Message:
-        self.message = await self.ctx.send(**self._current())
-        return self.message
-
 
 def _parse_emoji(text: str) -> list[dict]:
     results = []
-    custom_pattern = r'<a?:([a-zA-Z0-9_]+):(\d+)>'
+    custom_pattern = r"<a?:([a-zA-Z0-9_]+):(\d+)>"
     for match in re.finditer(custom_pattern, text):
         name = match.group(1)
         emoji_id = match.group(2)
-        animated = text[match.start():match.start()+3] == '<a:'
-        ext = 'gif' if animated else 'png'
+        animated = text[match.start() : match.start() + 3] == "<a:"
+        ext = "gif" if animated else "png"
         url = f"https://cdn.discordapp.com/emojis/{emoji_id}.{ext}?size=128"
         results.append({"name": name, "id": emoji_id, "url": url, "animated": animated})
     return results
@@ -176,11 +117,13 @@ class Steal(Package):
         stolen = []
         for emoji_data in emojis_found:
             try:
-                import aiohttp
                 async with aiohttp.ClientSession() as session:
                     async with session.get(emoji_data["url"]) as resp:
                         image_data = await resp.read()
-                emoji = await ctx.guild.create_custom_emoji(name=emoji_data["name"], image=image_data)
+                emoji = await ctx.guild.create_custom_emoji(
+                    name=emoji_data["name"],
+                    image=image_data,
+                )
                 stolen.append(emoji)
             except discord.HTTPException:
                 continue
@@ -204,9 +147,9 @@ class Steal(Package):
             return await ctx.warn("No custom emojis found in the last 100 messages")
 
         unique = {}
-        for e in emojis_found:
-            if e["id"] not in unique:
-                unique[e["id"]] = e
+        for entry in emojis_found:
+            if entry["id"] not in unique:
+                unique[entry["id"]] = entry
         emojis_found = list(unique.values())
 
         pages = []
@@ -219,11 +162,13 @@ class Steal(Package):
             embed.set_footer(text=f"{i}/{len(emojis_found)} \u2219 Module: server")
             pages.append(embed)
 
+        if not needs_pagination(pages):
+            return await ctx.send(embed=pages[0])
         view = StealPaginateView(ctx, pages, emojis_found)
         await view.start()
 
     def _parse_message_link(self, link: str) -> tuple[int, int]:
-        pattern = r'discord(?:app)?\.com/channels/(\d+)/(\d+)/(\d+)'
+        pattern = r"discord(?:app)?\.com/channels/(\d+)/(\d+)/(\d+)"
         match = re.search(pattern, link)
         if not match:
             raise ValueError("Invalid message link")
