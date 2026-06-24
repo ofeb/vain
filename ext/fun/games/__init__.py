@@ -367,10 +367,12 @@ class TicTacToeView(discord.ui.View):
         from ext.fun.ttt_stats import record_ttt_game
 
         guild_id = self.ctx.guild.id if self.ctx.guild else None
+        channel_id = self.ctx.channel.id if isinstance(self.ctx.channel, discord.GroupChannel) else None
         player_o_id = self.bot.user.id if self.vs_me else (self.player_o.id if self.player_o else None)
         await record_ttt_game(
             self.bot,
             guild_id=guild_id,
+            channel_id=channel_id,
             player_x_id=self.player_x.id,
             player_o_id=player_o_id,
             vs_me=self.vs_me,

@@ -29,22 +29,41 @@ async def _bump_guild(db: Any, guild_id: int, user_id: int, column: str) -> None
     )
 
 
+async def _bump_channel(db: Any, channel_id: int, user_id: int, column: str) -> None:
+    await db.execute(
+        f"""
+        INSERT INTO tictactoe_channel (channel_id, user_id, {column}) VALUES ($1, $2, 1)
+        ON CONFLICT (channel_id, user_id) DO UPDATE SET {column} = tictactoe_channel.{column} + 1
+        """,
+        channel_id,
+        user_id,
+    )
+
+
 async def _bump(
     db: Any,
     *,
     guild_id: int | None,
+    channel_id: int | None,
     user_id: int,
     column: str,
+    count_bot: bool = False,
+    bot_id: int | None = None,
 ) -> None:
+    if not count_bot and bot_id is not None and user_id == bot_id:
+        return
     await _bump_global(db, user_id, column)
     if guild_id is not None:
         await _bump_guild(db, guild_id, user_id, column)
+    if channel_id is not None:
+        await _bump_channel(db, channel_id, user_id, column)
 
 
 async def record_ttt_game(
     bot: Bleed,
     *,
     guild_id: int | None,
+    channel_id: int | None,
     player_x_id: int,
     player_o_id: int | None,
     vs_me: bool,
@@ -54,24 +73,78 @@ async def record_ttt_game(
     bot_id = bot.user.id if bot.user else None
 
     if winner == "tie":
-        await _bump(db, guild_id=guild_id, user_id=player_x_id, column="ties")
-        if not vs_me and player_o_id and player_o_id != bot_id:
-            await _bump(db, guild_id=guild_id, user_id=player_o_id, column="ties")
+        await _bump(
+            db,
+            guild_id=guild_id,
+            channel_id=channel_id,
+            user_id=player_x_id,
+            column="ties",
+            bot_id=bot_id,
+        )
+        if not vs_me and player_o_id:
+            await _bump(
+                db,
+                guild_id=guild_id,
+                channel_id=channel_id,
+                user_id=player_o_id,
+                column="ties",
+                bot_id=bot_id,
+            )
+        if vs_me and channel_id and bot_id:
+            await _bump_channel(db, channel_id, bot_id, "ties")
         return
+
+    if vs_me:
+        if winner == "O" and bot_id:
+            await _bump(
+                db,
+                guild_id=guild_id,
+                channel_id=None,
+                user_id=player_x_id,
+                column="losses",
+                bot_id=bot_id,
+            )
+            if channel_id:
+                await _bump_channel(db, channel_id, bot_id, "wins")
+                await _bump_channel(db, channel_id, player_x_id, "losses")
+            return
+        if winner == "X":
+            await _bump(
+                db,
+                guild_id=guild_id,
+                channel_id=None,
+                user_id=player_x_id,
+                column="wins",
+                bot_id=bot_id,
+            )
+            if channel_id and bot_id:
+                await _bump_channel(db, channel_id, player_x_id, "wins")
+                await _bump_channel(db, channel_id, bot_id, "losses")
+            return
 
     winner_id = player_x_id if winner == "X" else player_o_id
     loser_id = player_o_id if winner == "X" else player_x_id
-    if vs_me and winner == "O":
-        winner_id = None
-        loser_id = player_x_id
-    elif vs_me and winner == "X":
-        winner_id = player_x_id
-        loser_id = None
 
-    if winner_id and winner_id != bot_id:
-        await _bump(db, guild_id=guild_id, user_id=winner_id, column="wins")
-    if loser_id and loser_id != bot_id:
-        await _bump(db, guild_id=guild_id, user_id=loser_id, column="losses")
+    if winner_id:
+        await _bump(
+            db,
+            guild_id=guild_id,
+            channel_id=channel_id,
+            user_id=winner_id,
+            column="wins",
+            count_bot=channel_id is not None,
+            bot_id=bot_id,
+        )
+    if loser_id:
+        await _bump(
+            db,
+            guild_id=guild_id,
+            channel_id=channel_id,
+            user_id=loser_id,
+            column="losses",
+            count_bot=channel_id is not None,
+            bot_id=bot_id,
+        )
 
 
 async def fetch_ttt_stats(db: Any, user_id: int) -> dict[str, int]:
@@ -91,10 +164,23 @@ async def fetch_ttt_stats(db: Any, user_id: int) -> dict[str, int]:
 async def fetch_ttt_leaderboard(
     db: Any,
     *,
-    guild_id: int | None,
+    guild_id: int | None = None,
+    channel_id: int | None = None,
     limit: int = 30,
 ) -> list[dict[str, int]]:
-    if guild_id is None:
+    if channel_id is not None:
+        rows = await db.fetch(
+            """
+            SELECT user_id, wins
+            FROM tictactoe_channel
+            WHERE channel_id = $1 AND wins > 0
+            ORDER BY wins DESC
+            LIMIT $2
+            """,
+            channel_id,
+            limit,
+        )
+    elif guild_id is None:
         rows = await db.fetch(
             """
             SELECT user_id, wins
@@ -120,7 +206,17 @@ async def fetch_ttt_leaderboard(
     return [{"user_id": int(row["user_id"]), "wins": int(row["wins"] or 0)} for row in rows]
 
 
+def default_leaderboard_scope(channel: discord.abc.MessageableChannel | None) -> str:
+    if isinstance(channel, discord.GroupChannel):
+        return "group"
+    if isinstance(channel, discord.GuildChannel):
+        return "guild"
+    return "global"
+
+
 async def user_display(bot: Bleed, user_id: int) -> str:
+    if bot.user and user_id == bot.user.id:
+        return f"{bot.user.display_name}#0"
     user = bot.get_user(user_id)
     if user is None:
         try:

@@ -16,6 +16,7 @@ from discord.ext.commands import HybridCommand, HybridGroup
 
 from .discord.ctx import Cache, Context
 from .discord.help import BleedHelp
+from .discord.hybrid import rewrite_linked_prefix
 from .managers.database.client import Database
 from .managers.redis import BleedCache, FileBleedCache, RedisClient
 from .managers.watch import Watcher
@@ -412,12 +413,10 @@ class Bleed(commands.AutoShardedBot):
 
     async def _global_check(self, ctx: Context) -> bool:
         """runs before every command"""
-        if ctx.command is None:
-            return True
-
         owner = await self.is_owner(ctx.author)
-        cmd_name = ctx.command.qualified_name.lower()
-        is_help = cmd_name == "help"
+        is_help = False
+        if ctx.command is not None:
+            is_help = ctx.command.qualified_name.lower() == "help"
 
         if ctx.guild is not None and not owner:
             blacklisted = await self.remember(
@@ -428,7 +427,8 @@ class Bleed(commands.AutoShardedBot):
             if bool(blacklisted):
                 raise commands.CheckFailure("youre **blacklisted** from using this bot")
 
-        if ctx.guild is not None and not is_help and not owner:
+        if ctx.command is not None and ctx.guild is not None and not is_help and not owner:
+            cmd_name = ctx.command.qualified_name.lower()
             rows = await self.remember(
                 f"restrict:{ctx.guild.id}:{cmd_name}",
                 _ACCESS_TTL,
@@ -468,9 +468,7 @@ class Bleed(commands.AutoShardedBot):
         """global check for slash commands"""
         ctx = await self.get_context(inter, cls=Context)
         cmd = self._resolve_slash_command(inter)
-        if cmd is None:
-            return True
-        if ctx.command is None:
+        if cmd is not None and ctx.command is None:
             ctx.command = cmd
         try:
             await self._global_check(ctx)
@@ -478,6 +476,8 @@ class Bleed(commands.AutoShardedBot):
             raise
         except commands.CheckFailure as e:
             raise app_commands.CheckFailure(str(e)) from e
+        if cmd is None:
+            return True
         try:
             return await cmd.can_run(ctx)
         except commands.CommandError as e:
@@ -585,6 +585,10 @@ class Bleed(commands.AutoShardedBot):
         self._seen_message_ids.add(msg.id)
         if len(self._seen_message_ids) > 5000:
             self._seen_message_ids.clear()
+        prefixes = await self._get_prefix(self, msg)
+        rewritten = rewrite_linked_prefix(msg.content, prefixes)
+        if rewritten is not None:
+            msg.content = rewritten
         ctx = await self.get_context(msg)
         if msg.guild:
             self.dispatch("context", ctx)
@@ -595,6 +599,10 @@ class Bleed(commands.AutoShardedBot):
     async def on_message_edit(self, before: discord.Message, after: discord.Message) -> None:
         if before.content == after.content or after.author.bot or not self.is_ready():
             return
+        prefixes = await self._get_prefix(self, after)
+        rewritten = rewrite_linked_prefix(after.content, prefixes)
+        if rewritten is not None:
+            after.content = rewritten
         ctx = await self.get_context(after)
         await self.invoke(ctx)
 

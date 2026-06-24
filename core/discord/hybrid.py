@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import contextlib
 import functools
+import inspect
 import logging
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
 
 import discord
 from discord import app_commands
@@ -12,6 +13,51 @@ from discord.ext import commands
 log = logging.getLogger("bleed.hybrid")
 
 _DESCRIPTIONS_ATTR = "__bleed_descriptions__"
+_SLASH_HYBRID_ATTR = "__bleed_slash_hybrid__"
+_FAMILY_ROOT_ATTR = "__bleed_family_root__"
+_FAMILY_HELP_NAME_ATTR = "__bleed_family_help_name__"
+
+
+def linked_family(root: str, *, help_name: str | None = None) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    """link a hybrid command to a virtual family root for help and prefix routing."""
+    def deco(fn: Callable[..., Any]) -> Callable[..., Any]:
+        setattr(fn, _FAMILY_ROOT_ATTR, root)
+        if help_name:
+            setattr(fn, _FAMILY_HELP_NAME_ATTR, help_name)
+        return fn
+
+    return deco
+
+
+def _copy_link_meta(cmd: commands.Command, fn: Callable[..., Any]) -> None:
+    root = getattr(fn, _FAMILY_ROOT_ATTR, None)
+    help_name = getattr(fn, _FAMILY_HELP_NAME_ATTR, None)
+    if root is not None:
+        cmd.__bleed_family_root__ = root
+    if help_name is not None:
+        cmd.__bleed_family_help_name__ = help_name
+    callback = getattr(cmd, "callback", None)
+    if callback is not None:
+        if root is not None:
+            callback.__bleed_family_root__ = root
+        if help_name is not None:
+            callback.__bleed_family_help_name__ = help_name
+
+
+def family_root(cmd: commands.Command) -> str | None:
+    return getattr(cmd, _FAMILY_ROOT_ATTR, None) or getattr(
+        getattr(cmd, "callback", None), _FAMILY_ROOT_ATTR, None
+    )
+
+
+def family_help_name(cmd: commands.Command) -> str | None:
+    return getattr(cmd, _FAMILY_HELP_NAME_ATTR, None) or getattr(
+        getattr(cmd, "callback", None), _FAMILY_HELP_NAME_ATTR, None
+    )
+
+
+def command_display_name(cmd: commands.Command) -> str:
+    return family_help_name(cmd) or cmd.qualified_name
 
 
 def describe(**kw: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
@@ -163,6 +209,7 @@ def _hybrid_command(name: str | None = None, **attrs: Any):
     def deco(fn: Callable[..., Any]) -> commands.HybridCommand:
         prepared = _inject_descriptions(_wrap_callback(fn, guilds=guilds, dms=_dms, groupchats=_gcs), params)
         cmd = _try_register(commands.hybrid_command, prepared, name=name, attrs=attrs)
+        _copy_link_meta(cmd, fn)
         cmd.example = example
         cmd.parameters = params
         return cmd
@@ -213,3 +260,128 @@ def _hybrid_group(name: str | None = None, **attrs: Any):
         return grp
 
     return deco
+
+
+def slash_hybrid(name: str | None = None, **attrs: Any):
+    """slash-only command: no prefix registration, added in cog_load."""
+    description = attrs.get("description")
+    example, params, guild_only, guilds, dms, groupchats, _, _ = _pop_hybrid_attrs(attrs)
+    guilds, _dms, _gcs = _resolve_contexts(
+        guild_only=guild_only,
+        guilds=guilds,
+        dms=dms,
+        groupchats=groupchats,
+    )
+
+    def deco(fn: Callable[..., Any]) -> Callable[..., Any]:
+        setattr(
+            fn,
+            _SLASH_HYBRID_ATTR,
+            {
+                "name": name or fn.__name__,
+                "description": (description or fn.__doc__ or "…").strip(),
+                "example": example,
+                "parameters": params,
+                "guilds": guilds,
+                "dms": _dms,
+                "groupchats": _gcs,
+            },
+        )
+        return fn
+
+    return deco
+
+
+def _slash_kwargs(method: Callable[..., Any], namespace: Any) -> dict[str, Any]:
+    if namespace is None:
+        return {}
+    kwargs: dict[str, Any] = {}
+    for param_name in list(inspect.signature(method).parameters)[2:]:
+        if hasattr(namespace, param_name):
+            kwargs[param_name] = getattr(namespace, param_name)
+    return kwargs
+
+
+def register_cog_slash_hybrids(cog: commands.Cog) -> None:
+    """register slash_hybrid methods on the cog with the bot command tree."""
+    from core.discord.ctx import Context
+
+    bot = cog.bot
+    registered: list[str] = []
+
+    for attr_name in dir(cog):
+        method = getattr(cog, attr_name, None)
+        if method is None or not inspect.ismethod(method):
+            continue
+        fn = getattr(method, "__func__", method)
+        meta = getattr(fn, _SLASH_HYBRID_ATTR, None)
+        if meta is None:
+            continue
+
+        async def slash_invoke(
+            interaction: discord.Interaction,
+            *,
+            _method: Callable[..., Any] = method,
+            _meta: dict[str, Any] = meta,
+        ) -> None:
+            if not interaction.response.is_done():
+                with contextlib.suppress(discord.NotFound, discord.HTTPException):
+                    await interaction.response.defer()
+            ctx = await bot.get_context(interaction, cls=Context)
+            await _method(ctx, **_slash_kwargs(_method, interaction.namespace))
+
+        prepared = _inject_descriptions(
+            app_commands.allowed_contexts(
+                guilds=meta["guilds"],
+                dms=meta["dms"],
+                private_channels=meta["groupchats"],
+            )(
+                app_commands.allowed_installs(guilds=True, users=True)(slash_invoke)
+            ),
+            meta["parameters"],
+        )
+        app_cmd = app_commands.Command(
+            name=meta["name"],
+            description=meta["description"],
+            callback=prepared,
+        )
+        app_cmd.binding = cog
+        with contextlib.suppress(app_commands.CommandAlreadyRegistered):
+            bot.tree.add_command(app_cmd)
+        registered.append(meta["name"])
+
+    cog.__slash_hybrid_names__ = registered
+
+
+def rewrite_linked_prefix(content: str, prefixes: Iterable[str]) -> str | None:
+    """rewrite virtual family invocations to their real hybrid command names."""
+    if not content:
+        return None
+    prefix = next((pfx for pfx in sorted(prefixes, key=len, reverse=True) if content.startswith(pfx)), None)
+    if prefix is None:
+        return None
+    rest = content[len(prefix) :].strip()
+    if not rest:
+        return None
+    tokens = rest.split()
+    head = tokens[0].lower()
+    if head not in {"tictactoe", "ttt", "tic-tac-toe"}:
+        return None
+    if len(tokens) < 2:
+        return None
+    sub = tokens[1].lower()
+    tail = " ".join(tokens[2:])
+    if sub in {"statistics", "stats", "s"}:
+        target = "tictactoestatistics"
+    elif sub in {"leaderboard", "lb", "leader"}:
+        target = "tictactoeleaderboard"
+    else:
+        return None
+    body = f"{target} {tail}".strip()
+    return f"{prefix}{body}"
+
+
+def unregister_cog_slash_hybrids(cog: commands.Cog) -> None:
+    for name in getattr(cog, "__slash_hybrid_names__", ()):
+        with contextlib.suppress(Exception):
+            cog.bot.tree.remove_command(name)
