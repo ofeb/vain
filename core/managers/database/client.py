@@ -15,7 +15,7 @@ from asyncpg import Connection, Pool, Record as BaseRecord, create_pool
 from asyncpg.exceptions import InvalidCatalogNameError
 from discord.ext.commands import Context, check
 from ..values import database
-from ..storage_paths import POSTGRES_DB_FILE, ensure_storage_files
+from ..filetypes import POSTGRES_DB_FILE, ensure_storage_files
 
 log = getLogger(__name__)
 
@@ -123,18 +123,7 @@ class Database:
     async def connect(self) -> Pool:
         """open pool, create db if missing"""
         ensure_storage_files(postgres=True, redis=False)
-
-        if not database.enabled:
-            from .sqlite import SQLitePool, apply_schema
-
-            log.info("using postgres.db at %s", POSTGRES_DB_FILE)
-            self.pool = await SQLitePool.open(POSTGRES_DB_FILE)
-            schema_path = Path(__file__).parent / "models" / "schema.sql"
-            if schema_path.exists():
-                schema = schema_path.read_text(encoding="utf-8")
-                await apply_schema(POSTGRES_DB_FILE, schema)
-            log.info("postgres.db ready")
-            return self.pool
+        log.info("postgres.db storage file at %s", POSTGRES_DB_FILE)
 
         user, pw, host, port, name = self._dsn_parts(self.uri)
         log.info("connecting to postgres at %s:%s/%s", host, port, name)

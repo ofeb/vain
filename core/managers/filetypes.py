@@ -5,8 +5,6 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-import orjson
-
 from .values import storage
 
 log = logging.getLogger("bleed.storage")
@@ -15,7 +13,6 @@ CACHE_REDIS_FILE: Path = storage / "cache.redis"
 POSTGRES_DB_FILE: Path = storage / "postgres.db"
 
 _EMPTY_REDIS = b'{"keys":{}}'
-
 
 def ensure_storage_dir() -> None:
     storage.mkdir(parents=True, exist_ok=True)

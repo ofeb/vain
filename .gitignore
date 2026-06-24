@@ -12,5 +12,3 @@ myenv/
 core/storage/*.redis
 core/storage/*.redis.tmp
 core/storage/postgres.db
-core/storage/postgres.db-wal
-core/storage/postgres.db-shm

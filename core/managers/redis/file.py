@@ -21,7 +21,7 @@ from discord.ext.commands import Context
 from loguru import logger as log
 from xxhash import xxh3_64_hexdigest
 
-from core.managers.storage_paths import CACHE_REDIS_FILE
+from core.managers.filetypes import CACHE_REDIS_FILE
 
 
 def _resolve_path(path: str | Path | None = None) -> Path:

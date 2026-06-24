@@ -23,7 +23,7 @@ from .managers.guard import Guard
 from .tools.embed import PreparedScript, Script, parse
 from .tools.snipe import Snipe
 from .managers.values import token, bot, color, database, redis, emojis, music_enabled
-from .managers.storage_paths import CACHE_REDIS_FILE, ensure_storage_files
+from .managers.filetypes import CACHE_REDIS_FILE, ensure_storage_files
 
 log = logging.getLogger("bleed")
 
@@ -342,10 +342,6 @@ class Bleed(commands.AutoShardedBot):
 
     async def _run_schema_migration(self) -> None:
         """Execute schema.sql to ensure all tables exist"""
-        if not database.enabled:
-            log.info("schema applied to postgres.db during database connect")
-            return
-
         schema_path = Path(__file__).parent / "managers" / "database" / "models" / "schema.sql"
         if not schema_path.exists():
             log.warning(f"schema.sql not found at {schema_path}")

@@ -1,4 +1,4 @@
-"""smoke tests for file-backed redis and postgres."""
+"""smoke tests for file-backed redis and postgres storage."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ if str(ROOT) not in sys.path:
 
 
 async def test_redis() -> None:
-    from core.managers.storage_paths import CACHE_REDIS_FILE, ensure_storage_files
+    from core.managers.filetypes import CACHE_REDIS_FILE, ensure_storage_files
 
     spec = importlib.util.spec_from_file_location(
         "file_redis",
@@ -38,9 +38,8 @@ async def test_redis() -> None:
     print("redis: ok")
 
 
-async def test_postgres_file() -> None:
-    from core.managers.database.sqlite import SQLitePool, apply_schema, adapt_sql
-    from core.managers.storage_paths import POSTGRES_DB_FILE, ensure_storage_files
+async def test_postgres_db_file() -> None:
+    from core.managers.filetypes import POSTGRES_DB_FILE, ensure_storage_files
 
     ensure_storage_files(postgres=True, redis=False)
     if POSTGRES_DB_FILE.exists():
@@ -48,24 +47,6 @@ async def test_postgres_file() -> None:
 
     ensure_storage_files(postgres=True, redis=False)
     assert POSTGRES_DB_FILE.exists()
-
-    schema = (ROOT / "core/managers/database/models/schema.sql").read_text(encoding="utf-8")
-    await apply_schema(POSTGRES_DB_FILE, schema)
-    pool = await SQLitePool.open(POSTGRES_DB_FILE)
-
-    sql = adapt_sql(
-        """
-        INSERT INTO roleplay.actions (action, giver, receiver, amount)
-            VALUES ($1, $2, $3, 1)
-        ON CONFLICT (action, giver, receiver)
-            DO UPDATE SET amount = roleplay.actions.amount + 1
-        RETURNING amount
-        """
-    )
-    async with pool.acquire() as conn:
-        amount = await conn.fetchval(sql, "hug", 1, 2)
-        assert amount == 1
-    await pool.close()
     print("postgres.db: ok")
 
 
@@ -94,7 +75,7 @@ async def test_postgres_server() -> None:
 
 async def main() -> None:
     await test_redis()
-    await test_postgres_file()
+    await test_postgres_db_file()
     await test_postgres_server()
     print("storage tests finished")
 
