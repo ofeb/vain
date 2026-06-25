@@ -37,7 +37,7 @@ class CmdConverter(Converter):
         match = closest_match(arg, [c.qualified_name for c in ctx.bot.walk_commands()])
         if match:
             return ctx.bot.get_command(match)
-        raise CommandError(f"cant find a command named **{arg}**")
+        raise CommandError(f"**can't** find a command named **{arg}**")
 
 
 class AliasConverter(Converter):
@@ -49,7 +49,7 @@ class AliasConverter(Converter):
             raise CommandError("put a `,` between the command and alias")
         cmd_str, alias_str = [s.strip().lower() for s in arg.split(",", 1)]
         if alias_str in ctx.bot.command_list:
-            raise CommandError(f"cant alias to **{alias_str}** its already a command")
+            raise CommandError(f"**can't** alias to **{alias_str}** its already a command")
         cmd = await CmdConverter().convert(ctx, cmd_str)
         return Alias(command=cmd, alias=alias_str)
 

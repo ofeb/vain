@@ -364,7 +364,7 @@ class Miscellaneous(MiscellaneousEvents, Package):
             emote = await ctx.guild.create_custom_emoji(name=name, image=data)
             await ctx.success(f"Created emoji {emote}")
         except discord.Forbidden:
-            await ctx.warn("I don't have permission to manage emojis.")
+            await ctx.warn("I **don't** have permission to manage emojis.")
         except Exception as e:
             await ctx.fail(f"Failed: {str(e)[:100]}")
 async def setup(bot: Bleed):

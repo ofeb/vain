@@ -251,7 +251,7 @@ class ModerationCommands(Package):
             return await ctx.warn("Source and destination **cannot** be the same")
 
         if not ctx.guild.me.guild_permissions.move_members:
-            return await ctx.warn("I don't have the **Move Members** permission")
+            return await ctx.warn("I **don't** have the **Move Members** permission")
 
         moved = 0
         failed = 0
@@ -291,7 +291,7 @@ class ModerationCommands(Package):
         )
 
         if not rows:
-            return await ctx.fail("No **staff roles** are configured for this server")
+            return await ctx.warn("No **staff roles** are configured for this server")
 
         staff_role_ids = {row[0] for row in rows}
         removed = []
@@ -305,7 +305,7 @@ class ModerationCommands(Package):
                     continue
 
         if not removed:
-            return await ctx.fail(f"{member.mention} has **no dangerous roles** to strip")
+            return await ctx.warn(f"{member.mention} has **no dangerous roles** to strip")
 
         return await ctx.success(f"Stripped **{len(removed)}** dangerous roles from {member.mention}: {', '.join(removed)}")
 
@@ -415,13 +415,13 @@ class ModerationCommands(Package):
         )
         if not row or not row.get(role_key):
             setting_name = {"": "muted", "i": "imuted", "r": "rmuted"}.get(mute_type, mute_type)
-            return await ctx.fail(
+            return await ctx.warn(
                 f"No **{setting_name}** role is set. "
                 f"Use `{ctx.clean_prefix}settings {setting_name}` first."
             )
         role = ctx.guild.get_role(row[role_key])
         if not role:
-            return await ctx.fail("The configured mute role no longer exists.")
+            return await ctx.warn("The configured mute role no longer exists.")
 
         role_label = {"": "text-muted", "i": "image-muted", "r": "reaction-muted"}.get(mute_type, mute_type)
 
@@ -429,7 +429,7 @@ class ModerationCommands(Package):
         if duration:
             seconds = self._parse_duration_seconds(duration)
             if not seconds:
-                return await ctx.fail(f"Invalid duration `{duration}`. Examples: `30m`, `2h`, `7d`.")
+                return await ctx.warn(f"Invalid duration `{duration}`. Examples: `30m`, `2h`, `7d`.")
             expires_at = discord.utils.utcnow() + timedelta(seconds=seconds)
 
         if role in member.roles:

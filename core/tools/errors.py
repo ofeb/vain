@@ -45,4 +45,4 @@ class MissingSetup(CommandError):
 class MaxEntries(CommandError):
     """table row limit reached"""
     def __init__(self, table: str, limit: int):
-        super().__init__(f"cant add more than {limit} {table}s")
+        super().__init__(f"**can't** add more than {limit} {table}s")

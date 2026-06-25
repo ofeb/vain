@@ -71,7 +71,7 @@ class EventEnableCommands(Package):
             if entry.event in all_events:
                 all_events.remove(entry.event)
         if not all_events:
-            return await ctx.fail("all events are disabled")
+            return await ctx.warn("all events are disabled")
         numbered = [f"`{i}` `{EVENT_MAPPING[e][0]}`" for i, e in enumerate(all_events, start=1)]
         return await ctx.paginate(
             Embed(title="Enabled Bot Events", color=self.bot.color).set_author(

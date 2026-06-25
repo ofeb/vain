@@ -23,4 +23,4 @@ class RoleConvert(Converter):
         if match := closest_match(arg, names):
             if r := discord.utils.get(ctx.guild.roles, name=match):
                 return r
-        raise CommandError(f'cant find role **{arg}**')
+        raise CommandError(f'**can't** find role **{arg}**')

@@ -25,4 +25,4 @@ class ChannelConvert(Converter):
         if match := closest_match(arg, names):
             if ch := discord.utils.get(ctx.guild.channels, name=match):
                 return ch
-        raise CommandError(f'cant find channel **{arg}**')
+        raise CommandError(f'**can't** find channel **{arg}**')

@@ -47,7 +47,7 @@ class BoosterroleCommands(Package):
         extras = {}
         if name:
             if len(name) > 32:
-                raise CommandError("role name cant exceed **32** characters")
+                raise CommandError("role name **can't** exceed **32** characters")
             if len(name) < 2:
                 raise CommandError("role name needs at least **2** characters")
             extras["name"] = name
@@ -162,7 +162,7 @@ class BoosterroleCommands(Package):
     async def boosterrole_base(self, ctx, *, role: Role):
         """set booster role position"""
         if not role.is_assignable():
-            raise CommandError(f"cant edit {role.mention}")
+            raise CommandError(f"**can't** edit {role.mention}")
         await self.db.execute(
             """INSERT INTO booster_roles (guild_id, base_id) VALUES($1, $2) ON CONFLICT(guild_id) DO UPDATE SET base_id = excluded.base_id""",
             ctx.guild.id,
@@ -291,7 +291,7 @@ class BoosterroleCommands(Package):
         extras = {}
         if name:
             if len(name) > 32:
-                raise CommandError("role name cant exceed **32** characters")
+                raise CommandError("role name **can't** exceed **32** characters")
             if len(name) < 2:
                 raise CommandError("role name needs at least **2** characters")
             extras["name"] = name
@@ -465,7 +465,7 @@ class BoosterroleCommands(Package):
     async def boosterrole_rename(self, ctx, *, name: str):
         """rename booster role"""
         if len(name) > 32:
-            raise CommandError("name cant exceed **32** characters")
+            raise CommandError("name **can't** exceed **32** characters")
         if len(name) < 2:
             raise CommandError("name needs at least **2** characters")
         role_id = await self.db.fetchval(

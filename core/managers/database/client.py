@@ -27,7 +27,7 @@ def query_limit(table: str, limit: int = 5):
             f"SELECT COUNT(*) FROM {table} WHERE guild_id = $1", ctx.guild.id
         )
         if count == limit:
-            await ctx.fail(f"cant make more than **{limit}** {table}s")
+            await ctx.fail(f"**can't** make more than **{limit}** {table}s")
             return False
         return True
     return check(predicate)

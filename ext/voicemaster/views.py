@@ -242,7 +242,7 @@ class VoiceInterface(ui.View):
             return True
 
         if user.id != owner_id:
-            await _reply(interaction, _warn(interaction, "You don't own a **voice channel**!"))
+            await _reply(interaction, _warn(interaction, "You **don't** own a **voice channel**!"))
             return False
 
         return True

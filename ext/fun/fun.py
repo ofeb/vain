@@ -97,7 +97,7 @@ class Fun(Package):
             "Better not tell you now.",
             "Cannot predict now.",
             "Concentrate and ask again.",
-            "Don't count on it.",
+            "**don't** count on it.",
             "My reply is no.",
             "My sources say no.",
             "Outlook not so good.",
@@ -211,7 +211,7 @@ class Fun(Package):
         member2 = member2 or ctx.author
         
         if member1 == member2:
-            return await ctx.warn("You can't ship someone with themselves!")
+            return await ctx.warn("You **can't** ship someone with themselves!")
         
         combined_id = str(member1.id + member2.id)
         compatibility = int(combined_id[-2:]) % 100 + 1
@@ -269,14 +269,14 @@ class Fun(Package):
     async def joke(self, ctx: Context) -> None:
         """Get a random joke."""
         jokes = [
-            "Why don't scientists trust atoms? Because they make up everything!",
+            "Why **don't** scientists trust atoms? Because they make up everything!",
             "Why did the scarecrow win an award? Because he was outstanding in his field!",
             "I told my wife she was drawing her eyebrows too high. She looked surprised.",
-            "Why don't eggs tell jokes? They'd crack each other up!",
+            "Why **don't** eggs tell jokes? They'd crack each other up!",
             "What do you call a fake noodle? An impasta!",
             "Why did the bicycle fall over? Because it was two-tired!",
             "What do you call a bear with no teeth? A gummy bear!",
-            "Why can't you give Elsa a balloon? Because she will let it go!",
+            "Why **can't** you give Elsa a balloon? Because she will let it go!",
             "What do you call a fish without eyes? A fsh!",
             "Why did the math book look so sad? Because it had too many problems!",
         ]

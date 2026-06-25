@@ -407,13 +407,13 @@ class SuggestCommands(Package):
         if not token:
             return None, "missing emoji"
         if " " in token:
-            return None, "emoji values cant contain spaces"
+            return None, "emoji values **can't** contain spaces"
         if CUSTOM_EMOJI_RE.match(token):
             emoji = discord.PartialEmoji.from_str(token)
             if not emoji.id:
                 return None, "provide a **valid emoji**"
             if guild.get_emoji(emoji.id) is None:
-                return None, "i cant use that custom emoji in this server"
+                return None, "i **can't** use that custom emoji in this server"
             return str(emoji), None
         return token, None
 
@@ -772,7 +772,7 @@ class SuggestCommands(Package):
 
         content = suggestion.strip()
         if not content:
-            raise CommandError("suggestion cant be empty")
+            raise CommandError("suggestion **can't** be empty")
 
         settings = await self._get_settings(ctx.guild.id)
         if not settings.get("enabled"):
@@ -782,7 +782,7 @@ class SuggestCommands(Package):
         if settings.get("review_enabled") and not settings.get("review_channel_id"):
             raise CommandError("no suggestion review channel is configured")
         if await self._is_ignored(ctx.author):
-            raise CommandError("you cant submit suggestions in this server")
+            raise CommandError("you **can't** submit suggestions in this server")
 
         status = "pending_review" if settings.get("review_enabled") else "pending"
         suggestion_id = await self._next_suggestion_id(ctx.guild.id)
@@ -969,7 +969,7 @@ class SuggestCommands(Package):
 
         resolved = await self._resolve_member_or_role(ctx, target)
         if not resolved:
-            raise CommandError("cant find that member or role")
+            raise CommandError("**can't** find that member or role")
 
         target_type = "role" if isinstance(resolved, discord.Role) else "member"
         enabled = await self._toggle_ignored_entry(

@@ -23,7 +23,7 @@ class MemberConvert(Converter):
             try:
                 return await ctx.guild.fetch_member(arg.id)
             except discord.HTTPException:
-                raise CommandError(f"cant find member **{arg}**")
+                raise CommandError(f"**can't** find member **{arg}**")
         try:
             user_id = int(str(arg).strip("<@!>"))
             member = ctx.guild.get_member(user_id)
@@ -42,5 +42,5 @@ class MemberConvert(Converter):
         names = [m.display_name for m in ctx.guild.members]
         if match := closest_match(arg_low, names):
             return discord.utils.get(ctx.guild.members, display_name=match)
-        raise CommandError(f"cant find member **{arg}**")
+        raise CommandError(f"**can't** find member **{arg}**")
 

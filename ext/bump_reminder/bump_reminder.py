@@ -97,7 +97,7 @@ class BumpReminder(BumpReminderEvents, Package):
     async def bumpreminder_config(self, ctx: Context) -> None:
         data = self._cache.get(ctx.guild.id)
         if not data:
-            await ctx.fail("Bump reminder is not configured.")
+            await ctx.warn("Bump reminder is not configured.")
             return
 
         channel = ctx.guild.get_channel(data["channel_id"])

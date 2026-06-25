@@ -111,7 +111,7 @@ class Counters(commands.Cog):
                     option,
                 )
             else:
-                await ctx.fail(f"You already have a {option} counter")
+                await ctx.warn(f"You already have a {option} counter")
                 return
         
         if option == "members":
@@ -158,7 +158,7 @@ class Counters(commands.Cog):
             ctx.guild.id,
             channel.id,
         ):
-            await ctx.fail(f"There is no counter in {channel.mention}")
+            await ctx.warn(f"There is no counter in {channel.mention}")
             return
         
         if action == RemovalActionType.delete:
@@ -187,7 +187,7 @@ class Counters(commands.Cog):
             ctx.guild.id,
         )
         if not counters:
-            await ctx.fail("No category or channel are keeping track of members or boosts")
+            await ctx.warn("No category or channel are keeping track of members or boosts")
             return
         
         embed = discord.Embed(title="Counters", color=color.base)

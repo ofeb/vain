@@ -29,7 +29,7 @@ async def _ensure_paginator_row(package: Package, ctx, message: Message) -> tupl
     try:
         code = embed_script_from_message(message)
     except ValueError:
-        raise CommandError("cant edit that message")
+        raise CommandError("**can't** edit that message")
 
     pages = [code]
     await package.db.execute(
@@ -204,11 +204,11 @@ class PaginationCommands(Package):
     async def pagination_set(self, ctx, message: Message):
         """convert embed to paginator"""
         if message.author.id != self.bot.user.id:
-            raise CommandError("that message must be sent by me")
+            raise CommandError("that message must be sent by **me**")
         try:
             code = embed_script_from_message(message)
         except ValueError:
-            raise CommandError("cant edit that message")
+            raise CommandError("I **can't** **edit** that message")
         pages = [code]
         await self.db.execute(
             """

@@ -390,7 +390,7 @@ class Tickets(TicketsEvents, Package):
     ) -> None:
         panel_type = panel_type.lower()
         if panel_type not in {"buttons", "dropdown"}:
-            return await ctx.fail("Panel type must be `buttons` or `dropdown`.")
+            return await ctx.warn("Panel type must be `buttons` or `dropdown`.")
         row = await self.db.fetchrow(
             """
             INSERT INTO ticket_panels (guild_id, name, channel_id, panel_type, embed_script)
@@ -413,7 +413,7 @@ class Tickets(TicketsEvents, Package):
             ctx.guild.id,
         )
         if not rows:
-            return await ctx.fail("No ticket panels configured.")
+            return await ctx.warn("No ticket panels configured.")
         lines = [
             f"**`{row['name']}`** — <#{row['channel_id']}> ({row['panel_type']})"
             + (f" • [message](https://discord.com/channels/{ctx.guild.id}/{row['channel_id']}/{row['message_id']})" if row["message_id"] else "")
@@ -429,7 +429,7 @@ class Tickets(TicketsEvents, Package):
             name.lower(),
         )
         if not row:
-            return await ctx.fail(f"No panel named **`{name}`**.")
+            return await ctx.warn(f"No panel named **`{name}`**.")
         if row["message_id"]:
             channel = ctx.guild.get_channel(int(row["channel_id"]))
             if isinstance(channel, discord.TextChannel):
@@ -446,13 +446,13 @@ class Tickets(TicketsEvents, Package):
             name.lower(),
         )
         if not panel:
-            return await ctx.fail(f"No panel named **`{name}`**.")
+            return await ctx.warn(f"No panel named **`{name}`**.")
         options = await self.db.fetch(
             "SELECT * FROM ticket_options WHERE panel_id = $1 AND active = TRUE ORDER BY position, id",
             panel["id"],
         )
         if not options:
-            return await ctx.fail("That panel has no active options.")
+            return await ctx.warn("That panel has no active options.")
         if panel["message_id"]:
             channel = ctx.guild.get_channel(int(panel["channel_id"]))
             if isinstance(channel, discord.TextChannel):
@@ -484,7 +484,7 @@ class Tickets(TicketsEvents, Package):
             panel.lower(),
         )
         if not panel_row:
-            return await ctx.fail(f"No panel named **`{panel}`**.")
+            return await ctx.warn(f"No panel named **`{panel}`**.")
         await self.db.execute(
             """
             INSERT INTO ticket_options (guild_id, panel_id, name, label, emoji, description)
@@ -507,14 +507,14 @@ class Tickets(TicketsEvents, Package):
             panel.lower(),
         )
         if not panel_row:
-            return await ctx.fail(f"No panel named **`{panel}`**.")
+            return await ctx.warn(f"No panel named **`{panel}`**.")
         result = await self.db.execute(
             "DELETE FROM ticket_options WHERE panel_id = $1 AND name = $2",
             panel_row["id"],
             name.lower(),
         )
         if result == "DELETE 0":
-            return await ctx.fail(f"No option named **`{name}`** on that panel.")
+            return await ctx.warn(f"No option named **`{name}`** on that panel.")
         await self.tickets_resend(ctx, panel)
 
     @tickets_options.command(name="list")
@@ -525,13 +525,13 @@ class Tickets(TicketsEvents, Package):
             panel.lower(),
         )
         if not panel_row:
-            return await ctx.fail(f"No panel named **`{panel}`**.")
+            return await ctx.warn(f"No panel named **`{panel}`**.")
         rows = await self.db.fetch(
             "SELECT name, label, emoji, description, active FROM ticket_options WHERE panel_id = $1 ORDER BY position, id",
             panel_row["id"],
         )
         if not rows:
-            return await ctx.fail("That panel has no options.")
+            return await ctx.warn("That panel has no options.")
         lines = [
             f"**`{row['name']}`** — {row['label']}"
             + (f" {row['emoji']}" if row['emoji'] else "")
@@ -554,7 +554,7 @@ class Tickets(TicketsEvents, Package):
                 continue
             parsed.append({"key": f"q{index}", "label": label, "required": True})
         if not parsed:
-            return await ctx.fail("Provide at least one question separated by `;`.")
+            return await ctx.warn("Provide at least one question separated by `;`.")
         await self.db.execute(
             """
             INSERT INTO ticket_forms (guild_id, name, questions)
@@ -575,7 +575,7 @@ class Tickets(TicketsEvents, Package):
             ctx.guild.id,
         )
         if not rows:
-            return await ctx.fail("No ticket forms saved.")
+            return await ctx.warn("No ticket forms saved.")
         lines = []
         for row in rows:
             questions = row["questions"]
@@ -592,7 +592,7 @@ class Tickets(TicketsEvents, Package):
             name.lower(),
         )
         if result == "DELETE 0":
-            return await ctx.fail(f"No form named **`{name}`**.")
+            return await ctx.warn(f"No form named **`{name}`**.")
         await ctx.success(f"Removed form **`{name}`**.")
 
     @tickets.command(name="claim")
@@ -673,7 +673,7 @@ class Tickets(TicketsEvents, Package):
         settings = await self._settings(ctx.guild.id)
         ids = list(settings.get("blacklist_user_ids") or [])
         if member.id in ids:
-            return await ctx.fail(f"{member.mention} is already blacklisted.")
+            return await ctx.warn(f"{member.mention} is already blacklisted.")
         ids.append(member.id)
         await self.db.execute(
             "UPDATE ticket_settings SET blacklist_user_ids = $2 WHERE guild_id = $1",
@@ -698,7 +698,7 @@ class Tickets(TicketsEvents, Package):
         settings = await self._settings(ctx.guild.id)
         ids = settings.get("blacklist_user_ids") or []
         if not ids:
-            return await ctx.fail("No users are blacklisted from tickets.")
+            return await ctx.warn("No users are blacklisted from tickets.")
         await ctx.send(embed=discord.Embed(
             title="Ticket Blacklist",
             description=" ".join(f"<@{user_id}>" for user_id in ids),
@@ -708,7 +708,7 @@ class Tickets(TicketsEvents, Package):
     @tickets.command(name="support")
     async def tickets_support(self, ctx: Context, *roles: discord.Role) -> None:
         if not roles:
-            return await ctx.fail("Mention at least one support role.")
+            return await ctx.warn("Mention at least one support role.")
         await self.db.execute(
             """
             INSERT INTO ticket_settings (guild_id, support_role_ids)

@@ -279,7 +279,7 @@ class VoiceMaster(VoiceMasterEvents, Package):
             return True
         
         if ctx.author.id != owner_id:
-            raise commands.CommandError("You don't own this **voice channel**!")
+            raise commands.CommandError("You **don't** own this **voice channel**!")
         
         return True
 

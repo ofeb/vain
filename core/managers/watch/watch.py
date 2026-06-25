@@ -159,7 +159,7 @@ class Watcher:
                     full.mkdir(parents=True, exist_ok=True)
                     log.warning(f"created missing dir: {full}")
                 except Exception as e:
-                    log.error(f"cant create {full}: {e}")
+                    log.error(f"**can't** create {full}: {e}")
         if not self._exists():
             log.error(f"dirs missing: {self._paths_str()}")
             return

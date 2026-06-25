@@ -140,7 +140,7 @@ class CustomizeCommands(Package):
             else:
                 await ctx.success("reset my server name")
         except discord.Forbidden:
-            await ctx.warn("i don't have permission to change my **nickname**")
+            await ctx.warn("i **don't** have permission to change my **nickname**")
         except discord.HTTPException as e:
             await ctx.fail(f"failed to change nickname: `{e.text}`")
 
@@ -169,7 +169,7 @@ class CustomizeCommands(Package):
             await me.edit(avatar=data)
             return await ctx.success("updated my **server avatar**")
         except discord.Forbidden:
-            await ctx.warn("i don't have permission to change my server avatar")
+            await ctx.warn("i **don't** have permission to change my server avatar")
         except discord.HTTPException as e:
             await ctx.fail(f"failed to update server avatar: `{e.text}`")
 

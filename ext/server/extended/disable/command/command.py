@@ -33,7 +33,7 @@ class CommandDisableCommands(Package):
         if existing:
             if target.id in existing.object_ids:
                 raise CommandError(
-                    f"{target.mention} already cant use `{command.qualified_name}`"
+                    f"{target.mention} already **can't** use `{command.qualified_name}`"
                 )
             ids = list(existing.object_ids)
             kinds = list(existing.object_types)

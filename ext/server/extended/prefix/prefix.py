@@ -30,7 +30,7 @@ class PrefixCommands(Package):
     async def prefix_set(self, ctx, prefix: str):
         """replace the guild prefix"""
         if len(prefix) > 3:
-            raise CommandError("prefix cant be longer than **3** characters")
+            raise CommandError("prefix **can't** be longer than **3** characters")
         await self.db.execute(
             """INSERT INTO config (guild_id, prefixes) VALUES($1, $2) ON CONFLICT(guild_id) DO UPDATE SET prefixes = excluded.prefixes""",
             ctx.guild.id,
@@ -49,7 +49,7 @@ class PrefixCommands(Package):
     async def prefix_add(self, ctx, prefix: str):
         """append a guild prefix"""
         if len(prefix) > 3:
-            raise CommandError("prefix cant be longer than **3** characters")
+            raise CommandError("prefix **can't** be longer than **3** characters")
         existing = await self.db.fetchval(
             """SELECT prefixes FROM config WHERE guild_id = $1""", ctx.guild.id
         ) or [bot_config.prefix]
@@ -105,7 +105,7 @@ class PrefixCommands(Package):
             await ctx.bot.invalidate_prefix_cache(guild_id=ctx.guild.id)
             return await ctx.success(f"removed prefix `{prefix}`")
         else:
-            return await ctx.fail("no custom prefix set to remove")
+                return await ctx.warn("no custom prefix set to remove")
 
     @prefix.group(
         name="self",
@@ -116,7 +116,7 @@ class PrefixCommands(Package):
     async def prefix_self(self, ctx, prefix: str):
         """personal prefix for you"""
         if len(prefix) > 3:
-            raise CommandError("prefix cant be longer than **3** characters")
+            raise CommandError("prefix **can't** be longer than **3** characters")
         await self.db.execute(
             """INSERT INTO self_prefix (user_id, prefix) VALUES($1, $2) ON CONFLICT(user_id) DO UPDATE SET prefix = excluded.prefix""",
             ctx.author.id,

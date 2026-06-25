@@ -59,7 +59,7 @@ class _JSONEncoder:
 class BotLock(Lock):
     """redis lock that auto extends itself.
     keeps the lock alive while context manager is held.
-    raises LockError if it cant acquire"""
+    raises LockError if it **can't** acquire"""
 
     def __init__(self, redis: Redis, name, max_ttl: float = 30.0, extend_every: float = 0.5, **kw):
         self.extend_every = extend_every
@@ -78,7 +78,7 @@ class BotLock(Lock):
             if self.extend_every:
                 self._extend_task = asyncio.create_task(self._extender())
             return self
-        raise LockError("cant acquire lock in time")
+        raise LockError("**can't** acquire lock in time")
 
     async def __aexit__(self, *_):
         if self._extend_task:

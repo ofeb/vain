@@ -84,7 +84,7 @@ class WebhookCommands(Package):
     async def _build_payload(self, ctx, raw: str) -> dict:
         message = raw.strip()
         if not message:
-            raise CommandError("message cant be empty")
+            raise CommandError("message **can't** be empty")
 
         base, extra = message, None
         if " --add " in message:

@@ -260,10 +260,10 @@ class Autorole(commands.Cog):
     ) -> None:
         """Add a button role to a message."""
         if message.author.id != self.bot.user.id:
-            await ctx.fail("That is not a message that I created")
+            await ctx.warn("That is not a message that I created")
             return
         if not emoji and not label:
-            await ctx.fail("Either an emoji or label must be provided")
+            await ctx.warn("Either an emoji or label must be provided")
             return
         
         indexes = await self.bot.db.fetch(
@@ -276,7 +276,7 @@ class Autorole(commands.Cog):
             index = 1
         
         if len(label) > 100:
-            await ctx.fail("Label must be 100 characters or less")
+            await ctx.warn("Label must be 100 characters or less")
             return
         
         await self.bot.db.execute(
@@ -371,7 +371,7 @@ class Autorole(commands.Cog):
             ctx.guild.id,
         )
         if not rows:
-            await ctx.fail("No Reaction Roles have been setup yet")
+            await ctx.warn("No Reaction Roles have been setup yet")
             return
         
         rows = [
@@ -399,7 +399,7 @@ class Autorole(commands.Cog):
         try:
             await message.add_reaction(emoji)
         except Exception:
-            await ctx.fail(f"Emoji {emoji} is not a valid emoji")
+            await ctx.warn(f"Emoji {emoji} is not a valid emoji")
             return
         
         await self.bot.db.execute(
