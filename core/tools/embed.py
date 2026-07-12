@@ -37,7 +37,7 @@ class BadEmbed(Exception):
 
 
 class ParsedEmbedScript:
-    """Compatibility wrapper for callers that expect bored-style parsed scripts."""
+    """Compatibility wrapper for callers that expect vain-style parsed scripts."""
 
     def __init__(
         self,

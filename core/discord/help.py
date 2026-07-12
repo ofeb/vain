@@ -744,7 +744,7 @@ class HelpView(ui.View):
             description=(
                 f"> Use `{p}help <command>` for help on a specific command.\n"
                 f"> Parameters in `(...)` are required, `[...]` are optional.\n\n"
-                f"> Join the [support server](https://discord.gg/percsbio) for more support."
+                f"> Join the [support server](https://discord.gg/vainbot) for more support."
             ),
         )
         if self.ctx.bot.user:
@@ -925,9 +925,7 @@ class BleedHelp:
             [t for t in targets if t is not grp],
             key=lambda c: command_display_name(c).lower(),
         )
-        if isinstance(grp, Group) and grp.invoke_without_command:
-            subs.insert(0, grp)
-        elif not isinstance(grp, Group) and len(targets) > 1:
+        if not isinstance(grp, Group) and len(targets) > 1:
             subs.insert(0, grp)
         if not subs:
             await self._send(_detail_embed(grp, self.ctx))

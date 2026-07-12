@@ -19,7 +19,7 @@ START_TIMEOUT_SECONDS = 30
 RPS_EMOJI = {"rock": "🪨", "paper": "📄", "scissors": "✂️"}
 RPS_BEATS = {"rock": "scissors", "paper": "rock", "scissors": "paper"}
 ZWSP = "\u200b"
-BOT_NAME = "Refrain"
+BOT_NAME = "vain"
 BOT_OPPONENT = "Me"
 
 

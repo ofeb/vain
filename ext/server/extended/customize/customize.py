@@ -9,7 +9,7 @@ from discord.ext.commands import group
 
 from core.discord.package import Package
 
-BIO_LINKS = ("https://percs.cc/", "discord.gg/percsbio")
+BIO_LINKS = ("https://vain.bot/", "discord.gg/vainbot")
 BIO_MAX_LENGTH = 190
 CLEAR_WORDS = {"clear", "none", "off", "remove", "reset"}
 
@@ -69,7 +69,7 @@ class CustomizeCommands(Package):
         bio = text.strip()
         lower = bio.lower()
         if not any(link in lower for link in BIO_LINKS):
-            bio = f"{bio}\nhttps://percs.cc/"
+            bio = f"{bio}\nhttps://vain.bot/"
         return bio
 
     async def _reset_server_profile(self, ctx) -> list[str]:
@@ -148,7 +148,7 @@ class CustomizeCommands(Package):
         name="avatar",
         aliases=["pfp", "av"],
         description="Change or reset the bot's server avatar",
-        example=",customize avatar https://percs.cc/avatar.png",
+        example=",customize avatar https://vain.bot/avatar.png",
     )
     async def customize_avatar(self, ctx, source: str = None):
         """change bot server avatar"""
@@ -176,7 +176,7 @@ class CustomizeCommands(Package):
     @customize.command(
         name="banner",
         description="Change or reset the bot's server banner",
-        example=",customize banner https://percs.cc/banner.png",
+        example=",customize banner https://vain.bot/banner.png",
     )
     async def customize_banner(self, ctx, source: str = None):
         """change bot server banner"""
@@ -257,10 +257,10 @@ class CustomizeCommands(Package):
         current = settings.get("emoji", {})
 
         default_emoji = {
-            "success": "<:embeds_approve:1511705992323272745>",
-            "warn": "<:embeds_warn:1511705997918343168>",
-            "deny": "<:embeds_deny:1511705993283633253>",
-            "cooldown": "<:embeds_cooldown:1511705992755417129>",
+            "success": "<:approve:1525918671774679261>",
+            "warn": "<:warn:1525918556435255336>",
+            "deny": "<:deny:1525918867115741215>",
+            "cooldown": "<:cooldown:1525919040776835075>",
             "loading": "<a:embeds_loading:1511705994823077988>",
             "info": "<:interface_information:1511705999550185646>",
         }

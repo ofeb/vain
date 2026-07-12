@@ -426,7 +426,7 @@ class Bleed(commands.AutoShardedBot):
             return False
 
     def _log_all_commands(self) -> None:
-        """dump every registered command after all cogs are loaded"""
+        """dump every registered command and listener after all cogs are loaded"""
         all_cmds = sorted(self.commands, key=lambda c: c.qualified_name)
         log.info("=" * 60)
         log.info("ALL REGISTERED COMMANDS — %d total", len(all_cmds))
@@ -438,6 +438,24 @@ class Bleed(commands.AutoShardedBot):
                 log.info("  [%s]", cog_name)
             aliases = f" (aliases: {', '.join(cmd.aliases)})" if cmd.aliases else ""
             log.info("    • %s%s", cmd.qualified_name, aliases)
+
+        all_listeners = []
+        for event_name, funcs in self.extra_events.items():
+            for func in funcs:
+                cog_name = getattr(func, '__self__', None)
+                if cog_name is not None:
+                    cog_name = type(cog_name).__name__
+                else:
+                    cog_name = "Bot"
+                all_listeners.append((event_name, cog_name, func.__name__))
+        all_listeners.sort()
+        log.info("ALL REGISTERED LISTENERS — %d total", len(all_listeners))
+        current_event = None
+        for event_name, cog_name, func_name in all_listeners:
+            if event_name != current_event:
+                current_event = event_name
+                log.info("  [%s]", event_name)
+            log.info("    • %s.%s", cog_name, func_name)
         log.info("=" * 60)
 
     async def _sync_global_commands(self) -> None:
@@ -619,7 +637,7 @@ class Bleed(commands.AutoShardedBot):
             await self._sync_guild_commands()
             self._guild_slash_synced = True
 
-        await self.change_presence(status=discord.Status.online, activity=discord.CustomActivity(name="🔗 discord.gg/percsbio for the best biolink"))
+        await self.change_presence(status=discord.Status.online, activity=discord.CustomActivity(name="🔗 discord.gg/vainbot"))
 
     async def on_guild_join(self, guild: discord.Guild) -> None:
         await self._sync_guild_commands(guild=guild)

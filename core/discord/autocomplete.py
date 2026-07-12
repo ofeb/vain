@@ -63,7 +63,7 @@ async def guild_member_choices(
     choices: list[app_commands.Choice[str]] = []
 
     if include_me and (
-        not needle or any(x in needle for x in ("me", "refrain", "bot", "i"))
+        not needle or any(x in needle for x in ("me", "vain", "bot", "i"))
     ):
         choices.append(app_commands.Choice(name="Me", value="0"))
 

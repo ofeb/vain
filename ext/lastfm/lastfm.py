@@ -662,14 +662,14 @@ class Lastfm(LastfmEvents, Package):
     @commands.group(name="lastfm", aliases=["lf", "fm"], invoke_without_command=True)
     async def lastfm(self, ctx: Context) -> discord.Message:
         """
-        Integrate your Last.fm account with bored and view your scrobble stats
+        Integrate your Last.fm account with vain and view your scrobble stats
         """
         return await self.lastfm_now(ctx)
 
     @lastfm.command(name="login")
     async def lastfm_login(self, ctx: Context, username: str) -> None:
         """
-        Link your Last.fm username to bored
+        Link your Last.fm username to vain
         """
         username = username.strip().lstrip("@")
         if not username:
@@ -690,7 +690,7 @@ class Lastfm(LastfmEvents, Package):
     @lastfm.command(name="logout")
     async def lastfm_logout(self, ctx: Context) -> None:
         """
-        Remove your Last.fm account with bored
+        Remove your Last.fm account with vain
         """
         if not getattr(self.bot, "db", None):
             await ctx.warn("Last.fm is not configured on this bot.")

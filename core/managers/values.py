@@ -12,9 +12,9 @@ storage: Final[Path] = root / "core" / "storage"
 
 prime_emoji_environment()
 
-token: str = "MTUxMTQ1NjA0NDUwNzcyOTk5MQ.Gz-98R.ptCp8ALKvK4aceJyCT7P-Uo8pD68IrUP97XWos"
+token: str = "MTQxMTQwOTM5MjMzNDY3MjAxMw.GUte_c.SoJin1xjFeAzcnbIlAGy5psC0WQPbF6dqbdxyo"
 _DEFAULT_OWNER_IDS: Final[tuple[int, ...]] = (
-    197390603443634177,
+    1137513168965476352,
     1449456965334859860,
     1480279800701784074,
 )
@@ -23,8 +23,8 @@ _DEFAULT_OWNER_IDS: Final[tuple[int, ...]] = (
 class bot:
     prefix: str = ","
     owners: tuple[int, ...] = _DEFAULT_OWNER_IDS
-    support: str = "https://discord.gg/percsbio"
-    website: str = "https://percs.cc"
+    support: str = "https://discord.gg/vainbot"
+    website: str = "https://vain.bot"
     docs: str = "https://docs.bleed.bot"
     status: str = "online"
     activity_type: str = "none"
@@ -33,11 +33,11 @@ class bot:
 
 
 class emojis:
-    approve: str = default_emoji("approve", "<:embeds_approve:1511705992323272745>")
-    warn: str = default_emoji("warn", "<:embeds_warn:1511705997918343168>")
-    deny: str = default_emoji("deny", "<:embeds_deny:1511705993283633253>")
+    approve: str = default_emoji("approve", "<:approve:1525918671774679261>")
+    warn: str = default_emoji("warn", "<:warn:1525918556435255336>")
+    deny: str = default_emoji("deny", "<:deny:1525923852515803187>")
     loading: str = default_emoji("loading", "<a:embeds_loading:1511705994823077988>")
-    cooldown: str = default_emoji("cooldown", "<:embeds_cooldown:1511705992755417129>")
+    cooldown: str = default_emoji("cooldown", "<:cooldown:1525919040776835075>")
     add: str = "<:embeds_add:1511705992469942292>"
     remove: str = "<:embeds_remove:1511705995850551357>"
     lastfm: str = "<:embeds_lastfm:1511705994458300618>"
