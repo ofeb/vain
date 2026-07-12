@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import io
 import os
@@ -15,13 +15,13 @@ from core.managers.permissions import has_permissions
 from core.managers.values import color
 
 if TYPE_CHECKING:
-    from core.bleed import Bleed
+    from core.vain import Vain
 
 
 class Socials(Package):
     """Social media feeds and notifications."""
 
-    def __init__(self, bot: Bleed):
+    def __init__(self, bot: Vain):
         super().__init__(bot)
         self._filters = {}
 
@@ -240,5 +240,5 @@ class Socials(Package):
         await ctx.send(embed=embed)
 
 
-async def setup(bot: Bleed):
+async def setup(bot: Vain):
     await bot.add_cog(Socials(bot))

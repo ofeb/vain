@@ -1127,7 +1127,7 @@ class Database:
         guild_id: int,
         identifier: str,
     ) -> Optional[Row]:
-        """fetch one webhook row by the public bleed identifier"""
+        """fetch one webhook row by the public vain identifier"""
         return await self.fetchrow(
             "SELECT * FROM webhooks WHERE guild_id = $1 AND identifier = $2",
             guild_id,
@@ -1723,13 +1723,13 @@ class Database:
     async def get_color(self, guild_id: int, user_id: int = None) -> dict:
         """Get colors with guild/user override"""
         default_color = {
-            "base": 0x373737,
-            "approve": 0xA8EA7B,
-            "warn": 0xFDCF39,
-            "deny": 0xFF0000,
-            "cooldown": 0x4EC3E8,
-            "settings": 0x7289DA,
-            "dark": 0x2B2D31,
+            "base": 0xC8A4C2,
+            "approve": 0xA8D8A8,
+            "warn": 0xF5D76E,
+            "deny": 0xE07A7A,
+            "cooldown": 0xBBA0D2,
+            "settings": 0xD4B8D0,
+            "dark": 0x9B7A9E,
         }
 
         guild_settings = await self.get_guild_customize(guild_id)

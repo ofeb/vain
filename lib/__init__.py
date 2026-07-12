@@ -1,2 +1,2 @@
-"""legacy bleed compatibility namespace."""
+"""legacy vain compatibility namespace."""
 

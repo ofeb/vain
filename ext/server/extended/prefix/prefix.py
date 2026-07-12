@@ -1,4 +1,4 @@
-from discord.ext.commands import group, CommandError
+﻿from discord.ext.commands import group, CommandError
 from core.discord.package import Package
 from core.managers.values import bot as bot_config
 
@@ -109,7 +109,7 @@ class PrefixCommands(Package):
 
     @prefix.group(
         name="self",
-        description="Set personal prefix across all guilds with bleed",
+        description="Set personal prefix across all guilds with Vain",
         example=",prefix self k!",
         invoke_without_command=True,
     )

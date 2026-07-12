@@ -1,6 +1,6 @@
-from .client import BleedCache
-from .file import FileBleedCache
+from .client import VainCache
+from .file import FileVainCache
 
-RedisClient = BleedCache | FileBleedCache
+RedisClient = VainCache | FileVainCache
 
-__all__ = ["BleedCache", "FileBleedCache", "RedisClient"]
+__all__ = ["VainCache", "FileVainCache", "RedisClient"]

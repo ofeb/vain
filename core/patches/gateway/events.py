@@ -1,4 +1,4 @@
-﻿﻿"""gateway event hooks.
+﻿"""gateway event hooks.
 registers listeners that run before cog listeners.
 handles global checks like blacklists and maintenance"""
 
@@ -11,7 +11,7 @@ from discord.ext import commands
 from core.discord.package import Package
 
 if TYPE_CHECKING:
-    from core.bleed import Bleed
+    from core.vain import Vain
 
 
 class GatewayEvents(Package):
@@ -33,5 +33,5 @@ class GatewayEvents(Package):
         await self.bot.process_commands(message)
 
 
-async def setup(bot: Bleed):
+async def setup(bot: Vain):
     await bot.add_cog(GatewayEvents(bot))

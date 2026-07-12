@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime, timedelta
@@ -12,11 +12,11 @@ from asyncio import Lock
 from core.discord.package import Package
 
 if TYPE_CHECKING:
-    from core.bleed import Bleed
+    from core.vain import Vain
 
 
 class InformationEvents(Package):
-    def __init__(self: "InformationEvents", bot: Bleed):
+    def __init__(self: "InformationEvents", bot: Vain):
         super().__init__(bot)
         self.locks = defaultdict(Lock)
         self.joined_cache = {}
@@ -54,7 +54,7 @@ class InformationEvents(Package):
         embed = Embed(
             title="Member Joined",
             description=f"{member.mention} joined the server",
-            color=0x00FF00
+            color=0xD4B8D0
         )
         embed.add_field(name="Account Age", value=f"{account_age} days", inline=True)
         embed.add_field(name="Account Created", value=member.created_at.strftime("%Y-%m-%d"), inline=True)
@@ -80,7 +80,7 @@ class InformationEvents(Package):
         embed = Embed(
             title="Member Left",
             description=f"{member.name} left the server",
-            color=0xFF0000
+            color=0xE07A7A
         )
         embed.add_field(name="Duration in Server", value=duration, inline=True)
         embed.set_thumbnail(url=member.display_avatar.url)
@@ -107,7 +107,7 @@ class InformationEvents(Package):
         embed = Embed(
             title="Message Edited",
             description=f"Message by {before.author.mention} was edited",
-            color=0xFFFF00
+            color=0xBBA0D2
         )
         embed.add_field(name="Before", value=before.content[:1024] or "None", inline=False)
         embed.add_field(name="After", value=after.content[:1024] or "None", inline=False)
@@ -132,7 +132,7 @@ class InformationEvents(Package):
         embed = Embed(
             title="Message Deleted",
             description=f"Message by {message.author.mention} was deleted",
-            color=0xFF0000
+            color=0xC2A8D0
         )
         if message.content:
             embed.add_field(name="Content", value=message.content[:1024], inline=False)

@@ -1,11 +1,11 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
 import discord
 
 if TYPE_CHECKING:
-    from core.bleed import Bleed
+    from core.vain import Vain
 
 
 def is_group_chat(channel: discord.abc.MessageableChannel | None) -> bool:
@@ -113,7 +113,7 @@ async def _bump(
 
 
 async def record_ttt_game(
-    bot: Bleed,
+    bot: Vain,
     *,
     guild_id: int | None,
     channel_id: int | None,
@@ -293,7 +293,7 @@ async def leaderboard_rows(
     return await fetch_ttt_leaderboard(db)
 
 
-async def user_display(bot: Bleed, user_id: int) -> str:
+async def user_display(bot: Vain, user_id: int) -> str:
     if bot.user and user_id == bot.user.id:
         return f"{bot.user.display_name}#0"
     user = bot.get_user(user_id)
@@ -329,7 +329,7 @@ def build_stats_embed(author: discord.User, stats: dict[str, int]) -> discord.Em
 
 
 async def build_leaderboard_pages(
-    bot: Bleed,
+    bot: Vain,
     *,
     rows: list[dict[str, int]],
     author: discord.User,

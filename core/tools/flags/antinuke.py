@@ -17,5 +17,5 @@ class AntiNukeFlags(FlagConverter, case_insensitive=True, prefix="--", delimiter
     )
     command: bool = flag(
         default=False,
-        description="count bleed commands toward the threshold",
+        description="count vain commands toward the threshold",
     )

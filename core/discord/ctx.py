@@ -156,7 +156,7 @@ class Context(commands.Context):
         return await self.reply(embed=embed, **kwargs)
 
     async def success(self, message: str, **kw):
-        """send a success reply with bleed styling"""
+        """send a success reply with vain styling"""
         emoji = await self._get_emoji("success")
         color_value = await self._get_color("approve")
         return await self._send_embed_response(
@@ -169,7 +169,7 @@ class Context(commands.Context):
         )
 
     async def fail(self, message: str, **kw):
-        """send a failure reply with bleed styling"""
+        """send a failure reply with vain styling"""
         emoji = await self._get_emoji("deny")
         color_value = await self._get_color("deny")
         return await self._send_embed_response(
@@ -182,7 +182,7 @@ class Context(commands.Context):
         )
 
     async def warn(self, message: str, **kw):
-        """send a warning reply with bleed styling"""
+        """send a warning reply with vain styling"""
         emoji = await self._get_emoji("warn")
         color_value = await self._get_color("warn")
         return await self._send_embed_response(
@@ -195,7 +195,7 @@ class Context(commands.Context):
         )
 
     async def cooldown(self, message: str, **kw):
-        """send a cooldown reply with bleed styling"""
+        """send a cooldown reply with vain styling"""
         emoji = await self._get_emoji("cooldown")
         color_value = await self._get_color("cooldown")
         return await self._send_embed_response(
@@ -219,16 +219,16 @@ class Context(commands.Context):
         )
 
     async def info(self, message: str, **kw):
-        """send an informational reply using bleed's info emoji."""
+        """send an informational reply using vain's info emoji."""
         emoji = await self._get_emoji("info")
         return await self.normal(message, emoji=emoji, **kw)
 
     async def lastfm(self, message: str, **kw):
-        """send a compact Last.fm reply with bleed styling."""
+        """send a compact Last.fm reply with vain styling."""
         try:
             color_value = discord.Color.from_str(lastfm_color.value)
         except ValueError:
-            color_value = discord.Color(0xC1272D)
+            color_value = discord.Color(0xBBA0D2)
 
         return await self._send_embed_response(
             self._message_embed(
@@ -250,8 +250,8 @@ class Context(commands.Context):
         return await self.bot.send_embed(self, code, **kw)
 
     async def send_help(self, *args: Any):
-        """route help requests through bleed's custom help handler"""
-        help_handler = getattr(self.bot, "_bleed_help", None)
+        """route help requests through vain's custom help handler"""
+        help_handler = getattr(self.bot, "_vain_help", None)
         if help_handler is not None:
             entity = args[0] if args else self.command
             if isinstance(entity, str):

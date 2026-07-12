@@ -97,7 +97,7 @@ class ModerationEvents(Package):
         embed = discord.Embed(
             title="Role Changes",
             description=f"Roles updated for {after.mention}",
-            color=0xFFFF00
+            color=0xD4B8D0
         )
         
         if added_roles:
@@ -133,7 +133,7 @@ class ModerationEvents(Package):
                 embed = discord.Embed(
                     title="Member Banned",
                     description=f"{user.name} was banned by {entry.user.mention}",
-                    color=0xFF0000
+                    color=0xE07A7A
                 )
                 if entry.reason:
                     embed.add_field(name="Reason", value=entry.reason, inline=False)
@@ -157,7 +157,7 @@ class ModerationEvents(Package):
                 embed = discord.Embed(
                     title="Member Unbanned",
                     description=f"{user.name} was unbanned by {entry.user.mention}",
-                    color=0x00FF00
+                    color=0xA8D8A8
                 )
                 await log_channel.send(embed=embed)
                 break

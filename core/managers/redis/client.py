@@ -89,7 +89,7 @@ class BotLock(Lock):
         self._held = False
 
 
-class BleedCache(Redis):
+class VainCache(Redis):
     """discord bot redis with helpers.
     wraps redis.asyncio with rate limiting and message storage.
     use from_url classmethod to connect"""
@@ -112,7 +112,7 @@ class BleedCache(Redis):
         return [{n: l} for n, l in self._locks.items() if l.locked()]
 
     def __repr__(self):
-        return f"BleedCache ns={self._ns} pool={self.connection_pool!r}"
+        return f"VainCache ns={self._ns} pool={self.connection_pool!r}"
 
     async def jsonset(self, key, data: dict, **kw):
         return await self._json.set(key, ".", data, **kw)

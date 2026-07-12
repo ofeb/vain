@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import contextlib
 from collections import defaultdict, deque
@@ -19,7 +19,7 @@ from core.tools.flags import AntiRaidFlags
 from .models import AntiraidConfig, ModuleConfig
 
 if TYPE_CHECKING:
-    from core.bleed import Bleed
+    from core.vain import Vain
 
 from core.managers.permissions import has_permissions
 MASSJOIN_WINDOW = 10
@@ -504,5 +504,5 @@ class Antiraid(AntiraidEvents, Package):
         if unlocked:
             suffix = f" and **{unlocked}** channel{'s' if unlocked != 1 else ''} unlocked"
         await ctx.success(f"Antiraid configuration has been **reset**{suffix}.")
-async def setup(bot: Bleed) -> None:
+async def setup(bot: Vain) -> None:
     await bot.add_cog(Antiraid(bot))

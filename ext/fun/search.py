@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import re
 from html import unescape
@@ -8,8 +8,8 @@ from urllib.parse import parse_qs, unquote, urlparse
 import aiohttp
 import discord
 
-DDG_ICON = "https://bleed.bot/img/duckduckgo.png"
-GOOGLE_ICON = "https://bleed.bot/img/google.png"
+DDG_ICON = "https://vain.bot/img/duckduckgo.png"
+GOOGLE_ICON = "https://vain.bot/img/google.png"
 _DDG_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 _RESULTS_PER_PAGE = 3
 _FETCH_LIMIT = 12

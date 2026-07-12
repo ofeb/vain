@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone, timedelta
+from collections import deque
+
 import discord
 
 from core.discord.package import Package
+
+MASSJOIN_WINDOW = 30
 
 
 class AntiraidEvents:

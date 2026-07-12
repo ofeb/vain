@@ -10,12 +10,12 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-log = logging.getLogger("bleed.hybrid")
+log = logging.getLogger("vain.hybrid")
 
-_DESCRIPTIONS_ATTR = "__bleed_descriptions__"
-_SLASH_HYBRID_ATTR = "__bleed_slash_hybrid__"
-_FAMILY_ROOT_ATTR = "__bleed_family_root__"
-_FAMILY_HELP_NAME_ATTR = "__bleed_family_help_name__"
+_DESCRIPTIONS_ATTR = "__vain_descriptions__"
+_SLASH_HYBRID_ATTR = "__vain_slash_hybrid__"
+_FAMILY_ROOT_ATTR = "__vain_family_root__"
+_FAMILY_HELP_NAME_ATTR = "__vain_family_help_name__"
 
 
 def linked_family(root: str, *, help_name: str | None = None) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
@@ -33,15 +33,15 @@ def _copy_link_meta(cmd: commands.Command, fn: Callable[..., Any]) -> None:
     root = getattr(fn, _FAMILY_ROOT_ATTR, None)
     help_name = getattr(fn, _FAMILY_HELP_NAME_ATTR, None)
     if root is not None:
-        cmd.__bleed_family_root__ = root
+        cmd.__vain_family_root__ = root
     if help_name is not None:
-        cmd.__bleed_family_help_name__ = help_name
+        cmd.__vain_family_help_name__ = help_name
     callback = getattr(cmd, "callback", None)
     if callback is not None:
         if root is not None:
-            callback.__bleed_family_root__ = root
+            callback.__vain_family_root__ = root
         if help_name is not None:
-            callback.__bleed_family_help_name__ = help_name
+            callback.__vain_family_help_name__ = help_name
 
 
 def family_root(cmd: commands.Command) -> str | None:

@@ -1,9 +1,9 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from core.bleed import Bleed
+    from core.vain import Vain
 
 
 import asyncio
@@ -28,7 +28,7 @@ from core.managers.permissions import has_permissions
 class VoiceMaster(VoiceMasterEvents, Package):
     """Voice channel management system."""
 
-    def __init__(self, bot: Bleed):
+    def __init__(self, bot: Vain):
         super().__init__(bot)
         self._cooldowns: dict = {}
         self.bot.add_view(VoiceInterface(self))
@@ -70,7 +70,7 @@ class VoiceMaster(VoiceMasterEvents, Package):
         return [block for block in blocks if block]
 
     def _interface_embed(self, guild: discord.Guild) -> discord.Embed:
-        """Build the bleed-style VoiceMaster interface embed."""
+        """Build the Vain-style VoiceMaster interface embed."""
         embed = discord.Embed(
             color=color.base,
             title="VoiceMaster Interface",
@@ -715,5 +715,5 @@ class VoiceMaster(VoiceMasterEvents, Package):
         
         await ctx.success(f"Rejected {target.mention}")
     pass
-async def setup(bot: Bleed):
+async def setup(bot: Vain):
     await bot.add_cog(VoiceMaster(bot))

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import re
 from typing import TYPE_CHECKING
@@ -13,7 +13,7 @@ from core.managers.permissions import has_permissions
 from core.managers.values import color
 
 if TYPE_CHECKING:
-    from core.bleed import Bleed
+    from core.vain import Vain
 
 
 class EmbedCommands(Package):

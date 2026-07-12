@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import contextlib
 import datetime
@@ -15,7 +15,7 @@ from core.managers.permissions import has_permissions
 from core.managers.values import color, emojis
 
 if TYPE_CHECKING:
-    from core.bleed import Bleed
+    from core.vain import Vain
 
 EVENT_TYPES = {
     "messages": "Message edit/delete logging",
@@ -127,9 +127,9 @@ def _format_overwrite_changes(
 
 
 class Log(LogEvents, Package):
-    """Server logging via webhooks matching bleed's format."""
+    """Server logging via webhooks matching Vain's format."""
 
-    def __init__(self, bot: Bleed):
+    def __init__(self, bot: Vain):
         super().__init__(bot)
         self._webhook_cache: dict[int, discord.Webhook] = {}
 
@@ -154,11 +154,11 @@ class Log(LogEvents, Package):
         try:
             webhooks = await target.webhooks()
             for wh in webhooks:
-                if wh.user and wh.user.id == self.bot.user.id and wh.name == "bleed logs":
+                if wh.user and wh.user.id == self.bot.user.id and wh.name == "vain logs":
                     self._webhook_cache[channel_id] = wh
                     return wh
             wh = await target.create_webhook(
-                name="bleed logs",
+                name="vain logs",
                 avatar=await self.bot.user.display_avatar.read(),
             )
             self._webhook_cache[channel_id] = wh
@@ -212,12 +212,12 @@ class Log(LogEvents, Package):
                 wh = await self._get_webhook(channel_id)
                 if wh:
                     with contextlib.suppress(discord.HTTPException):
-                        await wh.send(embed=embed, username="bleed logs")
+                        await wh.send(embed=embed, username="vain logs")
         except Exception:
             pass
 
 
-async def setup(bot: Bleed):
+async def setup(bot: Vain):
     await bot.add_cog(Log(bot))
     @group(
         name="log",

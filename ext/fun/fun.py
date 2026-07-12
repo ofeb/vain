@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import random
 import re
@@ -32,7 +32,7 @@ from .ttt_stats import (
 )
 
 if TYPE_CHECKING:
-    from core.bleed import Bleed
+    from core.vain import Vain
 
 _CONTEXTS = dict(guilds=True, dms=True, groupchats=True)
 
@@ -605,7 +605,7 @@ class Fun(Package):
         await ctx.send(embed=embed)
 
 
-async def setup(bot: Bleed):
+async def setup(bot: Vain):
     from .events import FunEvents
 
     await bot.add_cog(Fun(bot))

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import asyncio
 from typing import TYPE_CHECKING
@@ -9,13 +9,13 @@ from core.discord.package import Package
 
 if TYPE_CHECKING:
     from .counters import Counters
-    from core.bleed import Bleed
+    from core.vain import Vain
 
 
 class CountersEvents(Package):
     """Counter event handlers."""
 
-    def __init__(self, bot: Bleed):
+    def __init__(self, bot: Vain):
         super().__init__(bot)
         self.rl_helper = {}
 
@@ -98,5 +98,5 @@ class CountersEvents(Package):
             await booster_counter_channel.edit(name=f"{num} boosters")
 
 
-async def setup(bot: Bleed):
+async def setup(bot: Vain):
     await bot.add_cog(CountersEvents(bot))

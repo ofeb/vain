@@ -92,7 +92,7 @@ def _has_link(s: str) -> bool:
 
 
 def is_embed_script(raw: str) -> bool:
-    """Return True when a template should be parsed as bleed embed code."""
+    """Return True when a template should be parsed as vain embed code."""
     stripped = str(raw).strip()
     if (
         stripped.startswith("{embed}")
@@ -595,7 +595,7 @@ class PreparedScript:
 
 
 class Script:
-    """shared bleed embed/template builder."""
+    """shared vain embed/template builder."""
 
     def __init__(
         self,

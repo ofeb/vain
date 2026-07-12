@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import contextlib
 from typing import TYPE_CHECKING, Any
@@ -48,7 +48,7 @@ async def _reply(
     *,
     view: ui.View | None = None,
 ) -> None:
-    """Send a branded embed using the same deferred interaction flow as bleed."""
+    """Send a branded embed using the same deferred interaction flow as Vain."""
     kwargs: dict[str, Any] = {"embed": embed, "ephemeral": True}
     if view is not None:
         kwargs["view"] = view

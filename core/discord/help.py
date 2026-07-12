@@ -18,7 +18,7 @@ from core.managers.values import color, emojis
 
 if TYPE_CHECKING:
     from .ctx import Context
-    from core.bleed import Bleed
+    from core.vain import Vain
 
 _BLANK = "‎"
 _HOME = "__home__"
@@ -146,7 +146,7 @@ _BLURBS: dict[str, str] = {
     "Rewards": "XP, levels, giveaways, and reward systems.",
     "Crypto": "Cryptocurrency prices, charts, and market data.",
     "Last.fm": "Scrobbles, charts, covers, whoknows, and now playing.",
-    "Owner": "Developer-only commands used to maintain bleed.",
+    "Owner": "Developer-only commands used to maintain vain.",
     "Logs": "Set up logging for your community events.",
 }
 
@@ -228,7 +228,7 @@ _LINKED_SUB_ALIASES = {
 
 
 def _linked_family_commands(
-    bot: Bleed,
+    bot: Vain,
     root_name: str,
     *,
     owner: bool,
@@ -242,7 +242,7 @@ def _linked_family_commands(
     return sorted(out, key=lambda c: command_display_name(c).lower())
 
 
-def _find_linked_sub(root: Command, sub: str, bot: Bleed) -> Command | None:
+def _find_linked_sub(root: Command, sub: str, bot: Vain) -> Command | None:
     sub_name = _LINKED_SUB_ALIASES.get(sub.lower(), sub.lower())
     for command in _linked_family_commands(bot, root.name, owner=False):
         help_name = family_help_name(command)
@@ -759,12 +759,12 @@ class HelpView(ui.View):
                 await self.msg.edit(view=self)
 
 
-class BleedHelp:
+class VainHelp:
     def __init__(self) -> None:
         self.ctx: Context = None
         self._seen: dict[int, float] = {}
 
-    def register(self, bot: Bleed) -> None:
+    def register(self, bot: Vain) -> None:
         @bot.command(name="help", aliases=["h", "commands"], description="view command help")
         async def _help(ctx: Context, *, command: str | None = None) -> None:
             await self.invoke(ctx, command)
@@ -796,7 +796,7 @@ class BleedHelp:
         else:
             await self._send_cmd(cmd)
 
-    def _find(self, bot: Bleed, query: str) -> Command | None:
+    def _find(self, bot: Vain, query: str) -> Command | None:
         direct = bot.get_command(query.strip())
         if direct is not None:
             return direct
@@ -837,7 +837,7 @@ class BleedHelp:
             e.set_author(name=self.ctx.bot.user.display_name, icon_url=self.ctx.bot.user.display_avatar.url)
         return e
 
-    def _build_cats(self, bot: Bleed, owner: bool) -> dict[str, list[Command]]:
+    def _build_cats(self, bot: Vain, owner: bool) -> dict[str, list[Command]]:
         cats: dict[str, list[Command]] = {}
         for cog in bot.cogs.values():
             if _hidden(cog, owner=owner):
@@ -870,7 +870,7 @@ class BleedHelp:
             kw["allowed_mentions"] = discord.AllowedMentions.none()
         return await ctx.send(embed=embed, view=view, **kw)
 
-    async def _send_home(self, bot: Bleed, owner: bool) -> None:
+    async def _send_home(self, bot: Vain, owner: bool) -> None:
         if self._dedup():
             return
         cats = self._build_cats(bot, owner)
@@ -886,7 +886,7 @@ class BleedHelp:
 
     def _family_targets(
         self,
-        bot: Bleed,
+        bot: Vain,
         root: Command,
         *,
         owner: bool,

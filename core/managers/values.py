@@ -25,7 +25,7 @@ class bot:
     owners: tuple[int, ...] = _DEFAULT_OWNER_IDS
     support: str = "https://discord.gg/vainbot"
     website: str = "https://vain.bot"
-    docs: str = "https://docs.bleed.bot"
+    docs: str = "https://docs.vain.bot"
     status: str = "online"
     activity_type: str = "none"
     activity_text: str = ""
@@ -66,17 +66,17 @@ class emojis:
 
 
 class color:
-    neutral: int = 0xEAEAEA
-    approve: int = 0xA8EA7B
-    warn: int = 0xFDCF39
-    deny: int = 0xFF0000
-    base: int = 0x373737
-    cooldown: int = 0x4EC3E8
-    settings: int = 0x7289DA
-    dark: int = 0x2B2D31
-    shazam: int = 0x08A8FF
-    voicemaster: int = 0x81A3A8
-    unknown: int = 0x24243C
+    neutral: int = 0xC8A4C2
+    approve: int = 0xA8D8A8
+    warn: int = 0xF5D76E
+    deny: int = 0xE07A7A
+    base: int = 0xC8A4C2
+    cooldown: int = 0xBBA0D2
+    settings: int = 0xD4B8D0
+    dark: int = 0x9B7A9E
+    shazam: int = 0xC2A8D0
+    voicemaster: int = 0xD1B5C8
+    unknown: int = 0xAFAFC8
 
     @classmethod
     def update_base(cls, new_color: int) -> None:
@@ -85,7 +85,7 @@ class color:
 
 class database:
     enabled: bool = True
-    dsn: str = "postgresql://bleed_user:bleed@localhost:5432/bleed"
+    dsn: str = "postgresql://vain_user:vain@localhost:5432/vain"
 
 
 class redis:
@@ -169,7 +169,7 @@ class music:
 
     @classmethod
     def identifier(cls) -> str:
-        raw = f"bleed:{cls.host}:{cls.port}:{cls.password}".encode()
+        raw = f"vain:{cls.host}:{cls.port}:{cls.password}".encode()
         return hashlib.sha256(raw).hexdigest()[:16]
 
 

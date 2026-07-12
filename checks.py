@@ -1,5 +1,5 @@
 """
-comprehensive integration test for bleed bot.
+comprehensive integration test for vain bot.
 simulates real Discord server environment:
   - mock guild, members, channels, messages, roles
   - command invocation through Command.invoke()
@@ -163,14 +163,14 @@ class MockDatabase(MagicMock):
 
 
 def _mock_core_modules():
-    import core.bleed as bleed_mod
+    import core.vain as bleed_mod
     import core.managers.database.database as db_mod
     import core.managers.database.client as db_client_mod
 
     db_client_mod.Database = MockDatabase
     db_mod.Database = MockDatabase
 
-    bleed_mod.Bleed.setup_hook = MagicMock(return_value=None)
+    bleed_mod.Vain.setup_hook = MagicMock(return_value=None)
     return bleed_mod
 
 
@@ -337,13 +337,13 @@ async def main():
     import datetime as dt
 
     bleed_mod = _mock_core_modules()
-    Bleed = bleed_mod.Bleed
+    Vain = bleed_mod.Vain
 
-    bot = Bleed()
-    bot.color = 0x2B2D31
+    bot = Vain()
+    bot.color = 0xC8A4C2
     bot.db = MockDatabase()
 
-    from core.bleed import _discover_extensions
+    from core.vain import _discover_extensions
     exts = _discover_extensions("ext")
     print(f"\nLoading {len(exts)} extensions...")
     loaded_ok = 0
@@ -433,7 +433,7 @@ async def main():
     ok(f"{len(owner_cmds)} owner, {len(admin_cmds)} admin, {len(public_cmds)} public")
 
     print("\n help droppdown menu")
-    from core.discord.help import BleedHelp, HelpView, _COG_MAP, _detail_embed
+    from core.discord.help import VainHelp, HelpView, _COG_MAP, _detail_embed
 
     guild = _build_mock_guild()
     admin = _build_mock_admin(guild)

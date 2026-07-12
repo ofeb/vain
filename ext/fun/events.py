@@ -27,10 +27,13 @@ class FunEvents(Package):
         if user.bot:
             return
 
-        config = await self.db.fetchrow(
-            "SELECT * FROM fun_config WHERE guild_id = $1",
-            reaction.message.guild.id,
-        )
+        try:
+            config = await self.db.fetchrow(
+                "SELECT * FROM fun_config WHERE guild_id = $1",
+                reaction.message.guild.id,
+            )
+        except Exception:
+            return
         if not config or not config.get("reaction_rewards", False):
             return
 
@@ -39,10 +42,13 @@ class FunEvents(Package):
 
     @Package.listener("on_member_join")
     async def on_welcome_message(self, member: discord.Member):
-        config = await self.db.fetchrow(
-            "SELECT * FROM fun_config WHERE guild_id = $1",
-            member.guild.id,
-        )
+        try:
+            config = await self.db.fetchrow(
+                "SELECT * FROM fun_config WHERE guild_id = $1",
+                member.guild.id,
+            )
+        except Exception:
+            return
         if not config or not config.get("welcome_enabled", False):
             return
 

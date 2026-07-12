@@ -9,7 +9,7 @@ RUNTIME_ROOT = Path(__file__).resolve().parent
 
 
 def configure_logging() -> None:
-    level_name = os.environ.get("BLEED_LOG_LEVEL", "INFO").upper()
+    level_name = os.environ.get("VAIN_LOG_LEVEL", "INFO").upper()
     level = getattr(logging, level_name, logging.INFO)
     logging.basicConfig(
         level=level,
@@ -18,7 +18,7 @@ def configure_logging() -> None:
         force=True,
     )
     logging.getLogger("discord").setLevel(logging.INFO)
-    logging.getLogger("bleed").setLevel(level)
+    logging.getLogger("vain").setLevel(level)
 
 
 def bootstrap() -> Path:
@@ -35,10 +35,10 @@ def main() -> None:
     bootstrap()
     configure_logging()
 
-    log = logging.getLogger("bleed")
-    log.info("starting bleed-bot")
+    log = logging.getLogger("vain")
+    log.info("starting vain-bot")
 
-    from core.bleed import Bleed
+    from core.vain import Vain
     from core.managers.values import token
 
     if not token:
@@ -50,4 +50,4 @@ def main() -> None:
     dcspoof.mode("ios")
 
     log.info("launching discord client")
-    Bleed().run(token, reconnect=True)
+    Vain().run(token, reconnect=True)

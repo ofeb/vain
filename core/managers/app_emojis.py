@@ -51,7 +51,7 @@ def _load_manifests() -> dict[str, str]:
 def prime_emoji_environment() -> dict[str, str]:
     loaded = _load_manifests()
     for key, value in loaded.items():
-        if not key.startswith("BLEED_EMOJI_"):
+        if not key.startswith("VAIN_EMOJI_"):
             continue
         os.environ.setdefault(key, value)
     return loaded
@@ -69,7 +69,7 @@ _UNICODE_FALLBACKS: dict[str, str] = {
 
 
 def default_emoji(key: str, fallback: str) -> str:
-    env_key = f"BLEED_EMOJI_{key.upper()}"
+    env_key = f"VAIN_EMOJI_{key.upper()}"
     return os.environ.get(env_key, fallback)
 
 

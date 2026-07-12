@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import asyncio
 import logging
@@ -15,7 +15,7 @@ from core.managers.values import color, music as nl, music_enabled
 
 from .events import MusicEvents
 
-log = logging.getLogger("bleed.music")
+log = logging.getLogger("Vain.music")
 
 _SEARCH_PREFIX_RE = re.compile(r"^[a-z]+search:", re.I)
 _URL_HINT_RE = re.compile(
@@ -25,7 +25,7 @@ _URL_HINT_RE = re.compile(
 )
 
 if TYPE_CHECKING:
-    from core.bleed import Bleed
+    from core.vain import Vain
 
 try:
     import lava_lyra as lyra
@@ -37,7 +37,7 @@ try:
         TrackLoadError,
     )
 
-    class BleedPlayer(lyra.Player):
+    class VainPlayer(lyra.Player):
         async def play(
             self,
             track,
@@ -73,7 +73,7 @@ except ImportError:
     HAS_LYRA = False
     lyra = None
     URLRegex = None
-    BleedPlayer = None
+    VainPlayer = None
     NoNodesAvailable = NodeCreationError = NodeRestException = TrackLoadError = Exception
 
 
@@ -95,7 +95,7 @@ class Music(MusicEvents, Package):
         "chipmunk", "piano", "metal", "vibrato", "8d", "soft",
     )
 
-    def __init__(self, bot: Bleed):
+    def __init__(self, bot: Vain):
         super().__init__(bot)
         self.queues: dict[int, GuildQueue] = {}
         self._node = None
@@ -182,7 +182,7 @@ class Music(MusicEvents, Package):
         if not await self._ensure_voice(ctx):
             return None
         if not ctx.voice_client:
-            await ctx.author.voice.channel.connect(cls=BleedPlayer, self_deaf=True)
+            await ctx.author.voice.channel.connect(cls=VainPlayer, self_deaf=True)
         return ctx.voice_client
 
     def _normalize_query(self, query: str) -> str:
@@ -596,7 +596,7 @@ for _preset_name in Music.PRESETS:
     _preset_cmd.__name__ = f"preset_{_preset_name.replace('8d', 'eightd')}"
 
 
-async def setup(bot: Bleed):
+async def setup(bot: Vain):
     if not music_enabled:
         return
     await bot.add_cog(Music(bot))

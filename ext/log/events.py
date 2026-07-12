@@ -1,8 +1,109 @@
 from __future__ import annotations
 
+from typing import Optional, Union
+
 import discord
 
 from core.discord.package import Package
+
+
+def _channel_type_label(channel: discord.abc.GuildChannel) -> str:
+    if isinstance(channel, discord.VoiceChannel):
+        return "Voice channel"
+    if isinstance(channel, discord.TextChannel):
+        return "Text channel"
+    if isinstance(channel, discord.CategoryChannel):
+        return "Category channel"
+    if isinstance(channel, discord.ForumChannel):
+        return "Forum channel"
+    if isinstance(channel, discord.StageChannel):
+        return "Stage channel"
+    return str(channel.type).replace("_", " ").title() + " channel"
+
+
+async def _get_audit_entry(
+    guild: discord.Guild,
+    action: discord.AuditLogAction,
+    target_id: int = None,
+    *,
+    limit: int = 5,
+) -> Optional[discord.AuditLogEntry]:
+    try:
+        async for entry in guild.audit_logs(limit=limit, action=action):
+            if target_id is None or (entry.target and entry.target.id == target_id):
+                if (discord.utils.utcnow() - entry.created_at).total_seconds() < 10:
+                    return entry
+    except (discord.Forbidden, discord.HTTPException):
+        pass
+    return None
+
+
+def _format_overwrite_changes(
+    old: Optional[discord.PermissionOverwrite],
+    new: Optional[discord.PermissionOverwrite],
+) -> list[str]:
+    old = old or discord.PermissionOverwrite()
+    new = new or discord.PermissionOverwrite()
+    changes = []
+    for name, label in PERMISSION_NAMES.items():
+        old_val = getattr(old, name, None)
+        new_val = getattr(new, name, None)
+        if old_val != new_val:
+            old_str = str(old_val) if old_val is not None else "inherit"
+            new_str = str(new_val) if new_val is not None else "inherit"
+            changes.append(f"**{label}**: `{old_str}` -> `{new_str}`")
+    return changes
+
+
+PERMISSION_NAMES = {
+    "create_instant_invite": "Create Invite",
+    "kick_members": "Kick Members",
+    "ban_members": "Ban Members",
+    "administrator": "Administrator",
+    "manage_channels": "Manage Channels",
+    "manage_guild": "Manage Guild",
+    "add_reactions": "Add Reactions",
+    "view_audit_log": "View Audit Log",
+    "priority_speaker": "Priority Speaker",
+    "stream": "Stream",
+    "view_channel": "Read Messages",
+    "read_messages": "Read Messages",
+    "send_messages": "Send Messages",
+    "send_tts_messages": "Send TTS Messages",
+    "manage_messages": "Manage Messages",
+    "embed_links": "Embed Links",
+    "attach_files": "Attach Files",
+    "read_message_history": "Read Message History",
+    "mention_everyone": "Mention Everyone",
+    "external_emojis": "Use External Emojis",
+    "use_external_emojis": "Use External Emojis",
+    "view_guild_insights": "View Guild Insights",
+    "connect": "Connect",
+    "speak": "Speak",
+    "mute_members": "Mute Members",
+    "deafen_members": "Deafen Members",
+    "move_members": "Move Members",
+    "use_voice_activation": "Use Voice Activity",
+    "change_nickname": "Change Nickname",
+    "manage_nicknames": "Manage Nicknames",
+    "manage_roles": "Manage Roles",
+    "manage_webhooks": "Manage Webhooks",
+    "manage_expressions": "Manage Expressions",
+    "use_application_commands": "Use Application Commands",
+    "request_to_speak": "Request to Speak",
+    "manage_events": "Manage Events",
+    "manage_threads": "Manage Threads",
+    "create_public_threads": "Create Public Threads",
+    "create_private_threads": "Create Private Threads",
+    "external_stickers": "Use External Stickers",
+    "use_external_stickers": "Use External Stickers",
+    "send_messages_in_threads": "Send Messages in Threads",
+    "use_embedded_activities": "Use Activities",
+    "moderate_members": "Moderate Members",
+    "use_soundboard": "Use Soundboard",
+    "create_expressions": "Create Expressions",
+    "send_voice_messages": "Send Voice Messages",
+}
 
 
 class LogEvents:
@@ -135,10 +236,12 @@ class LogEvents:
             embed.add_field(name="**After**", value=after.nick or after.name, inline=True)
             await self._log(after.guild.id, "members", embed)
 
-        if before.communication_disabled_until != after.communication_disabled_until:
-            if after.communication_disabled_until and after.communication_disabled_until > discord.utils.utcnow():
+        before_timeout = getattr(before, 'timed_out_until', None)
+        after_timeout = getattr(after, 'timed_out_until', None)
+        if before_timeout != after_timeout:
+            if after_timeout and after_timeout > discord.utils.utcnow():
                 embed = discord.Embed(
-                    description=f"{after.mention} timed out until <t:{int(after.communication_disabled_until.timestamp())}> (<t:{int(after.communication_disabled_until.timestamp())}:R>)",
+                    description=f"{after.mention} timed out until <t:{int(after_timeout.timestamp())}> (<t:{int(after_timeout.timestamp())}:R>)",
                     timestamp=discord.utils.utcnow(),
                 )
                 embed.set_author(name="Member Timed Out", icon_url=after.display_avatar.url)
@@ -151,9 +254,9 @@ class LogEvents:
                         inline=True,
                     )
                 await self._log(after.guild.id, "members", embed)
-            elif before.communication_disabled_until and (
-                not after.communication_disabled_until
-                or after.communication_disabled_until <= discord.utils.utcnow()
+            elif before_timeout and (
+                not after_timeout
+                or after_timeout <= discord.utils.utcnow()
             ):
                 embed = discord.Embed(
                     description=f"{after.mention} timeout removed early",
@@ -272,7 +375,7 @@ class LogEvents:
         embed = discord.Embed(
             description=f"Role {role.mention} created",
             timestamp=discord.utils.utcnow(),
-            color=role.color.value if role.color.value else 0x262626,
+            color=role.color.value if role.color.value else 0xD4B8D0,
         )
 
         entry = await _get_audit_entry(role.guild, discord.AuditLogAction.role_create, role.id)

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import asyncio
 import os
@@ -16,7 +16,7 @@ from core.managers.values import color
 from core.networks.media import ffmpeg as ffm
 
 if TYPE_CHECKING:
-    from core.bleed import Bleed
+    from core.vain import Vain
 
 
 async def flux(ctx: Context, operation: str, attachment: discord.File, **payload) -> discord.File:
@@ -233,5 +233,5 @@ class Manipulation(Package):
         await self._process(ctx, attachment, filename="resize.gif", processor=lambda d: ffm.image_to_gif(d, vf))
 
 
-async def setup(bot: Bleed):
+async def setup(bot: Vain):
     await bot.add_cog(Manipulation(bot))

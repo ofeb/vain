@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import asyncio
 import contextlib
@@ -11,7 +11,7 @@ from core.managers.values import color
 from .connect4_board import render_connect4_board
 
 if TYPE_CHECKING:
-    from core.bleed import Bleed
+    from core.vain import Vain
     from core.discord.ctx import Context
 
 INACTIVITY_SECONDS = 180
@@ -23,11 +23,11 @@ BOT_NAME = "vain"
 BOT_OPPONENT = "Me"
 
 
-def _is_bot_opponent(user: discord.User, bot: Bleed) -> bool:
+def _is_bot_opponent(user: discord.User, bot: Vain) -> bool:
     return user.bot and user.id == bot.user.id
 
 
-def _opponent_label(user: discord.User, bot: Bleed) -> str:
+def _opponent_label(user: discord.User, bot: Vain) -> str:
     return BOT_OPPONENT if _is_bot_opponent(user, bot) else user.display_name
 
 
@@ -115,7 +115,7 @@ class RPSView(discord.ui.View):
         player1: discord.User,
         player2: discord.User,
         rounds: int,
-        bot: Bleed,
+        bot: Vain,
     ) -> None:
         super().__init__(timeout=INACTIVITY_SECONDS)
         self.ctx = ctx
@@ -300,7 +300,7 @@ class TicTacToeView(discord.ui.View):
         player_x: discord.User,
         player_o: discord.User | None,
         vs_me: bool,
-        bot: Bleed,
+        bot: Vain,
     ) -> None:
         super().__init__(timeout=INACTIVITY_SECONDS)
         self.ctx = ctx
@@ -368,7 +368,7 @@ class TicTacToeView(discord.ui.View):
 
         from ext.fun.ttt_stats import record_ttt_game, scope_ids
 
-        log = logging.getLogger("bleed.ttt")
+        log = logging.getLogger("Vain.ttt")
         channel = self.message.channel if self.message else self.ctx.channel
         guild = getattr(channel, "guild", None) or self.ctx.guild
         guild_id, channel_id = scope_ids(channel, guild)
@@ -578,7 +578,7 @@ class Connect4View(discord.ui.View):
         ctx: "Context",
         player1: discord.User,
         player2: discord.User,
-        bot: Bleed,
+        bot: Vain,
         vs_me: bool = False,
     ) -> None:
         super().__init__(timeout=INACTIVITY_SECONDS)

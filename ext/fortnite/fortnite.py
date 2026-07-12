@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import io
 import logging
@@ -15,9 +15,9 @@ from core.discord.hybrid import describe, hybrid
 from core.managers.values import color
 
 if TYPE_CHECKING:
-    from core.bleed import Bleed
+    from core.vain import Vain
 
-log = logging.getLogger("bleed.fortnite")
+log = logging.getLogger("Vain.fortnite")
 
 
 @dataclass(slots=True)
@@ -31,7 +31,7 @@ class FortniteCosmetic:
 
 
 class Fortnite(Package):
-    def __init__(self, bot: Bleed):
+    def __init__(self, bot: Vain):
         super().__init__(bot)
 
     def _parse_fortnite_api_item(self, row: dict[str, Any]) -> FortniteCosmetic:
@@ -234,5 +234,5 @@ class Fortnite(Package):
         await self.fortnite_itemshop(ctx)
 
 
-async def setup(bot: Bleed):
+async def setup(bot: Vain):
     await bot.add_cog(Fortnite(bot))

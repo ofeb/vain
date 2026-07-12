@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from contextlib import suppress
 from typing import TYPE_CHECKING
@@ -10,11 +10,11 @@ from core.managers.values import emojis
 from core.tools.embed import Script, maybe_wrap_embed_script, to_code
 
 if TYPE_CHECKING:
-    from core.bleed import Bleed
+    from core.vain import Vain
 
 
 def _custom_ids(message_id: int) -> dict[str, str]:
-    base = f"bleed:pag:{message_id}"
+    base = f"Vain:pag:{message_id}"
     return {
         "prev": f"{base}:prev",
         "next": f"{base}:next",
@@ -91,7 +91,7 @@ class StoredPaginationView(ui.View):
 
     def __init__(
         self,
-        bot: Bleed,
+        bot: Vain,
         *,
         guild_id: int,
         channel_id: int,
@@ -168,7 +168,7 @@ class StoredPaginationView(ui.View):
 
 
 async def sync_stored_pagination(
-    bot: Bleed,
+    bot: Vain,
     *,
     guild_id: int,
     channel_id: int,
@@ -202,7 +202,7 @@ async def sync_stored_pagination(
     await message.edit(**payload)
 
 
-async def register_stored_paginations(bot: Bleed) -> None:
+async def register_stored_paginations(bot: Vain) -> None:
     """restore persistent pagination views after startup."""
     rows = await bot.db.fetch(
         """

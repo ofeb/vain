@@ -128,7 +128,7 @@ class GiveawayEvents(Cog):
             embed = Embed(
                 title="Giveaway Ended",
                 description=f"Prize: {giveaway['prize']}\nNo valid entries!",
-                color=0xFF0000
+                color=0xD1B5C8
             )
             await message.edit(embed=embed)
             return
@@ -138,7 +138,7 @@ class GiveawayEvents(Cog):
             embed = Embed(
                 title="Giveaway Ended",
                 description=f"Prize: {giveaway['prize']}\nNo valid members!",
-                color=0xFF0000
+                color=0xD1B5C8
             )
             await message.edit(embed=embed)
             return
@@ -150,7 +150,7 @@ class GiveawayEvents(Cog):
         embed = Embed(
             title="Giveaway Ended",
             description=f"Prize: {giveaway['prize']}\nWinner(s): {winners_text}",
-            color=0x00FF00
+            color=0xA8D8A8
         )
         await message.edit(embed=embed)
         

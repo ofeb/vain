@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .values import storage
 
-log = logging.getLogger("bleed.storage")
+log = logging.getLogger("vain.storage")
 
 CACHE_REDIS_FILE: Path = storage / "cache.redis"
 POSTGRES_DB_FILE: Path = storage / "postgres.db"

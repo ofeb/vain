@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
@@ -10,13 +10,13 @@ from core.discord.package import Package
 
 if TYPE_CHECKING:
     from .autorole import Autorole
-    from core.bleed import Bleed
+    from core.vain import Vain
 
 
 class AutoroleEvents(Package):
     """Autorole event handlers."""
 
-    def __init__(self, bot: Bleed):
+    def __init__(self, bot: Vain):
         super().__init__(bot)
         self.locks = defaultdict(asyncio.Lock)
 
@@ -125,6 +125,6 @@ class AutoroleEvents(Package):
             await member.remove_roles(role, reason="Reaction Role")
 
 
-async def setup(bot: Bleed):
+async def setup(bot: Vain):
     """Load the AutoroleEvents cog."""
     await bot.add_cog(AutoroleEvents(bot))

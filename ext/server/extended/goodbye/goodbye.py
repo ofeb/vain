@@ -1,4 +1,4 @@
-from discord.ext.commands import group
+﻿from discord.ext.commands import group
 from discord import Embed, TextChannel, Message, Member
 from asyncpg import UniqueViolationError
 from asyncio import sleep, Lock
@@ -119,7 +119,7 @@ class GoodbyeCommands(Package):
     async def goodbye_variables(self, ctx) -> Message:
         """show available template vars"""
         return await ctx.normal(
-            "check all **variables** at: https://bleed.bot/resources/scripting/variables",
+            "check all **variables** at: https://vain.bot/resources/scripting/variables",
             emoji=":information_source:",
         )
 

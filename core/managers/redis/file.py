@@ -1,7 +1,7 @@
 """file-backed redis-compatible store (.redis extension).
 
 persists key/value data to disk when redis.enabled is false in values.py.
-implements the subset of redis commands used by bleed-bot."""
+implements the subset of redis commands used by vain-bot."""
 
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ def _fmt_seconds(seconds: Union[int, float]) -> str:
     return humanize.naturaldelta(timedelta(seconds=seconds), minimum_unit="microseconds")
 
 
-class FileBleedCache:
+class FileVainCache:
     """redis-compatible cache backed by a single .redis json file."""
 
     def __init__(self, path: str | Path) -> None:
@@ -66,10 +66,10 @@ class FileBleedCache:
         self.channels: list = []
 
     def __repr__(self) -> str:
-        return f"FileBleedCache(path={self.path!s}, keys={len(self._keys)})"
+        return f"FileVainCache(path={self.path!s}, keys={len(self._keys)})"
 
     @classmethod
-    async def open(cls, path: str | Path | None = None) -> FileBleedCache:
+    async def open(cls, path: str | Path | None = None) -> FileVainCache:
         inst = cls(_resolve_path(path))
         await inst._load()
         log.info("file redis ready at {}", inst.path)
@@ -358,6 +358,6 @@ class FileBleedCache:
         return list(itertools.chain.from_iterable(r for r in results if r))
 
     @classmethod
-    async def from_url(cls, *_: Any, **__: Any) -> FileBleedCache:
+    async def from_url(cls, *_: Any, **__: Any) -> FileVainCache:
         """compat alias — file store ignores redis urls."""
         return await cls.open(CACHE_REDIS_FILE)

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import asyncio
 import datetime
@@ -19,11 +19,11 @@ from core.managers.values import color
 from ..information.lookup import GOOGLE_FOOTER_ICON
 
 if TYPE_CHECKING:
-    from core.bleed import Bleed
+    from core.vain import Vain
 
 
 class Miscellaneous(MiscellaneousEvents, Package):
-    def __init__(self, bot: Bleed):
+    def __init__(self, bot: Vain):
         super().__init__(bot)
         self.afk_users: dict[int, dict] = {}
         self.active_polls: list[dict] = []
@@ -58,11 +58,24 @@ class Miscellaneous(MiscellaneousEvents, Package):
     async def invite(self, ctx: Context) -> None:
         bot_id = self.bot.user.id if self.bot.user else "0"
         embed = discord.Embed(
-            title="Invite Bleed",
-            description=f"[Click here to invite me!](https://discord.com/oauth2/authorize?client_id={bot_id}&permissions=8&scope=bot%20applications.commands)",
+            title="Invite Vain",
+            description="Use the buttons below to invite me or join the support server!",
             color=color.base,
         )
-        await ctx.send(embed=embed)
+        view = discord.ui.View()
+        view.add_item(discord.ui.Button(
+            label="Invite Me",
+            style=discord.ButtonStyle.link,
+            url=f"https://discord.com/oauth2/authorize?client_id={bot_id}&permissions=8&scope=bot%20applications.commands",
+            emoji="\U0001f517",
+        ))
+        view.add_item(discord.ui.Button(
+            label="Support Server",
+            style=discord.ButtonStyle.link,
+            url=self.bot.support if hasattr(self.bot, 'support') else "https://discord.gg/vainbot",
+            emoji="\U0001f4ac",
+        ))
+        await ctx.send(embed=embed, view=view)
 
     @hybrid(
         name="afk",
@@ -367,5 +380,5 @@ class Miscellaneous(MiscellaneousEvents, Package):
             await ctx.warn("I **don't** have permission to manage emojis.")
         except Exception as e:
             await ctx.fail(f"Failed: {str(e)[:100]}")
-async def setup(bot: Bleed):
+async def setup(bot: Vain):
     await bot.add_cog(Miscellaneous(bot))

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import contextlib
 import re
@@ -77,7 +77,7 @@ def _parse_response_flags(raw: str) -> tuple[str, dict[str, object], str | None]
 
 
 def _is_embed_script(response: str) -> bool:
-    """Return True when the response should be parsed as bleed embed code."""
+    """Return True when the response should be parsed as Vain embed code."""
     from core.tools.embed import is_embed_script as _core_is_embed_script
     return _core_is_embed_script(response)
 
@@ -437,7 +437,7 @@ class AutoresponderCommands(Package):
     async def autoresponder_variables(self, ctx):
         """Show available variables."""
         return await ctx.normal(
-            "check all **variables** at: https://bleed.bot/resources/scripting/variables",
+            "check all **variables** at: https://vain.bot/resources/scripting/variables",
             emoji=":information_source:",
         )
 

@@ -1,8 +1,26 @@
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import discord
 
 from core.discord.package import Package
+
+DANGEROUS_PERMISSIONS = (
+    "administrator",
+    "manage_guild",
+    "manage_roles",
+    "manage_channels",
+    "manage_webhooks",
+    "ban_members",
+    "kick_members",
+    "manage_messages",
+    "mention_everyone",
+    "manage_nicknames",
+    "manage_emojis",
+    "manage_threads",
+    "priority_speaker",
+)
 
 
 class AntinukeEvents:

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime, timedelta
@@ -13,12 +13,12 @@ import random
 from core.discord.package import Package
 
 if TYPE_CHECKING:
-    from core.bleed import Bleed
+    from core.vain import Vain
     from .roleplay import Roleplay
 
 
 class RoleplayEvents(Package):
-    def __init__(self: "RoleplayEvents", bot: Bleed):
+    def __init__(self: "RoleplayEvents", bot: Vain):
         super().__init__(bot)
         self.locks = defaultdict(Lock)
         self.character_cache = {}
@@ -123,5 +123,5 @@ class RoleplayEvents(Package):
         await message.reply(embed=embed)
 
 
-async def setup(bot: Bleed):
+async def setup(bot: Vain):
     await bot.add_cog(RoleplayEvents(bot))

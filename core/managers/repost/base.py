@@ -1,4 +1,4 @@
-﻿﻿"""base class for media repost handlers.
+﻿"""base class for media repost handlers.
 provides download and send logic all platforms share.
 subclass this and implement fetch"""
 
@@ -11,7 +11,7 @@ import discord
 from discord.ext.commands import Context
 
 if TYPE_CHECKING:
-    from core.bleed import Bleed
+    from core.vain import Vain
 
 
 class BaseRepost:
@@ -19,7 +19,7 @@ class BaseRepost:
 
     platform: str = "unknown"
 
-    def __init__(self, bot: Bleed):
+    def __init__(self, bot: Vain):
         self.bot = bot
 
     async def fetch(self, url: str) -> Optional[dict]:

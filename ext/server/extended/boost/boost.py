@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from asyncio import Lock, sleep
 from collections import defaultdict
@@ -123,7 +123,7 @@ class BoostCommands(Package):
     async def boosts_variables(self, ctx) -> Message:
         """show available template vars"""
         return await ctx.normal(
-            "check all **variables** at: https://bleed.bot/resources/scripting/variables",
+            "check all **variables** at: https://vain.bot/resources/scripting/variables",
             emoji=":information_source:",
         )
 

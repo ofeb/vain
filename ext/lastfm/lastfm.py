@@ -1,9 +1,9 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from core.bleed import Bleed
+    from core.vain import Vain
 
 
 import asyncio
@@ -73,7 +73,7 @@ _PLAYS_QUERY_USER_ID_PREFIX_RE = re.compile(r"^([0-9]{17,20})\s+(.+)$", re.DOTAL
 
 class Lastfm(LastfmEvents, Package):
 
-    def __init__(self, bot: Bleed) -> None:
+    def __init__(self, bot: Vain) -> None:
         super().__init__(bot)
         self._api = LastFMApiClient(bot, lastfm_color=self._lastfm_color)
         self._library = LastFMLibraryStore(bot, self._api)
@@ -3264,5 +3264,5 @@ class Lastfm(LastfmEvents, Package):
         Clean up custom commands from absent members
         """
         await self.lastfm_customcommand_cleanup(ctx)
-async def setup(bot: Bleed) -> None:
+async def setup(bot: Vain) -> None:
     await bot.add_cog(Lastfm(bot))

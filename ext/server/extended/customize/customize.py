@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from urllib.parse import urlparse
 
@@ -124,7 +124,7 @@ class CustomizeCommands(Package):
         name="name",
         aliases=["nick", "nickname"],
         description="Change the bot's nickname in the server",
-        example=",customize name bleed",
+        example=",customize name Vain",
     )
     async def customize_name(self, ctx, *, name: str = None):
         """change bot nickname"""
@@ -205,7 +205,7 @@ class CustomizeCommands(Package):
     @customize.command(
         name="bio",
         description="Change or reset the bot's server bio",
-        example=",customize bio bleed is a really cool bot",
+        example=",customize bio Vain is a really cool bot",
     )
     async def customize_bio(self, ctx, *, bio: str = None):
         """change bot server bio"""
@@ -222,7 +222,7 @@ class CustomizeCommands(Package):
             normalized = self._normalized_bio(bio)
             if len(normalized) > BIO_MAX_LENGTH:
                 return await ctx.warn(
-                    f"bio must stay under **{BIO_MAX_LENGTH}** characters after the bleed link is appended"
+                    f"bio must stay under **{BIO_MAX_LENGTH}** characters after the Vain link is appended"
                 )
 
             await me.edit(bio=normalized)

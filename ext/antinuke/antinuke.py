@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import asyncio
 import contextlib
@@ -21,7 +21,7 @@ from core.tools.permissions import DANGEROUS_PERMISSIONS, normalize_dangerous_pe
 from .models import AntinukeConfig, PermissionWatch
 
 if TYPE_CHECKING:
-    from core.bleed import Bleed
+    from core.vain import Vain
 
 SHORT_WINDOW = 60
 LONG_WINDOW = 20 * 60
@@ -1015,7 +1015,7 @@ class Antinuke(AntinukeEvents, Package):
         normalized = normalize_dangerous_permission(permission)
         if not normalized:
             return await ctx.warn(
-                "You passed an **invalid permission name**, please visit the documentation [here](https://docs.bleed.bot/help/commands/antinuke/antinuke-permissions)"
+                "You passed an **invalid permission name**, please visit the documentation [here](https://docs.vain.bot/help/commands/antinuke/antinuke-permissions)"
             )
 
         penalty = str(ctx.flags.get("punishment") or "kick").lower()
@@ -1203,5 +1203,5 @@ class Antinuke(AntinukeEvents, Package):
         return await ctx.success("Antinuke configuration has been **reset**.")
 
 
-async def setup(bot: Bleed) -> None:
+async def setup(bot: Vain) -> None:
     await bot.add_cog(Antinuke(bot))

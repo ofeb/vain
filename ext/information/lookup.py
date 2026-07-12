@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 import re
@@ -11,9 +11,9 @@ import aiohttp
 import discord
 from PIL import Image
 
-WEATHER_COLOR = 0x3498DB
-DEFINE_COLOR = 0xE8E8E6
-CASHAPP_GREEN = 0x00D632
+WEATHER_COLOR = 0xD4B8D0
+DEFINE_COLOR = 0xBBA0D2
+CASHAPP_GREEN = 0xA8D8A8
 CASHAPP_FOOTER_ICON = "https://cash.app/favicon-32x32.png"
 GITHUB_CREATED_ICON = "https://cdn.discordapp.com/emojis/843537056541442068.png"
 UD_FOOTER_ICON = "https://www.urbandictionary.com/favicon-32x32.png"
@@ -26,7 +26,7 @@ _CASHAPP_HEADERS = {
 }
 _GITHUB_HEADERS = {
     "Accept": "application/vnd.github+json",
-    "User-Agent": "bleed-bot",
+    "User-Agent": "Vain-bot",
 }
 
 

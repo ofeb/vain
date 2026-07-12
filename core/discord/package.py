@@ -7,7 +7,7 @@ from discord.ext import commands, tasks
 from .mixin import Mixin
 
 if TYPE_CHECKING:
-    from core.bleed import Bleed
+    from core.vain import Vain
     from core.managers.database.client import Database
     from core.managers.redis import RedisClient
     from core.managers.guard import Guard
@@ -20,7 +20,7 @@ class Package(Mixin):
 
     listener = staticmethod(commands.Cog.listener)
 
-    def __init__(self, bot: Bleed) -> None:
+    def __init__(self, bot: Vain) -> None:
         self.bot = bot
 
     @property

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import asyncio
 import datetime
@@ -16,12 +16,12 @@ from core.managers.permissions import has_permissions
 from core.managers.values import color
 
 if TYPE_CHECKING:
-    from core.bleed import Bleed
+    from core.vain import Vain
 
 class BumpReminder(BumpReminderEvents, Package):
     """Bump reminder commands to keep your server promoted."""
 
-    def __init__(self, bot: Bleed):
+    def __init__(self, bot: Vain):
         super().__init__(bot)
         self._cache: dict[int, dict] = {}
 
@@ -176,5 +176,5 @@ class BumpReminder(BumpReminderEvents, Package):
             self._cache[ctx.guild.id] = {}
         self._cache[ctx.guild.id]["remind_message"] = message
         await ctx.success(f"Reminder message set to: {message}")
-async def setup(bot: Bleed):
+async def setup(bot: Vain):
     await bot.add_cog(BumpReminder(bot))

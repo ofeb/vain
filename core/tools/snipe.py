@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 import discord
 
 if TYPE_CHECKING:
-    from core.bleed import Bleed
+    from core.vain import Vain
 
 
 class SnipeError(Exception):
@@ -26,7 +26,7 @@ class Snipe:
     indexed per channel with deque of max 100 entries.
     type is snipe editsnipe or reactionsnipe"""
 
-    def __init__(self, bot: Bleed):
+    def __init__(self, bot: Vain):
         self.bot = bot
         self.data: dict = {}
 

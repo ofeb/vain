@@ -1,4 +1,4 @@
-from discord.ext.commands import group
+﻿from discord.ext.commands import group
 from discord import Embed, TextChannel, Message, Member, AllowedMentions
 from asyncpg import UniqueViolationError
 from asyncio import sleep, Lock
@@ -118,16 +118,19 @@ class WelcomeCommands(Package):
     async def welcome_variables(self, ctx) -> Message:
         """show available template vars"""
         return await ctx.normal(
-            "check all **variables** at: https://bleed.bot/resources/scripting/variables",
+            "check all **variables** at: https://vain.bot/resources/scripting/variables",
             emoji=":information_source:",
         )
 
     async def _ping_on_join(self, member: Member):
         """ping member on join"""
-        ids = await self.bot.db.fetchval(
-            """SELECT channel_ids FROM pingonjoin WHERE guild_id = $1""",
-            member.guild.id,
-        )
+        try:
+            ids = await self.bot.db.fetchval(
+                """SELECT channel_ids FROM pingonjoin WHERE guild_id = $1""",
+                member.guild.id,
+            )
+        except Exception:
+            return
         if not ids:
             return
         for cid in ids:

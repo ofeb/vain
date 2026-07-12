@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 """Render FNBR shop rotations as a horizontal multi-column grid image."""
 
 
@@ -10,7 +10,7 @@ from dataclasses import dataclass
 import aiohttp
 from PIL import Image, ImageDraw, ImageFont
 
-log = logging.getLogger("bleed.fortnite.shop")
+log = logging.getLogger("Vain.fortnite.shop")
 
 TILE = 132
 NAME_H = 34

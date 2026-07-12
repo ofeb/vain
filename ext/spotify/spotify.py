@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from typing import TYPE_CHECKING
 from urllib.parse import quote_plus
@@ -14,7 +14,7 @@ from core.managers.values import color, emojis, music_enabled
 from .api import SpotifyUserAPI, redirect_uri
 
 if TYPE_CHECKING:
-    from core.bleed import Bleed
+    from core.vain import Vain
 
 TOP_DURATIONS = {
     "week": "short_term",
@@ -37,7 +37,7 @@ def _track_line(index: int, track: dict) -> str:
 class Spotify(Package):
     """Spotify search and playback controls."""
 
-    def __init__(self, bot: Bleed):
+    def __init__(self, bot: Vain):
         super().__init__(bot)
         self.api = SpotifyUserAPI(self.db)
         self._login_states: dict[int, str] = {}
@@ -89,7 +89,7 @@ class Spotify(Package):
         embed.set_footer(text="Use `spotify login` to control playback")
         await ctx.send(embed=embed)
 
-    @spotify.command(name="login", description="Grant bleed access to your Spotify account")
+    @spotify.command(name="login", description="Grant Vain access to your Spotify account")
     async def spotify_login(self, ctx: Context, *, code: str | None = None) -> None:
         if not self.api._client_configured():
             return await ctx.fail("Spotify API credentials are not configured.")
@@ -101,7 +101,7 @@ class Spotify(Package):
             embed = discord.Embed(
                 title="Spotify Login",
                 description=(
-                    "Authorize bleed to control your Spotify account.\n\n"
+                    "Authorize Vain to control your Spotify account.\n\n"
                     f"**1.** [Click here to authorize]({url})\n"
                     f"**2.** Copy the full redirect URL or authorization code\n"
                     f"**3.** Run `{ctx.clean_prefix}spotify login <code>`\n\n"
@@ -571,5 +571,5 @@ class Spotify(Package):
         await ctx.send(embed=embed, view=view)
 
 
-async def setup(bot: Bleed):
+async def setup(bot: Vain):
     await bot.add_cog(Spotify(bot))

@@ -33,7 +33,7 @@ EVENT_MAPPING = _EventMapping(
         "cleverbot": ("cleverbot", "Toggle clever bot conversations."),
         "automodmessage": (
             "automodmessage",
-            "Toggle bleed auto-mod messages upon user punishment.",
+            "Toggle vain auto-mod messages upon user punishment.",
         ),
         "instagram": ("instagram", "Toggle Instagram reposting from members."),
         "tiktok": ("tiktok", "Toggle TikTok reposting from members."),

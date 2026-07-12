@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import re
@@ -14,7 +14,7 @@ from core.managers.values import color, emojis
 
 
 if TYPE_CHECKING:
-    from core.bleed import Bleed
+    from core.vain import Vain
 
 class Embedcode(Package):
     """copy embed code from a message"""

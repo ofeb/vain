@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import asyncio
 import datetime
@@ -13,7 +13,7 @@ from core.discord.hybrid import describe, group, hybrid
 from core.managers.values import color
 
 if TYPE_CHECKING:
-    from core.bleed import Bleed
+    from core.vain import Vain
 
 
 def parse_duration(text: str) -> Optional[int]:
@@ -45,7 +45,7 @@ def parse_duration(text: str) -> Optional[int]:
 class Timers(Package):
     """Timed events, reminders, and scheduled tasks."""
 
-    def __init__(self, bot: Bleed):
+    def __init__(self, bot: Vain):
         super().__init__(bot)
         self._timers: dict[str, dict] = {}
         self._loop_running = False
@@ -190,5 +190,5 @@ class Timers(Package):
         return " ".join(parts)
 
 
-async def setup(bot: Bleed):
+async def setup(bot: Vain):
     await bot.add_cog(Timers(bot))

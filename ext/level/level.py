@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import random
 from typing import TYPE_CHECKING, Optional
@@ -14,7 +14,7 @@ from core.managers.permissions import has_permissions
 from core.managers.values import color
 
 if TYPE_CHECKING:
-    from core.bleed import Bleed
+    from core.vain import Vain
 
 XP_PER_MESSAGE = 15
 XP_COOLDOWN = 60
@@ -40,7 +40,7 @@ from .events import LevelEvents
 class Level(LevelEvents, Package):
     """XP tracking, level roles, and leaderboards."""
 
-    def __init__(self, bot: Bleed):
+    def __init__(self, bot: Vain):
         super().__init__(bot)
         self._cooldowns: dict[int, float] = {}
     @group(
@@ -200,5 +200,5 @@ class Level(LevelEvents, Package):
             await ctx.send(embed=embed)
         except Exception:
             await ctx.fail("Configuration unavailable.")
-async def setup(bot: Bleed):
+async def setup(bot: Vain):
     await bot.add_cog(Level(bot))

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from asyncio import Lock
 from collections import defaultdict
@@ -45,7 +45,7 @@ from .events import ServerEvents
 
 
 if TYPE_CHECKING:
-    from core.bleed import Bleed
+    from core.vain import Vain
 
 class Server(
     ServerCommands,
@@ -85,7 +85,7 @@ class Server(
 ):
     """main server extension — all subcommands combined"""
 
-    def __init__(self, bot: Bleed) -> None:
+    def __init__(self, bot: Vain) -> None:
         Package.__init__(self, bot)
         self.ar_locks = defaultdict(Lock)
         self.leave_locks = defaultdict(Lock)
@@ -95,6 +95,6 @@ class Server(
         self.pinned_ids = {}
 
 
-async def setup(bot: Bleed) -> None:
+async def setup(bot: Vain) -> None:
     """load server extension"""
     await bot.add_cog(Server(bot))

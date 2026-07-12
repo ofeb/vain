@@ -22,14 +22,14 @@ async def test_redis() -> None:
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    FileBleedCache = mod.FileBleedCache
+    FileVainCache = mod.FileVainCache
 
     ensure_storage_files(postgres=False, redis=True)
     if CACHE_REDIS_FILE.exists():
         CACHE_REDIS_FILE.unlink()
 
     ensure_storage_files(postgres=False, redis=True)
-    cache = await FileBleedCache.open()
+    cache = await FileVainCache.open()
     assert cache.path == CACHE_REDIS_FILE.resolve()
     await cache.set("prefix:1:2", {"user": None, "guild": [","]}, ex=120)
     assert await cache.get("prefix:1:2") == {"user": None, "guild": [","]}

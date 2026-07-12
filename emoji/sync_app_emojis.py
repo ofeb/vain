@@ -16,9 +16,9 @@ API_BASE = "https://discord.com/api/v10"
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SUPPORTED_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"}
 PACK_PREFIXES = {
-    "ctx": "BLEED_EMOJI_",
-    "paginator": "BLEED_EMOJI_PAGINATOR_",
-    "interface": "BLEED_EMOJI_INTERFACE_",
+    "ctx": "VAIN_EMOJI_",
+    "paginator": "VAIN_EMOJI_PAGINATOR_",
+    "interface": "VAIN_EMOJI_INTERFACE_",
 }
 
 
@@ -32,7 +32,7 @@ def _request_json(
     body = None
     headers = {
         "Authorization": f"Bot {token}",
-        "User-Agent": "bleed-emoji-sync",
+        "User-Agent": "vain-emoji-sync",
     }
     if payload is not None:
         body = json.dumps(payload).encode()
@@ -108,11 +108,11 @@ def main() -> None:
     parser.add_argument("--manifest", type=Path, default=None)
     args = parser.parse_args()
 
-    from core.managers.values import token as bleed_token
+    from core.managers.values import token as vain_token
 
-    token = bleed_token
+    token = vain_token
     if not token:
-        raise SystemExit("BLEED_TOKEN, DISCORD_TOKEN, or TOKEN is required")
+        raise SystemExit("VAIN_TOKEN, DISCORD_TOKEN, or TOKEN is required")
 
     emoji_dir = args.emoji_dir.resolve()
     if not emoji_dir.is_dir():

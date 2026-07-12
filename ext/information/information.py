@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import platform
 from typing import TYPE_CHECKING
@@ -27,7 +27,7 @@ from .lookup import (
 )
 
 if TYPE_CHECKING:
-    from core.bleed import Bleed
+    from core.vain import Vain
 
 _CONTEXTS = dict(guilds=True, dms=True, groupchats=True)
 
@@ -35,7 +35,7 @@ _CONTEXTS = dict(guilds=True, dms=True, groupchats=True)
 class InformationCommands(Package):
     """base mixin for standalone information commands."""
 
-    def __init__(self, bot: Bleed):
+    def __init__(self, bot: Vain):
         super().__init__(bot)
 
     @hybrid(
@@ -52,7 +52,7 @@ class InformationCommands(Package):
         uptime = discord.utils.format_dt(bot.started_at, style="R")
         shard_count = bot.shard_count or 1
         lines = [
-            f"## {bot.user.display_name if bot.user else 'Bleed'}",
+            f"## {bot.user.display_name if bot.user else 'Vain'}",
             f"-# Commands » `{total_commands}`",
             f"-# Latency » `{latency}ms`",
             f"-# Uptime » {uptime}",

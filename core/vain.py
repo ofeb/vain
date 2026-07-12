@@ -16,10 +16,10 @@ from discord.ext import commands
 from discord.ext.commands import HybridCommand, HybridGroup
 
 from .discord.ctx import Cache, Context
-from .discord.help import BleedHelp
+from .discord.help import VainHelp
 from .discord.hybrid import rewrite_linked_prefix
 from .managers.database.client import Database
-from .managers.redis import BleedCache, FileBleedCache, RedisClient
+from .managers.redis import VainCache, FileVainCache, RedisClient
 from .managers.watch import Watcher
 from .managers.guard import Guard
 from .tools.embed import PreparedScript, Script, parse
@@ -29,7 +29,7 @@ from .tools.snipe import Snipe
 from .managers.values import token, bot, color, database, redis, emojis, music_enabled
 from .managers.filetypes import CACHE_REDIS_FILE, ensure_storage_files
 
-log = logging.getLogger("bleed")
+log = logging.getLogger("vain")
 
 
 _SKIP_DIRS = frozenset({"models", "__pycache__"})
@@ -150,7 +150,7 @@ def _intents() -> discord.Intents:
     return i
 
 
-class Bleed(commands.AutoShardedBot):
+class Vain(commands.AutoShardedBot):
     """the main bot class.
     manages db redis extensions and all discord events.
     instantiate then call run with the token"""
@@ -159,7 +159,7 @@ class Bleed(commands.AutoShardedBot):
         self.color: int = color.base
         self.db = Database()
         self.redis: RedisClient | None = None
-        self._bleed_help = BleedHelp()
+        self._vain_help = VainHelp()
         self.object_cache = Cache(self)
         self.guard = Guard()
         self.snipes = Snipe(self)
@@ -193,7 +193,7 @@ class Bleed(commands.AutoShardedBot):
             chunk_guilds_at_startup=False,
             max_messages=1000,
         )
-        self._bleed_help.register(self)
+        self._vain_help.register(self)
 
     async def remember(self, key: str, ttl: int, loader: Callable[[], Awaitable[object]]) -> object:
         """small local ttl cache for hot runtime reads"""
@@ -262,7 +262,7 @@ class Bleed(commands.AutoShardedBot):
             await self.redis.set(key, data, ex=_PREFIX_TTL)
         return data
 
-    async def _get_prefix(self, _: "Bleed", msg: discord.Message) -> Iterable[str]:
+    async def _get_prefix(self, _: "Vain", msg: discord.Message) -> Iterable[str]:
         """resolve prefixes for a message"""
         default = bot.prefix
         if not msg.guild:
@@ -318,13 +318,13 @@ class Bleed(commands.AutoShardedBot):
         if redis.enabled:
             log.info("connecting redis at %s", redis.url)
             try:
-                self.redis = await BleedCache.from_url(redis.url)
+                self.redis = await VainCache.from_url(redis.url)
                 log.info("redis connected")
             except Exception as e:
                 log.warning(f"redis failed: {e}")
         else:
             log.info("redis disabled, using file store at %s", CACHE_REDIS_FILE)
-            self.redis = await FileBleedCache.open(CACHE_REDIS_FILE)
+            self.redis = await FileVainCache.open(CACHE_REDIS_FILE)
 
         self.add_check(self._global_check)
         self.tree.on_error = self._slash_error
@@ -723,7 +723,7 @@ class Bleed(commands.AutoShardedBot):
         return err
 
     async def create_embed(self, template: str, **kw) -> PreparedScript:
-        """prepare a reusable embed payload from bleed script text"""
+        """prepare a reusable embed payload from vain script text"""
         user = kw.get("user") or kw.get("member")
         if user is None and hasattr(kw.get("ctx"), "author"):
             user = kw["ctx"].author
@@ -732,7 +732,7 @@ class Bleed(commands.AutoShardedBot):
         return PreparedScript(payload)
 
     async def send_embed(self, dest, template: str, **kw) -> discord.Message:
-        """parse bleed embed code, resolve variables, and send it"""
+        """parse vain embed code, resolve variables, and send it"""
         if "user" not in kw and "member" not in kw and hasattr(dest, "author"):
             kw["user"] = dest.author
         if "guild" not in kw and hasattr(dest, "guild"):
@@ -746,7 +746,7 @@ class Bleed(commands.AutoShardedBot):
         return await builder.send(dest)
 
     async def send_script(self, dest, template: str, user, **kw) -> discord.Message:
-        """legacy helper for sending bleed embed code"""
+        """legacy helper for sending vain embed code"""
         return await self.send_embed(dest, template, user=user, **kw)
 
     async def close(self) -> None:
@@ -756,4 +756,4 @@ class Bleed(commands.AutoShardedBot):
             await self.redis.close()
         with contextlib.suppress(Exception):
             await super().close()
-        log.info("bleed shut down cleanly")
+        log.info("vain shut down cleanly")

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from io import BytesIO
 from typing import TYPE_CHECKING, Optional
@@ -15,7 +15,7 @@ from core.tools.human.text import ordinal
 from .media import fetch_action_gif
 
 if TYPE_CHECKING:
-    from core.bleed import Bleed
+    from core.vain import Vain
 
 ACTION_MAP = {
     "hug": "**hugs** {}",
@@ -110,6 +110,7 @@ class RoleplayCommands(Package):
             action,
             giver_id,
             receiver_id,
+            cached=False,
         )
 
     async def _perform_action(
@@ -200,5 +201,5 @@ for _name in ROLEPLAY_ACTIONS:
     setattr(RoleplayCommands, _name, _make_prefix_action(_name))
 
 
-async def setup(bot: Bleed):
+async def setup(bot: Vain):
     await bot.add_cog(RoleplayCommands(bot))

@@ -13,7 +13,7 @@ import discord
 from watchfiles import Change, awatch
 
 if TYPE_CHECKING:
-    from core.bleed import Bleed
+    from core.vain import Vain
 
 try:
     from discord.ext import commands
@@ -36,7 +36,7 @@ class Watcher:
 
     def __init__(
         self,
-        client: Bleed,
+        client: Vain,
         path: Union[str, List[str]] = "ext",
         debug: bool = True,
         loop: asyncio.BaseEventLoop = None,

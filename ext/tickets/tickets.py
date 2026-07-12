@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import contextlib
 import io
@@ -20,7 +20,7 @@ from core.managers.values import color
 from .views import TicketControlView, TicketFormModal, TicketOpenView
 
 if TYPE_CHECKING:
-    from core.bleed import Bleed
+    from core.vain import Vain
 
 DEFAULT_PANEL_SCRIPT = (
     "{embed}$v{title: Support Tickets}$v"
@@ -743,5 +743,5 @@ class _FakeInteraction:
 
     async def defer(self, *, ephemeral: bool = False) -> None:
         self._done = True
-async def setup(bot: Bleed) -> None:
+async def setup(bot: Vain) -> None:
     await bot.add_cog(Tickets(bot))
