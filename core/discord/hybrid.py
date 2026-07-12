@@ -119,6 +119,7 @@ def _wrap_callback(
                     await inter.response.defer()
         return await fn(*args, **kwargs)
 
+    wrapper.__globals__ = fn.__globals__
     return wrapper
 
 

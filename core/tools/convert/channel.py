@@ -3,7 +3,11 @@ tries mention id then exact then fuzzy name.
 raises CommandError if no match found"""
 
 from discord.ext.commands import Converter, CommandError, Context
-from fast_string_match import closest_match
+try:
+    from fast_string_match import closest_match
+except ImportError:
+    def closest_match(query, candidates):
+        return None
 from typing import Union
 import discord
 

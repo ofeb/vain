@@ -3,7 +3,11 @@ tries id mention then name then fuzzy match.
 raises CommandError with closest suggestion"""
 
 from discord.ext.commands import Converter, CommandError, Context
-from fast_string_match import closest_match
+try:
+    from fast_string_match import closest_match
+except ImportError:
+    def closest_match(query, candidates):
+        return None
 import discord
 
 

@@ -5,7 +5,11 @@ use AliasConverter in command params"""
 from typing import List, Optional, Union
 from discord.ext.commands import Command, Converter, Context, Group
 from discord.ext.commands.errors import CommandError
-from fast_string_match import closest_match
+try:
+    from fast_string_match import closest_match
+except ImportError:
+    def closest_match(query, candidates):
+        return None
 
 
 class Alias:
