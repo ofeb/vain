@@ -85,7 +85,7 @@ class color:
 
 class database:
     enabled: bool = True
-    dsn: str = "postgresql://vain_user:vain@localhost:5432/bleed"
+    dsn: str = "postgresql://bleed_user:bleed@localhost:5432/bleed"
 
 
 class redis:
