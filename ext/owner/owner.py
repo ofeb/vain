@@ -110,7 +110,6 @@ class Owner(commands.Cog):
     @owner.command(
         name="guilds",
         description="List all guilds the bot is in",
-        aliases=["guilds"],
     )
     async def owner_servers(self, ctx: Context) -> None:
         entries = []

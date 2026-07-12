@@ -4,6 +4,7 @@ import contextlib
 import functools
 import inspect
 import logging
+import types
 from typing import Any, Callable, Iterable
 
 import discord
@@ -96,6 +97,16 @@ def _resolve_contexts(
     )
 
 
+async def _wrapper_impl(*args: Any, fn: Callable[..., Any] = None, **kwargs: Any) -> Any:
+    ctx = next((a for a in args if isinstance(a, commands.Context)), None)
+    if ctx is not None and getattr(ctx, "interaction", None) is not None:
+        inter = ctx.interaction
+        if not inter.response.is_done():
+            with contextlib.suppress(discord.NotFound, discord.HTTPException):
+                await inter.response.defer()
+    return await fn(*args, **kwargs)
+
+
 def _wrap_callback(
     fn: Callable[..., Any],
     *,
@@ -109,17 +120,17 @@ def _wrap_callback(
     if guilds and not dms and not groupchats:
         fn = commands.guild_only()(fn)
 
-    @functools.wraps(fn)
-    async def wrapper(*args: Any, **kwargs: Any):
-        ctx = next((a for a in args if isinstance(a, commands.Context)), None)
-        if ctx is not None and getattr(ctx, "interaction", None) is not None:
-            inter = ctx.interaction
-            if not inter.response.is_done():
-                with contextlib.suppress(discord.NotFound, discord.HTTPException):
-                    await inter.response.defer()
-        return await fn(*args, **kwargs)
+    async def _temp(*args: Any, **kwargs: Any):
+        return await _wrapper_impl(*args, fn=fn, **kwargs)
 
-    wrapper.__globals__ = fn.__globals__
+    wrapper = types.FunctionType(
+        _temp.__code__,
+        fn.__globals__,
+        _temp.__name__,
+        _temp.__defaults__,
+        _temp.__closure__,
+    )
+    functools.update_wrapper(wrapper, fn)
     return wrapper
 
 
