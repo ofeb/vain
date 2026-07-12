@@ -73,7 +73,6 @@ class Miscellaneous(MiscellaneousEvents, Package):
             label="Support Server",
             style=discord.ButtonStyle.link,
             url=self.bot.support if hasattr(self.bot, 'support') else "https://discord.gg/vainbot",
-            emoji="\U0001f4ac",
         ))
         await ctx.send(embed=embed, view=view)
 
