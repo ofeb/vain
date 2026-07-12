@@ -373,23 +373,72 @@ class Bleed(commands.AutoShardedBot):
 
     async def _load_extensions(self) -> None:
         extensions = _discover_extensions("ext")
+        log.info("=" * 60)
+        log.info("EXTENSION DISCOVERY — %d extensions found", len(extensions))
+        for ext in extensions:
+            log.info("  discovered: %s", ext)
+        log.info("=" * 60)
+
+        failed: list[str] = []
+        loaded: list[str] = []
         results = await asyncio.gather(
-            *[self._try_load(ext) for ext in extensions],
+            *[self._try_load(ext, loaded, failed) for ext in extensions],
             return_exceptions=True,
         )
-        ok = sum(1 for r in results if r is True)
-        log.info(f"{ok}/{len(extensions)} extensions loaded")
 
-    async def _try_load(self, ext: str) -> bool:
+        log.info("=" * 60)
+        log.info("EXTENSION SUMMARY — %d/%d loaded", len(loaded), len(extensions))
+        if loaded:
+            log.info("  LOADED:")
+            for ext in loaded:
+                log.info("    [OK]  %s", ext)
+        if failed:
+            log.warning("  FAILED:")
+            for ext in failed:
+                log.warning("    [!!] %s", ext)
+        log.info("=" * 60)
+
+        self._log_all_commands()
+
+    async def _try_load(self, ext: str, loaded: list[str], failed: list[str]) -> bool:
         started = time.perf_counter()
         try:
-            log.info("loading %s", ext)
+            log.info("[LOAD] %s ...", ext)
             await self.load_extension(ext)
-            log.info("loaded %s (%.1fs)", ext, time.perf_counter() - started)
+            elapsed = time.perf_counter() - started
+            log.info("[OK]   %s (%.1fs)", ext, elapsed)
+
+            cog = self.get_cog(ext.split(".")[-1].title().replace("_", ""))
+            if cog:
+                cmds = list(cog.walk_commands())
+                log.info("       %s → %d commands registered", ext, len(cmds))
+                for cmd in sorted(cmds, key=lambda c: c.qualified_name):
+                    aliases = f" (aliases: {', '.join(cmd.aliases)})" if cmd.aliases else ""
+                    log.info("         • %s%s", cmd.qualified_name, aliases)
+
+            loaded.append(ext)
             return True
         except Exception as e:
-            log.exception(f"failed to load {ext} after {time.perf_counter() - started:.1f}s: {e}")
+            elapsed = time.perf_counter() - started
+            log.error("[FAIL] %s (%.1fs): %s", ext, elapsed, e)
+            log.exception("       traceback for %s:", ext)
+            failed.append(ext)
             return False
+
+    def _log_all_commands(self) -> None:
+        """dump every registered command after all cogs are loaded"""
+        all_cmds = sorted(self.commands, key=lambda c: c.qualified_name)
+        log.info("=" * 60)
+        log.info("ALL REGISTERED COMMANDS — %d total", len(all_cmds))
+        current_cog = None
+        for cmd in all_cmds:
+            cog_name = cmd.cog_name or "No Cog"
+            if cog_name != current_cog:
+                current_cog = cog_name
+                log.info("  [%s]", cog_name)
+            aliases = f" (aliases: {', '.join(cmd.aliases)})" if cmd.aliases else ""
+            log.info("    • %s%s", cmd.qualified_name, aliases)
+        log.info("=" * 60)
 
     async def _sync_global_commands(self) -> None:
         try:
