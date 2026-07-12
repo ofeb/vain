@@ -97,16 +97,6 @@ def _resolve_contexts(
     )
 
 
-async def _wrapper_impl(*args: Any, fn: Callable[..., Any] = None, **kwargs: Any) -> Any:
-    ctx = next((a for a in args if isinstance(a, commands.Context)), None)
-    if ctx is not None and getattr(ctx, "interaction", None) is not None:
-        inter = ctx.interaction
-        if not inter.response.is_done():
-            with contextlib.suppress(discord.NotFound, discord.HTTPException):
-                await inter.response.defer()
-    return await fn(*args, **kwargs)
-
-
 def _wrap_callback(
     fn: Callable[..., Any],
     *,
@@ -121,7 +111,15 @@ def _wrap_callback(
         fn = commands.guild_only()(fn)
 
     async def _temp(*args: Any, **kwargs: Any):
-        return await _wrapper_impl(*args, fn=fn, **kwargs)
+        ctx = next((a for a in args if isinstance(a, commands.Context)), None)
+        if ctx is not None and getattr(ctx, "interaction", None) is not None:
+            inter = ctx.interaction
+            if not inter.response.is_done():
+                try:
+                    await inter.response.defer()
+                except (discord.NotFound, discord.HTTPException):
+                    pass
+        return await fn(*args, **kwargs)
 
     wrapper = types.FunctionType(
         _temp.__code__,
