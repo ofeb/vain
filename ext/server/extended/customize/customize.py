@@ -660,40 +660,41 @@ class CustomizeCommands(Package):
         return await ctx.success(f"set **decrease** emoji to {emoji}")
 
     @customize.group(
-        name="self",
+        name="context",
+        aliases=["self", "selfcontext"],
         usage="(subcommand) <args>",
         description="Customize your personal embed appearance",
         invoke_without_command=True,
     )
-    async def customize_self(self, ctx):
+    async def customize_context(self, ctx):
         """Customize your personal embed appearance."""
         await ctx.send_help(ctx.command)
 
-    @customize_self.command(
+    @customize_context.command(
         name="reset",
         description="Reset all your personal customizations",
     )
-    async def customize_self_reset(self, ctx):
+    async def customize_context_reset(self, ctx):
         """Reset all your personal customizations."""
         await self.db.reset_user_customize(ctx.author.id, ctx.guild.id)
         return await ctx.success("reset all your **personal** customizations")
 
-    @customize_self.group(
+    @customize_context.group(
         name="emoji",
         usage="(subcommand) <args>",
         example="warn :new_emoji:",
         invoke_without_command=True,
     )
-    async def customize_self_emoji(self, ctx):
+    async def customize_context_emoji(self, ctx):
         """Customize your personal embed emojis."""
         await ctx.send_help(ctx.command)
 
-    @customize_self_emoji.command(
+    @customize_context_emoji.command(
         name="list",
         aliases=["view"],
         example="",
     )
-    async def customize_self_emoji_list(self, ctx):
+    async def customize_context_emoji_list(self, ctx):
         """View your personal emoji settings."""
         settings = await self.db.get_user_customize(ctx.author.id, ctx.guild.id)
         current = settings.get("emoji", {})
@@ -707,15 +708,15 @@ class CustomizeCommands(Package):
             description="\n".join(lines),
             color=self.color,
         )
-        embed.set_footer(text=f"Use {ctx.clean_prefix}customize self emoji <key> <emoji> to change")
+        embed.set_footer(text=f"Use {ctx.clean_prefix}customize context emoji <key> <emoji> to change")
         await ctx.send(embed=embed)
 
-    @customize_self_emoji.command(
+    @customize_context_emoji.command(
         name="success",
         description="Set your personal success emoji",
         example=":white_check_mark:",
     )
-    async def customize_self_emoji_success(self, ctx, emoji: str = None):
+    async def customize_context_emoji_success(self, ctx, emoji: str = None):
         """Set your personal success emoji."""
         if not emoji or emoji.lower() in CLEAR_WORDS:
             settings = await self.db.get_user_customize(ctx.author.id, ctx.guild.id)
@@ -730,12 +731,12 @@ class CustomizeCommands(Package):
         await self.db.set_user_customize(ctx.author.id, ctx.guild.id, "emoji", emoji_dict)
         return await ctx.success(f"set your **success** emoji to {emoji}")
 
-    @customize_self_emoji.command(
+    @customize_context_emoji.command(
         name="warn",
         description="Set your personal warning emoji",
         example=":warning:",
     )
-    async def customize_self_emoji_warn(self, ctx, emoji: str = None):
+    async def customize_context_emoji_warn(self, ctx, emoji: str = None):
         """Set your personal warn emoji."""
         if not emoji or emoji.lower() in CLEAR_WORDS:
             settings = await self.db.get_user_customize(ctx.author.id, ctx.guild.id)
@@ -750,13 +751,13 @@ class CustomizeCommands(Package):
         await self.db.set_user_customize(ctx.author.id, ctx.guild.id, "emoji", emoji_dict)
         return await ctx.success(f"set your **warn** emoji to {emoji}")
 
-    @customize_self_emoji.command(
+    @customize_context_emoji.command(
         name="deny",
         aliases=["error"],
         description="Set your personal deny/error emoji",
         example=":x:",
     )
-    async def customize_self_emoji_deny(self, ctx, emoji: str = None):
+    async def customize_context_emoji_deny(self, ctx, emoji: str = None):
         """Set your personal deny emoji."""
         if not emoji or emoji.lower() in CLEAR_WORDS:
             settings = await self.db.get_user_customize(ctx.author.id, ctx.guild.id)
@@ -771,12 +772,12 @@ class CustomizeCommands(Package):
         await self.db.set_user_customize(ctx.author.id, ctx.guild.id, "emoji", emoji_dict)
         return await ctx.success(f"set your **deny** emoji to {emoji}")
 
-    @customize_self_emoji.command(
+    @customize_context_emoji.command(
         name="cooldown",
         description="Set your personal cooldown emoji",
         example=":clock1:",
     )
-    async def customize_self_emoji_cooldown(self, ctx, emoji: str = None):
+    async def customize_context_emoji_cooldown(self, ctx, emoji: str = None):
         """Set your personal cooldown emoji."""
         if not emoji or emoji.lower() in CLEAR_WORDS:
             settings = await self.db.get_user_customize(ctx.author.id, ctx.guild.id)
@@ -1034,22 +1035,22 @@ class CustomizeCommands(Package):
         await self.db.set_guild_customize(ctx.guild.id, "color", color_dict)
         return await ctx.success(f"set **dark** color to `#{hex_code}`")
 
-    @customize_self.group(
+    @customize_context.group(
         name="color",
         usage="(subcommand) <args>",
         example="warn FF0000",
         invoke_without_command=True,
     )
-    async def customize_self_color(self, ctx):
+    async def customize_context_color(self, ctx):
         """Customize your personal embed colors."""
         await ctx.send_help(ctx.command)
 
-    @customize_self_color.command(
+    @customize_context_color.command(
         name="list",
         aliases=["view"],
         example="",
     )
-    async def customize_self_color_list(self, ctx):
+    async def customize_context_color_list(self, ctx):
         """View your personal color settings."""
         settings = await self.db.get_user_customize(ctx.author.id, ctx.guild.id)
         current = settings.get("color", {})
@@ -1063,15 +1064,15 @@ class CustomizeCommands(Package):
             description="\n".join(lines),
             color=self.color,
         )
-        embed.set_footer(text=f"Use {ctx.clean_prefix}customize self color <key> <hex> to change")
+        embed.set_footer(text=f"Use {ctx.clean_prefix}customize context color <key> <hex> to change")
         await ctx.send(embed=embed)
 
-    @customize_self_color.command(
+    @customize_context_color.command(
         name="base",
         description="Set your personal base embed color",
         example="373737",
     )
-    async def customize_self_color_base(self, ctx, hex_code: str = None):
+    async def customize_context_color_base(self, ctx, hex_code: str = None):
         """Set your personal base color."""
         if not hex_code or hex_code.lower() in CLEAR_WORDS:
             settings = await self.db.get_user_customize(ctx.author.id, ctx.guild.id)
@@ -1092,13 +1093,13 @@ class CustomizeCommands(Package):
         await self.db.set_user_customize(ctx.author.id, ctx.guild.id, "color", color_dict)
         return await ctx.success(f"set your **base** color to `#{hex_code}`")
 
-    @customize_self_color.command(
+    @customize_context_color.command(
         name="approve",
         aliases=["success"],
         description="Set your personal approve/success color",
         example="A8EA7B",
     )
-    async def customize_self_color_approve(self, ctx, hex_code: str = None):
+    async def customize_context_color_approve(self, ctx, hex_code: str = None):
         """Set your personal approve color."""
         if not hex_code or hex_code.lower() in CLEAR_WORDS:
             settings = await self.db.get_user_customize(ctx.author.id, ctx.guild.id)
@@ -1119,12 +1120,12 @@ class CustomizeCommands(Package):
         await self.db.set_user_customize(ctx.author.id, ctx.guild.id, "color", color_dict)
         return await ctx.success(f"set your **approve** color to `#{hex_code}`")
 
-    @customize_self_color.command(
+    @customize_context_color.command(
         name="warn",
         description="Set your personal warning color",
         example="FDCF39",
     )
-    async def customize_self_color_warn(self, ctx, hex_code: str = None):
+    async def customize_context_color_warn(self, ctx, hex_code: str = None):
         """Set your personal warn color."""
         if not hex_code or hex_code.lower() in CLEAR_WORDS:
             settings = await self.db.get_user_customize(ctx.author.id, ctx.guild.id)
@@ -1145,13 +1146,13 @@ class CustomizeCommands(Package):
         await self.db.set_user_customize(ctx.author.id, ctx.guild.id, "color", color_dict)
         return await ctx.success(f"set your **warn** color to `#{hex_code}`")
 
-    @customize_self_color.command(
+    @customize_context_color.command(
         name="deny",
         aliases=["error"],
         description="Set your personal deny/error color",
         example="FF0000",
     )
-    async def customize_self_color_deny(self, ctx, hex_code: str = None):
+    async def customize_context_color_deny(self, ctx, hex_code: str = None):
         """Set your personal deny color."""
         if not hex_code or hex_code.lower() in CLEAR_WORDS:
             settings = await self.db.get_user_customize(ctx.author.id, ctx.guild.id)
@@ -1172,12 +1173,12 @@ class CustomizeCommands(Package):
         await self.db.set_user_customize(ctx.author.id, ctx.guild.id, "color", color_dict)
         return await ctx.success(f"set your **deny** color to `#{hex_code}`")
 
-    @customize_self_color.command(
+    @customize_context_color.command(
         name="cooldown",
         description="Set your personal cooldown color",
         example="4EC3E8",
     )
-    async def customize_self_color_cooldown(self, ctx, hex_code: str = None):
+    async def customize_context_color_cooldown(self, ctx, hex_code: str = None):
         """Set your personal cooldown color."""
         if not hex_code or hex_code.lower() in CLEAR_WORDS:
             settings = await self.db.get_user_customize(ctx.author.id, ctx.guild.id)
@@ -1198,12 +1199,12 @@ class CustomizeCommands(Package):
         await self.db.set_user_customize(ctx.author.id, ctx.guild.id, "color", color_dict)
         return await ctx.success(f"set your **cooldown** color to `#{hex_code}`")
 
-    @customize_self_color.command(
+    @customize_context_color.command(
         name="settings",
         description="Set your personal settings color",
         example="7289DA",
     )
-    async def customize_self_color_settings(self, ctx, hex_code: str = None):
+    async def customize_context_color_settings(self, ctx, hex_code: str = None):
         """Set your personal settings color."""
         if not hex_code or hex_code.lower() in CLEAR_WORDS:
             settings = await self.db.get_user_customize(ctx.author.id, ctx.guild.id)
@@ -1224,12 +1225,12 @@ class CustomizeCommands(Package):
         await self.db.set_user_customize(ctx.author.id, ctx.guild.id, "color", color_dict)
         return await ctx.success(f"set your **settings** color to `#{hex_code}`")
 
-    @customize_self_color.command(
+    @customize_context_color.command(
         name="dark",
         description="Set your personal dark embed color",
         example="2B2D31",
     )
-    async def customize_self_color_dark(self, ctx, hex_code: str = None):
+    async def customize_context_color_dark(self, ctx, hex_code: str = None):
         """Set your personal dark color."""
         if not hex_code or hex_code.lower() in CLEAR_WORDS:
             settings = await self.db.get_user_customize(ctx.author.id, ctx.guild.id)
