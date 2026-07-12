@@ -182,17 +182,17 @@ class RoleplayCommands(Package):
 
 
 def _make_prefix_action(name: str):
-    @command(
-        name=name,
-        description=f"Roleplay: {name}",
-        example=f",{name} @user",
-    )
     async def action(self, ctx: Context, *, member: Optional[discord.User] = None):
         return await self._perform_action(ctx, name, member)
 
     action.__name__ = name
     action.__qualname__ = f"RoleplayCommands.{name}"
-    return action
+
+    return command(
+        name=name,
+        description=f"Roleplay: {name}",
+        example=f",{name} @user",
+    )(action)
 
 
 for _name in ROLEPLAY_ACTIONS:
