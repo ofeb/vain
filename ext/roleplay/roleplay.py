@@ -92,7 +92,7 @@ ACTION_MAP = {
 }
 
 ROLEPLAY_ACTIONS: tuple[str, ...] = tuple(ACTION_MAP.keys())
-PREFIX_ACTION_SKIP: frozenset[str] = frozenset({"kick"})
+PREFIX_ACTION_SKIP: frozenset[str] = frozenset({"kick", "roll"})
 
 
 class RoleplayCommands(Package):
