@@ -11,7 +11,6 @@ from core.discord.package import Package
 from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe
 from core.managers.permissions import has_permissions
-from core.tools.human.text import humanize
 
 
 class InviteTracker(Package):
