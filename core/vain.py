@@ -29,6 +29,9 @@ from .tools.snipe import Snipe
 from .managers.values import token, bot, color, database, redis, emojis, music_enabled
 from .managers.filetypes import CACHE_REDIS_FILE, ensure_storage_files
 
+from .discord.interaction import patch_interaction
+patch_interaction()
+
 log = logging.getLogger("vain")
 
 
@@ -164,6 +167,8 @@ class Vain(commands.AutoShardedBot):
         self.object_cache = Cache(self)
         self.guard = Guard()
         self.snipes = Snipe(self)
+        self._error_store: dict[str, str] = {}
+        self._error_counter: int = 0
         self.watcher: Optional[Watcher] = None
         self.started_at = datetime.datetime.now(datetime.timezone.utc)
         self._seen_message_ids: set[int] = set()
@@ -697,9 +702,18 @@ class Vain(commands.AutoShardedBot):
                     f"Please wait **{err.retry_after:.2f} seconds** before using this command again"
                 )
             return
+
+        self._error_counter += 1
+        error_id = str(self._error_counter)
+        tb_text = "".join(traceback.format_exception(type(err), err, err.__traceback__))
+        self._error_store[error_id] = tb_text
+        if len(self._error_store) > 50:
+            oldest = min(self._error_store.keys(), key=lambda k: int(k))
+            del self._error_store[oldest]
+
         if isinstance(err, commands.CommandError):
             with contextlib.suppress(discord.HTTPException):
-                await ctx.fail(str(err))
+                await ctx.fail(f"{str(err)} (error #{error_id})")
             return
         log.exception(f"unhandled error in {ctx.command}: {err}")
 

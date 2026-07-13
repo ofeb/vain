@@ -3,13 +3,12 @@ from __future__ import annotations
 from typing import Optional
 
 import discord
-from discord import app_commands
 from discord.ext import commands
-from discord.ext.commands import group, CommandError
+from discord.ext.commands import CommandError
 
 from core.discord.package import Package
 from core.discord.ctx import Context
-from core.discord.hybrid import hybrid, describe
+from core.discord.hybrid import group
 from core.managers.permissions import has_permissions
 
 
@@ -40,13 +39,19 @@ class InviteTracker(Package):
             return {"invites": 0, "leaves": 0, "fake": 0, "bonus": 0}
         return dict(row)
 
-    @hybrid(
+    # ─── invites root ───────────────────────────────────────────────
+
+    @group(
         name="invites",
-        description="View invite information",
-        guilds=True,
+        description="View and manage invite tracking",
+        invoke_without_command=True,
     )
-    @describe(user="User to check invites for")
-    async def invites(self, ctx: Context, user: Optional[discord.Member] = None):
+    @has_permissions(manage_guild=True)
+    async def invites(self, ctx: Context):
+        await ctx.send_help(ctx.command)
+
+    @invites.command(name="view", description="View a user's invite stats")
+    async def invites_view(self, ctx: Context, user: Optional[discord.Member] = None):
         if user is None:
             user = ctx.author
 
@@ -67,11 +72,10 @@ class InviteTracker(Package):
         embed.set_thumbnail(url=user.display_avatar.url)
         return await ctx.send(embed=embed)
 
-    @invites.group(
+    @invites.command(
         name="leaderboard",
         aliases=["lb", "top", "rank"],
         description="View the invite leaderboard",
-        invoke_without_command=True,
     )
     @has_permissions(manage_guild=True)
     async def invites_leaderboard(self, ctx: Context):
@@ -156,20 +160,11 @@ class InviteTracker(Package):
             f"Added **{amount}** bonus invites to **{member.display_name}**"
         )
 
-    @hybrid(
-        name="stats",
-        description="View detailed stats",
-        guilds=True,
-    )
-    async def stats(self, ctx: Context):
-        pass
-
-    @stats.command(
+    @invites.command(
         name="userinvites",
         description="Break down a member's invite contributions",
     )
-    @describe(user="User to check")
-    async def stats_userinvites(
+    async def invites_userinvites(
         self, ctx: Context, user: Optional[discord.Member] = None
     ):
         if user is None:
@@ -201,23 +196,22 @@ class InviteTracker(Package):
         if invite_lines:
             description += "\n\n**Active invites:**\n" + "\n".join(invite_lines)
 
-        embed = discord.Embed(
-            description=description,
-            color=self.color,
-        )
+        embed = discord.Embed(description=description, color=self.color)
         embed.set_thumbnail(url=user.display_avatar.url)
         return await ctx.send(embed=embed)
 
-    # ─── invitetracker join subgroup ────────────────────────────────
+    # ─── invitetracker root ─────────────────────────────────────────
 
-    @hybrid(
+    @group(
         name="invitetracker",
         description="Configure invite tracking",
-        guilds=True,
+        invoke_without_command=True,
     )
     @has_permissions(manage_guild=True)
     async def invitetracker(self, ctx: Context):
-        pass
+        await ctx.send_help(ctx.command)
+
+    # ─── invitetracker join ─────────────────────────────────────────
 
     @invitetracker.group(
         name="join",
@@ -232,7 +226,6 @@ class InviteTracker(Package):
         name="set",
         description="Set the channel for invite join logs",
     )
-    @describe(channel="Channel to log invite joins")
     @has_permissions(manage_guild=True)
     async def invitetracker_join_set(self, ctx: Context, channel: discord.TextChannel):
         config = await self._get_config(ctx.guild.id)
@@ -269,7 +262,6 @@ class InviteTracker(Package):
         name="message",
         description="Set the invite join message",
     )
-    @describe(message="Message template. Variables: {inviter}, {invitee}, {invites}, {code}, {url}")
     @has_permissions(manage_guild=True)
     async def invitetracker_join_message(self, ctx: Context, *, message: str):
         await self.db.execute(
@@ -307,7 +299,7 @@ class InviteTracker(Package):
         )
         return await ctx.send(embed=embed)
 
-    # ─── invitetracker leave subgroup ───────────────────────────────
+    # ─── invitetracker leave ────────────────────────────────────────
 
     @invitetracker.group(
         name="leave",
@@ -322,7 +314,6 @@ class InviteTracker(Package):
         name="set",
         description="Set the channel for invite leave logs",
     )
-    @describe(channel="Channel to log invite leaves")
     @has_permissions(manage_guild=True)
     async def invitetracker_leave_set(self, ctx: Context, channel: discord.TextChannel):
         config = await self._get_config(ctx.guild.id)
@@ -359,7 +350,6 @@ class InviteTracker(Package):
         name="message",
         description="Set the invite leave message",
     )
-    @describe(message="Message template. Variables: {inviter}, {invitee}, {invites}, {code}")
     @has_permissions(manage_guild=True)
     async def invitetracker_leave_message(self, ctx: Context, *, message: str):
         await self.db.execute(

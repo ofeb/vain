@@ -141,10 +141,10 @@ class RoleplayBackView(discord.ui.View):
         self.add_item(btn)
 
     async def _back_callback(self, interaction: discord.Interaction):
+        import traceback as _tb
+
         if interaction.user.id != self.target_id:
-            return await interaction.response.send_message(
-                "Only the target can use this button!", ephemeral=True
-            )
+            return await interaction.warning("Only the target can use this button!")
 
         for item in self.children:
             item.disabled = True
@@ -183,15 +183,12 @@ class RoleplayBackView(discord.ui.View):
             )
             embed.set_image(url="attachment://action.gif")
 
-            await interaction.followup.send(
-                file=attachment, embed=embed,
-                reference=interaction.message,
-            )
-        except Exception:
+            await interaction.followup.send(file=attachment, embed=embed)
+        except Exception as exc:
+            tb_text = "".join(_tb.format_exception(type(exc), exc, exc.__traceback__))
             with contextlib.suppress(discord.HTTPException):
-                await interaction.followup.send(
-                    "Something went wrong sending the reply. Try again later.",
-                    ephemeral=True,
+                await interaction.warning(
+                    f"```\n{tb_text[:1800]}\n```"
                 )
 
     async def on_timeout(self):
