@@ -19,6 +19,22 @@ log = logging.getLogger("vain.invitetracker.events")
 class InviteTrackerEvents(Package):
     """invite tracking event listeners"""
 
+    def __init__(self, bot: Vain):
+        super().__init__(bot)
+        self._invite_cache: dict[int, dict[str, int]] = {}
+
+    async def cog_load(self) -> None:
+        self.bot.loop.create_task(self._populate_cache())
+
+    async def _populate_cache(self) -> None:
+        """Snapshot invite uses for all guilds on startup."""
+        await self.bot.wait_until_ready()
+        for guild in self.bot.guilds:
+            invites = await self._snapshot_invites(guild)
+            if invites:
+                self._invite_cache[guild.id] = invites
+                log.debug("Cached %d invites for %s", len(invites), guild.name)
+
     async def _snapshot_invites(self, guild: discord.Guild) -> dict[str, int]:
         """Fetch current invite uses as {code: uses}"""
         try:
@@ -36,7 +52,13 @@ class InviteTrackerEvents(Package):
             "SELECT * FROM invite_config WHERE guild_id = $1", guild_id
         )
         if not row:
-            return {"enabled": False, "channel_id": None}
+            return {
+                "enabled": False,
+                "channel_id": None,
+                "message": "{inviter} invited {invitee}. They have **{invites}** invites.",
+                "leave_message": "{invitee} left. {inviter} now has **{invites}** invites.",
+                "fake_remove": True,
+            }
         return dict(row)
 
     async def _find_used_invite(
@@ -60,17 +82,24 @@ class InviteTrackerEvents(Package):
     async def on_member_join(self, member: discord.Member) -> None:
         guild = member.guild
 
-        # Snapshot invites BEFORE the join
-        before = await self._snapshot_invites(guild)
+        # Use cached invites as the "before" snapshot
+        before = self._invite_cache.get(guild.id, {})
         if not before:
-            log.debug("No invites found before join in %s, skipping snapshot", guild.name)
-            return
+            log.debug("No cached invites for %s, fetching fresh", guild.name)
+            before = await self._snapshot_invites(guild)
+            if not before:
+                log.debug("No invites found in %s, skipping", guild.name)
+                return
 
-        # Wait for Discord to update invite counts
+        # Wait briefly for Discord to update invite counts
         await asyncio.sleep(2)
 
         # Snapshot invites AFTER the join
         after = await self._snapshot_invites(guild)
+
+        # Update the cache with post-join state
+        if after:
+            self._invite_cache[guild.id] = after
 
         # Find which invite was used
         invite = await self._find_used_invite(before, after, member)
@@ -151,6 +180,12 @@ class InviteTrackerEvents(Package):
     @commands.Cog.listener()
     async def on_member_remove(self, member: discord.Member) -> None:
         guild = member.guild
+
+        # Update cache after member leaves
+        invites = await self._snapshot_invites(guild)
+        if invites:
+            self._invite_cache[guild.id] = invites
+
         config = await self._get_config(guild.id)
 
         if not config.get("enabled"):
