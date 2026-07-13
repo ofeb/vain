@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Optional
 import discord
 from discord import app_commands
 from discord.ext import commands
+from PIL import Image
 
 from core.discord.package import Package
 from core.discord.ctx import Context
@@ -18,6 +19,16 @@ from .media import fetch_action_gif
 
 if TYPE_CHECKING:
     from core.vain import Vain
+
+
+def _extract_dominant_color(gif_bytes: bytes) -> int | None:
+    try:
+        with Image.open(BytesIO(gif_bytes)) as img:
+            img = img.convert("RGB").resize((1, 1))
+            r, g, b = img.getpixel((0, 0))
+            return (r << 16) | (g << 8) | b
+    except Exception:
+        return None
 
 ACTION_MAP = {
     "hug": "**hugs** {}",
@@ -161,8 +172,9 @@ class RoleplayBackView(discord.ui.View):
             cached=False,
         )
 
+        embed_color = _extract_dominant_color(gif_bytes) or bot.color
         embed = discord.Embed(
-            color=bot.color,
+            color=embed_color,
             description=(
                 f"{interaction.user.mention} {ACTION_MAP[self.action].format(mention)} "
                 f"for the **{ordinal(total)}** time!"
@@ -221,8 +233,9 @@ class RoleplayCommands(Package):
         total = await self._record(action, ctx.author.id, target.id)
         mention = target.mention if target != ctx.author else "themselves"
 
+        embed_color = _extract_dominant_color(gif_bytes) or self.bot.color
         embed = discord.Embed(
-            color=self.bot.color,
+            color=embed_color,
             description=(
                 f"{ctx.author.mention} {ACTION_MAP[action].format(mention)} "
                 f"for the **{ordinal(total)}** time!"

@@ -66,11 +66,11 @@ class emojis:
 
 
 class color:
-    neutral: int = 0xC8A4C2
+    neutral: int = 0x2A2B2F
     approve: int = 0xA8D8A8
     warn: int = 0xF5D76E
     deny: int = 0xE07A7A
-    base: int = 0xC8A4C2
+    base: int = 0x2A2B2F
     cooldown: int = 0xBBA0D2
     settings: int = 0xD4B8D0
     dark: int = 0x9B7A9E

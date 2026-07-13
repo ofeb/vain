@@ -186,17 +186,16 @@ def _cmd_hidden(cmd: Command, *, owner: bool) -> bool:
 def _fmt_commands(cmds: Iterable[Command], limit: int = 3900) -> str:
     names = sorted({c.qualified_name for c in cmds})
     if not names:
-        return "`none`"
+        return "*none*"
     parts: list[str] = []
     total = 0
     for i, n in enumerate(names):
-        piece = f"`{n}`"
         sep = 2 if parts else 0
-        if total + sep + len(piece) > limit:
+        if total + sep + len(n) > limit:
             body = ", ".join(parts)
             return f"{body}\n*and {len(names) - i} more*"
-        parts.append(piece)
-        total += sep + len(piece)
+        parts.append(n)
+        total += sep + len(n)
     return ", ".join(parts)
 
 

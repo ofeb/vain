@@ -660,8 +660,8 @@ class CustomizeCommands(Package):
         return await ctx.success(f"set **decrease** emoji to {emoji}")
 
     @customize.group(
-        name="context",
-        aliases=["self", "selfcontext"],
+        name="selfcontext",
+        aliases=["self"],
         usage="(subcommand) <args>",
         description="Customize your personal embed appearance",
         invoke_without_command=True,
@@ -708,7 +708,7 @@ class CustomizeCommands(Package):
             description="\n".join(lines),
             color=self.color,
         )
-        embed.set_footer(text=f"Use {ctx.clean_prefix}customize context emoji <key> <emoji> to change")
+        embed.set_footer(text=f"Use {ctx.clean_prefix}customize selfcontext emoji <key> <emoji> to change")
         await ctx.send(embed=embed)
 
     @customize_context_emoji.command(
@@ -1064,7 +1064,7 @@ class CustomizeCommands(Package):
             description="\n".join(lines),
             color=self.color,
         )
-        embed.set_footer(text=f"Use {ctx.clean_prefix}customize context color <key> <hex> to change")
+        embed.set_footer(text=f"Use {ctx.clean_prefix}customize selfcontext color <key> <hex> to change")
         await ctx.send(embed=embed)
 
     @customize_context_color.command(

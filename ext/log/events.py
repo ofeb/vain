@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+from collections import defaultdict
 from typing import Optional, Union
 
 import discord
@@ -107,6 +109,27 @@ PERMISSION_NAMES = {
 
 
 class LogEvents:
+    _BULK_THRESHOLD: int = 3
+    _BULK_WINDOW: float = 10.0
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if not hasattr(cls, "_bulk_tracker"):
+            cls._bulk_tracker: dict[int, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
+
+    def _track_bulk_event(self, guild_id: int, event_key: str) -> int:
+        now = time.monotonic()
+        bucket = self._bulk_tracker[guild_id][event_key]
+        bucket[:] = [t for t in bucket if now - t < self._BULK_WINDOW]
+        bucket.append(now)
+        return len(bucket)
+
+    def _should_suppress_individual(self, guild_id: int, event_key: str) -> bool:
+        now = time.monotonic()
+        bucket = self._bulk_tracker[guild_id][event_key]
+        bucket[:] = [t for t in bucket if now - t < self._BULK_WINDOW]
+        return len(bucket) >= self._BULK_THRESHOLD
+
     @Package.listener()
     async def on_message_delete(self, message: discord.Message) -> None:
         if message.author.bot or not message.guild:
@@ -137,6 +160,62 @@ class LogEvents:
             embed.add_field(name="**Attachments**", value=urls[:1024], inline=False)
 
         await self._log(message.guild.id, "messages", embed)
+
+    @Package.listener()
+    async def on_bulk_message_delete(self, messages: list[discord.Message]) -> None:
+        messages = [m for m in messages if not m.author.bot and m.guild]
+        if not messages:
+            return
+
+        guild = messages[0].guild
+        channel = messages[0].channel
+
+        if await self._is_ignored(guild.id, channel.id):
+            return
+
+        uncached = sum(1 for m in messages if m.content is None)
+
+        members: dict[int, discord.Member] = {}
+        for m in messages:
+            if m.author and not m.author.bot:
+                members[m.author.id] = m.author
+
+        lines: list[str] = []
+        for m in messages:
+            if m.content:
+                ts = m.created_at.strftime("%Y-%m-%d %H:%M:%S")
+                lines.append(f"[{ts}] {m.author}: {m.content}")
+
+        description = f"**{len(messages)}** messages deleted in {channel.mention}\n"
+        if uncached:
+            description += f"({uncached} message{'s' if uncached != 1 else ''} were not cached)\n"
+
+        embed = discord.Embed(
+            title="Bulk Message Delete",
+            description=description,
+            timestamp=discord.utils.utcnow(),
+        )
+
+        if members:
+            member_list = "\n".join(
+                f"{m.mention} (`{m}`) ({m.id})" for m in members.values()
+            )
+            embed.add_field(
+                name=f"**{len(members)} member{'s' if len(members) != 1 else ''}**",
+                value=member_list[:1024],
+                inline=False,
+            )
+
+        embed.set_footer(text=f"Channel ID: {channel.id}")
+
+        file_content = "\n".join(lines).encode() if lines else None
+        await self._log(
+            guild.id,
+            "messages",
+            embed,
+            file_content=file_content,
+            file_name="messages.txt",
+        )
 
     @Package.listener()
     async def on_message_edit(self, before: discord.Message, after: discord.Message) -> None:
@@ -372,6 +451,27 @@ class LogEvents:
 
     @Package.listener()
     async def on_guild_role_create(self, role: discord.Role) -> None:
+        count = self._track_bulk_event(role.guild.id, "role_create")
+        if count >= self._BULK_THRESHOLD and count == self._BULK_THRESHOLD:
+            embed = discord.Embed(
+                title="Bulk Role Create",
+                description=f"**{count}** roles created in {role.guild.name}",
+                timestamp=discord.utils.utcnow(),
+                color=role.color.value if role.color.value else 0xD4B8D0,
+            )
+            entry = await _get_audit_entry(role.guild, discord.AuditLogAction.role_create, role.id)
+            if entry and entry.user:
+                embed.set_author(name="Bulk Role Create", icon_url=entry.user.display_avatar.url)
+                embed.set_footer(text=f"User ID: {entry.user.id}")
+                embed.add_field(name="**Moderator**", value=f"{entry.user.mention} (`{entry.user.id}`)", inline=True)
+            else:
+                embed.set_author(name="Bulk Role Create")
+            await self._log(role.guild.id, "roles", embed)
+            return
+
+        if self._should_suppress_individual(role.guild.id, "role_create"):
+            return
+
         embed = discord.Embed(
             description=f"Role {role.mention} created",
             timestamp=discord.utils.utcnow(),
@@ -393,6 +493,26 @@ class LogEvents:
 
     @Package.listener()
     async def on_guild_role_delete(self, role: discord.Role) -> None:
+        count = self._track_bulk_event(role.guild.id, "role_delete")
+        if count >= self._BULK_THRESHOLD and count == self._BULK_THRESHOLD:
+            embed = discord.Embed(
+                title="Bulk Role Delete",
+                description=f"**{count}** roles deleted in {role.guild.name}",
+                timestamp=discord.utils.utcnow(),
+            )
+            entry = await _get_audit_entry(role.guild, discord.AuditLogAction.role_delete, role.id)
+            if entry and entry.user:
+                embed.set_author(name="Bulk Role Delete", icon_url=entry.user.display_avatar.url)
+                embed.set_footer(text=f"User ID: {entry.user.id}")
+                embed.add_field(name="**Moderator**", value=f"{entry.user.mention} (`{entry.user.id}`)", inline=True)
+            else:
+                embed.set_author(name="Bulk Role Delete")
+            await self._log(role.guild.id, "roles", embed)
+            return
+
+        if self._should_suppress_individual(role.guild.id, "role_delete"):
+            return
+
         embed = discord.Embed(
             description=f"Role **{role.name}** deleted",
             timestamp=discord.utils.utcnow(),
@@ -469,6 +589,27 @@ class LogEvents:
     @Package.listener()
     async def on_guild_channel_create(self, channel: discord.abc.GuildChannel) -> None:
         label = _channel_type_label(channel)
+
+        count = self._track_bulk_event(channel.guild.id, "channel_create")
+        if count >= self._BULK_THRESHOLD and count == self._BULK_THRESHOLD:
+            embed = discord.Embed(
+                title="Bulk Channel Create",
+                description=f"**{count}** channels created in <#{channel.guild.id}>",
+                timestamp=discord.utils.utcnow(),
+            )
+            entry = await _get_audit_entry(channel.guild, discord.AuditLogAction.channel_create, channel.id)
+            if entry and entry.user:
+                embed.set_author(name="Bulk Channel Create", icon_url=entry.user.display_avatar.url)
+                embed.set_footer(text=f"User ID: {entry.user.id}")
+                embed.add_field(name="**Moderator**", value=f"{entry.user.mention} (`{entry.user.id}`)", inline=True)
+            else:
+                embed.set_author(name="Bulk Channel Create")
+            await self._log(channel.guild.id, "channels", embed)
+            return
+
+        if self._should_suppress_individual(channel.guild.id, "channel_create"):
+            return
+
         embed = discord.Embed(
             description=f"{label} {channel.mention} created",
             timestamp=discord.utils.utcnow(),
@@ -487,6 +628,27 @@ class LogEvents:
     @Package.listener()
     async def on_guild_channel_delete(self, channel: discord.abc.GuildChannel) -> None:
         label = _channel_type_label(channel)
+
+        count = self._track_bulk_event(channel.guild.id, "channel_delete")
+        if count >= self._BULK_THRESHOLD and count == self._BULK_THRESHOLD:
+            embed = discord.Embed(
+                title="Bulk Channel Delete",
+                description=f"**{count}** channels deleted in <#{channel.guild.id}>",
+                timestamp=discord.utils.utcnow(),
+            )
+            entry = await _get_audit_entry(channel.guild, discord.AuditLogAction.channel_delete, channel.id)
+            if entry and entry.user:
+                embed.set_author(name="Bulk Channel Delete", icon_url=entry.user.display_avatar.url)
+                embed.set_footer(text=f"User ID: {entry.user.id}")
+                embed.add_field(name="**Moderator**", value=f"{entry.user.mention} (`{entry.user.id}`)", inline=True)
+            else:
+                embed.set_author(name="Bulk Channel Delete")
+            await self._log(channel.guild.id, "channels", embed)
+            return
+
+        if self._should_suppress_individual(channel.guild.id, "channel_delete"):
+            return
+
         embed = discord.Embed(
             description=f"{label} **#{channel.name}** deleted",
             timestamp=discord.utils.utcnow(),
@@ -571,6 +733,21 @@ class LogEvents:
 
         if before.channel != after.channel:
             if before.channel is None and after.channel is not None:
+                join_key = f"voice_join_{after.channel.id}"
+                count = self._track_bulk_event(member.guild.id, join_key)
+                if count >= self._BULK_THRESHOLD and count == self._BULK_THRESHOLD:
+                    embed = discord.Embed(
+                        title="Bulk Voice Join",
+                        description=f"**{count}** members joined {after.channel.mention}",
+                        timestamp=discord.utils.utcnow(),
+                    )
+                    embed.set_author(name="Bulk Voice Join")
+                    embed.set_footer(text=f"Channel ID: {after.channel.id}")
+                    await self._log(member.guild.id, "voice", embed)
+                    return
+                if self._should_suppress_individual(member.guild.id, join_key):
+                    return
+
                 embed = discord.Embed(
                     description=f"{member.mention} joined **{after.channel.name}**",
                     timestamp=discord.utils.utcnow(),

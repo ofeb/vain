@@ -10,7 +10,7 @@ import discord
 from core.discord.package import Package
 
 from core.discord.ctx import Context
-from core.discord.hybrid import describe, group
+from core.discord.hybrid import describe, group, hybrid
 from core.managers.permissions import has_permissions
 from core.managers.values import color
 
@@ -238,6 +238,60 @@ class Socials(Package):
             color=color.base,
         )
         await ctx.send(embed=embed)
+
+    @hybrid(
+        name="repost",
+        description="Repost media from TikTok, YouTube Shorts, Instagram, or Twitter",
+        example=",repost https://www.tiktok.com/user/video/123",
+        guilds=True,
+        dms=False,
+        groupchats=True,
+    )
+    @describe(url="Social media URL to repost")
+    async def repost(self, ctx: Context, *, url: str) -> None:
+        async with ctx.typing():
+            try:
+                from udownloader import AsyncDownloader
+
+                downloader = AsyncDownloader(max_concurrent=1)
+                result = await downloader.download_async(
+                    url,
+                    output_dir=os.path.join(os.sep, "tmp"),
+                    audio_only=False,
+                )
+
+                if not result or not result.get("filepath"):
+                    await ctx.fail("Could not download media from that URL.")
+                    return
+
+                filepath = result["filepath"]
+                if not os.path.exists(filepath):
+                    await ctx.fail("Downloaded file not found.")
+                    return
+
+                file_size = os.path.getsize(filepath)
+                if file_size > 25_000_000:
+                    os.remove(filepath)
+                    await ctx.fail("File exceeds Discord's 25MB upload limit.")
+                    return
+
+                with open(filepath, "rb") as f:
+                    data = f.read()
+
+                try:
+                    os.remove(filepath)
+                except Exception:
+                    pass
+
+                filename = result.get("filename", "repost.mp4")
+                fp = io.BytesIO(data)
+                file = discord.File(fp, filename=filename)
+                await ctx.send(file=file)
+
+            except ImportError:
+                await ctx.fail("uDownloader is not installed. Run `pip install udownloader`.")
+            except Exception as e:
+                await ctx.fail(f"Download failed: {str(e)[:100]}")
 
 
 async def setup(bot: Vain):

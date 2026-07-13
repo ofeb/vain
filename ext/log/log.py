@@ -2,6 +2,7 @@
 
 import contextlib
 import datetime
+import io
 from typing import TYPE_CHECKING, Optional, Union
 
 import discord
@@ -150,7 +151,17 @@ class Log(LogEvents, Package):
         except Exception:
             return False
 
-    async def _log(self, guild_id: int, event_type: str, embed: discord.Embed) -> None:
+    async def _log(
+        self,
+        guild_id: int,
+        event_type: str,
+        embed: discord.Embed,
+        *,
+        file_content: bytes | None = None,
+        file_name: str | None = None,
+    ) -> None:
+        if embed.color is None:
+            embed.color = self.color
         try:
             rows = await self.db.fetch(
                 "SELECT channel_id FROM log_config WHERE guild_id = $1 AND $2 = ANY(events)",
@@ -164,7 +175,13 @@ class Log(LogEvents, Package):
                 wh = await self._get_webhook(channel_id)
                 if wh:
                     with contextlib.suppress(discord.HTTPException):
-                        await wh.send(embed=embed, username="vain logs")
+                        send_kwargs: dict = {"embed": embed, "username": "vain logs"}
+                        if file_content is not None and file_name:
+                            send_kwargs["file"] = discord.File(
+                                io.BytesIO(file_content),
+                                filename=file_name,
+                            )
+                        await wh.send(**send_kwargs)
         except Exception:
             pass
 

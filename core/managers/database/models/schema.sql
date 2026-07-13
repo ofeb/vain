@@ -1221,3 +1221,12 @@ CREATE TABLE IF NOT EXISTS spotify_tokens (
     expires_at TIMESTAMP NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS nuke (
+    guild_id BIGINT NOT NULL,
+    channel_id BIGINT NOT NULL,
+    last_nuke TIMESTAMP,
+    nuke_threshold INT NOT NULL DEFAULT 3600,
+    message TEXT NOT NULL DEFAULT 'first',
+    PRIMARY KEY (guild_id, channel_id)
+);
