@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING
 
 import discord
 from discord.ext import commands, tasks
-from discord.ext.commands import commands as ext_commands
 
 from core.discord.package import Package
 from core.managers.values import color
@@ -39,7 +38,7 @@ class OwnerEvents(Package):
         except discord.HTTPException:
             pass
 
-    @ext_commands.Cog.listener()
+    @commands.Cog.listener()
     async def on_guild_join(self, guild: discord.Guild) -> None:
         """Log when the bot joins a new guild"""
         owner = guild.owner
@@ -73,7 +72,7 @@ class OwnerEvents(Package):
                 except discord.HTTPException:
                     pass
 
-    @ext_commands.Cog.listener()
+    @commands.Cog.listener()
     async def on_guild_remove(self, guild: discord.Guild) -> None:
         """Log when the bot leaves a guild"""
         owner = guild.owner
