@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Optional
 import discord
 from discord import app_commands
 from discord.ext import commands
-from PIL import Image
+from colorthief import ColorThief
 
 from core.discord.package import Package
 from core.discord.ctx import Context
@@ -23,10 +23,9 @@ if TYPE_CHECKING:
 
 def _extract_dominant_color(gif_bytes: bytes) -> int | None:
     try:
-        with Image.open(BytesIO(gif_bytes)) as img:
-            img = img.convert("RGB").resize((1, 1))
-            r, g, b = img.getpixel((0, 0))
-            return (r << 16) | (g << 8) | b
+        ct = ColorThief(BytesIO(gif_bytes))
+        r, g, b = ct.get_color(quality=1)
+        return (r << 16) | (g << 8) | b
     except Exception:
         return None
 

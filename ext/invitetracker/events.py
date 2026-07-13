@@ -20,6 +20,13 @@ def _invite_word(count: int) -> str:
     return "invite" if count == 1 else "invites"
 
 
+def _fix_invite_plural(text: str, count: int) -> str:
+    """Replace hardcoded 'invites' with correct plural form in rendered text."""
+    import re
+    word = _invite_word(count)
+    return re.sub(r'\binvites\b', word, text)
+
+
 class InviteTrackerEvents(Package):
     """invite tracking event listeners"""
 
@@ -199,7 +206,7 @@ class InviteTrackerEvents(Package):
         )
 
         script = Script(template, user=member)
-        rendered = script.render(**invite_vars)
+        rendered = _fix_invite_plural(script.render(**invite_vars), total)
 
         await channel.send(rendered)
 
@@ -272,6 +279,6 @@ class InviteTrackerEvents(Package):
         )
 
         script = Script(template, user=member)
-        rendered = script.render(**leave_vars)
+        rendered = _fix_invite_plural(script.render(**leave_vars), total)
 
         await channel.send(rendered)
