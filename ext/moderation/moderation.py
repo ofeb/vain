@@ -11,6 +11,48 @@ from core.discord.package import Package
 
 
 from core.managers.permissions import has_permissions
+
+
+class _BoostConfirmView(discord.ui.View):
+    """Approve/Decline confirmation when targeting a booster."""
+
+    def __init__(self, ctx, *, action: str, member: discord.Member, timeout: float = 30.0):
+        super().__init__(timeout=timeout)
+        self.ctx = ctx
+        self.member = member
+        self.value: bool | None = None
+        self._action = action
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.ctx.author.id:
+            await interaction.response.send_message("This is not for you.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Approve", style=discord.ButtonStyle.success)
+    async def approve(self, interaction: discord.Interaction, _: discord.ui.Button):
+        self.value = True
+        await interaction.response.defer()
+        self.stop()
+
+    @discord.ui.button(label="Decline", style=discord.ButtonStyle.danger)
+    async def decline(self, interaction: discord.Interaction, _: discord.ui.Button):
+        self.value = False
+        await interaction.response.defer()
+        self.stop()
+
+    async def prompt(self) -> bool:
+        embed = discord.Embed(
+            description=f"Are you sure you want to **{self._action}** {self.member.mention}?\nThey are currently boosting the server.",
+            color=0x2A2B2F,
+        )
+        msg = await self.ctx.send(embed=embed, view=self)
+        await self.wait()
+        with contextlib.suppress(discord.HTTPException):
+            await msg.delete()
+        return bool(self.value)
+
+
 class ModerationCommands(Package):
     """standalone moderation commands"""
 
@@ -102,6 +144,13 @@ class ModerationCommands(Package):
                 f"their top role ({member.top_role.mention}) must be below my highest role ({bot_member.top_role.mention})"
             )
 
+    async def _confirm_if_booster(self, ctx, member: discord.Member, action: str) -> bool:
+        """Show approval prompt if the target is boosting. Returns True to proceed."""
+        if not getattr(member, "premium_since", None):
+            return True
+        view = _BoostConfirmView(ctx, action=action, member=member)
+        return await view.prompt()
+
     async def _create_case(
         self,
         ctx,
@@ -185,6 +234,8 @@ class ModerationCommands(Package):
     ):
         """temporarily ban a member"""
         self._ensure_targetable(ctx, member)
+        if not await self._confirm_if_booster(ctx, member, "tempban"):
+            return await ctx.warn("Action cancelled.")
 
         seconds = self._parse_duration_seconds(duration)
         if not seconds or seconds < 1:
@@ -639,6 +690,8 @@ class ModerationCommands(Package):
     ):
         """softban a member"""
         self._ensure_targetable(ctx, member)
+        if not await self._confirm_if_booster(ctx, member, "softban"):
+            return await ctx.warn("Action cancelled.")
 
         delete_days = self._coerce_delete_days(delete_history, default=1)
         role_ids = [
@@ -702,6 +755,8 @@ class ModerationCommands(Package):
     ):
         """Bans the mentioned user"""
         self._ensure_targetable(ctx, member)
+        if not await self._confirm_if_booster(ctx, member, "ban"):
+            return await ctx.warn("Action cancelled.")
 
         delete_days = self._coerce_delete_days(delete_history, default=0)
         role_ids = [
@@ -758,6 +813,8 @@ class ModerationCommands(Package):
     ):
         """kick a member"""
         self._ensure_targetable(ctx, member)
+        if not await self._confirm_if_booster(ctx, member, "kick"):
+            return await ctx.warn("Action cancelled.")
 
         role_ids = [
             role.id
