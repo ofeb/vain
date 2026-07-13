@@ -32,11 +32,16 @@ class ModerationCommands(Package):
     def _coerce_delete_days(self, value, *, default: int = 0) -> int:
         if value in (None, ""):
             return default
-        try:
-            days = int(value)
-        except (TypeError, ValueError):
-            days = default
-        return max(0, min(days, 7))
+        raw = str(value).strip().lower()
+        units = {"s": 1 / 86400, "m": 1 / 1440, "h": 1 / 24, "d": 1, "w": 7}
+        if raw and raw[-1] in units and raw[:-1].isdigit():
+            days = int(raw[:-1]) * units[raw[-1]]
+        else:
+            try:
+                days = int(raw)
+            except (TypeError, ValueError):
+                days = default
+        return max(0, min(int(days), 7))
 
     def _parse_duration_seconds(self, value: str | None) -> int | None:
         if not value:
@@ -85,11 +90,17 @@ class ModerationCommands(Package):
         author = ctx.author if isinstance(ctx.author, discord.Member) else None
         bot_member = ctx.guild.me or ctx.guild.get_member(self.bot.user.id if self.bot.user else 0)
         if author and ctx.guild.owner_id != author.id and member.top_role >= author.top_role:
-            raise CommandError("that member is above or equal to your highest role")
+            raise CommandError(
+                f"**{member.display_name}** has a higher or equal role than you — "
+                f"their top role ({member.top_role.mention}) must be below yours ({author.top_role.mention})"
+            )
         if bot_member is None:
             raise CommandError("I could not resolve my server member")
         if member.top_role >= bot_member.top_role:
-            raise CommandError("that member is above or equal to my highest role")
+            raise CommandError(
+                f"**{member.display_name}** has a higher or equal role than me — "
+                f"their top role ({member.top_role.mention}) must be below my highest role ({bot_member.top_role.mention})"
+            )
 
     async def _create_case(
         self,
@@ -231,7 +242,8 @@ class ModerationCommands(Package):
         name="warn",
         description="Warns the mentioned user and private messages them the warning",
     )
-    async def warn(self, ctx, member, *, reason):
+    @has_permissions(manage_messages=True)
+    async def warn(self, ctx, member, *, reason=None):
         """warn a member"""
         pass
 
@@ -311,9 +323,10 @@ class ModerationCommands(Package):
 
     @command(
         name="jail",
-        description="No description given",
+        description="Jails the mentioned user",
     )
-    async def jail(self, ctx, member, duration, *, reason):
+    @has_permissions(manage_messages=True)
+    async def jail(self, ctx, member, *, reason=None):
         """jail a member"""
         pass
 
@@ -363,8 +376,9 @@ class ModerationCommands(Package):
 
     @command(
         name="caselog",
-        description="No description given",
+        description="View a case log",
     )
+    @has_permissions(manage_messages=True)
     async def caselog(self, ctx, case_id):
         """view case log"""
         pass
@@ -374,7 +388,8 @@ class ModerationCommands(Package):
         description="Mutes the provided member using Discords timeout feature",
         invoke_without_command=True,
     )
-    async def timeout(self, ctx, member, duration, *, reason):
+    @has_permissions(moderate_members=True)
+    async def timeout(self, ctx, member, duration, *, reason=None):
         """timeout a member"""
         pass
 
@@ -391,7 +406,8 @@ class ModerationCommands(Package):
         name="untimeout",
         description="Removes a timeout for a member",
     )
-    async def untimeout(self, ctx, member, *, reason):
+    @has_permissions(moderate_members=True)
+    async def untimeout(self, ctx, member, *, reason=None):
         """remove timeout from a member"""
         pass
 
@@ -576,6 +592,7 @@ class ModerationCommands(Package):
         name="drag",
         description="Drag member(s) to the specified Voice Channel",
     )
+    @has_permissions(move_members=True)
     async def drag(self, ctx, members, channel):
         """drag members to voice channel"""
         pass
@@ -584,6 +601,7 @@ class ModerationCommands(Package):
         name="unbanall",
         description="Unbans every member in a guild",
     )
+    @has_permissions(ban_members=True)
     async def unbanall(self, ctx):
         """unban all members"""
         pass
@@ -592,6 +610,7 @@ class ModerationCommands(Package):
         name="unbanall cancel",
         description="Cancels a unban all task running",
     )
+    @has_permissions(ban_members=True)
     async def unbanall_cancel(self, ctx):
         """cancel unban all task"""
         pass
@@ -600,6 +619,7 @@ class ModerationCommands(Package):
         name="unban",
         description="Unbans the mentioned user",
     )
+    @has_permissions(ban_members=True)
     async def unban(self, ctx, user, *, reason=None):
         """unban a user"""
         pass
@@ -613,7 +633,7 @@ class ModerationCommands(Package):
         self,
         ctx,
         member: discord.Member,
-        delete_history: int = 1,
+        delete_history: str = "1d",
         *,
         reason: str = None,
     ):
@@ -676,7 +696,7 @@ class ModerationCommands(Package):
         self,
         ctx,
         member: discord.Member,
-        delete_history: int = 0,
+        delete_history: str = "0",
         *,
         reason: str = None,
     ):
@@ -795,6 +815,7 @@ class ModerationCommands(Package):
         example="50 Threatening members",
         description="Bans the most recently joined members",
     )
+    @has_permissions(ban_members=True)
     async def ban_recent(self, ctx):
         """Bans the most recently joined members"""
         pass
@@ -805,6 +826,7 @@ class ModerationCommands(Package):
         example="7",
         description="Bans all members and purges their recent messages",
     )
+    @has_permissions(ban_members=True)
     async def ban_purge(self, ctx, delete_history):
         """Bans all members and purges their recent messages"""
         pass

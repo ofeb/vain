@@ -88,8 +88,16 @@ def _build_snipe_embed(snipe: dict, index: int, total: int, snipe_type: str) -> 
     label = {"snipe": "Deleted", "editsnipe": "Edited", "reactionsnipe": "Reaction"}.get(snipe_type, "Deleted")
     ts = snipe.get("timestamp", 0)
     if isinstance(ts, (int, float)):
-        ts = datetime.datetime.fromtimestamp(ts)
-    embed.set_footer(text=f"{label} {discord.utils.format_dt(ts, style='R')} \u2219 {index}/{total} \u2219 Module: utility")
+        ts = datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc)
+    now = datetime.datetime.now(tz=datetime.timezone.utc)
+    diff = now - ts
+    if diff.total_seconds() < 86400 and ts.day == now.day:
+        time_str = f"today at {discord.utils.format_dt(ts, style='t')}"
+    elif diff.total_seconds() < 172800 and ts.day == now.day - 1:
+        time_str = f"yesterday at {discord.utils.format_dt(ts, style='t')}"
+    else:
+        time_str = discord.utils.format_dt(ts, style='f')
+    embed.set_footer(text=f"{label} {time_str} \u2219 {index}/{total} \u2219 Module: utility")
 
     return embed
 
@@ -185,9 +193,20 @@ class Snipe(commands.Cog):
         reaction = snipe.get("reaction", "")
         reaction_display = reaction if not reaction.startswith("https://cdn.discordapp.com/") else str(reaction)
 
+        ts_raw = snipe.get("timestamp", 0)
+        ts = datetime.datetime.fromtimestamp(ts_raw, tz=datetime.timezone.utc) if isinstance(ts_raw, (int, float)) else ts_raw
+        now = datetime.datetime.now(tz=datetime.timezone.utc)
+        diff = now - ts
+        if diff.total_seconds() < 86400 and ts.day == now.day:
+            time_str = f"today at {discord.utils.format_dt(ts, style='t')}"
+        elif diff.total_seconds() < 172800 and ts.day == now.day - 1:
+            time_str = f"yesterday at {discord.utils.format_dt(ts, style='t')}"
+        else:
+            time_str = discord.utils.format_dt(ts, style='f')
+
         embed = discord.Embed(
             color=color.base,
-            description=f"**{snipe.get('author', {}).get('name', 'Unknown')}** reacted with {reaction_display} <t:{int(snipe.get('timestamp', 0))}:R>",
+            description=f"**{snipe.get('author', {}).get('name', 'Unknown')}** reacted with {reaction_display} {time_str}",
         )
         embed.set_footer(text=f"Reaction \u2219 {index}/{total} \u2219 Module: utility")
 

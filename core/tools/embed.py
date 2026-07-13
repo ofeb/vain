@@ -627,6 +627,8 @@ class Script:
 
         user = kwargs.get("user") or kwargs.get("member") or self.user
         moderator = kwargs.get("moderator")
+        inviter = kwargs.get("inviter")
+        invitee = kwargs.get("invitee")
         guild = kwargs.get("guild") or getattr(user, "guild", None)
         channel = kwargs.get("channel")
         role = kwargs.get("role")
@@ -637,6 +639,12 @@ class Script:
 
         if moderator:
             replacements.update(_user_replacements("moderator", moderator))
+
+        if inviter:
+            replacements.update(_user_replacements("inviter", inviter))
+
+        if invitee:
+            replacements.update(_user_replacements("invitee", invitee))
 
         if guild:
             replacements.update(
@@ -721,6 +729,18 @@ class Script:
         case_id = kwargs.get("case_id")
         if case_id is not None:
             replacements["{case_id}"] = str(case_id)
+
+        invites = kwargs.get("invites")
+        if invites is not None:
+            replacements["{invites}"] = str(invites)
+
+        code = kwargs.get("code")
+        if code is not None:
+            replacements["{code}"] = str(code)
+
+        url = kwargs.get("url")
+        if url is not None:
+            replacements["{url}"] = str(url)
 
         invite = kwargs.get("invite")
         if invite:

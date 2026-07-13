@@ -164,26 +164,33 @@ class Log(LogEvents, Package):
             embed.color = self.color
         try:
             rows = await self.db.fetch(
+                "SELECT channel_id, silent_events FROM log_config WHERE guild_id = $1 AND $2 = ANY(events)",
+                guild_id, event_type,
+            )
+        except Exception:
+            rows = await self.db.fetch(
                 "SELECT channel_id FROM log_config WHERE guild_id = $1 AND $2 = ANY(events)",
                 guild_id, event_type,
             )
-            for row in rows:
-                channel_id = row[0]
-                custom_color = await self._get_event_color(guild_id, channel_id, event_type)
-                if custom_color is not None:
-                    embed.color = custom_color
-                wh = await self._get_webhook(channel_id)
-                if wh:
-                    with contextlib.suppress(discord.HTTPException):
-                        send_kwargs: dict = {"embed": embed, "username": "vain logs"}
-                        if file_content is not None and file_name:
-                            send_kwargs["file"] = discord.File(
-                                io.BytesIO(file_content),
-                                filename=file_name,
-                            )
-                        await wh.send(**send_kwargs)
-        except Exception:
-            pass
+        for row in rows:
+            channel_id = row[0]
+            silent_events = row[1] if len(row) > 1 else []
+            is_silent = event_type in (silent_events or [])
+            custom_color = await self._get_event_color(guild_id, channel_id, event_type)
+            if custom_color is not None:
+                embed.color = custom_color
+            wh = await self._get_webhook(channel_id)
+            if wh:
+                with contextlib.suppress(discord.HTTPException):
+                    send_kwargs: dict = {"embed": embed, "username": "vain logs"}
+                    if is_silent:
+                        send_kwargs["silent"] = True
+                    if file_content is not None and file_name:
+                        send_kwargs["file"] = discord.File(
+                            io.BytesIO(file_content),
+                            filename=file_name,
+                        )
+                    await wh.send(**send_kwargs)
 
     @group(
         name="log",
@@ -216,10 +223,11 @@ class Log(LogEvents, Package):
         for evt in events:
             with contextlib.suppress(Exception):
                 await self.db.execute(
-                    """INSERT INTO log_config (guild_id, channel_id, events)
-                       VALUES ($1, $2, ARRAY[$3])
+                    """INSERT INTO log_config (guild_id, channel_id, events, silent_events)
+                       VALUES ($1, $2, ARRAY[$3], ARRAY[$3])
                        ON CONFLICT (guild_id, channel_id) DO UPDATE
-                       SET events = array_append(log_config.events, $3)
+                       SET events = array_append(log_config.events, $3),
+                           silent_events = array_append(log_config.silent_events, $3)
                        WHERE NOT (log_config.events @> ARRAY[$3])""",
                     ctx.guild.id, channel.id, evt,
                 )
@@ -251,6 +259,60 @@ class Log(LogEvents, Package):
             event, ctx.guild.id, channel.id,
         )
         return await ctx.success(f"No longer **logging** event `{event}` to {channel.mention}")
+
+    @log.command(
+        name="silent",
+        description="Toggle silent mode for log messages (no ping)",
+    )
+    @has_permissions(manage_guild=True)
+    async def log_silent(
+        self, ctx: Context, channel: discord.TextChannel, event: str = None, *, state: str = None
+    ) -> None:
+        if state is None or state.lower() not in ("on", "off", "enable", "disable", "true", "false", "yes", "no"):
+            return await ctx.warn("Usage: `,log silent #channel [event/all] on/off`")
+
+        toggle = state.lower() in ("on", "enable", "true", "yes")
+
+        existing = await self.db.fetchval(
+            "SELECT 1 FROM log_config WHERE guild_id = $1 AND channel_id = $2",
+            ctx.guild.id, channel.id,
+        )
+        if not existing:
+            return await ctx.warn(f"{channel.mention} has **no logging** configured — use `,log add` first")
+
+        if event is None or event.lower() == "all":
+            if toggle:
+                await self.db.execute(
+                    """UPDATE log_config SET silent_events = events WHERE guild_id = $1 AND channel_id = $2""",
+                    ctx.guild.id, channel.id,
+                )
+            else:
+                await self.db.execute(
+                    """UPDATE log_config SET silent_events = ARRAY[]::TEXT[] WHERE guild_id = $1 AND channel_id = $2""",
+                    ctx.guild.id, channel.id,
+                )
+            label = "**all events**"
+        else:
+            event = event.lower()
+            if event not in EVENT_TYPES:
+                return await ctx.warn(f"Invalid event type. Valid: {', '.join(f'`{e}`' for e in EVENT_TYPES)}")
+
+            if toggle:
+                await self.db.execute(
+                    """UPDATE log_config SET silent_events = array_append(silent_events, $1)
+                       WHERE guild_id = $2 AND channel_id = $3 AND NOT ($1 = ANY(silent_events))""",
+                    event, ctx.guild.id, channel.id,
+                )
+            else:
+                await self.db.execute(
+                    """UPDATE log_config SET silent_events = array_remove(silent_events, $1)
+                       WHERE guild_id = $2 AND channel_id = $3""",
+                    event, ctx.guild.id, channel.id,
+                )
+            label = f"`{event}`"
+
+        status = "**silent** (no notifications)" if toggle else "**not silent** (with notifications)"
+        return await ctx.success(f"{label} in {channel.mention} set to {status}")
 
     @log.group(
         name="color",
@@ -392,7 +454,7 @@ class Log(LogEvents, Package):
     @has_permissions(manage_guild=True)
     async def log_list(self, ctx: Context) -> None:
         rows = await self.db.fetch(
-            "SELECT channel_id, events FROM log_config WHERE guild_id = $1",
+            "SELECT channel_id, events, silent_events FROM log_config WHERE guild_id = $1",
             ctx.guild.id,
         )
         if not rows:
@@ -403,7 +465,12 @@ class Log(LogEvents, Package):
             channel = ctx.guild.get_channel(row[0])
             if channel:
                 events_str = ", ".join(f"`{e}`" for e in row[1])
-                lines.append(f"{channel.mention} — {events_str}")
+                silent = row[2] or []
+                if silent:
+                    silent_str = ", ".join(f"`{e}`" for e in silent)
+                    lines.append(f"{channel.mention} — {events_str}\n  ↳ silent: {silent_str}")
+                else:
+                    lines.append(f"{channel.mention} — {events_str}")
 
         if not lines:
             return await ctx.warn("No valid logging channels found")

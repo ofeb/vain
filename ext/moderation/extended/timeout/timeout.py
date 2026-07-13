@@ -12,7 +12,7 @@ class Timeout(Package):
         description="Mutes the provided member using Discords timeout feature",
         invoke_without_command=True,
     )
-    async def timeout(self, ctx, member, duration, *, reason):
+    async def timeout(self, ctx, member, duration, *, reason=None):
         """timeout a member"""
         pass
 

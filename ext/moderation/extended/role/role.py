@@ -63,11 +63,17 @@ class Role(Package):
         author = ctx.author if isinstance(ctx.author, discord.Member) else None
         bot_member = ctx.guild.me or ctx.guild.get_member(self.bot.user.id if self.bot.user else 0)
         if author and ctx.guild.owner_id != author.id and member.top_role >= author.top_role:
-            raise CommandError("that member is above or equal to your highest role")
+            raise CommandError(
+                f"**{member.display_name}** has a higher or equal role than you — "
+                f"their top role ({member.top_role.mention}) must be below yours ({author.top_role.mention})"
+            )
         if bot_member is None:
             raise CommandError("I could not resolve my server member")
         if member.top_role >= bot_member.top_role:
-            raise CommandError("that member is above or equal to my highest role")
+            raise CommandError(
+                f"**{member.display_name}** has a higher or equal role than me — "
+                f"their top role ({member.top_role.mention}) must be below my highest role ({bot_member.top_role.mention})"
+            )
 
     async def _create_case(
         self,
@@ -122,6 +128,7 @@ class Role(Package):
         description="Modify a member's roles",
         invoke_without_command=True,
     )
+    @has_permissions(manage_roles=True)
     async def role(self, ctx, member, role):
         """modify member roles"""
         pass

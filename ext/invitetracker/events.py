@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import asyncio
+import logging
 from typing import TYPE_CHECKING
 
 import discord
@@ -12,6 +13,8 @@ from core.tools.embed import Script
 if TYPE_CHECKING:
     from core.vain import Vain
 
+log = logging.getLogger("vain.invitetracker.events")
+
 
 class InviteTrackerEvents(Package):
     """invite tracking event listeners"""
@@ -21,7 +24,11 @@ class InviteTrackerEvents(Package):
         try:
             invites = await guild.invites()
             return {invite.code: invite.uses for invite in invites}
-        except discord.HTTPException:
+        except discord.Forbidden:
+            log.warning("Missing permissions to fetch invites in %s (%s)", guild.name, guild.id)
+            return {}
+        except discord.HTTPException as e:
+            log.warning("Failed to fetch invites in %s: %s", guild.name, e)
             return {}
 
     async def _get_config(self, guild_id: int) -> dict:
@@ -52,14 +59,15 @@ class InviteTrackerEvents(Package):
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member) -> None:
         guild = member.guild
-        config = await self._get_config(guild.id)
 
         # Snapshot invites BEFORE the join
         before = await self._snapshot_invites(guild)
+        if not before:
+            log.debug("No invites found before join in %s, skipping snapshot", guild.name)
+            return
 
-        # Wait a moment for Discord to update invite counts
-        import asyncio
-        await asyncio.sleep(1)
+        # Wait for Discord to update invite counts
+        await asyncio.sleep(2)
 
         # Snapshot invites AFTER the join
         after = await self._snapshot_invites(guild)
@@ -68,10 +76,12 @@ class InviteTrackerEvents(Package):
         invite = await self._find_used_invite(before, after, member)
 
         if not invite:
+            log.debug("No used invite detected for %s in %s", member, guild.name)
             return
 
         inviter = invite.inviter
         if not inviter:
+            log.debug("Invite has no inviter in %s", guild.name)
             return
 
         # Update invite counts
@@ -99,10 +109,11 @@ class InviteTrackerEvents(Package):
             inviter.id,
         )
 
+        config = await self._get_config(guild.id)
         if not config.get("enabled"):
             return
 
-        channel = guild.get_channel(config["channel_id"])
+        channel = guild.get_channel(config.get("channel_id"))
         if not channel:
             return
 
@@ -114,21 +125,22 @@ class InviteTrackerEvents(Package):
         )
         total = (data["invites"] - data["fake"] + data["bonus"]) if data else 1
 
+        # Resolve inviter as a Member if possible for proper mention
+        inviter_member = guild.get_member(inviter.id) or inviter
+
         # Build invite variables for template
         invite_vars = {
-            "inviter": inviter,
+            "inviter": inviter_member,
             "invitee": member,
             "invites": str(total),
             "code": invite.code,
             "url": invite.url,
-            "channel": invite.channel,
             "guild": guild,
-            "user": member,
         }
 
         template = config.get(
             "message",
-            "{inviter} invited {invitee}. They have **{invites}** invites.",
+            "{inviter.mention} invited {invitee.mention}. They have **{invites}** invites.",
         )
 
         script = Script(template, user=member)
@@ -144,12 +156,11 @@ class InviteTrackerEvents(Package):
         if not config.get("enabled"):
             return
 
-        channel = guild.get_channel(config["channel_id"])
+        channel = guild.get_channel(config.get("channel_id"))
         if not channel:
             return
 
         # Find who invited this member by checking invite_uses
-        # We look for the most recent invite used by this member
         row = await self.db.fetchrow(
             """SELECT inviter_id, code FROM invite_uses
                WHERE guild_id = $1 AND inviter_id != $2
@@ -164,9 +175,6 @@ class InviteTrackerEvents(Package):
 
         # Update leave count for inviter
         if inviter_id:
-            # Find which invite this member used by looking at invite codes
-            # Since we can't directly track per-member invites, we decrement
-            # We check if the member is in the fake list
             data = await self.db.fetchrow(
                 "SELECT * FROM invite_counts WHERE guild_id = $1 AND user_id = $2",
                 guild.id,
@@ -203,12 +211,11 @@ class InviteTrackerEvents(Package):
             "invitee": member,
             "invites": str(total),
             "guild": guild,
-            "user": member,
         }
 
         template = config.get(
             "leave_message",
-            "{invitee} left. {inviter} now has **{invites}** invites.",
+            "{invitee.mention} left. {inviter.mention} now has **{invites}** invites.",
         )
 
         script = Script(template, user=member)

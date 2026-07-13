@@ -193,10 +193,11 @@ def _fmt_commands(cmds: Iterable[Command], limit: int = 3900) -> str:
         sep = 2 if parts else 0
         if total + sep + len(n) > limit:
             body = ", ".join(parts)
-            return f"{body}\n*and {len(names) - i} more*"
+            return f"```\n{body}\n```\n*and {len(names) - i} more*"
         parts.append(n)
         total += sep + len(n)
-    return ", ".join(parts)
+    body = ", ".join(parts)
+    return f"```\n{body}\n```"
 
 
 def _visible_subs(grp: Group) -> list[Command]:
@@ -401,7 +402,7 @@ def _format_usage_token(label: str, *, required: bool) -> str:
     cleaned = label.strip()
     if not cleaned:
         return ""
-    return f"({cleaned})" if required else f"[{cleaned}]"
+    return cleaned
 
 
 def _derived_syntax(cmd: Command) -> str:

@@ -77,6 +77,7 @@ class Nuke(Package):
             ("auto_responders", "allowed_channel_ids", True),
             ("auto_responders", "denied_channel_ids", True),
             ("trackers", "channel_ids", True),
+            ("invite_config", "channel_id", False),
         ]
 
         for table, column, is_array in tables:
