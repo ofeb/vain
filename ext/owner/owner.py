@@ -52,16 +52,18 @@ class Owner(Package):
 
     async def _resolve_user(self, argument: str) -> discord.User:
         """resolve a user from mention, ID, or name"""
-        try:
-            return await commands.UserConverter().convert(
-                type("FakeCtx", (), {"bot": self.bot, "author": None, "guild": None})(),
-                argument,
-            )
-        except (commands.BadArgument, commands.CommandError):
+        mention = argument.strip("<@!>")
+        if mention.isdigit():
+            user = self.bot.get_user(int(mention))
+            if user:
+                return user
             try:
-                return await self.bot.fetch_user(int(argument))
-            except (ValueError, discord.NotFound):
-                raise CommandError(f"Could not find user `{argument}`")
+                return await self.bot.fetch_user(int(mention))
+            except discord.NotFound:
+                raise CommandError(f"User `{argument}` not found")
+        raise CommandError(
+            f"Could not resolve `{argument}` as a user — use a mention or ID"
+        )
 
     def _parse_duration(self, duration: str) -> int | None:
         units = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
