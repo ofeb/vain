@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import re
 from asyncio import create_task
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 
 import discord
@@ -19,6 +20,7 @@ from core.discord.package import Package
 from core.managers.permissions import has_permissions
 
 URL = re.compile(r"https?://[^\s]+")
+BULK_DELETE_LIMIT = timedelta(days=14)
 
 
 class Purge(Package):
@@ -31,8 +33,9 @@ class Purge(Package):
     async def delete_messages(self, messages: List[Message]):
         async def purge(messages: List[Message]) -> None:
             channel = messages[0].channel
-            bulkable = [m for m in messages if m.is_deleteable]
-            non_bulk = [m for m in messages if not m.is_deletable]
+            now = datetime.now(timezone.utc)
+            bulkable = [m for m in messages if (now - m.created_at) < BULK_DELETE_LIMIT]
+            non_bulk = [m for m in messages if (now - m.created_at) >= BULK_DELETE_LIMIT]
             amount = len(bulkable)
 
             async def bulk():
@@ -50,12 +53,15 @@ class Purge(Package):
             await bulk()
             await nonbulk()
 
-        if task := self.tasks.get(f"purge-{messages[0].guild.id}"):
+        key = f"purge-{messages[0].guild.id}"
+        if self.tasks.get(key):
             raise MaxConcurrencyReached(1, BucketType.guild)
         task = create_task(purge(messages))
-        self.tasks[f"purge-{messages[0].guild.id}"] = task
-        await task
-        self.tasks.pop(f"purge-{messages[0].guild.id}", None)
+        self.tasks[key] = task
+        try:
+            await task
+        finally:
+            self.tasks.pop(key, None)
 
     @group(
         name="purge",
@@ -172,11 +178,8 @@ class Purge(Package):
     )
     @has_permissions(manage_messages=True)
     async def purge_before(self, ctx: Context, message: Message):
-        def check(message: Message, m: Message) -> bool:
-            if message.created_at <= m.created_at:
-                return True
-            else:
-                return False
+        def check(m: Message) -> bool:
+            return m.created_at < message.created_at
 
         messages = [
             m async for m in ctx.channel.history() if m != ctx.message and check(m)
@@ -277,7 +280,8 @@ class Purge(Package):
             for message in messages:
                 await message.clear_reactions()
 
-        if task := self.tasks.get(f"purge-{ctx.guild.id}"):
+        key = f"purge-{ctx.guild.id}"
+        if self.tasks.get(key):
             raise MaxConcurrencyReached(1, BucketType.guild)
         messages = [
             m async for m in ctx.channel.history() if m != ctx.message and check(m)
@@ -285,9 +289,11 @@ class Purge(Package):
         if not messages:
             raise CommandError("No purgable messages found")
         task = create_task(remove_reactions(messages))
-        self.tasks[f"purge-{ctx.guild.id}"] = task
-        await task
-        self.tasks.pop(f"purge-{ctx.guild.id}", None)
+        self.tasks[key] = task
+        try:
+            await task
+        finally:
+            self.tasks.pop(key, None)
         return await ctx.send("👍")
 
     @purge.command(
@@ -387,7 +393,7 @@ class Purge(Package):
     @has_permissions(manage_messages=True)
     async def purge_upto(self, ctx: Context, message: Message):
         def check(m: Message) -> bool:
-            return True if m.created_at > message.created_at else False
+            return m.created_at < message.created_at
 
         messages = [
             m async for m in ctx.channel.history() if m != ctx.message and check(m)

@@ -1700,9 +1700,9 @@ class Database:
     async def get_emoji(self, guild_id: int | None, user_id: int | None = None) -> dict:
         """Get emojis with guild/user override"""
         default_emoji_map = {
-            "success": default_emoji("approve", "<:approve:1525918671774679261>"),
-            "warn": default_emoji("warn", "<:warn:1525918556435255336>"),
-            "deny": default_emoji("deny", "<:deny:1525918867115741215>"),
+            "success": default_emoji("approve", "<:approve_new:1526186163457490974>"),
+            "warn": default_emoji("warn", "<:warning:1526186228561477642>"),
+            "deny": default_emoji("deny", "<:deny:1526186193971052634>"),
             "cooldown": default_emoji("cooldown", "<:cooldown:1525919040776835075>"),
             "loading": default_emoji("loading", "<a:embeds_loading:1511705994823077988>"),
             "info": "<:interface_information:1511705999550185646>",

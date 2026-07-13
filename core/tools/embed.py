@@ -642,6 +642,7 @@ class Script:
                     "{guild.owner_id}": str(getattr(guild, "owner_id", "")),
                     "{guild.count}": str(getattr(guild, "member_count", 0)),
                     "{guild.members}": str(getattr(guild, "member_count", 0)),
+                    "{guild.member_count}": str(getattr(guild, "member_count", 0)),
                     "{len(guild.members)}": str(getattr(guild, "member_count", 0)),
                     "{guild.channels}": str(len(getattr(guild, "channels", ()))),
                     "{guild.channel_count}": str(len(getattr(guild, "channels", ()))),
