@@ -4,7 +4,7 @@ import io
 import logging
 import textwrap
 import traceback
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Optional
 
 import discord
@@ -64,20 +64,6 @@ class Owner(Package):
         raise CommandError(
             f"Could not resolve `{argument}` as a user — use a mention or ID"
         )
-
-    def _parse_duration(self, duration: str) -> int | None:
-        units = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
-        duration = duration.strip().lower()
-        if not duration:
-            return None
-        unit = duration[-1]
-        if unit not in units:
-            return None
-        try:
-            value = int(duration[:-1])
-            return value * units[unit]
-        except ValueError:
-            return None
 
     # ─── owner root ─────────────────────────────────────────────────
 
@@ -520,62 +506,33 @@ class Owner(Package):
         description="Blacklist a user or guild from using the bot",
         invoke_without_command=True,
     )
-    async def blacklist(self, ctx: Context) -> None:
-        await ctx.send_help(ctx.command)
+    @describe(target="User ID/mention or guild ID to blacklist")
+    async def blacklist(self, ctx: Context, *, target: str) -> None:
+        resolved = self.bot.get_guild(int(target)) if target.isdigit() else None
+        if resolved:
+            await self.bot.db.execute(
+                "INSERT INTO blacklist (user_id, guild_id) VALUES (NULL, $1)",
+                resolved.id,
+            )
+            await ctx.success(
+                f"Blacklisted guild **{resolved.name}** (`{resolved.id}`)"
+            )
+            await self._log_devlog(
+                f"**{ctx.author}** blacklisted guild **{resolved.name}** (`{resolved.id}`)"
+            )
+            return
 
-    @blacklist.command(name="user", description="Blacklist a user")
-    @describe(
-        user="User ID, mention, or name",
-        duration="Duration (e.g. 1h, 7d) or empty for permanent",
-    )
-    async def blacklist_user(
-        self, ctx: Context, user: str, *, duration: str = None
-    ) -> None:
-        target = await self._resolve_user(user)
-        expires_at = None
-        if duration:
-            seconds = self._parse_duration(duration)
-            if seconds is None:
-                await ctx.fail(
-                    "Invalid duration format. Use e.g. `1h`, `7d`, `30m`"
-                )
-                return
-            expires_at = datetime.now(timezone.utc) + timedelta(seconds=seconds)
-
+        user = await self._resolve_user(target)
         await self.bot.db.execute(
-            """
-            INSERT INTO blacklist (user_id, guild_id, expires_at)
-                VALUES ($1, NULL, $2)
-            """,
-            target.id,
-            expires_at,
+            "INSERT INTO blacklist (user_id, guild_id) VALUES ($1, NULL)",
+            user.id,
         )
         await self.bot.forget(
-            f"blacklist:{ctx.guild.id if ctx.guild else 0}:{target.id}"
+            f"blacklist:{ctx.guild.id if ctx.guild else 0}:{user.id}"
         )
-
-        duration_str = f" for **{duration}**" if duration else " permanently"
-        await ctx.success(f"Blacklisted **{target}**{duration_str}")
+        await ctx.success(f"Blacklisted **{user}**")
         await self._log_devlog(
-            f"**{ctx.author}** blacklisted **{target}** (`{target.id}`){duration_str}"
-        )
-
-    @blacklist.command(name="guild", description="Blacklist a guild")
-    @describe(guild_id="Guild ID to blacklist")
-    async def blacklist_guild(self, ctx: Context, guild_id: str) -> None:
-        guild = self.bot.get_guild(int(guild_id))
-        guild_name = guild.name if guild else "Unknown"
-
-        await self.bot.db.execute(
-            """
-            INSERT INTO blacklist (user_id, guild_id)
-                VALUES (NULL, $1)
-            """,
-            int(guild_id),
-        )
-        await ctx.success(f"Blacklisted guild **{guild_name}** (`{guild_id}`)")
-        await self._log_devlog(
-            f"**{ctx.author}** blacklisted guild **{guild_name}** (`{guild_id}`)"
+            f"**{ctx.author}** blacklisted **{user}** (`{user.id}`)"
         )
 
     @blacklist.command(
@@ -585,8 +542,7 @@ class Owner(Package):
     )
     async def blacklist_list(self, ctx: Context) -> None:
         rows = await self.bot.db.fetch(
-            "SELECT user_id, guild_id, created_at, expires_at "
-            "FROM blacklist ORDER BY created_at DESC"
+            "SELECT user_id, guild_id, created_at FROM blacklist ORDER BY created_at DESC"
         )
         if not rows:
             raise CommandError("No blacklisted users or guilds")
@@ -594,52 +550,52 @@ class Owner(Package):
         values = []
         for row in rows:
             if row["user_id"]:
-                entry = f"User: <@{row['user_id']}> (`{row['user_id']}`)"
-                if row["expires_at"]:
-                    entry += f" — expires <t:{int(row['expires_at'].timestamp())}:R>"
-                values.append(entry)
+                values.append(f"User: <@{row['user_id']}> (`{row['user_id']}`)")
             elif row["guild_id"]:
-                entry = f"Guild: `{row['guild_id']}`"
-                if row["expires_at"]:
-                    entry += f" — expires <t:{int(row['expires_at'].timestamp())}:R>"
-                values.append(entry)
+                values.append(f"Guild: `{row['guild_id']}`")
 
         embed = discord.Embed(title="Blacklist", color=color.base)
         return await ctx.paginate(embed, values)
 
     # ─── whitelist ───────────────────────────────────────────────────
 
-    @command(
+    @group(
         name="whitelist",
         aliases=["unblacklist"],
         description="Remove a user or guild from blacklist",
+        invoke_without_command=True,
     )
-    @describe(user="User to whitelist", guild_id="Guild ID to whitelist")
-    async def whitelist(
-        self, ctx: Context, user: str = None, guild_id: str = None
-    ) -> None:
-        if user:
-            target = await self._resolve_user(user)
+    @describe(target="User ID/mention or guild ID to whitelist")
+    async def whitelist(self, ctx: Context, *, target: str) -> None:
+        resolved = self.bot.get_guild(int(target)) if target.isdigit() else None
+        if resolved:
             await self.bot.db.execute(
-                "DELETE FROM blacklist WHERE user_id = $1", target.id
+                "DELETE FROM blacklist WHERE guild_id = $1", resolved.id
             )
-            await self.bot.forget(
-                f"blacklist:{ctx.guild.id if ctx.guild else 0}:{target.id}"
-            )
-            await ctx.success(f"Whitelisted **{target}**")
+            await ctx.success(f"Whitelisted guild **{resolved.name}** (`{resolved.id}`)")
             await self._log_devlog(
-                f"**{ctx.author}** whitelisted **{target}** (`{target.id}`)"
+                f"**{ctx.author}** whitelisted guild **{resolved.name}** (`{resolved.id}`)"
             )
-        elif guild_id:
-            await self.bot.db.execute(
-                "DELETE FROM blacklist WHERE guild_id = $1", int(guild_id)
-            )
-            await ctx.success(f"Whitelisted guild `{guild_id}`")
-            await self._log_devlog(
-                f"**{ctx.author}** whitelisted guild `{guild_id}`"
-            )
-        else:
-            await ctx.fail("Provide a user or guild ID")
+            return
+
+        user = await self._resolve_user(target)
+        await self.bot.db.execute(
+            "DELETE FROM blacklist WHERE user_id = $1", user.id
+        )
+        await self.bot.forget(
+            f"blacklist:{ctx.guild.id if ctx.guild else 0}:{user.id}"
+        )
+        await ctx.success(f"Whitelisted **{user}**")
+        await self._log_devlog(
+            f"**{ctx.author}** whitelisted **{user}** (`{user.id}`)"
+        )
+
+    @whitelist.command(
+        name="list",
+        description="View all whitelisted users and guilds",
+    )
+    async def whitelist_list(self, ctx: Context) -> None:
+        await ctx.fail("Whitelisting removes entries — use `blacklist list` to see current entries")
 
     # ─── portal ──────────────────────────────────────────────────────
 

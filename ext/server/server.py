@@ -150,6 +150,16 @@ class ServerCommands(Package):
                     "{unix}": "Unix timestamp",
                 },
             },
+            "invite": {
+                "description": "Invite variables (for join/leave)",
+                "variables": {
+                    "{inviter}": "Who created the invite",
+                    "{invitee}": "Who joined using the invite",
+                    "{invites}": "Inviter's total invite count",
+                    "{code}": "Invite code",
+                    "{url}": "Invite URL",
+                },
+            },
         }
 
         if category:
