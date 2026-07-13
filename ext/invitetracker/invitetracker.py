@@ -17,7 +17,7 @@ class InviteTracker(Package):
 
     async def _get_config(self, guild_id: int) -> dict:
         row = await self.db.fetchrow(
-            "SELECT * FROM invite_config WHERE guild_id = $1", guild_id
+            "SELECT * FROM invite_config WHERE guild_id = $1", guild_id, cached=False
         )
         if not row:
             return {
@@ -239,19 +239,19 @@ class InviteTracker(Package):
     async def invitetracker_join_set(self, ctx: Context, channel: Optional[discord.TextChannel] = None):
         if channel is None:
             channel = ctx.channel
-        config = await self._get_config(ctx.guild.id)
+        default_message = "{inviter.mention} invited {invitee.mention}. They have **{invites}** {invite_word}."
+        default_leave = "{invitee.mention} left. {inviter.mention} now has **{invites}** {invite_word}."
         await self.db.execute(
             """
             INSERT INTO invite_config (guild_id, enabled, channel_id, message, leave_message, fake_remove)
-                VALUES ($1, TRUE, $2, $3, $4, $5)
+                VALUES ($1, TRUE, $2, $3, $4, TRUE)
             ON CONFLICT (guild_id)
-                DO UPDATE SET enabled = TRUE, channel_id = $2
+                DO UPDATE SET enabled = TRUE, channel_id = $2, message = $3, leave_message = $4
             """,
             ctx.guild.id,
             channel.id,
-            config["message"],
-            config["leave_message"],
-            config["fake_remove"],
+            default_message,
+            default_leave,
         )
         return await ctx.success(
             f"Invite join logging enabled in {channel.mention}"
@@ -264,19 +264,20 @@ class InviteTracker(Package):
     @has_permissions(manage_guild=True)
     async def invitetracker_join_on(self, ctx: Context):
         config = await self._get_config(ctx.guild.id)
+        default_message = "{inviter.mention} invited {invitee.mention}. They have **{invites}** {invite_word}."
+        default_leave = "{invitee.mention} left. {inviter.mention} now has **{invites}** {invite_word}."
         if not config["channel_id"]:
             await self.db.execute(
                 """
                 INSERT INTO invite_config (guild_id, enabled, channel_id, message, leave_message, fake_remove)
-                    VALUES ($1, TRUE, $2, $3, $4, $5)
+                    VALUES ($1, TRUE, $2, $3, $4, TRUE)
                 ON CONFLICT (guild_id)
-                    DO UPDATE SET enabled = TRUE, channel_id = $2
+                    DO UPDATE SET enabled = TRUE, channel_id = $2, message = $3, leave_message = $4
                 """,
                 ctx.guild.id,
                 ctx.channel.id,
-                config["message"],
-                config["leave_message"],
-                config["fake_remove"],
+                default_message,
+                default_leave,
             )
         else:
             await self.db.execute(

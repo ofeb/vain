@@ -87,7 +87,7 @@ class InviteTrackerEvents(Package):
 
     async def _get_config(self, guild_id: int) -> dict:
         row = await self.db.fetchrow(
-            "SELECT * FROM invite_config WHERE guild_id = $1", guild_id
+            "SELECT * FROM invite_config WHERE guild_id = $1", guild_id, cached=False
         )
         if not row:
             return {
@@ -201,20 +201,19 @@ class InviteTrackerEvents(Package):
 
         config = await self._get_config(guild.id)
         if not config.get("enabled"):
+            log.info("[inviter] %s joined %s but invite tracking is disabled", member, guild.name)
             return
 
         channel = guild.get_channel(config.get("channel_id"))
         if not channel:
+            log.warning("[inviter] %s joined %s but no channel configured", member, guild.name)
             return
 
-        
         total = await self._get_net_invites(guild.id, inviter.id)
         word = _invite_word(total)
 
-        
         inviter_member = guild.get_member(inviter.id) or inviter
 
-        
         invite_vars = {
             "inviter": inviter_member,
             "invitee": member,
@@ -227,11 +226,15 @@ class InviteTrackerEvents(Package):
 
         template = config.get(
             "message",
-            "{inviter} invited {invitee}. They have **{invites}** {invite_word}.",
+            "{inviter.mention} invited {invitee.mention}. They have **{invites}** {invite_word}.",
         )
+
+        log.info("[inviter] guild=%s template=%r", guild.id, template)
 
         script = Script(template, user=member)
         rendered = _fix_invite_plural(script.render(**invite_vars), total)
+
+        log.info("[inviter] rendered=%r", rendered)
 
         await channel.send(rendered)
 
