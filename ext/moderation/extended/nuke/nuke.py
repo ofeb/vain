@@ -41,8 +41,8 @@ class Nuke(Package):
         new_id = new.id
         guild_id = old.guild.id
 
-        # Each statement: (table, column, is_array)
-        # Only single-ID columns that belong to this guild are updated
+        
+        
         tables = [
             ("guilds", "welcome_channel_id", False),
             ("guilds", "leave_channel_id", False),

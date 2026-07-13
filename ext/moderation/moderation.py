@@ -409,7 +409,7 @@ class ModerationCommands(Package):
         if not jail_role:
             return await ctx.warn("The configured jail role no longer exists")
 
-        # Check if already jailed
+        
         existing = await self.db.fetchrow(
             "SELECT 1 FROM jailed WHERE guild_id = $1 AND user_id = $2",
             ctx.guild.id, member.id,
@@ -417,10 +417,10 @@ class ModerationCommands(Package):
         if existing:
             return await ctx.warn(f"**{member}** is already jailed")
 
-        # Store current roles (exclude @everyone)
+        
         role_ids = [r.id for r in member.roles if r != ctx.guild.default_role]
 
-        # Remove all roles and add jail role
+        
         try:
             if row["jail_remove_roles"] and role_ids:
                 roles_to_remove = [ctx.guild.get_role(rid) for rid in role_ids if ctx.guild.get_role(rid)]
@@ -432,14 +432,14 @@ class ModerationCommands(Package):
         except discord.HTTPException as e:
             return await ctx.warn(f"Failed to update roles: {e}")
 
-        # Move to jail channel
+        
         if isinstance(member.voice.channel, discord.VoiceChannel):
             try:
                 await member.move_to(jail_channel, reason=f"Jailed by {ctx.author}")
             except (discord.Forbidden, discord.HTTPException):
                 pass
 
-        # Store in database
+        
         await self.db.execute(
             """INSERT INTO jailed (guild_id, user_id, role_ids, moderator_id, reason)
                VALUES ($1, $2, $3, $4, $5)
@@ -478,7 +478,7 @@ class ModerationCommands(Package):
         ))
         jail_role_id = jail_role_id["jail_role_id"] if jail_role_id else None
 
-        # Remove jail role and restore original roles
+        
         try:
             if jail_role_id:
                 jail_role = ctx.guild.get_role(jail_role_id)
@@ -493,7 +493,7 @@ class ModerationCommands(Package):
         except discord.HTTPException as e:
             return await ctx.warn(f"Failed to restore roles: {e}")
 
-        # Remove from database
+        
         await self.db.execute(
             "DELETE FROM jailed WHERE guild_id = $1 AND user_id = $2",
             ctx.guild.id, member.id,

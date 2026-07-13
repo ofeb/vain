@@ -104,7 +104,7 @@ class InviteTrackerEvents(Package):
     async def on_member_join(self, member: discord.Member) -> None:
         guild = member.guild
 
-        # Use cached invites as the "before" snapshot
+        
         before = self._invite_cache.get(guild.id, {})
         if not before:
             log.debug("No cached invites for %s, fetching fresh", guild.name)
@@ -113,17 +113,17 @@ class InviteTrackerEvents(Package):
                 log.debug("No invites found in %s, skipping", guild.name)
                 return
 
-        # Wait briefly for Discord to update invite counts
+        
         await asyncio.sleep(2)
 
-        # Snapshot invites AFTER the join
+        
         after = await self._snapshot_invites(guild)
 
-        # Update the cache with post-join state
+        
         if after:
             self._invite_cache[guild.id] = after
 
-        # Find which invite was used
+        
         invite = await self._find_used_invite(before, after, member)
 
         if not invite:
@@ -135,7 +135,7 @@ class InviteTrackerEvents(Package):
             log.debug("Invite has no inviter in %s", guild.name)
             return
 
-        # Update invite counts
+        
         await self.db.execute(
             """
             INSERT INTO invite_counts (guild_id, user_id, invites, leaves, fake, bonus)
@@ -147,7 +147,7 @@ class InviteTrackerEvents(Package):
             inviter.id,
         )
 
-        # Track invite use
+        
         await self.db.execute(
             """
             INSERT INTO invite_uses (guild_id, code, inviter_id, uses)
@@ -160,7 +160,7 @@ class InviteTrackerEvents(Package):
             inviter.id,
         )
 
-        # Track member-to-inviter mapping for leave attribution
+        
         await self.db.execute(
             """
             INSERT INTO member_invites (guild_id, invitee_id, inviter_id, code)
@@ -182,14 +182,14 @@ class InviteTrackerEvents(Package):
         if not channel:
             return
 
-        # Get current net invite count for inviter
+        
         total = await self._get_net_invites(guild.id, inviter.id)
         word = _invite_word(total)
 
-        # Resolve inviter as a Member if possible for proper mention
+        
         inviter_member = guild.get_member(inviter.id) or inviter
 
-        # Build invite variables for template
+        
         invite_vars = {
             "inviter": inviter_member,
             "invitee": member,
@@ -214,14 +214,14 @@ class InviteTrackerEvents(Package):
     async def on_member_remove(self, member: discord.Member) -> None:
         guild = member.guild
 
-        # Update cache after member leaves
+        
         invites = await self._snapshot_invites(guild)
         if invites:
             self._invite_cache[guild.id] = invites
 
         config = await self._get_config(guild.id)
 
-        # Find who invited this member via member_invites table
+        
         row = await self.db.fetchrow(
             "SELECT inviter_id FROM member_invites WHERE guild_id = $1 AND invitee_id = $2",
             guild.id,
@@ -230,7 +230,7 @@ class InviteTrackerEvents(Package):
 
         inviter_id = row["inviter_id"] if row else None
 
-        # Update leave count for inviter
+        
         if inviter_id:
             await self.db.execute(
                 """
@@ -243,7 +243,7 @@ class InviteTrackerEvents(Package):
                 inviter_id,
             )
 
-        # Clean up member_invites entry
+        
         if inviter_id:
             await self.db.execute(
                 "DELETE FROM member_invites WHERE guild_id = $1 AND invitee_id = $2",

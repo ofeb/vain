@@ -13,7 +13,7 @@ from core.managers.values import color
 if TYPE_CHECKING:
     from core.vain import Vain
 
-# Guilds to never log in devlogs (testing, partner, etc.)
+
 DEVLOG_GUILD_IGNORE: set[int] = {
     1424433148892287108,
     1333981881913315358,

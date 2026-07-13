@@ -39,7 +39,7 @@ class InviteTracker(Package):
             return {"invites": 0, "leaves": 0, "fake": 0, "bonus": 0}
         return dict(row)
 
-    # ─── invites root ───────────────────────────────────────────────
+    
 
     @group(
         name="invites",
@@ -208,7 +208,7 @@ class InviteTracker(Package):
         embed.set_thumbnail(url=user.display_avatar.url)
         return await ctx.send(embed=embed)
 
-    # ─── invitetracker root ─────────────────────────────────────────
+    
 
     @group(
         name="invitetracker",
@@ -220,7 +220,7 @@ class InviteTracker(Package):
     async def invitetracker(self, ctx: Context):
         await ctx.send_help(ctx.command)
 
-    # ─── invitetracker join ─────────────────────────────────────────
+    
 
     @invitetracker.group(
         name="join",
@@ -350,7 +350,7 @@ class InviteTracker(Package):
         )
         return await ctx.send(embed=embed)
 
-    # ─── invitetracker leave ────────────────────────────────────────
+    
 
     @invitetracker.group(
         name="leave",

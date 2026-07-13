@@ -335,7 +335,7 @@ class Socials(Package):
 
             blank = Image.new("RGB", (W, H), color=(0, 0, 0))
 
-            # Download and process avatar
+            
             try:
                 resp = urllib.request.urlopen(avatar_url)
                 avatar_raw = resp.read()
@@ -344,20 +344,20 @@ class Socials(Package):
             except Exception:
                 avatar = Image.new("RGBA", (450, 450), (80, 80, 80, 255))
 
-            # Create gradient overlay
+            
             gradient = Image.new("RGBA", (450, 450), (0, 0, 0, 0))
             draw_grad = ImageDraw.Draw(gradient)
             for y in range(450):
                 alpha = int(255 * (y / 450) * 0.7)
                 draw_grad.line([(0, y), (450, y)], fill=(0, 0, 0, alpha))
 
-            # Composite avatar with gradient
+            
             avatar.paste(Image.alpha_composite(avatar, gradient), (0, 0), avatar)
             avatar_rgb = avatar.convert("RGB")
 
             blank.paste(avatar_rgb, (0, 0))
 
-            # Wrap text
+            
             max_chars = 20
             words = content.split()
             lines = []
@@ -374,7 +374,7 @@ class Socials(Package):
                 lines.append(current_line)
             wrapped = "\n".join(lines)
 
-            # Auto-size font
+            
             text_x = 550
             max_text_w = W - text_x - 30
             max_text_h = H - 120
@@ -388,22 +388,22 @@ class Socials(Package):
                     break
                 font_size -= 2
 
-            # Draw text
+            
             draw = ImageDraw.Draw(blank)
             text_bbox = font.getbbox(wrapped)
             text_h = text_bbox[3] - text_bbox[1]
             text_y = (H - text_h) // 2 - 20
             draw.text((text_x, text_y), wrapped, fill=(255, 255, 255), font=font)
 
-            # Draw name
+            
             name_y = text_y + text_h + 15
             draw.text((text_x, name_y), f"- {display_name}", fill=(255, 255, 255), font=name_font)
 
-            # Draw username
+            
             user_y = name_y + 40
             draw.text((text_x, user_y), f"@{username}", fill=(89, 89, 89), font=user_font)
 
-            # Draw watermark
+            
             draw.text((W - 100, H - 30), "vain", fill=(89, 89, 89), font=user_font)
 
             buf = io.BytesIO()

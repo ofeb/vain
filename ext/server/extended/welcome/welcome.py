@@ -146,7 +146,7 @@ class WelcomeCommands(Package):
         if await self.db.get_antiraid_state(member.guild.id):
             return
 
-        # Fetch invite info if available
+        
         invite_info = {}
         try:
             invite_tracker = self.bot.get_cog("InviteTracker")

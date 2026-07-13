@@ -64,7 +64,7 @@ async def _validate_opponent(ctx: "Context", opponent: discord.User) -> str | No
     if opponent.bot and opponent.id != ctx.bot.user.id:
         return "You can't play against a bot."
 
-    # slash member pickers already scope to the current conversation
+    
     if ctx.interaction is not None and ctx.guild is None:
         return None
 

@@ -65,7 +65,7 @@ class Owner(Package):
             f"Could not resolve `{argument}` as a user — use a mention or ID"
         )
 
-    # ─── owner root ─────────────────────────────────────────────────
+    
 
     @group(
         name="owner",
@@ -247,7 +247,7 @@ class Owner(Package):
         await ctx.success("Shutting down...")
         await self.bot.close()
 
-    # ─── debug ───────────────────────────────────────────────────────
+    
 
     @owner.command(
         name="debug",
@@ -334,7 +334,7 @@ class Owner(Package):
             await ctx.success(f"Command `{command}` ran — see attached log")
         await ctx.send(file=file)
 
-    # ─── traceback ───────────────────────────────────────────────────
+    
 
     @owner.command(
         name="traceback",
@@ -371,7 +371,7 @@ class Owner(Package):
         )
         await ctx.send(embed=embed, file=file)
 
-    # ─── edit group ──────────────────────────────────────────────────
+    
 
     @group(
         name="botedit",
@@ -437,7 +437,7 @@ class Owner(Package):
                 await self.bot.change_presence(activity=None)
         await ctx.success("Status updated" if text else "Status cleared")
 
-    # ─── devlogs ─────────────────────────────────────────────────────
+    
 
     @group(
         name="devlogs",
@@ -498,7 +498,7 @@ class Owner(Package):
         else:
             await ctx.fail("No devlog channel set")
 
-    # ─── blacklist ───────────────────────────────────────────────────
+    
 
     @group(
         name="blacklist",
@@ -557,7 +557,7 @@ class Owner(Package):
         embed = discord.Embed(title="Blacklist", color=color.base)
         return await ctx.paginate(embed, values)
 
-    # ─── whitelist ───────────────────────────────────────────────────
+    
 
     @group(
         name="whitelist",
@@ -597,7 +597,7 @@ class Owner(Package):
     async def whitelist_list(self, ctx: Context) -> None:
         await ctx.fail("Whitelisting removes entries — use `blacklist list` to see current entries")
 
-    # ─── portal ──────────────────────────────────────────────────────
+    
 
     @command(
         name="portal",
