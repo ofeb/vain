@@ -159,7 +159,7 @@ class Steal(Package):
                 description=f"**Emoji:** `:{emoji_data['name']}:`\n**ID:** {emoji_data['id']}",
             )
             embed.set_thumbnail(url=emoji_data["url"])
-            embed.set_footer(text=f"{i}/{len(emojis_found)} \u2219 Module: server")
+            embed.set_footer(text=f"{i}/{len(emojis_found)}")
             pages.append(embed)
 
         if not needs_pagination(pages):

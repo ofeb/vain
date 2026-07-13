@@ -23,8 +23,8 @@ class InviteTracker(Package):
             return {
                 "enabled": False,
                 "channel_id": None,
-                "message": "{inviter} invited {invitee}. They have **{invites}** invites.",
-                "leave_message": "{invitee} left. {inviter} now has **{invites}** invites.",
+                "message": "{inviter} invited {invitee}. They have **{invites}** {invite_word}.",
+                "leave_message": "{invitee} left. {inviter} now has **{invites}** {invite_word}.",
                 "fake_remove": True,
             }
         return dict(row)
@@ -56,7 +56,7 @@ class InviteTracker(Package):
             user = ctx.author
 
         data = await self._get_invites(ctx.guild.id, user.id)
-        real = data["invites"] - data["fake"] + data["bonus"]
+        real = data["invites"] - data["leaves"] - data["fake"] + data["bonus"]
 
         embed = discord.Embed(
             color=self.color,
@@ -66,7 +66,7 @@ class InviteTracker(Package):
                 f"Left: **{data['leaves']}**\n"
                 f"Fake: **{data['fake']}**\n"
                 f"Bonus: **{data['bonus']}**\n"
-                f"Total: **{real}**"
+                f"Net: **{real}**"
             ),
         )
         embed.set_thumbnail(url=user.display_avatar.url)
@@ -81,7 +81,7 @@ class InviteTracker(Package):
     async def invites_leaderboard(self, ctx: Context):
         rows = await self.db.fetch(
             """SELECT user_id, invites, leaves, fake, bonus,
-                      (invites - fake + bonus) AS real
+                      (invites - leaves - fake + bonus) AS real
                FROM invite_counts WHERE guild_id = $1
                ORDER BY real DESC LIMIT 20""",
             ctx.guild.id,
@@ -115,6 +115,9 @@ class InviteTracker(Package):
         await self.db.execute(
             "DELETE FROM invite_uses WHERE guild_id = $1", ctx.guild.id
         )
+        await self.db.execute(
+            "DELETE FROM member_invites WHERE guild_id = $1", ctx.guild.id
+        )
         return await ctx.success("Wiped all invite stats for this server")
 
     @invites.command(
@@ -130,6 +133,11 @@ class InviteTracker(Package):
         )
         await self.db.execute(
             "DELETE FROM invite_uses WHERE guild_id = $1 AND inviter_id = $2",
+            ctx.guild.id,
+            member.id,
+        )
+        await self.db.execute(
+            "DELETE FROM member_invites WHERE guild_id = $1 AND (invitee_id = $2 OR inviter_id = $2)",
             ctx.guild.id,
             member.id,
         )
@@ -171,7 +179,7 @@ class InviteTracker(Package):
             user = ctx.author
 
         data = await self._get_invites(ctx.guild.id, user.id)
-        real = data["invites"] - data["fake"] + data["bonus"]
+        real = data["invites"] - data["leaves"] - data["fake"] + data["bonus"]
 
         rows = await self.db.fetch(
             """SELECT code, uses FROM invite_uses
@@ -191,7 +199,7 @@ class InviteTracker(Package):
             f"Left: **{data['leaves']}**\n"
             f"Fake: **{data['fake']}**\n"
             f"Bonus: **{data['bonus']}**\n"
-            f"Total: **{real}**"
+            f"Net: **{real}**"
         )
         if invite_lines:
             description += "\n\n**Active invites:**\n" + "\n".join(invite_lines)
@@ -204,6 +212,7 @@ class InviteTracker(Package):
 
     @group(
         name="invitetracker",
+        aliases=["it"],
         description="Configure invite tracking",
         invoke_without_command=True,
     )
@@ -227,7 +236,9 @@ class InviteTracker(Package):
         description="Set the channel for invite join logs",
     )
     @has_permissions(manage_guild=True)
-    async def invitetracker_join_set(self, ctx: Context, channel: discord.TextChannel):
+    async def invitetracker_join_set(self, ctx: Context, channel: Optional[discord.TextChannel] = None):
+        if channel is None:
+            channel = ctx.channel
         config = await self._get_config(ctx.guild.id)
         await self.db.execute(
             """
@@ -245,6 +256,46 @@ class InviteTracker(Package):
         return await ctx.success(
             f"Invite join logging enabled in {channel.mention}"
         )
+
+    @invitetracker_join.command(
+        name="on",
+        description="Enable invite join messages",
+    )
+    @has_permissions(manage_guild=True)
+    async def invitetracker_join_on(self, ctx: Context):
+        config = await self._get_config(ctx.guild.id)
+        if not config["channel_id"]:
+            await self.db.execute(
+                """
+                INSERT INTO invite_config (guild_id, enabled, channel_id, message, leave_message, fake_remove)
+                    VALUES ($1, TRUE, $2, $3, $4, $5)
+                ON CONFLICT (guild_id)
+                    DO UPDATE SET enabled = TRUE, channel_id = $2
+                """,
+                ctx.guild.id,
+                ctx.channel.id,
+                config["message"],
+                config["leave_message"],
+                config["fake_remove"],
+            )
+        else:
+            await self.db.execute(
+                "UPDATE invite_config SET enabled = TRUE WHERE guild_id = $1",
+                ctx.guild.id,
+            )
+        return await ctx.success("Invite join messages enabled")
+
+    @invitetracker_join.command(
+        name="off",
+        description="Disable invite join messages",
+    )
+    @has_permissions(manage_guild=True)
+    async def invitetracker_join_off(self, ctx: Context):
+        await self.db.execute(
+            "UPDATE invite_config SET enabled = FALSE WHERE guild_id = $1",
+            ctx.guild.id,
+        )
+        return await ctx.success("Invite join messages disabled")
 
     @invitetracker_join.command(
         name="remove",
@@ -315,7 +366,9 @@ class InviteTracker(Package):
         description="Set the channel for invite leave logs",
     )
     @has_permissions(manage_guild=True)
-    async def invitetracker_leave_set(self, ctx: Context, channel: discord.TextChannel):
+    async def invitetracker_leave_set(self, ctx: Context, channel: Optional[discord.TextChannel] = None):
+        if channel is None:
+            channel = ctx.channel
         config = await self._get_config(ctx.guild.id)
         await self.db.execute(
             """
@@ -345,6 +398,46 @@ class InviteTracker(Package):
             ctx.guild.id,
         )
         return await ctx.success("Invite leave tracking disabled")
+
+    @invitetracker_leave.command(
+        name="on",
+        description="Enable invite leave messages",
+    )
+    @has_permissions(manage_guild=True)
+    async def invitetracker_leave_on(self, ctx: Context):
+        config = await self._get_config(ctx.guild.id)
+        if not config["channel_id"]:
+            await self.db.execute(
+                """
+                INSERT INTO invite_config (guild_id, enabled, channel_id, message, leave_message, fake_remove)
+                    VALUES ($1, TRUE, $2, $3, $4, $5)
+                ON CONFLICT (guild_id)
+                    DO UPDATE SET enabled = TRUE, channel_id = $2
+                """,
+                ctx.guild.id,
+                ctx.channel.id,
+                config["message"],
+                config["leave_message"],
+                config["fake_remove"],
+            )
+        else:
+            await self.db.execute(
+                "UPDATE invite_config SET enabled = TRUE WHERE guild_id = $1",
+                ctx.guild.id,
+            )
+        return await ctx.success("Invite leave messages enabled")
+
+    @invitetracker_leave.command(
+        name="off",
+        description="Disable invite leave messages",
+    )
+    @has_permissions(manage_guild=True)
+    async def invitetracker_leave_off(self, ctx: Context):
+        await self.db.execute(
+            "UPDATE invite_config SET enabled = FALSE WHERE guild_id = $1",
+            ctx.guild.id,
+        )
+        return await ctx.success("Invite leave messages disabled")
 
     @invitetracker_leave.command(
         name="message",

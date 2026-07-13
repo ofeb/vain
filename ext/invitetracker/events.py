@@ -16,6 +16,10 @@ if TYPE_CHECKING:
 log = logging.getLogger("vain.invitetracker.events")
 
 
+def _invite_word(count: int) -> str:
+    return "invite" if count == 1 else "invites"
+
+
 class InviteTrackerEvents(Package):
     """invite tracking event listeners"""
 
@@ -55,8 +59,8 @@ class InviteTrackerEvents(Package):
             return {
                 "enabled": False,
                 "channel_id": None,
-                "message": "{inviter} invited {invitee}. They have **{invites}** invites.",
-                "leave_message": "{invitee} left. {inviter} now has **{invites}** invites.",
+                "message": "{inviter} invited {invitee}. They have **{invites}** {invite_word}.",
+                "leave_message": "{invitee} left. {inviter} now has **{invites}** {invite_word}.",
                 "fake_remove": True,
             }
         return dict(row)
@@ -77,6 +81,17 @@ class InviteTrackerEvents(Package):
                 except discord.HTTPException:
                     continue
         return None
+
+    async def _get_net_invites(self, guild_id: int, user_id: int) -> int:
+        """Get net invite count: invites - leaves - fake + bonus"""
+        data = await self.db.fetchrow(
+            "SELECT * FROM invite_counts WHERE guild_id = $1 AND user_id = $2",
+            guild_id,
+            user_id,
+        )
+        if not data:
+            return 0
+        return data["invites"] - data["leaves"] - data["fake"] + data["bonus"]
 
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member) -> None:
@@ -138,6 +153,20 @@ class InviteTrackerEvents(Package):
             inviter.id,
         )
 
+        # Track member-to-inviter mapping for leave attribution
+        await self.db.execute(
+            """
+            INSERT INTO member_invites (guild_id, invitee_id, inviter_id, code)
+                VALUES ($1, $2, $3, $4)
+            ON CONFLICT (guild_id, invitee_id)
+                DO UPDATE SET inviter_id = $3, code = $4, joined_at = CURRENT_TIMESTAMP
+            """,
+            guild.id,
+            member.id,
+            inviter.id,
+            invite.code,
+        )
+
         config = await self._get_config(guild.id)
         if not config.get("enabled"):
             return
@@ -146,13 +175,9 @@ class InviteTrackerEvents(Package):
         if not channel:
             return
 
-        # Get current invite count for inviter
-        data = await self.db.fetchrow(
-            "SELECT * FROM invite_counts WHERE guild_id = $1 AND user_id = $2",
-            guild.id,
-            inviter.id,
-        )
-        total = (data["invites"] - data["fake"] + data["bonus"]) if data else 1
+        # Get current net invite count for inviter
+        total = await self._get_net_invites(guild.id, inviter.id)
+        word = _invite_word(total)
 
         # Resolve inviter as a Member if possible for proper mention
         inviter_member = guild.get_member(inviter.id) or inviter
@@ -162,6 +187,7 @@ class InviteTrackerEvents(Package):
             "inviter": inviter_member,
             "invitee": member,
             "invites": str(total),
+            "invite_word": word,
             "code": invite.code,
             "url": invite.url,
             "guild": guild,
@@ -169,7 +195,7 @@ class InviteTrackerEvents(Package):
 
         template = config.get(
             "message",
-            "{inviter.mention} invited {invitee.mention}. They have **{invites}** invites.",
+            "{inviter} invited {invitee}. They have **{invites}** {invite_word}.",
         )
 
         script = Script(template, user=member)
@@ -188,69 +214,61 @@ class InviteTrackerEvents(Package):
 
         config = await self._get_config(guild.id)
 
-        if not config.get("enabled"):
+        # Find who invited this member via member_invites table
+        row = await self.db.fetchrow(
+            "SELECT inviter_id FROM member_invites WHERE guild_id = $1 AND invitee_id = $2",
+            guild.id,
+            member.id,
+        )
+
+        inviter_id = row["inviter_id"] if row else None
+
+        # Update leave count for inviter
+        if inviter_id:
+            await self.db.execute(
+                """
+                INSERT INTO invite_counts (guild_id, user_id, invites, leaves, fake, bonus)
+                    VALUES ($1, $2, 0, 1, 0, 0)
+                ON CONFLICT (guild_id, user_id)
+                    DO UPDATE SET leaves = invite_counts.leaves + 1
+                """,
+                guild.id,
+                inviter_id,
+            )
+
+        # Clean up member_invites entry
+        if inviter_id:
+            await self.db.execute(
+                "DELETE FROM member_invites WHERE guild_id = $1 AND invitee_id = $2",
+                guild.id,
+                member.id,
+            )
+
+        if not config.get("enabled") or not inviter_id:
             return
 
         channel = guild.get_channel(config.get("channel_id"))
         if not channel:
             return
 
-        # Find who invited this member by checking invite_uses
-        row = await self.db.fetchrow(
-            """SELECT inviter_id, code FROM invite_uses
-               WHERE guild_id = $1 AND inviter_id != $2
-               ORDER BY uses DESC LIMIT 1""",
-            guild.id,
-            member.id,
-        )
-
-        inviter_id = None
-        if row:
-            inviter_id = row["inviter_id"]
-
-        # Update leave count for inviter
-        if inviter_id:
-            data = await self.db.fetchrow(
-                "SELECT * FROM invite_counts WHERE guild_id = $1 AND user_id = $2",
-                guild.id,
-                inviter_id,
-            )
-            if data and data["invites"] > 0:
-                await self.db.execute(
-                    """
-                    INSERT INTO invite_counts (guild_id, user_id, invites, leaves, fake, bonus)
-                        VALUES ($1, $2, 0, 1, 0, 0)
-                    ON CONFLICT (guild_id, user_id)
-                        DO UPDATE SET leaves = invite_counts.leaves + 1
-                    """,
-                    guild.id,
-                    inviter_id,
-                )
-
-        if not inviter_id:
-            return
-
         inviter = guild.get_member(inviter_id) or self.bot.get_user(inviter_id)
         if not inviter:
             return
 
-        data = await self.db.fetchrow(
-            "SELECT * FROM invite_counts WHERE guild_id = $1 AND user_id = $2",
-            guild.id,
-            inviter_id,
-        )
-        total = (data["invites"] - data["fake"] + data["bonus"]) if data else 0
+        total = await self._get_net_invites(guild.id, inviter_id)
+        word = _invite_word(total)
 
         leave_vars = {
             "inviter": inviter,
             "invitee": member,
             "invites": str(total),
+            "invite_word": word,
             "guild": guild,
         }
 
         template = config.get(
             "leave_message",
-            "{invitee.mention} left. {inviter.mention} now has **{invites}** invites.",
+            "{invitee} left. {inviter} now has **{invites}** {invite_word}.",
         )
 
         script = Script(template, user=member)

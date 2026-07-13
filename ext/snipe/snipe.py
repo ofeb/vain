@@ -97,7 +97,7 @@ def _build_snipe_embed(snipe: dict, index: int, total: int, snipe_type: str) -> 
         time_str = f"yesterday at {discord.utils.format_dt(ts, style='t')}"
     else:
         time_str = discord.utils.format_dt(ts, style='f')
-    embed.set_footer(text=f"{label} {time_str} \u2219 {index}/{total} \u2219 Module: utility")
+    embed.set_footer(text=f"{label} {time_str} \u2219 {index}/{total}")
 
     return embed
 
@@ -208,7 +208,7 @@ class Snipe(commands.Cog):
             color=color.base,
             description=f"**{snipe.get('author', {}).get('name', 'Unknown')}** reacted with {reaction_display} {time_str}",
         )
-        embed.set_footer(text=f"Reaction \u2219 {index}/{total} \u2219 Module: utility")
+        embed.set_footer(text=f"Reaction \u2219 {index}/{total}")
 
         await ctx.send(embed=embed)
 

@@ -13,6 +13,13 @@ from core.managers.values import color
 if TYPE_CHECKING:
     from core.vain import Vain
 
+# Guilds to never log in devlogs (testing, partner, etc.)
+DEVLOG_GUILD_IGNORE: set[int] = {
+    1424433148892287108,
+    1333981881913315358,
+    1431305396244713624,
+}
+
 
 class OwnerEvents(Package):
     """Bot join/leave logging and periodic tasks"""
@@ -20,6 +27,9 @@ class OwnerEvents(Package):
     @Package.listener()
     async def on_guild_join(self, guild: discord.Guild) -> None:
         """Log when the bot joins a new guild"""
+        if guild.id in DEVLOG_GUILD_IGNORE:
+            return
+
         owner = guild.owner
         owner_str = str(owner) if owner else "Unknown"
 
@@ -56,6 +66,9 @@ class OwnerEvents(Package):
     @Package.listener()
     async def on_guild_remove(self, guild: discord.Guild) -> None:
         """Log when the bot leaves a guild"""
+        if guild.id in DEVLOG_GUILD_IGNORE:
+            return
+
         owner = guild.owner
         owner_str = str(owner) if owner else "Unknown"
 

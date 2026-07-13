@@ -386,17 +386,127 @@ class ModerationCommands(Package):
         description="Jails the mentioned user",
     )
     @has_permissions(manage_messages=True)
-    async def jail(self, ctx, member, *, reason=None):
+    async def jail(self, ctx, member: discord.Member, *, reason=None):
         """jail a member"""
-        pass
+        if not await self._ensure_targetable(ctx, member):
+            return
+
+        row = await self.db.fetchrow(
+            "SELECT jail_channel_id, jail_role_id, jail_remove_roles FROM server_settings WHERE guild_id = $1",
+            ctx.guild.id,
+        )
+        if not row:
+            return await ctx.warn("Jail is not configured — use `,settings jail` first")
+        jail_channel_id = row["jail_channel_id"]
+        jail_role_id = row["jail_role_id"]
+        if not jail_channel_id or not jail_role_id:
+            return await ctx.warn("Jail channel or jail role is not configured — use `,settings jail`")
+
+        jail_channel = ctx.guild.get_channel(jail_channel_id)
+        jail_role = ctx.guild.get_role(jail_role_id)
+        if not jail_channel:
+            return await ctx.warn("The configured jail channel no longer exists")
+        if not jail_role:
+            return await ctx.warn("The configured jail role no longer exists")
+
+        # Check if already jailed
+        existing = await self.db.fetchrow(
+            "SELECT 1 FROM jailed WHERE guild_id = $1 AND user_id = $2",
+            ctx.guild.id, member.id,
+        )
+        if existing:
+            return await ctx.warn(f"**{member}** is already jailed")
+
+        # Store current roles (exclude @everyone)
+        role_ids = [r.id for r in member.roles if r != ctx.guild.default_role]
+
+        # Remove all roles and add jail role
+        try:
+            if row["jail_remove_roles"] and role_ids:
+                roles_to_remove = [ctx.guild.get_role(rid) for rid in role_ids if ctx.guild.get_role(rid)]
+                if roles_to_remove:
+                    await member.remove_roles(*roles_to_remove, reason=f"Jailed by {ctx.author}: {reason or 'no reason'}")
+            await member.add_roles(jail_role, reason=f"Jailed by {ctx.author}: {reason or 'no reason'}")
+        except discord.Forbidden:
+            return await ctx.warn("I don't have permission to manage this member's roles")
+        except discord.HTTPException as e:
+            return await ctx.warn(f"Failed to update roles: {e}")
+
+        # Move to jail channel
+        if isinstance(member.voice.channel, discord.VoiceChannel):
+            try:
+                await member.move_to(jail_channel, reason=f"Jailed by {ctx.author}")
+            except (discord.Forbidden, discord.HTTPException):
+                pass
+
+        # Store in database
+        await self.db.execute(
+            """INSERT INTO jailed (guild_id, user_id, role_ids, moderator_id, reason)
+               VALUES ($1, $2, $3, $4, $5)
+               ON CONFLICT (guild_id, user_id) DO UPDATE
+               SET role_ids = $3, moderator_id = $4, reason = $5, jailed_at = CURRENT_TIMESTAMP""",
+            ctx.guild.id, member.id, role_ids, ctx.author.id, reason,
+        )
+
+        case_id = await self._create_case(
+            ctx, action="jail", target_id=member.id, reason=reason,
+        )
+        await self._send_modlog(
+            ctx, action="jail", target=member, case_id=case_id, reason=reason,
+        )
+
+        return await ctx.success(f"Jailed **{member}** - {self._default_reason(reason)}")
 
     @command(
         name="unjail",
         description="Unjails the mentioned user",
     )
-    async def unjail(self, ctx, member, *, reason):
+    @has_permissions(manage_messages=True)
+    async def unjail(self, ctx, member: discord.Member, *, reason=None):
         """unjail a member"""
-        pass
+        row = await self.db.fetchrow(
+            "SELECT * FROM jailed WHERE guild_id = $1 AND user_id = $2",
+            ctx.guild.id, member.id,
+        )
+        if not row:
+            return await ctx.warn(f"**{member}** is not jailed")
+
+        role_ids = row["role_ids"]
+        jail_role_id = (await self.db.fetchrow(
+            "SELECT jail_role_id FROM server_settings WHERE guild_id = $1",
+            ctx.guild.id,
+        ))
+        jail_role_id = jail_role_id["jail_role_id"] if jail_role_id else None
+
+        # Remove jail role and restore original roles
+        try:
+            if jail_role_id:
+                jail_role = ctx.guild.get_role(jail_role_id)
+                if jail_role and jail_role in member.roles:
+                    await member.remove_roles(jail_role, reason=f"Unjailed by {ctx.author}")
+
+            roles_to_add = [ctx.guild.get_role(rid) for rid in role_ids if ctx.guild.get_role(rid)]
+            if roles_to_add:
+                await member.add_roles(*roles_to_add, reason=f"Unjailed by {ctx.author}")
+        except discord.Forbidden:
+            return await ctx.warn("I don't have permission to manage this member's roles")
+        except discord.HTTPException as e:
+            return await ctx.warn(f"Failed to restore roles: {e}")
+
+        # Remove from database
+        await self.db.execute(
+            "DELETE FROM jailed WHERE guild_id = $1 AND user_id = $2",
+            ctx.guild.id, member.id,
+        )
+
+        case_id = await self._create_case(
+            ctx, action="unjail", target_id=member.id, reason=reason,
+        )
+        await self._send_modlog(
+            ctx, action="unjail", target=member, case_id=case_id, reason=reason,
+        )
+
+        return await ctx.success(f"Unjailed **{member}** - {self._default_reason(reason)}")
 
     @command(
         name="modstats",
@@ -432,7 +542,28 @@ class ModerationCommands(Package):
     @has_permissions(manage_messages=True)
     async def jaillist(self, ctx):
         """list all jailed members"""
-        pass
+        rows = await self.db.fetch(
+            "SELECT user_id, moderator_id, reason, jailed_at FROM jailed WHERE guild_id = $1 ORDER BY jailed_at DESC",
+            ctx.guild.id,
+        )
+        if not rows:
+            return await ctx.warn("No members are currently jailed")
+
+        lines = []
+        for row in rows:
+            member = ctx.guild.get_member(row["user_id"])
+            name = member.mention if member else f"`{row['user_id']}`"
+            mod = ctx.guild.get_member(row["moderator_id"])
+            mod_name = mod.mention if mod else "`unknown`"
+            reason = row["reason"] or "no reason"
+            lines.append(f"{name} — jailed by {mod_name}: {reason}")
+
+        embed = discord.Embed(
+            title="Jailed Members",
+            description="\n".join(lines),
+            color=self.color,
+        )
+        await ctx.send(embed=embed)
 
     @command(
         name="caselog",

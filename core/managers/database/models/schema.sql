@@ -310,6 +310,16 @@ CREATE TABLE IF NOT EXISTS sticky_roles (
     PRIMARY KEY (guild_id, user_id, role_id)
 );
 
+CREATE TABLE IF NOT EXISTS jailed (
+    guild_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    role_ids BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    moderator_id BIGINT,
+    reason TEXT,
+    jailed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, user_id)
+);
+
 CREATE TABLE IF NOT EXISTS booster_roles (
     guild_id BIGINT PRIMARY KEY,
     base_id BIGINT,
@@ -1257,6 +1267,15 @@ CREATE TABLE IF NOT EXISTS invite_uses (
     inviter_id BIGINT NOT NULL,
     uses INT NOT NULL DEFAULT 0,
     PRIMARY KEY (guild_id, code)
+);
+
+CREATE TABLE IF NOT EXISTS member_invites (
+    guild_id BIGINT NOT NULL,
+    invitee_id BIGINT NOT NULL,
+    inviter_id BIGINT NOT NULL,
+    code TEXT NOT NULL,
+    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, invitee_id)
 );
 
 CREATE TABLE IF NOT EXISTS devlog_config (
