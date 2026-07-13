@@ -584,26 +584,6 @@ class Fun(Package):
         except (discord.Forbidden, discord.HTTPException):
             await ctx.warn("Couldn't add reactions to the poll message.")
 
-    @hybrid(
-        name="quote",
-        description="Quote a message",
-    )
-    @describe(message_link="Message link to quote")
-    async def quote(self, ctx: Context, message_link: str) -> None:
-        try:
-            msg = await ctx.bot.fetch_message(message_link)
-        except Exception:
-            return await ctx.fail("Could not fetch that message.")
-
-        embed = discord.Embed(
-            description=msg.content[:4000],
-            color=color.base,
-            timestamp=msg.created_at,
-        )
-        embed.set_author(name=str(msg.author), icon_url=msg.author.display_avatar.url)
-        embed.set_footer(text=f"Quoted from #{msg.channel.name}")
-        await ctx.send(embed=embed)
-
 
 async def setup(bot: Vain):
     from .events import FunEvents

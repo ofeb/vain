@@ -5,7 +5,7 @@ import logging
 from typing import TYPE_CHECKING
 
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 
 from core.discord.package import Package
 from core.tools.embed import Script
@@ -36,15 +36,42 @@ class InviteTrackerEvents(Package):
 
     async def cog_load(self) -> None:
         self.bot.loop.create_task(self._populate_cache())
+        self._cache_refresh.start()
+
+    def cog_unload(self) -> None:
+        self._cache_refresh.cancel()
+
+    @tasks.loop(minutes=5)
+    async def _cache_refresh(self) -> None:
+        """Periodically refresh invite cache to prevent stale data."""
+        if not self.bot.is_ready():
+            return
+        for guild in self.bot.guilds:
+            try:
+                invites = await self._snapshot_invites(guild)
+                if invites:
+                    self._invite_cache[guild.id] = invites
+            except Exception:
+                pass
+
+    @_cache_refresh.before_loop
+    async def _before_cache_refresh(self) -> None:
+        await self.bot.wait_until_ready()
 
     async def _populate_cache(self) -> None:
         """Snapshot invite uses for all guilds on startup."""
-        await self.bot.wait_until_ready()
-        for guild in self.bot.guilds:
-            invites = await self._snapshot_invites(guild)
-            if invites:
-                self._invite_cache[guild.id] = invites
-                log.debug("Cached %d invites for %s", len(invites), guild.name)
+        try:
+            await self.bot.wait_until_ready()
+            for guild in self.bot.guilds:
+                try:
+                    invites = await self._snapshot_invites(guild)
+                    if invites:
+                        self._invite_cache[guild.id] = invites
+                        log.debug("Cached %d invites for %s", len(invites), guild.name)
+                except Exception as e:
+                    log.error("Failed to cache invites for %s: %s", guild.name, e)
+        except Exception as e:
+            log.error("Invite cache population failed: %s", e)
 
     async def _snapshot_invites(self, guild: discord.Guild) -> dict[str, int]:
         """Fetch current invite uses as {code: uses}"""
@@ -104,26 +131,24 @@ class InviteTrackerEvents(Package):
     async def on_member_join(self, member: discord.Member) -> None:
         guild = member.guild
 
-        
         before = self._invite_cache.get(guild.id, {})
         if not before:
-            log.debug("No cached invites for %s, fetching fresh", guild.name)
+            log.warning("No cached invites for %s — fetching fresh snapshot (detection may be inaccurate)", guild.name)
             before = await self._snapshot_invites(guild)
             if not before:
-                log.debug("No invites found in %s, skipping", guild.name)
+                log.warning("No invites found in %s, skipping", guild.name)
                 return
+            # Store as cache so subsequent joins work correctly
+            self._invite_cache[guild.id] = before
 
-        
+        # Wait for Discord to update invite counts
         await asyncio.sleep(2)
 
-        
         after = await self._snapshot_invites(guild)
 
-        
         if after:
             self._invite_cache[guild.id] = after
 
-        
         invite = await self._find_used_invite(before, after, member)
 
         if not invite:
