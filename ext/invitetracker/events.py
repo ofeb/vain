@@ -5,7 +5,7 @@ import logging
 from typing import TYPE_CHECKING
 
 import discord
-from discord.ext import commands, tasks
+from discord.ext import tasks
 
 from core.discord.package import Package
 from core.tools.embed import Script
@@ -127,7 +127,7 @@ class InviteTrackerEvents(Package):
             return 0
         return data["invites"] - data["leaves"] - data["fake"] + data["bonus"]
 
-    @commands.Cog.listener()
+    @Package.listener()
     async def on_member_join(self, member: discord.Member) -> None:
         guild = member.guild
 
@@ -235,7 +235,7 @@ class InviteTrackerEvents(Package):
 
         await channel.send(rendered)
 
-    @commands.Cog.listener()
+    @Package.listener()
     async def on_member_remove(self, member: discord.Member) -> None:
         guild = member.guild
 
