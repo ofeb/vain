@@ -9,8 +9,6 @@ import discord
 from discord import Member, Message
 from discord.ext import commands
 from discord.ext.commands import group, CommandError
-from discord.utils import BucketType
-
 from core.discord.package import Package
 from core.managers.permissions import has_permissions
 
