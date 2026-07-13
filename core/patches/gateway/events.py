@@ -27,7 +27,8 @@ class GatewayEvents(Package):
         if not message.guild:
             return
         if await self.bot.db.fetchrow(
-            "SELECT 1 FROM blacklist WHERE user_id = $1", message.author.id
+            "SELECT 1 FROM blacklist WHERE user_id = $1 AND (expires_at IS NULL OR expires_at > NOW())",
+            message.author.id,
         ):
             return
         await self.bot.process_commands(message)

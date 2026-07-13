@@ -151,41 +151,48 @@ class RoleplayBackView(discord.ui.View):
             item.label = f"{PAST_TENSE.get(self.action, self.action.title())} back"
         await interaction.response.edit_message(view=self)
 
-        gif_bytes = await fetch_action_gif(self.action)
-        attachment = discord.File(BytesIO(gif_bytes), filename="action.gif")
+        try:
+            gif_bytes = await fetch_action_gif(self.action)
+            attachment = discord.File(BytesIO(gif_bytes), filename="action.gif")
 
-        bot = interaction.client
-        target_user = await bot.fetch_user(self.original_author_id)
-        mention = target_user.mention
+            bot = interaction.client
+            target_user = await bot.fetch_user(self.original_author_id)
+            mention = target_user.mention
 
-        total = await bot.db.fetchval(
-            """
-            INSERT INTO roleplay.actions (action, giver, receiver, amount)
-                VALUES ($1, $2, $3, 1)
-            ON CONFLICT (action, giver, receiver)
-                DO UPDATE SET amount = roleplay.actions.amount + 1
-            RETURNING amount
-            """,
-            self.action,
-            interaction.user.id,
-            self.original_author_id,
-            cached=False,
-        )
+            total = await bot.db.fetchval(
+                """
+                INSERT INTO roleplay.actions (action, giver, receiver, amount)
+                    VALUES ($1, $2, $3, 1)
+                ON CONFLICT (action, giver, receiver)
+                    DO UPDATE SET amount = roleplay.actions.amount + 1
+                RETURNING amount
+                """,
+                self.action,
+                interaction.user.id,
+                self.original_author_id,
+                cached=False,
+            )
 
-        embed_color = _extract_dominant_color(gif_bytes) or bot.color
-        embed = discord.Embed(
-            color=embed_color,
-            description=(
-                f"{interaction.user.mention} {ACTION_MAP[self.action].format(mention)} "
-                f"for the **{ordinal(total)}** time!"
-            ),
-        )
-        embed.set_image(url="attachment://action.gif")
+            embed_color = _extract_dominant_color(gif_bytes) or bot.color
+            embed = discord.Embed(
+                color=embed_color,
+                description=(
+                    f"{interaction.user.mention} {ACTION_MAP[self.action].format(mention)} "
+                    f"for the **{ordinal(total)}** time!"
+                ),
+            )
+            embed.set_image(url="attachment://action.gif")
 
-        await interaction.followup.send(
-            file=attachment, embed=embed,
-            reference=interaction.message,
-        )
+            await interaction.followup.send(
+                file=attachment, embed=embed,
+                reference=interaction.message,
+            )
+        except Exception:
+            with contextlib.suppress(discord.HTTPException):
+                await interaction.followup.send(
+                    "Something went wrong sending the reply. Try again later.",
+                    ephemeral=True,
+                )
 
     async def on_timeout(self):
         for item in self.children:
@@ -247,7 +254,10 @@ class RoleplayCommands(Package):
         if action in BACK_ACTIONS and target != ctx.author:
             view = RoleplayBackView(action, ctx.author.id, target.id)
 
-        return await ctx.send(file=attachment, embed=embed, view=view)
+        msg = await ctx.send(file=attachment, embed=embed, view=view)
+        if view is not None:
+            view.message = msg
+        return msg
 
     @hybrid(
         name="roleplay",

@@ -1,0 +1,217 @@
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING
+
+import discord
+from discord.ext import commands
+
+from core.discord.package import Package
+from core.tools.embed import Script
+
+if TYPE_CHECKING:
+    from core.vain import Vain
+
+
+class InviteTrackerEvents(Package):
+    """invite tracking event listeners"""
+
+    async def _snapshot_invites(self, guild: discord.Guild) -> dict[str, int]:
+        """Fetch current invite uses as {code: uses}"""
+        try:
+            invites = await guild.invites()
+            return {invite.code: invite.uses for invite in invites}
+        except discord.HTTPException:
+            return {}
+
+    async def _get_config(self, guild_id: int) -> dict:
+        row = await self.db.fetchrow(
+            "SELECT * FROM invite_config WHERE guild_id = $1", guild_id
+        )
+        if not row:
+            return {"enabled": False, "channel_id": None}
+        return dict(row)
+
+    async def _find_used_invite(
+        self,
+        before: dict[str, int],
+        after: dict[str, int],
+        member: discord.Member,
+    ) -> discord.Invite | None:
+        """Compare invite snapshots to find which invite was used"""
+        for code, uses in after.items():
+            old_uses = before.get(code, 0)
+            if uses > old_uses:
+                try:
+                    invite = await self.bot.fetch_invite(code)
+                    return invite
+                except discord.HTTPException:
+                    continue
+        return None
+
+    @commands.Cog.listener()
+    async def on_member_join(self, member: discord.Member) -> None:
+        guild = member.guild
+        config = await self._get_config(guild.id)
+
+        # Snapshot invites BEFORE the join
+        before = await self._snapshot_invites(guild)
+
+        # Wait a moment for Discord to update invite counts
+        import asyncio
+        await asyncio.sleep(1)
+
+        # Snapshot invites AFTER the join
+        after = await self._snapshot_invites(guild)
+
+        # Find which invite was used
+        invite = await self._find_used_invite(before, after, member)
+
+        if not invite:
+            return
+
+        inviter = invite.inviter
+        if not inviter:
+            return
+
+        # Update invite counts
+        await self.db.execute(
+            """
+            INSERT INTO invite_counts (guild_id, user_id, invites, leaves, fake, bonus)
+                VALUES ($1, $2, 1, 0, 0, 0)
+            ON CONFLICT (guild_id, user_id)
+                DO UPDATE SET invites = invite_counts.invites + 1
+            """,
+            guild.id,
+            inviter.id,
+        )
+
+        # Track invite use
+        await self.db.execute(
+            """
+            INSERT INTO invite_uses (guild_id, code, inviter_id, uses)
+                VALUES ($1, $2, $3, 1)
+            ON CONFLICT (guild_id, code)
+                DO UPDATE SET uses = invite_uses.uses + 1
+            """,
+            guild.id,
+            invite.code,
+            inviter.id,
+        )
+
+        if not config.get("enabled"):
+            return
+
+        channel = guild.get_channel(config["channel_id"])
+        if not channel:
+            return
+
+        # Get current invite count for inviter
+        data = await self.db.fetchrow(
+            "SELECT * FROM invite_counts WHERE guild_id = $1 AND user_id = $2",
+            guild.id,
+            inviter.id,
+        )
+        total = (data["invites"] - data["fake"] + data["bonus"]) if data else 1
+
+        # Build invite variables for template
+        invite_vars = {
+            "inviter": inviter,
+            "invitee": member,
+            "invites": str(total),
+            "code": invite.code,
+            "url": invite.url,
+            "channel": invite.channel,
+            "guild": guild,
+            "user": member,
+        }
+
+        template = config.get(
+            "message",
+            "{inviter} invited {invitee}. They have **{invites}** invites.",
+        )
+
+        script = Script(template, user=member)
+        rendered = script.render(**invite_vars)
+
+        await channel.send(rendered)
+
+    @commands.Cog.listener()
+    async def on_member_remove(self, member: discord.Member) -> None:
+        guild = member.guild
+        config = await self._get_config(guild.id)
+
+        if not config.get("enabled"):
+            return
+
+        channel = guild.get_channel(config["channel_id"])
+        if not channel:
+            return
+
+        # Find who invited this member by checking invite_uses
+        # We look for the most recent invite used by this member
+        row = await self.db.fetchrow(
+            """SELECT inviter_id, code FROM invite_uses
+               WHERE guild_id = $1 AND inviter_id != $2
+               ORDER BY uses DESC LIMIT 1""",
+            guild.id,
+            member.id,
+        )
+
+        inviter_id = None
+        if row:
+            inviter_id = row["inviter_id"]
+
+        # Update leave count for inviter
+        if inviter_id:
+            # Find which invite this member used by looking at invite codes
+            # Since we can't directly track per-member invites, we decrement
+            # We check if the member is in the fake list
+            data = await self.db.fetchrow(
+                "SELECT * FROM invite_counts WHERE guild_id = $1 AND user_id = $2",
+                guild.id,
+                inviter_id,
+            )
+            if data and data["invites"] > 0:
+                await self.db.execute(
+                    """
+                    INSERT INTO invite_counts (guild_id, user_id, invites, leaves, fake, bonus)
+                        VALUES ($1, $2, 0, 1, 0, 0)
+                    ON CONFLICT (guild_id, user_id)
+                        DO UPDATE SET leaves = invite_counts.leaves + 1
+                    """,
+                    guild.id,
+                    inviter_id,
+                )
+
+        if not inviter_id:
+            return
+
+        inviter = guild.get_member(inviter_id) or self.bot.get_user(inviter_id)
+        if not inviter:
+            return
+
+        data = await self.db.fetchrow(
+            "SELECT * FROM invite_counts WHERE guild_id = $1 AND user_id = $2",
+            guild.id,
+            inviter_id,
+        )
+        total = (data["invites"] - data["fake"] + data["bonus"]) if data else 0
+
+        leave_vars = {
+            "inviter": inviter,
+            "invitee": member,
+            "invites": str(total),
+            "guild": guild,
+            "user": member,
+        }
+
+        template = config.get(
+            "leave_message",
+            "{invitee} left. {inviter} now has **{invites}** invites.",
+        )
+
+        script = Script(template, user=member)
+        rendered = script.render(**leave_vars)
+
+        await channel.send(rendered)

@@ -94,7 +94,8 @@ def _discover_extensions(ext_dir: str = "ext") -> tuple[str, ...]:
 
 _BLACKLIST_SQL = """
     SELECT 1 FROM blacklist
-    WHERE (user_id = $1) OR (guild_id = $2)
+    WHERE (user_id = $1 OR guild_id = $2)
+    AND (expires_at IS NULL OR expires_at > NOW())
     LIMIT 1
 """
 

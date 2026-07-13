@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS blacklist (
     id SERIAL PRIMARY KEY,
     user_id BIGINT,
     guild_id BIGINT,
+    expires_at TIMESTAMPTZ,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -1229,4 +1230,36 @@ CREATE TABLE IF NOT EXISTS nuke (
     nuke_threshold INT NOT NULL DEFAULT 3600,
     message TEXT NOT NULL DEFAULT 'first',
     PRIMARY KEY (guild_id, channel_id)
+);
+
+CREATE TABLE IF NOT EXISTS invite_config (
+    guild_id BIGINT PRIMARY KEY,
+    enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    channel_id BIGINT,
+    message TEXT NOT NULL DEFAULT '{inviter} invited {invitee}. They have **{invites}** invites.',
+    leave_message TEXT NOT NULL DEFAULT '{invitee} left. {inviter} now has **{invites}** invites.',
+    fake_remove BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+CREATE TABLE IF NOT EXISTS invite_counts (
+    guild_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    invites INT NOT NULL DEFAULT 0,
+    leaves INT NOT NULL DEFAULT 0,
+    fake INT NOT NULL DEFAULT 0,
+    bonus INT NOT NULL DEFAULT 0,
+    PRIMARY KEY (guild_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS invite_uses (
+    guild_id BIGINT NOT NULL,
+    code TEXT NOT NULL,
+    inviter_id BIGINT NOT NULL,
+    uses INT NOT NULL DEFAULT 0,
+    PRIMARY KEY (guild_id, code)
+);
+
+CREATE TABLE IF NOT EXISTS devlog_config (
+    bot_id BIGINT PRIMARY KEY,
+    channel_id BIGINT NOT NULL
 );

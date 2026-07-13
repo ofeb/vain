@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import asyncio
 import io
 import textwrap
 import traceback
-from typing import TYPE_CHECKING
+from datetime import datetime, timezone, timedelta
+from typing import TYPE_CHECKING, Optional
 
 import discord
 from discord.ext import commands
+from discord.ext.commands import group, CommandError
 
 from core.discord.ctx import Context
 from core.discord.hybrid import describe, hybrid, group
@@ -236,6 +239,298 @@ class Owner(commands.Cog):
             color=color.base,
         )
         await ctx.send(embed=embed)
+
+    # ─── edit group ─────────────────────────────────────────────────
+
+    @owner.group(
+        name="edit",
+        description="Edit bot appearance",
+        invoke_without_command=True,
+    )
+    async def owner_edit(self, ctx: Context) -> None:
+        await ctx.send_help(ctx.command)
+
+    @owner_edit.command(name="pfp", description="Change bot avatar")
+    @describe(url="Image URL or attachment")
+    async def owner_edit_pfp(self, ctx: Context, url: str = None) -> None:
+        if url is None and ctx.message.attachments:
+            url = ctx.message.attachments[0].url
+        if not url:
+            await ctx.fail("Provide an image URL or attach an image")
+            return
+        async with ctx.typing():
+            data = await self.bot.http._HTTPClient__session.get(url)
+            avatar_bytes = await data.read()
+            await self.bot.user.edit(avatar=avatar_bytes)
+        await ctx.success("Bot avatar updated")
+
+    @owner_edit.command(name="banner", description="Change bot banner")
+    @describe(url="Image URL or attachment")
+    async def owner_edit_banner(self, ctx: Context, url: str = None) -> None:
+        if url is None and ctx.message.attachments:
+            url = ctx.message.attachments[0].url
+        if not url:
+            await ctx.fail("Provide an image URL or attach an image")
+            return
+        async with ctx.typing():
+            data = await self.bot.http._HTTPClient__session.get(url)
+            banner_bytes = await data.read()
+            await self.bot.user.edit(banner=banner_bytes)
+        await ctx.success("Bot banner updated")
+
+    @owner_edit.command(name="bio", description="Change bot bio/about me")
+    @describe(text="New bio text (max 190 chars)")
+    async def owner_edit_bio(self, ctx: Context, *, text: str) -> None:
+        if len(text) > 190:
+            await ctx.fail("Bio must be 190 characters or less")
+            return
+        async with ctx.typing():
+            await self.bot.http.edit_profile(bio=text)
+        await ctx.success("Bot bio updated")
+
+    @owner_edit.command(name="customstatus", aliases=["status", "activity"], description="Change bot custom status")
+    @describe(text="Status text (empty to clear)")
+    async def owner_edit_customstatus(self, ctx: Context, *, text: str = "") -> None:
+        async with ctx.typing():
+            if text:
+                await self.bot.change_presence(
+                    activity=discord.CustomActivity(name=text)
+                )
+            else:
+                await self.bot.change_presence(activity=None)
+        await ctx.success(f"Status updated" if text else "Status cleared")
+
+    # ─── devlogs / botlogs ──────────────────────────────────────────
+
+    @owner.group(
+        name="devlogs",
+        aliases=["botlogs"],
+        description="Configure dev logging channel",
+        invoke_without_command=True,
+    )
+    @describe(channel="Channel to log bot events")
+    async def owner_devlogs(self, ctx: Context, channel: discord.TextChannel = None) -> None:
+        if channel is None:
+            current = await self.bot.db.fetchval(
+                "SELECT channel_id FROM devlog_config WHERE bot_id = $1",
+                self.bot.user.id,
+            )
+            if current:
+                ch = self.bot.get_channel(current)
+                await ctx.send(f"Current devlog channel: {ch.mention if ch else f'<#{current}>'}")
+            else:
+                await ctx.fail("No devlog channel set. Usage: `owner devlogs #channel`")
+            return
+        await self.bot.db.execute(
+            """
+            INSERT INTO devlog_config (bot_id, channel_id)
+                VALUES ($1, $2)
+            ON CONFLICT (bot_id)
+                DO UPDATE SET channel_id = $2
+            """,
+            self.bot.user.id,
+            channel.id,
+        )
+        await ctx.success(f"Devlog channel set to {channel.mention}")
+
+    @owner_devlogs.command(name="remove", description="Remove devlog channel")
+    async def owner_devlogs_remove(self, ctx: Context) -> None:
+        await self.bot.db.execute(
+            "DELETE FROM devlog_config WHERE bot_id = $1",
+            self.bot.user.id,
+        )
+        await ctx.success("Devlog channel removed")
+
+    @owner_devlogs.command(name="view", description="View current devlog channel")
+    async def owner_devlogs_view(self, ctx: Context) -> None:
+        current = await self.bot.db.fetchval(
+            "SELECT channel_id FROM devlog_config WHERE bot_id = $1",
+            self.bot.user.id,
+        )
+        if current:
+            ch = self.bot.get_channel(current)
+            await ctx.success(f"Devlog channel: {ch.mention if ch else f'<#{current}>'}")
+        else:
+            await ctx.fail("No devlog channel set")
+
+    # ─── portal ─────────────────────────────────────────────────────
+
+    @owner.command(
+        name="portal",
+        description="Get an invite link for a server via DM",
+    )
+    @describe(guild_id="Guild ID to get invite for")
+    async def owner_portal(self, ctx: Context, guild_id: str) -> None:
+        guild = self.bot.get_guild(int(guild_id))
+        if not guild:
+            await ctx.fail(f"Bot is not in guild `{guild_id}`")
+            return
+        try:
+            invite = None
+            for ch in guild.text_channels:
+                if ch.permissions_for(guild.me).create_instant_invite:
+                    invite = await ch.create_invite(max_age=0, max_uses=0, unique=False)
+                    break
+            if not invite:
+                await ctx.fail("Cannot create invite — no permissions")
+                return
+            await ctx.author.send(f"**{guild.name}** (`{guild.id}`)\n{invite.url}")
+            await ctx.success("Invite sent to your DMs")
+        except discord.Forbidden:
+            await ctx.fail("Cannot DM you — check your privacy settings")
+
+    # ─── blacklist ──────────────────────────────────────────────────
+
+    @owner.group(
+        name="blacklist",
+        aliases=["bl"],
+        description="Blacklist a user or guild from using the bot",
+        invoke_without_command=True,
+    )
+    async def owner_blacklist(self, ctx: Context) -> None:
+        await ctx.send_help(ctx.command)
+
+    @owner_blacklist.command(name="user", description="Blacklist a user")
+    @describe(user="User to blacklist", duration="Duration (e.g. 1h, 7d) or empty for permanent")
+    async def owner_blacklist_user(
+        self, ctx: Context, user: discord.User, *, duration: str = None
+    ) -> None:
+        expires_at = None
+        if duration:
+            seconds = self._parse_duration(duration)
+            if seconds is None:
+                await ctx.fail("Invalid duration format. Use e.g. `1h`, `7d`, `30m`")
+                return
+            expires_at = datetime.now(timezone.utc) + timedelta(seconds=seconds)
+
+        await self.bot.db.execute(
+            """
+            INSERT INTO blacklist (user_id, guild_id, expires_at)
+                VALUES ($1, NULL, $2)
+            ON CONFLICT DO NOTHING
+            """,
+            user.id,
+            expires_at,
+        )
+        # Cache the blacklist
+        await self.bot.remember(f"blacklist:{ctx.guild.id if ctx.guild else 0}:{user.id}", 300, lambda: True)
+
+        duration_str = f" for **{duration}**" if duration else " permanently"
+        await ctx.success(f"Blacklisted **{user}**{duration_str}")
+
+        # Log to devlogs
+        await self._log_devlog(
+            f"**{ctx.author}** blacklisted **{user}** (`{user.id}`){duration_str}"
+        )
+
+    @owner_blacklist.command(name="guild", description="Blacklist a guild")
+    @describe(guild_id="Guild ID to blacklist")
+    async def owner_blacklist_guild(
+        self, ctx: Context, guild_id: str
+    ) -> None:
+        guild = self.bot.get_guild(int(guild_id))
+        guild_name = guild.name if guild else "Unknown"
+
+        await self.bot.db.execute(
+            """
+            INSERT INTO blacklist (user_id, guild_id)
+                VALUES (NULL, $1)
+            ON CONFLICT DO NOTHING
+            """,
+            int(guild_id),
+        )
+
+        await ctx.success(f"Blacklisted guild **{guild_name}** (`{guild_id}`)")
+        await self._log_devlog(
+            f"**{ctx.author}** blacklisted guild **{guild_name}** (`{guild_id}`)"
+        )
+
+    @owner.command(
+        name="whitelist",
+        aliases=["unblacklist"],
+        description="Remove a user or guild from blacklist",
+    )
+    @describe(user="User to whitelist", guild_id="Guild ID to whitelist")
+    async def owner_whitelist(
+        self, ctx: Context, user: discord.User = None, guild_id: str = None
+    ) -> None:
+        if user:
+            await self.bot.db.execute(
+                "DELETE FROM blacklist WHERE user_id = $1", user.id
+            )
+            await self.bot.redis.delete(f"blacklist:*:{user.id}") if self.bot.redis else None
+            await ctx.success(f"Whitelisted **{user}**")
+            await self._log_devlog(
+                f"**{ctx.author}** whitelisted **{user}** (`{user.id}`)"
+            )
+        elif guild_id:
+            await self.bot.db.execute(
+                "DELETE FROM blacklist WHERE guild_id = $1", int(guild_id)
+            )
+            await ctx.success(f"Whitelisted guild `{guild_id}`")
+            await self._log_devlog(
+                f"**{ctx.author}** whitelisted guild `{guild_id}`"
+            )
+        else:
+            await ctx.fail("Provide a user or guild ID")
+
+    @owner.command(
+        name="blacklistlist",
+        aliases=["blacklists", "bls"],
+        description="View all blacklisted users and guilds",
+    )
+    async def owner_blacklistlist(self, ctx: Context) -> None:
+        rows = await self.bot.db.fetch(
+            "SELECT user_id, guild_id, created_at, expires_at FROM blacklist ORDER BY created_at DESC"
+        )
+        if not rows:
+            raise CommandError("No blacklisted users or guilds")
+
+        values = []
+        for row in rows:
+            if row["user_id"]:
+                values.append(f"User: <@{row['user_id']}> (`{row['user_id']}`)")
+            elif row["guild_id"]:
+                values.append(f"Guild: `{row['guild_id']}`")
+
+        embed = discord.Embed(title="Blacklist", color=color.base)
+        return await ctx.paginate(embed, values)
+
+    def _parse_duration(self, duration: str) -> int | None:
+        """Parse duration string like '1h', '7d', '30m' to seconds"""
+        units = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
+        duration = duration.strip().lower()
+        if not duration:
+            return None
+        unit = duration[-1]
+        if unit not in units:
+            return None
+        try:
+            value = int(duration[:-1])
+            return value * units[unit]
+        except ValueError:
+            return None
+
+    async def _log_devlog(self, message: str) -> None:
+        """Send a message to the devlog channel"""
+        channel_id = await self.bot.db.fetchval(
+            "SELECT channel_id FROM devlog_config WHERE bot_id = $1",
+            self.bot.user.id,
+        )
+        if not channel_id:
+            return
+        ch = self.bot.get_channel(channel_id)
+        if not ch:
+            return
+        embed = discord.Embed(
+            description=message,
+            color=color.base,
+            timestamp=datetime.now(timezone.utc),
+        )
+        try:
+            await ch.send(embed=embed)
+        except discord.HTTPException:
+            pass
 
 
 async def setup(bot: commands.Bot):

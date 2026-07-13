@@ -146,6 +146,36 @@ class WelcomeCommands(Package):
         if await self.db.get_antiraid_state(member.guild.id):
             return
 
+        # Fetch invite info if available
+        invite_info = {}
+        try:
+            invite_tracker = self.bot.get_cog("InviteTracker")
+            if invite_tracker:
+                config = await invite_tracker._get_config(member.guild.id)
+                if config.get("enabled"):
+                    invites_data = await self.db.fetchrow(
+                        """SELECT inviter_id, code FROM invite_uses
+                           WHERE guild_id = $1
+                           ORDER BY uses DESC LIMIT 1""",
+                        member.guild.id,
+                    )
+                    if invites_data and invites_data["inviter_id"]:
+                        inviter = member.guild.get_member(invites_data["inviter_id"])
+                        if inviter:
+                            count_data = await self.db.fetchrow(
+                                "SELECT * FROM invite_counts WHERE guild_id = $1 AND user_id = $2",
+                                member.guild.id,
+                                inviter.id,
+                            )
+                            total = (count_data["invites"] - count_data["fake"] + count_data["bonus"]) if count_data else 0
+                            invite_info = {
+                                "inviter": inviter,
+                                "invites": str(total),
+                                "code": invites_data["code"],
+                            }
+        except Exception:
+            pass
+
         rate = await self.bot.object_cache.ratelimited(
             f"welcome_messages:{member.guild.id}", 1, 5
         )
@@ -162,7 +192,7 @@ class WelcomeCommands(Package):
                     continue
                 try:
                     builder = await self.create_embed(
-                        row.message, member=member, user=member
+                        row.message, member=member, user=member, **invite_info
                     )
                 except Exception:
                     continue

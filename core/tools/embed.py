@@ -217,6 +217,18 @@ def _user_replacements(prefix: str, user) -> dict[str, str]:
         ),
     }
 
+    top_role = getattr(user, "top_role", None)
+    if top_role:
+        replacements[f"{{{prefix}.top_role}}"] = str(top_role)
+        replacements[f"{{{prefix}.top_role.mention}}"] = str(getattr(top_role, "mention", top_role))
+        replacements[f"{{{prefix}.top_role.name}}"] = str(getattr(top_role, "name", top_role))
+
+    member_roles = getattr(user, "roles", None)
+    if member_roles:
+        non_everyone = [r for r in member_roles if r.name != "@everyone"]
+        replacements[f"{{{prefix}.roles}}"] = ", ".join(str(r) for r in non_everyone)
+        replacements[f"{{{prefix}.role_count}}"] = str(len(non_everyone))
+
     joined_at = getattr(user, "joined_at", None)
     premium_since = getattr(user, "premium_since", None)
     if joined_at:
@@ -679,6 +691,50 @@ class Script:
                 }
             )
 
+        now = datetime.datetime.now(datetime.timezone.utc)
+        replacements.update(
+            {
+                "{date}": now.strftime("%Y-%m-%d"),
+                "{time}": now.strftime("%H:%M:%S"),
+                "{datetime}": now.strftime("%Y-%m-%d %H:%M:%S"),
+                "{timestamp}": str(int(now.timestamp())),
+                "{unix}": str(int(now.timestamp())),
+            }
+        )
+
+        target = kwargs.get("target")
+        if target:
+            replacements.update(_user_replacements("target", target))
+
+        reason = kwargs.get("reason")
+        if reason is not None:
+            replacements["{reason}"] = str(reason)
+
+        duration = kwargs.get("duration")
+        if duration is not None:
+            replacements["{duration}"] = str(duration)
+
+        action = kwargs.get("action")
+        if action is not None:
+            replacements["{action}"] = str(action)
+
+        case_id = kwargs.get("case_id")
+        if case_id is not None:
+            replacements["{case_id}"] = str(case_id)
+
+        invite = kwargs.get("invite")
+        if invite:
+            replacements.update(
+                {
+                    "{invite.code}": str(getattr(invite, "code", "")),
+                    "{invite.inviter}": str(getattr(getattr(invite, "inviter", None), "name", "")),
+                    "{invite.uses}": str(getattr(invite, "uses", 0)),
+                    "{invite.url}": str(getattr(invite, "url", "")),
+                    "{invite.max_uses}": str(getattr(invite, "max_uses", 0)),
+                    "{invite.channel}": str(getattr(getattr(invite, "channel", None), "name", "")),
+                }
+            )
+
         if channel:
             replacements.update(
                 {
@@ -687,6 +743,7 @@ class Script:
                     "{channel.mention}": str(getattr(channel, "mention", channel)),
                     "{channel.name}": str(getattr(channel, "name", channel)),
                     "{channel.topic}": str(getattr(channel, "topic", "")),
+                    "{channel.category}": str(getattr(getattr(channel, "category", None), "name", "")),
                     "{channel.created_at}": _format_dt(
                         getattr(channel, "created_at", None)
                     ),
