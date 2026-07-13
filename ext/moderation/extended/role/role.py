@@ -29,51 +29,67 @@ class Role(Package):
     def _default_reason(self, reason: str | None) -> str:
         return reason or "no reason provided"
 
-    def _ensure_manageable_role(
+    async def _ensure_manageable_role(
         self,
         ctx,
         role: discord.Role,
         *,
         action: str = "manage",
-    ) -> None:
+    ) -> bool:
+        """Check if a role can be modified. Returns True if OK, False if blocked."""
         if ctx.guild is None:
-            raise CommandError("this command can only be used in a server")
+            await ctx.warn("This command can only be used in a server")
+            return False
         if role == ctx.guild.default_role:
-            raise CommandError(f"you cannot {action} the default role")
+            await ctx.warn(f"You cannot {action} the default role")
+            return False
         if role.managed:
-            raise CommandError(f"you cannot {action} an integration role")
+            await ctx.warn(f"You cannot {action} an integration role")
+            return False
 
         author = ctx.author if isinstance(ctx.author, discord.Member) else None
         bot_member = ctx.guild.me or ctx.guild.get_member(self.bot.user.id if self.bot.user else 0)
         if author and ctx.guild.owner_id != author.id and role >= author.top_role:
-            raise CommandError("that role is above or equal to your highest role")
+            await ctx.warn("That role is above or equal to your highest role")
+            return False
         if bot_member is None:
-            raise CommandError("I could not resolve my server member")
+            await ctx.warn("I could not resolve my server member")
+            return False
         if role >= bot_member.top_role:
-            raise CommandError("that role is above or equal to my highest role")
+            await ctx.warn("That role is above or equal to my highest role")
+            return False
+        return True
 
-    def _ensure_targetable_member(self, ctx, member: discord.Member) -> None:
+    async def _ensure_targetable_member(self, ctx, member: discord.Member) -> bool:
+        """Check if a member's roles can be modified. Returns True if OK, False if blocked."""
         if ctx.guild is None:
-            raise CommandError("this command can only be used in a server")
+            await ctx.warn("This command can only be used in a server")
+            return False
         if member.id == ctx.author.id:
-            raise CommandError("you cannot modify your own roles with this command")
+            await ctx.warn("You cannot modify your own roles with this command")
+            return False
         if member.id == ctx.guild.owner_id:
-            raise CommandError("you cannot modify the server owner's roles")
+            await ctx.warn("You cannot modify the server owner's roles")
+            return False
 
         author = ctx.author if isinstance(ctx.author, discord.Member) else None
         bot_member = ctx.guild.me or ctx.guild.get_member(self.bot.user.id if self.bot.user else 0)
         if author and ctx.guild.owner_id != author.id and member.top_role >= author.top_role:
-            raise CommandError(
+            await ctx.warn(
                 f"**{member.display_name}** has a higher or equal role than you — "
                 f"their top role ({member.top_role.mention}) must be below yours ({author.top_role.mention})"
             )
+            return False
         if bot_member is None:
-            raise CommandError("I could not resolve my server member")
+            await ctx.warn("I could not resolve my server member")
+            return False
         if member.top_role >= bot_member.top_role:
-            raise CommandError(
+            await ctx.warn(
                 f"**{member.display_name}** has a higher or equal role than me — "
                 f"their top role ({member.top_role.mention}) must be below my highest role ({bot_member.top_role.mention})"
             )
+            return False
+        return True
 
     async def _create_case(
         self,
@@ -163,8 +179,10 @@ class Role(Package):
         reason: str = None,
     ):
         """remove role from member"""
-        self._ensure_targetable_member(ctx, member)
-        self._ensure_manageable_role(ctx, role, action="remove")
+        if not await self._ensure_targetable_member(ctx, member):
+            return
+        if not await self._ensure_manageable_role(ctx, role, action="remove"):
+            return
         if role not in member.roles:
             return await ctx.warn(f"**{member}** does not have **{role.name}**")
 
@@ -224,8 +242,10 @@ class Role(Package):
         reason: str = None,
     ):
         """add role to member"""
-        self._ensure_targetable_member(ctx, member)
-        self._ensure_manageable_role(ctx, role, action="give")
+        if not await self._ensure_targetable_member(ctx, member):
+            return
+        if not await self._ensure_manageable_role(ctx, role, action="give"):
+            return
         if role in member.roles:
             return await ctx.warn(f"**{member}** already has **{role.name}**")
 
@@ -276,7 +296,8 @@ class Role(Package):
         reason: str = None,
     ):
         """delete role"""
-        self._ensure_manageable_role(ctx, role, action="delete")
+        if not await self._ensure_manageable_role(ctx, role, action="delete"):
+            return
 
         snapshot = {
             "name": role.name,

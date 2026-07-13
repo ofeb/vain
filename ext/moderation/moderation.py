@@ -121,28 +121,36 @@ class ModerationCommands(Package):
                 break
         return ", ".join(parts) if parts else "0 seconds"
 
-    def _ensure_targetable(self, ctx, member: discord.Member) -> None:
+    async def _ensure_targetable(self, ctx, member: discord.Member) -> bool:
+        """Check if a member can be moderated. Returns True if OK, False if blocked (sends warning)."""
         if ctx.guild is None:
-            raise CommandError("this command can only be used in a server")
+            await ctx.warn("This command can only be used in a server")
+            return False
         if member.id == ctx.author.id:
-            raise CommandError("you cannot moderate yourself")
+            await ctx.warn("You cannot moderate yourself")
+            return False
         if member.id == ctx.guild.owner_id:
-            raise CommandError("you cannot moderate the server owner")
+            await ctx.warn("You cannot moderate the server owner")
+            return False
 
         author = ctx.author if isinstance(ctx.author, discord.Member) else None
         bot_member = ctx.guild.me or ctx.guild.get_member(self.bot.user.id if self.bot.user else 0)
         if author and ctx.guild.owner_id != author.id and member.top_role >= author.top_role:
-            raise CommandError(
+            await ctx.warn(
                 f"**{member.display_name}** has a higher or equal role than you — "
                 f"their top role ({member.top_role.mention}) must be below yours ({author.top_role.mention})"
             )
+            return False
         if bot_member is None:
-            raise CommandError("I could not resolve my server member")
+            await ctx.warn("I could not resolve my server member")
+            return False
         if member.top_role >= bot_member.top_role:
-            raise CommandError(
+            await ctx.warn(
                 f"**{member.display_name}** has a higher or equal role than me — "
                 f"their top role ({member.top_role.mention}) must be below my highest role ({bot_member.top_role.mention})"
             )
+            return False
+        return True
 
     async def _confirm_if_booster(self, ctx, member: discord.Member, action: str) -> bool:
         """Show approval prompt if the target is boosting. Returns True to proceed."""
@@ -233,7 +241,8 @@ class ModerationCommands(Package):
         reason: str = None,
     ):
         """temporarily ban a member"""
-        self._ensure_targetable(ctx, member)
+        if not await self._ensure_targetable(ctx, member):
+            return
         if not await self._confirm_if_booster(ctx, member, "tempban"):
             return await ctx.warn("Action cancelled.")
 
@@ -471,7 +480,8 @@ class ModerationCommands(Package):
         duration: str | None = None,
         reason: str | None = None,
     ):
-        self._ensure_targetable(ctx, member)
+        if not await self._ensure_targetable(ctx, member):
+            return
 
         role_key = f"{mute_type}muted_role_id"
         if mute_type == "":
@@ -689,7 +699,8 @@ class ModerationCommands(Package):
         reason: str = None,
     ):
         """softban a member"""
-        self._ensure_targetable(ctx, member)
+        if not await self._ensure_targetable(ctx, member):
+            return
         if not await self._confirm_if_booster(ctx, member, "softban"):
             return await ctx.warn("Action cancelled.")
 
@@ -754,7 +765,8 @@ class ModerationCommands(Package):
         reason: str = None,
     ):
         """Bans the mentioned user"""
-        self._ensure_targetable(ctx, member)
+        if not await self._ensure_targetable(ctx, member):
+            return
         if not await self._confirm_if_booster(ctx, member, "ban"):
             return await ctx.warn("Action cancelled.")
 
@@ -812,7 +824,8 @@ class ModerationCommands(Package):
         reason: str = None,
     ):
         """kick a member"""
-        self._ensure_targetable(ctx, member)
+        if not await self._ensure_targetable(ctx, member):
+            return
         if not await self._confirm_if_booster(ctx, member, "kick"):
             return await ctx.warn("Action cancelled.")
 

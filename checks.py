@@ -536,7 +536,9 @@ async def main():
 
     from ext.moderation.moderation import ModerationCommands
     _orig_ensure = ModerationCommands._ensure_targetable
-    ModerationCommands._ensure_targetable = lambda self, ctx, member: None
+    async def _mock_ensure(self, ctx, member):
+        return True
+    ModerationCommands._ensure_targetable = _mock_ensure
     _orig_dispatch = ModerationCommands._dispatch_antinuke_action
     ModerationCommands._dispatch_antinuke_action = lambda self, ctx, **kw: None
 
