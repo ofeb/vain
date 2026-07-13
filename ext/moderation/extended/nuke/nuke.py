@@ -37,41 +37,63 @@ class Nuke(Package):
         await new_channel.send(content="first")
 
     async def update_channels(self, old: TextChannel, new: TextChannel) -> None:
-        old_channel_id = old.id
-        new_channel_id = new.id
+        old_id = old.id
+        new_id = new.id
         guild_id = old.guild.id
-        exists = await self.db.fetchval(
-            """
-            SELECT guild_id
-            FROM config
-            WHERE jail_channel = $1 OR
-                join_logs = $1 OR
-                mod_logs = $1 OR
-                dj_role = $1 OR
-                premium_role = $1 OR
-                $1 = ANY(staff_roles) OR
-                $1 = ANY(prefixes);
-        """,
-            old_channel_id,
-        )
 
-        if exists:
-            await self.db.execute(
-                """
-                UPDATE config
-                SET jail_channel = CASE WHEN jail_channel = $1 THEN $2 ELSE jail_channel END,
-                    join_logs = CASE WHEN join_logs = $1 THEN $2 ELSE join_logs END,
-                    mod_logs = CASE WHEN mod_logs = $1 THEN $2 ELSE mod_logs END,
-                    dj_role = CASE WHEN dj_role = $1 THEN $2 ELSE dj_role END,
-                    premium_role = CASE WHEN premium_role = $1 THEN $2 ELSE premium_role END,
-                    staff_roles = ARRAY(SELECT CASE WHEN role = $1 THEN $2 ELSE role END FROM unnest(staff_roles) AS role),
-                    prefixes = ARRAY(SELECT CASE WHEN prefix = $1 THEN $2 ELSE prefix END FROM unnest(prefixes) AS prefix)
-                WHERE guild_id = $3;
-            """,
-                old_channel_id,
-                new_channel_id,
-                guild_id,
-            )
+        # Each statement: (table, column, is_array)
+        # Only single-ID columns that belong to this guild are updated
+        tables = [
+            ("guilds", "welcome_channel_id", False),
+            ("guilds", "leave_channel_id", False),
+            ("guilds", "boost_channel_id", False),
+            ("server_settings", "jail_channel_id", False),
+            ("server_settings", "jail_message_channel_id", False),
+            ("server_settings", "joinlog_channel_id", False),
+            ("log_config", "channel_id", False),
+            ("log_config", "ignored_channels", True),
+            ("modlog_config", "channel_id", False),
+            ("moderation_config", "log_channel", False),
+            ("roleplay_config", "action_channel", False),
+            ("information_config", "info_channel", False),
+            ("join_messages", "channel_id", False),
+            ("leave_messages", "channel_id", False),
+            ("boost_messages", "channel_id", False),
+            ("suggest_settings", "channel_id", False),
+            ("suggest_settings", "review_channel_id", False),
+            ("birthday_notifications", "channel_id", False),
+            ("bump_reminder", "channel_id", False),
+            ("counters", "channel_id", False),
+            ("clownboard", "channel_id", False),
+            ("starboard", "channel_id", False),
+            ("button_roles", "channel_id", False),
+            ("giveaways", "channel_id", False),
+            ("ticket_settings", "log_channel_id", False),
+            ("ticket_settings", "transcript_channel_id", False),
+            ("ticket_panels", "channel_id", False),
+            ("tictactoe_channel", "channel_id", False),
+            ("disabled_events", "channel_ids", True),
+            ("disabled_modules", "channel_ids", True),
+            ("auto_responders", "allowed_channel_ids", True),
+            ("auto_responders", "denied_channel_ids", True),
+            ("trackers", "channel_ids", True),
+        ]
+
+        for table, column, is_array in tables:
+            if is_array:
+                await self.db.execute(
+                    f"UPDATE {table} SET {column} = array_replace({column}, $1, $2) WHERE guild_id = $3 AND $1 = ANY({column})",
+                    old_id,
+                    new_id,
+                    guild_id,
+                )
+            else:
+                await self.db.execute(
+                    f"UPDATE {table} SET {column} = $2 WHERE guild_id = $3 AND {column} = $1",
+                    old_id,
+                    new_id,
+                    guild_id,
+                )
 
     @nuke.command(
         name="list",
