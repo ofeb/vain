@@ -220,17 +220,22 @@ class Log(LogEvents, Package):
             else:
                 events = [event]
 
+        failed = 0
         for evt in events:
-            with contextlib.suppress(Exception):
+            try:
                 await self.db.execute(
                     """INSERT INTO log_config (guild_id, channel_id, events, silent_events)
-                       VALUES ($1, $2, ARRAY[$3], ARRAY[$3])
+                       VALUES ($1, $2, ARRAY[$3], ARRAY[]::TEXT[])
                        ON CONFLICT (guild_id, channel_id) DO UPDATE
-                       SET events = array_append(log_config.events, $3),
-                           silent_events = array_append(log_config.silent_events, $3)
+                       SET events = array_append(log_config.events, $3)
                        WHERE NOT (log_config.events @> ARRAY[$3])""",
                     ctx.guild.id, channel.id, evt,
                 )
+            except Exception:
+                failed += 1
+
+        if failed:
+            return await ctx.warn(f"Failed to add {failed} event(s) — check database connection")
 
         label = "all events" if len(events) > 1 else f"`{events[0]}`"
         return await ctx.success(f"Event {label} will be **logged** in {channel.mention}")
@@ -255,7 +260,10 @@ class Log(LogEvents, Package):
             return await ctx.warn(f"Invalid event type. Valid: {', '.join(f'`{e}`' for e in EVENT_TYPES)}")
 
         await self.db.execute(
-            "UPDATE log_config SET events = array_remove(events, $1) WHERE guild_id = $2 AND channel_id = $3",
+            """UPDATE log_config
+               SET events = array_remove(events, $1),
+                   silent_events = array_remove(silent_events, $1)
+               WHERE guild_id = $2 AND channel_id = $3""",
             event, ctx.guild.id, channel.id,
         )
         return await ctx.success(f"No longer **logging** event `{event}` to {channel.mention}")
@@ -266,9 +274,20 @@ class Log(LogEvents, Package):
     )
     @has_permissions(manage_guild=True)
     async def log_silent(
-        self, ctx: Context, channel: discord.TextChannel, event: str = None, *, state: str = None
+        self, ctx: Context, channel: discord.TextChannel, *, args: str = None
     ) -> None:
-        if state is None or state.lower() not in ("on", "off", "enable", "disable", "true", "false", "yes", "no"):
+        if not args:
+            return await ctx.warn("Usage: `,log silent #channel [event/all] on/off`")
+
+        parts = args.strip().split()
+        if len(parts) == 1:
+            event, state = None, parts[0]
+        elif len(parts) == 2:
+            event, state = parts[0], parts[1]
+        else:
+            return await ctx.warn("Usage: `,log silent #channel [event/all] on/off`")
+
+        if state.lower() not in ("on", "off", "enable", "disable", "true", "false", "yes", "no"):
             return await ctx.warn("Usage: `,log silent #channel [event/all] on/off`")
 
         toggle = state.lower() in ("on", "enable", "true", "yes")
