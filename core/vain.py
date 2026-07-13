@@ -38,7 +38,7 @@ _SKIP_DIRS = frozenset({"models", "__pycache__"})
 def _has_setup_entry(path: Path) -> bool:
     target = path / "__init__.py" if path.is_dir() else path
     try:
-        source = target.read_text(encoding="utf-8")
+        source = target.read_text(encoding="utf-8-sig")
     except OSError:
         return False
     try:

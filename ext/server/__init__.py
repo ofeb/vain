@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from asyncio import Lock
 from collections import defaultdict

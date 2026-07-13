@@ -24,7 +24,7 @@ EVENT_TYPES = {
     "roles": "Role create/delete/update logging",
     "invites": "Invite create/delete logging",
     "emojis": "Emoji/sticker create/delete/update logging",
-    "voice": "Voice channel join/leave/move/mute/deafen logging",
+    "voice": "Voice channel join/leave/mute/deafen logging",
 }
 
 PERMISSION_NAMES = {
@@ -76,54 +76,6 @@ PERMISSION_NAMES = {
     "create_expressions": "Create Expressions",
     "send_voice_messages": "Send Voice Messages",
 }
-
-
-def _channel_type_label(channel: discord.abc.GuildChannel) -> str:
-    if isinstance(channel, discord.VoiceChannel):
-        return "Voice channel"
-    if isinstance(channel, discord.TextChannel):
-        return "Text channel"
-    if isinstance(channel, discord.CategoryChannel):
-        return "Category channel"
-    if isinstance(channel, discord.ForumChannel):
-        return "Forum channel"
-    if isinstance(channel, discord.StageChannel):
-        return "Stage channel"
-    return str(channel.type).replace("_", " ").title() + " channel"
-
-
-async def _get_audit_entry(
-    guild: discord.Guild,
-    action: discord.AuditLogAction,
-    target_id: int = None,
-    *,
-    limit: int = 5,
-) -> Optional[discord.AuditLogEntry]:
-    try:
-        async for entry in guild.audit_logs(limit=limit, action=action):
-            if target_id is None or (entry.target and entry.target.id == target_id):
-                if (discord.utils.utcnow() - entry.created_at).total_seconds() < 10:
-                    return entry
-    except (discord.Forbidden, discord.HTTPException):
-        pass
-    return None
-
-
-def _format_overwrite_changes(
-    old: Optional[discord.PermissionOverwrite],
-    new: Optional[discord.PermissionOverwrite],
-) -> list[str]:
-    old = old or discord.PermissionOverwrite()
-    new = new or discord.PermissionOverwrite()
-    changes = []
-    for name, label in PERMISSION_NAMES.items():
-        old_val = getattr(old, name, None)
-        new_val = getattr(new, name, None)
-        if old_val != new_val:
-            old_str = str(old_val) if old_val is not None else "inherit"
-            new_str = str(new_val) if new_val is not None else "inherit"
-            changes.append(f"**{label}**: `{old_str}` -> `{new_str}`")
-    return changes
 
 
 class Log(LogEvents, Package):
@@ -216,9 +168,6 @@ class Log(LogEvents, Package):
         except Exception:
             pass
 
-
-async def setup(bot: Vain):
-    await bot.add_cog(Log(bot))
     @group(
         name="log",
         description="Set up logging for your community",
@@ -450,3 +399,6 @@ async def setup(bot: Vain):
             numbered,
         )
 
+
+async def setup(bot: Vain):
+    await bot.add_cog(Log(bot))

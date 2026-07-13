@@ -33,9 +33,9 @@ class bot:
 
 
 class emojis:
-    approve: str = default_emoji("approve", "<:approve:1525918671774679261>")
-    warn: str = default_emoji("warn", "<:warn:1525918556435255336>")
-    deny: str = default_emoji("deny", "<:deny:1525923852515803187>")
+    approve: str = default_emoji("approve", "<:approve_new:1526186163457490974>")
+    warn: str = default_emoji("warn", "<:warning:1526186228561477642>")
+    deny: str = default_emoji("deny", "<:deny:1526186193971052634>")
     loading: str = default_emoji("loading", "<a:embeds_loading:1511705994823077988>")
     cooldown: str = default_emoji("cooldown", "<:cooldown:1525919040776835075>")
     add: str = "<:embeds_add:1511705992469942292>"

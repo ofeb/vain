@@ -1,5 +1,7 @@
 ﻿from __future__ import annotations
 
+import contextlib
+import uuid
 from io import BytesIO
 from typing import TYPE_CHECKING, Optional
 
@@ -27,7 +29,7 @@ ACTION_MAP = {
     "kick": "**kicks** {}",
     "punch": "**punches** {}",
     "headpat": "**headpats** {}",
-    "tickle": "**tickle** {}",
+    "tickle": "**tickles** {}",
     "highfive": "**highfives** {}",
     "shrug": "**shrugs** {}",
     "wave": "**waves** {}",
@@ -94,6 +96,92 @@ ACTION_MAP = {
 ROLEPLAY_ACTIONS: tuple[str, ...] = tuple(ACTION_MAP.keys())
 PREFIX_ACTION_SKIP: frozenset[str] = frozenset({"kick", "roll"})
 
+BACK_ACTIONS: frozenset[str] = frozenset({
+    "punch", "slap", "kick", "pat", "hug", "kiss",
+    "bite", "poke", "smack", "pinch",
+})
+
+PAST_TENSE: dict[str, str] = {
+    "punch": "Punched",
+    "slap": "Slapped",
+    "kick": "Kicked",
+    "pat": "Patted",
+    "hug": "Hugged",
+    "kiss": "Kissed",
+    "bite": "Bit",
+    "poke": "Poked",
+    "smack": "Smacked",
+    "pinch": "Pinched",
+}
+
+
+class RoleplayBackView(discord.ui.View):
+    def __init__(self, action: str, original_author_id: int, target_id: int):
+        super().__init__(timeout=300)
+        self.action = action
+        self.original_author_id = original_author_id
+        self.target_id = target_id
+
+        btn = discord.ui.Button(
+            label=f"{action.title()} back",
+            style=discord.ButtonStyle.secondary,
+        )
+        btn.callback = self._back_callback
+        self.add_item(btn)
+
+    async def _back_callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.target_id:
+            return await interaction.response.send_message(
+                "Only the target can use this button!", ephemeral=True
+            )
+
+        for item in self.children:
+            item.disabled = True
+            item.label = f"{PAST_TENSE.get(self.action, self.action.title())} back"
+        await interaction.response.edit_message(view=self)
+
+        gif_bytes = await fetch_action_gif(self.action)
+        attachment = discord.File(BytesIO(gif_bytes), filename="action.gif")
+
+        bot = interaction.client
+        target_user = await bot.fetch_user(self.original_author_id)
+        mention = target_user.mention
+
+        total = await bot.db.fetchval(
+            """
+            INSERT INTO roleplay.actions (action, giver, receiver, amount)
+                VALUES ($1, $2, $3, 1)
+            ON CONFLICT (action, giver, receiver)
+                DO UPDATE SET amount = roleplay.actions.amount + 1
+            RETURNING amount
+            """,
+            self.action,
+            interaction.user.id,
+            self.original_author_id,
+            cached=False,
+        )
+
+        embed = discord.Embed(
+            color=bot.color,
+            description=(
+                f"{interaction.user.mention} {ACTION_MAP[self.action].format(mention)} "
+                f"for the **{ordinal(total)}** time!"
+            ),
+        )
+        embed.set_image(url="attachment://action.gif")
+
+        await interaction.followup.send(
+            file=attachment, embed=embed,
+            reference=interaction.message,
+        )
+
+    async def on_timeout(self):
+        for item in self.children:
+            item.disabled = True
+        if self.message:
+            with contextlib.suppress(discord.HTTPException):
+                await self.message.edit(view=self)
+
 
 class RoleplayCommands(Package):
     """Themed member-to-member reaction commands."""
@@ -130,10 +218,7 @@ class RoleplayCommands(Package):
         gif_bytes = await fetch_action_gif(action)
         attachment = discord.File(BytesIO(gif_bytes), filename="action.gif")
 
-        if ctx.guild is not None:
-            total = await self._record(action, ctx.author.id, target.id)
-        else:
-            total = 1
+        total = await self._record(action, ctx.author.id, target.id)
         mention = target.mention if target != ctx.author else "themselves"
 
         embed = discord.Embed(
@@ -144,7 +229,12 @@ class RoleplayCommands(Package):
             ),
         )
         embed.set_image(url="attachment://action.gif")
-        return await ctx.send(file=attachment, embed=embed)
+
+        view = None
+        if action in BACK_ACTIONS and target != ctx.author:
+            view = RoleplayBackView(action, ctx.author.id, target.id)
+
+        return await ctx.send(file=attachment, embed=embed, view=view)
 
     @hybrid(
         name="roleplay",
