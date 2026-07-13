@@ -108,7 +108,7 @@ PREFIX_ACTION_SKIP: frozenset[str] = frozenset({"kick", "roll"})
 
 BACK_ACTIONS: frozenset[str] = frozenset({
     "punch", "slap", "kick", "pat", "hug", "kiss",
-    "bite", "poke", "smack", "pinch",
+    "bite", "poke", "smack", "pinch", "tickle",
 })
 
 PAST_TENSE: dict[str, str] = {
@@ -122,6 +122,7 @@ PAST_TENSE: dict[str, str] = {
     "poke": "Poked",
     "smack": "Smacked",
     "pinch": "Pinched",
+    "tickle": "Tickled",
 }
 
 
