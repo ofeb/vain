@@ -1021,7 +1021,6 @@ CREATE TABLE IF NOT EXISTS log_config (
     guild_id BIGINT NOT NULL,
     channel_id BIGINT NOT NULL,
     events TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
-    silent_events TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
     color VARCHAR(7),
     ignored_channels BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
