@@ -23,8 +23,8 @@ class InviteTracker(Package):
             return {
                 "enabled": False,
                 "channel_id": None,
-                "message": "{inviter} invited {invitee}. They have **{invites}** {invite_word}.",
-                "leave_message": "{invitee} left. {inviter} now has **{invites}** {invite_word}.",
+                "message": "{inviter.mention} invited {invitee.mention}. They have **{invites}** {invite_word}.",
+                "leave_message": "{invitee.mention} left. {inviter.mention} now has **{invites}** {invite_word}.",
                 "fake_remove": True,
             }
         return dict(row)

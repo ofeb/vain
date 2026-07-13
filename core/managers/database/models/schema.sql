@@ -1246,8 +1246,8 @@ CREATE TABLE IF NOT EXISTS invite_config (
     guild_id BIGINT PRIMARY KEY,
     enabled BOOLEAN NOT NULL DEFAULT FALSE,
     channel_id BIGINT,
-    message TEXT NOT NULL DEFAULT '{inviter} invited {invitee}. They have **{invites}** invites.',
-    leave_message TEXT NOT NULL DEFAULT '{invitee} left. {inviter} now has **{invites}** invites.',
+    message TEXT NOT NULL DEFAULT '{inviter.mention} invited {invitee.mention}. They have **{invites}** {invite_word}.',
+    leave_message TEXT NOT NULL DEFAULT '{invitee.mention} left. {inviter.mention} now has **{invites}** {invite_word}.',
     fake_remove BOOLEAN NOT NULL DEFAULT TRUE
 );
 
