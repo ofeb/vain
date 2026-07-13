@@ -100,24 +100,36 @@ class InformationCommands(Package):
         guild = inv.guild
         channel = inv.channel
         embed = discord.Embed(
-            title=f"Invite — {guild.name if guild else 'Unknown'}",
-            color=color.base,
+            color=0xFFFFFF,
         )
-        if guild and guild.icon:
-            embed.set_thumbnail(url=guild.icon.url)
-        embed.add_field(name="Code", value=f"`{inv.code}`", inline=True)
-        embed.add_field(name="Uses", value=str(inv.uses or 0), inline=True)
-        embed.add_field(name="Max Uses", value=str(inv.max_uses) if inv.max_uses else "Unlimited", inline=True)
-        embed.add_field(name="Temporary", value="Yes" if inv.temporary else "No", inline=True)
-        embed.add_field(name="Expires", value=discord.utils.format_dt(inv.expires_at, style="R") if inv.expires_at else "Never", inline=True)
         if guild:
-            embed.add_field(name="Members", value=str(inv.approximate_member_count or guild.member_count or "?"), inline=True)
-            embed.add_field(name="Online", value=str(inv.approximate_presence_count or "?"), inline=True)
-        if channel:
-            embed.add_field(name="Channel", value=f"#{channel.name}", inline=True)
-        if inv.inviter:
-            embed.add_field(name="Inviter", value=str(inv.inviter), inline=True)
-        embed.add_field(name="URL", value=f"https://discord.gg/{inv.code}", inline=False)
+            embed.set_author(name=guild.name, icon_url=guild.icon.url if guild.icon else None)
+            if guild.icon:
+                embed.set_thumbnail(url=guild.icon.url)
+            if hasattr(guild, "banner") and guild.banner:
+                embed.set_image(url=guild.url)
+
+        created = discord.utils.format_dt(inv.created_at, style="D") if inv.created_at else "Unknown"
+        created_r = f" ({discord.utils.format_dt(inv.created_at, style='R')})" if inv.created_at else ""
+        embed.add_field(
+            name="Created",
+            value=f">>> {created}{created_r}",
+            inline=False,
+        )
+        expires = discord.utils.format_dt(inv.expires_at, style="R") if inv.expires_at else "Never"
+        inv_url = f"[{inv.code}](https://discord.gg/{inv.code})"
+        embed.add_field(
+            name="Invite",
+            value=f">>> Code: {inv_url}\nExpires: {expires}",
+            inline=True,
+        )
+        member_count = inv.approximate_member_count or (guild.member_count if guild else "?")
+        online_count = inv.approximate_presence_count or "?"
+        embed.add_field(
+            name="Server",
+            value=f">>> Members: `{member_count:,}`\nOnline: `{online_count:,}`",
+            inline=True,
+        )
         await ctx.send(embed=embed)
 
     @hybrid(

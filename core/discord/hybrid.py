@@ -110,10 +110,10 @@ def _wrap_callback(
     if guilds and not dms and not groupchats:
         fn = commands.guild_only()(fn)
 
-    _commands = commands
+    fn.__globals__["_vain_commands"] = commands
 
     async def _temp(*args: Any, **kwargs: Any):
-        ctx = next((a for a in args if isinstance(a, _commands.Context)), None)
+        ctx = next((a for a in args if isinstance(a, _vain_commands.Context)), None)
         if ctx is not None and getattr(ctx, "interaction", None) is not None:
             inter = ctx.interaction
             if not inter.response.is_done():

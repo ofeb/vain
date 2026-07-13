@@ -203,21 +203,96 @@ class ServerCommands(Package):
         """show server info"""
         g = ctx.guild
         e = discord.Embed(title=g.name, color=self.color)
-        e.set_thumbnail(url=g.icon.url if g.icon else None)
-        e.add_field(name="Owner", value=str(g.owner), inline=True)
-        e.add_field(name="Members", value=f"{g.member_count:,}", inline=True)
-        e.add_field(name="Channels", value=str(len(g.channels)), inline=True)
-        e.add_field(name="Text Channels", value=str(len(g.text_channels)), inline=True)
-        e.add_field(name="Voice Channels", value=str(len(g.voice_channels)), inline=True)
-        e.add_field(name="Roles", value=str(len(g.roles)), inline=True)
-        e.add_field(name="Emojis", value=str(len(g.emojis)), inline=True)
-        e.add_field(name="Boosts", value=str(g.premium_subscription_count or 0), inline=True)
-        e.add_field(name="Boost Tier", value=str(g.premium_tier), inline=True)
-        e.add_field(name="Verification", value=str(g.verification_level).replace("_", " ").title(), inline=True)
-        e.add_field(name="Created", value=discord.utils.format_dt(g.created_at, style="R"), inline=True)
-        e.add_field(name="ID", value=str(g.id), inline=True)
+
+        if g.icon:
+            e.set_thumbnail(url=g.icon.url)
+
         if g.banner:
             e.set_image(url=g.banner.url)
+
+        owner = g.owner
+        owner_text = f"{owner} — {owner.id}" if owner else "Unknown"
+        owner_icon = owner.display_avatar.url if owner else None
+        e.set_author(name=f"owned by {owner_text}", icon_url=owner_icon)
+
+        humans = sum(1 for m in g.members if not m.bot)
+        bots = sum(1 for m in g.members if m.bot)
+
+        categories = len(g.categories)
+        text_channels = len(g.text_channels)
+        voice_channels = len(g.voice_channels)
+        total_channels = categories + text_channels + voice_channels
+
+        role_limit = 250
+        emoji_limit = g.emoji_limit or 50
+        sticker_limit = getattr(g, "sticker_limit", 5) or 5
+
+        boosters = getattr(g, "premium_subscribers", None) or []
+        booster_count = len(boosters)
+
+        features = g.features or []
+        shown = features[:6]
+        extra = len(features) - len(shown)
+        features_str = ", ".join(f.replace("_", " ").title() for f in shown)
+        if extra > 0:
+            features_str += f" **+ {extra}** more"
+
+        vanity = "N/A"
+        if "VANITY_URL" in features:
+            try:
+                vinv = await g.vanity_invite()
+                vanity = vinv.code
+            except Exception:
+                vanity = "N/A"
+
+        mfa = "Require_2fa" if g.mfa_level else "None"
+
+        e.add_field(
+            name=f"Members ({g.member_count})",
+            value=f">>> Boosters: `{booster_count}`\nHumans: `{humans}`\nBots: `{bots}`",
+            inline=True,
+        )
+        e.add_field(
+            name=f"Counts ({total_channels})",
+            value=f">>> Stickers: `{len(g.stickers)}/{sticker_limit}`\nEmojis: `{len(g.emojis)}/{emoji_limit}`\nRoles: `{len(g.roles)}/{role_limit}`",
+            inline=True,
+        )
+        e.add_field(
+            name=f"Channels ({total_channels})",
+            value=f">>> Categories: `{categories}`\nText: `{text_channels}`\nVoice: `{voice_channels}`",
+            inline=True,
+        )
+        e.add_field(
+            name="Boosts",
+            value=f">>> Level: `{g.premium_tier}`\nBoosts: `{g.premium_subscription_count or 0}`\nBoosters: `{booster_count}`",
+            inline=True,
+        )
+
+        icon_url = f"[view]({g.icon.url})" if g.icon else "`none`"
+        banner_url = "`none`"
+        splash_url = "`none`"
+        if hasattr(g, "banner") and g.banner:
+            banner_url = f"[view]({g.banner.url})"
+        if hasattr(g, "splash") and g.splash:
+            splash_url = f"[view]({g.splash.url})"
+        e.add_field(
+            name="Design",
+            value=f">>> Icon: {icon_url}\nBanner: {banner_url}\nSplash: {splash_url}",
+            inline=True,
+        )
+        e.add_field(
+            name="System",
+            value=f">>> Verification: `{str(g.verification_level).replace('_', ' ').title()}`\nMfa level: `{mfa}`\nVanity: `{vanity}`",
+            inline=True,
+        )
+        if features_str:
+            e.add_field(
+                name=f"Features ({len(features)})",
+                value=f">>> {features_str}",
+                inline=False,
+            )
+
+        e.set_footer(text=f"ID: {g.id} • Shard {g.shard_id if g.shard_id is not None else 0} • Cluster ID {getattr(g, 'cluster_id', 'N/A')}")
         await ctx.send(embed=e)
 
     @command(

@@ -266,14 +266,31 @@ class Miscellaneous(MiscellaneousEvents, Package):
         user = user or ctx.author
         roles = [r.mention for r in user.roles if r != ctx.guild.default_role]
         embed = discord.Embed(
-            title=f"User Info — {user.display_name}",
-            color=color.base,
+            color=user.color if user.color.value else color.base,
+        )
+        embed.set_author(
+            name=f"{user.display_name} ({user})",
+            icon_url=user.display_avatar.url,
         )
         embed.set_thumbnail(url=user.display_avatar.url)
-        embed.add_field(name="ID", value=user.id, inline=True)
-        embed.add_field(name="Joined", value=discord.utils.format_dt(user.joined_at, style="R"), inline=True)
-        embed.add_field(name="Registered", value=discord.utils.format_dt(user.created_at, style="R"), inline=True)
-        embed.add_field(name="Roles", value=" ".join(roles[:5]) if roles else "None", inline=False)
+        embed.add_field(
+            name="Created",
+            value=f">>> {discord.utils.format_dt(user.created_at, style='D')} ({discord.utils.format_dt(user.created_at, style='R')})",
+            inline=True,
+        )
+        joined = getattr(user, "joined_at", None)
+        if joined:
+            embed.add_field(
+                name="Joined",
+                value=f">>> {discord.utils.format_dt(joined, style='D')} ({discord.utils.format_dt(joined, style='R')})",
+                inline=False,
+            )
+        embed.add_field(
+            name=f"Roles ({len(roles)})",
+            value=" ".join(roles[:20]) if roles else "None",
+            inline=True,
+        )
+        embed.set_footer(text=f"ID: {user.id}")
         await ctx.send(embed=embed)
 
     @hybrid(
