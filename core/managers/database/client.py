@@ -138,8 +138,23 @@ class Database:
             await self.execute("CREATE EXTENSION IF NOT EXISTS timescaledb;")
         except Exception as e:
             log.warning(f"timescaledb not available: {e}")
+        await self._run_schema()
         log.info("postgres pool ready")
         return self.pool
+
+    async def _run_schema(self) -> None:
+        """Execute schema.sql to create/update all tables."""
+        schema_path = Path(__file__).parent / "models" / "schema.sql"
+        if not schema_path.exists():
+            log.warning("schema.sql not found at %s", schema_path)
+            return
+        try:
+            sql = schema_path.read_text(encoding="utf-8")
+            async with self.pool.acquire() as conn:
+                await conn.execute(sql)
+            log.info("schema.sql applied successfully")
+        except Exception as e:
+            log.error("Failed to apply schema.sql: %s", e)
 
     async def close(self) -> None:
         """close pool connection"""
