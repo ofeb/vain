@@ -474,7 +474,9 @@ async def main():
 
     for cat_name in list(cats.keys())[:5]:
         try:
-            view.cat_embed(cat_name)
+            import asyncio
+            coro = view.cat_embed(cat_name)
+            comps = asyncio.get_event_loop().run_until_complete(coro) if asyncio.iscoroutine(coro) else coro
             ok(f"cat_embed({cat_name}) rendered")
         except Exception as e:
             fail(f"cat_embed({cat_name}) crashed: {e}")

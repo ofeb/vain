@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import asyncio
 from io import BytesIO
 
 import aiohttp
-from PIL import Image
+from colorthief import ColorThief
 
 
 async def get_dominant_color(source) -> str | None:
+    """Fetch image and return dominant color as hex using colorthief (for all dominants)."""
     if source is None:
         return None
 
@@ -19,12 +21,22 @@ async def get_dominant_color(source) -> str | None:
         return None
 
     try:
-        async with aiohttp.ClientSession() as session, session.get(url) as response:
-            if response.status != 200:
-                return None
-            buffer = BytesIO(await response.read())
-        with Image.open(buffer).convert("RGB").resize((1, 1)) as image:
-            red, green, blue = image.getpixel((0, 0))
-            return f"#{red:02x}{green:02x}{blue:02x}"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=8) as response:
+                if response.status != 200:
+                    return None
+                data = await response.read()
+
+        def _extract():
+            ct = ColorThief(BytesIO(data))
+            r, g, b = ct.get_color(quality=1)
+            # brighten very dark results slightly
+            if (r + g + b) < 80:
+                r = min(r + 60, 255)
+                g = min(g + 60, 255)
+                b = min(b + 60, 255)
+            return f"#{r:02x}{g:02x}{b:02x}"
+
+        return await asyncio.to_thread(_extract)
     except Exception:
         return None

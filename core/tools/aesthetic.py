@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-import io
 
-import discord
-from PIL import Image
 import aiohttp
+import discord
+from colorthief import ColorThief
+from io import BytesIO
 
 
 def body(*lines: str) -> str:
@@ -91,8 +91,8 @@ def reply_embed(
     return aesthetic_embed(color=color, message=message, footer=subtitle, timestamp=False)
 
 
-async def get_dominant_color(url: str, fallback: int = 0x2b2d31) -> int:
-    """Fetch image and return a nice dominant color (not too dark/light)."""
+async def get_dominant_color(url: str, fallback: int = 0x2A2B2F) -> int:
+    """Fetch image and return dominant color using colorthief."""
     if not url:
         return fallback
     try:
@@ -101,26 +101,25 @@ async def get_dominant_color(url: str, fallback: int = 0x2b2d31) -> int:
                 if resp.status != 200:
                     return fallback
                 data = await resp.read()
-        img = Image.open(io.BytesIO(data)).convert("RGB")
-        img = img.resize((100, 100))  
-        pixels = list(img.getdata())
-        
-        color_count = {}
-        for p in pixels:
-            color_count[p] = color_count.get(p, 0) + 1
-        dominant = max(color_count, key=color_count.get)
-        r, g, b = dominant
-        
-        if (r + g + b) < 80:
-            r, g, b = min(r + 60, 255), min(g + 60, 255), min(b + 60, 255)
-        return (r << 16) + (g << 8) + b
+
+        def _extract():
+            ct = ColorThief(BytesIO(data))
+            r, g, b = ct.get_color(quality=1)
+            # brighten very dark colors a bit (kept from previous logic)
+            if (r + g + b) < 80:
+                r = min(r + 60, 255)
+                g = min(g + 60, 255)
+                b = min(b + 60, 255)
+            return (r << 16) + (g << 8) + b
+
+        return await asyncio.to_thread(_extract)
     except Exception:
         return fallback
 
 async def get_bot_dominant_color(bot) -> int:
     if bot.user and bot.user.display_avatar:
         return await get_dominant_color(str(bot.user.display_avatar.url))
-    return 0x5865f2  
+    return 0x2A2B2F
 
 
 def build_repost_container(

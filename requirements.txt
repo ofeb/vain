@@ -1,6 +1,7 @@
 discord.py>=2.4.0
 jishaku
 aiohttp
+colorthief
 async-timeout
 asyncpg
 fast-string-match

@@ -11,6 +11,7 @@ class Lockdown(Package):
 
     @group(
         name="lockdown",
+        aliases=["ld", "lock"],
         description="Lockdown a channel",
         invoke_without_command=True,
         example=",lockdown #general spam raid",
@@ -168,18 +169,19 @@ class Lockdown(Package):
         )
 
     @group(
-        name="unlock",
+        name="unlockdown",
+        aliases=["uld", "unlock"],
         description="Unlock a locked channel",
         invoke_without_command=True,
-        example=",unlock #general",
+        example=",unlockdown #general",
     )
     @has_permissions(manage_channels=True)
-    async def unlock(self, ctx, channel: TextChannel, *, reason: str = "No reason provided"):
-        """unlock a channel"""
+    async def unlockdown(self, ctx, channel: TextChannel, *, reason: str = "No reason provided"):
+        """unlockdown a channel"""
         everyone = ctx.guild.default_role
         overwrite = channel.overwrites_for(everyone)
         overwrite.send_messages = None
-        await channel.set_permissions(everyone, overwrite=overwrite, reason=f"Unlock by {ctx.author}: {reason}")
+        await channel.set_permissions(everyone, overwrite=overwrite, reason=f"Unlocked by {ctx.author}: {reason}")
 
         await self.db.execute(
             """DELETE FROM lockdowns WHERE guild_id = $1 AND channel_id = $2""",
@@ -188,13 +190,13 @@ class Lockdown(Package):
 
         return await ctx.success(f"{channel.mention} has been **unlocked** — {reason}")
 
-    @unlock.command(
+    @unlockdown.command(
         name="all",
         description="Unlocks all locked channels",
-        example=",unlock all",
+        example=",unlockdown all",
     )
     @has_permissions(manage_guild=True)
-    async def unlock_all(self, ctx, *, reason: str = "No reason provided"):
+    async def unlockdown_all(self, ctx, *, reason: str = "No reason provided"):
         """unlock all channels"""
         everyone = ctx.guild.default_role
         unlocked = []
@@ -205,7 +207,7 @@ class Lockdown(Package):
             overwrite = channel.overwrites_for(everyone)
             if overwrite.send_messages is False:
                 overwrite.send_messages = None
-                await channel.set_permissions(everyone, overwrite=overwrite, reason=f"Unlock all by {ctx.author}: {reason}")
+                await channel.set_permissions(everyone, overwrite=overwrite, reason=f"Unlock all channels by {ctx.author}: {reason}")
                 unlocked.append(channel.mention)
 
         await self.db.execute(
