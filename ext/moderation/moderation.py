@@ -2246,51 +2246,6 @@ class ModerationCommands(Package):
         )
         await ctx.send(embed=embed)
 
-    @command(
-        name="unlock",
-        description="Unlock a channel",
-    )
-    @has_permissions(manage_channels=True)
-    async def unlock(self, ctx, channel: discord.TextChannel, *, reason: str = "No reason provided"):
-        """unlock a channel"""
-        everyone = ctx.guild.default_role
-        overwrite = channel.overwrites_for(everyone)
-        overwrite.send_messages = None
-        await channel.set_permissions(
-            everyone, overwrite=overwrite, reason=f"Unlock by {ctx.author}: {reason}",
-        )
-        await self.db.execute(
-            "DELETE FROM lockdowns WHERE guild_id = $1 AND channel_id = $2",
-            ctx.guild.id, channel.id,
-        )
-        return await ctx.success(f"{channel.mention} has been **unlocked** — {reason}")
-
-    @command(
-        name="unlock all",
-        description="Unlocks every channel",
-    )
-    @has_permissions(manage_channels=True)
-    async def unlock_all(self, ctx, *, reason: str = "No reason provided"):
-        """unlock all channels"""
-        everyone = ctx.guild.default_role
-        unlocked = 0
-        for channel in ctx.guild.channels:
-            if not isinstance(channel, discord.TextChannel):
-                continue
-            overwrite = channel.overwrites_for(everyone)
-            if overwrite.send_messages is False:
-                overwrite.send_messages = None
-                await channel.set_permissions(
-                    everyone,
-                    overwrite=overwrite,
-                    reason=f"Unlock all by {ctx.author}: {reason}",
-                )
-                unlocked += 1
-        await self.db.execute("DELETE FROM lockdowns WHERE guild_id = $1", ctx.guild.id)
-        if not unlocked:
-            return await ctx.warn("No channels are currently **locked**")
-        return await ctx.success(f"**Unlocked** **{unlocked}** channel(s) — {reason}")
-
     @tasks.loop(seconds=30)
     async def temprole_watcher(self) -> None:
         if getattr(self.db, "pool", None) is None:

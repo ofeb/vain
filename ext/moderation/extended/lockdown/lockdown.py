@@ -10,14 +10,14 @@ class Lockdown(Package):
     """lockdown management"""
 
     @group(
-        name="lockdown",
-        aliases=["ld", "lock"],
+        name="lock",
+        aliases=["ld", "lockdown"],
         description="Lockdown a channel",
         invoke_without_command=True,
-        example=",lockdown #general spam raid",
+        example=",lock #general spam raid",
     )
     @has_permissions(manage_channels=True)
-    async def lockdown(self, ctx, channel: TextChannel, *, reason: str = "No reason provided"):
+    async def lock(self, ctx, channel: TextChannel, *, reason: str = "No reason provided"):
         """lockdown a channel"""
         everyone = ctx.guild.default_role
         overwrite = channel.overwrites_for(everyone)
@@ -33,13 +33,13 @@ class Lockdown(Package):
 
         return await ctx.success(f"{channel.mention} has been **locked** — {reason}")
 
-    @lockdown.command(
+    @lock.command(
         name="all",
         description="Locks all channels",
-        example=",lockdown all raid",
+        example=",lock all raid",
     )
     @has_permissions(manage_guild=True)
-    async def lockdown_all(self, ctx, *, reason: str = "No reason provided"):
+    async def lock_all(self, ctx, *, reason: str = "No reason provided"):
         """lockdown all channels"""
         ignored_rows = await self.db.fetch(
             """SELECT channel_id FROM lockdown_ignore WHERE guild_id = $1""",
@@ -72,13 +72,13 @@ class Lockdown(Package):
 
         return await ctx.success(f"**{len(locked)}** channels locked — {reason}")
 
-    @lockdown.command(
+    @lock.command(
         name="role",
         description="Allow a role to bypass lockdown",
-        example=",lockdown role @Admins",
+        example=",lock role @Admins",
     )
     @has_permissions(manage_guild=True)
-    async def lockdown_role(self, ctx, role):
+    async def lock_role(self, ctx, role):
         """lockdown role"""
         everyone = ctx.guild.default_role
         for channel in ctx.guild.channels:
@@ -92,23 +92,23 @@ class Lockdown(Package):
 
         return await ctx.success(f"{role.mention} can now **speak** in locked channels")
 
-    @lockdown.group(
+    @lock.group(
         name="ignore",
         description="Manage channels ignored from lockdown",
         invoke_without_command=True,
     )
     @has_permissions(manage_guild=True)
-    async def lockdown_ignore(self, ctx):
+    async def lock_ignore(self, ctx):
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    @lockdown_ignore.command(
+    @lock_ignore.command(
         name="add",
         description="Set an ignored lockdown channel",
-        example=",lockdown ignore add #bot-commands",
+        example=",lock ignore add #bot-commands",
     )
     @has_permissions(manage_guild=True)
-    async def lockdown_ignore_add(self, ctx, channel: TextChannel):
+    async def lock_ignore_add(self, ctx, channel: TextChannel):
         """add ignored lockdown channel"""
         existing = await self.db.fetchval(
             """SELECT channel_id FROM lockdown_ignore WHERE guild_id = $1 AND channel_id = $2""",
@@ -123,13 +123,13 @@ class Lockdown(Package):
         )
         return await ctx.success(f"{channel.mention} will be **ignored** during lockdown all")
 
-    @lockdown_ignore.command(
+    @lock_ignore.command(
         name="remove",
         description="Remove an ignored lockdown channel",
-        example=",lockdown ignore remove #bot-commands",
+        example=",lock ignore remove #bot-commands",
     )
     @has_permissions(manage_guild=True)
-    async def lockdown_ignore_remove(self, ctx, channel: TextChannel):
+    async def lock_ignore_remove(self, ctx, channel: TextChannel):
         """remove ignored lockdown channel"""
         deleted = await self.db.execute(
             """DELETE FROM lockdown_ignore WHERE guild_id = $1 AND channel_id = $2""",
@@ -139,13 +139,13 @@ class Lockdown(Package):
             return await ctx.warn(f"{channel.mention} is not **ignored**")
         return await ctx.success(f"{channel.mention} is no longer **ignored** during lockdown all")
 
-    @lockdown_ignore.command(
+    @lock_ignore.command(
         name="list",
         aliases=["ls", "show", "view"],
         description="View all ignored lockdown channels",
     )
     @has_permissions(manage_guild=True)
-    async def lockdown_ignore_list(self, ctx):
+    async def lock_ignore_list(self, ctx):
         """list ignored lockdown channels"""
         rows = await self.db.fetch(
             """SELECT channel_id FROM lockdown_ignore WHERE guild_id = $1""",
@@ -169,15 +169,15 @@ class Lockdown(Package):
         )
 
     @group(
-        name="unlockdown",
-        aliases=["uld"],
+        name="unlock",
+        aliases=["uld", "unlockdown"],
         description="Unlock a locked channel",
         invoke_without_command=True,
-        example=",unlockdown #general",
+        example=",unlock #general",
     )
     @has_permissions(manage_channels=True)
-    async def unlockdown(self, ctx, channel: TextChannel, *, reason: str = "No reason provided"):
-        """unlockdown a channel"""
+    async def unlock(self, ctx, channel: TextChannel, *, reason: str = "No reason provided"):
+        """unlock a channel"""
         everyone = ctx.guild.default_role
         overwrite = channel.overwrites_for(everyone)
         overwrite.send_messages = None
@@ -190,13 +190,13 @@ class Lockdown(Package):
 
         return await ctx.success(f"{channel.mention} has been **unlocked** — {reason}")
 
-    @unlockdown.command(
+    @unlock.command(
         name="all",
         description="Unlocks all locked channels",
-        example=",unlockdown all",
+        example=",unlock all",
     )
     @has_permissions(manage_guild=True)
-    async def unlockdown_all(self, ctx, *, reason: str = "No reason provided"):
+    async def unlock_all(self, ctx, *, reason: str = "No reason provided"):
         """unlock all channels"""
         everyone = ctx.guild.default_role
         unlocked = []

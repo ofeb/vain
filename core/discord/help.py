@@ -830,26 +830,38 @@ class _CategorySelect(ui.Select):
                 home_c = ui.Container(accent_colour=accent)
                 for it in items:
                     home_c.add_item(it)
-                await inter.response.edit_message(components=[home_c], view=self._v)
+                # Edit the existing help message (do not send new)
+                await inter.response.defer()
+                if inter.message:
+                    await inter.message.edit(components=[home_c], view=self._v)
             except Exception:
-                # Always stay in V2 components
-                await inter.response.edit_message(components=[ui.Container().add_item(ui.TextDisplay("Help • Select a category"))], view=self._v)
+                # Always stay in V2 components - edit only
+                await inter.response.defer()
+                if inter.message:
+                    await inter.message.edit(components=[ui.Container().add_item(ui.TextDisplay("Help • Select a category"))], view=self._v)
             return
 
         comps = await self._v.cat_embed(self.values[0])
         try:
-            await inter.response.edit_message(components=comps, view=self._v)
+            # Edit the existing help message (do not send new)
+            await inter.response.defer()
+            if inter.message:
+                await inter.message.edit(components=comps, view=self._v)
         except Exception:
             # Never fall back to content= (avoids "help message edited" and plain text)
-            # Always provide components
+            # Always provide components - edit only
             try:
                 safe = ui.Container(accent_colour=0x2A2B2F)
                 safe.add_item(ui.TextDisplay(f"**{self.values[0]}**"))
                 safe.add_item(ui.Separator(visible=True, spacing=1))
                 safe.add_item(ui.TextDisplay(f"-# Category selected. Use the dropdown or `{prefix}help <command>`."))
-                await inter.response.edit_message(components=[safe], view=self._v)
+                await inter.response.defer()
+                if inter.message:
+                    await inter.message.edit(components=[safe], view=self._v)
             except Exception:
-                await inter.response.edit_message(components=[ui.Container().add_item(ui.TextDisplay("Select a category to browse commands."))], view=self._v)
+                await inter.response.defer()
+                if inter.message:
+                    await inter.message.edit(components=[ui.Container().add_item(ui.TextDisplay("Select a category to browse commands."))], view=self._v)
 
 
 class HelpView(ui.View):
