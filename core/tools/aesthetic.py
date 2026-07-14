@@ -91,7 +91,7 @@ def reply_embed(
     return aesthetic_embed(color=color, message=message, footer=subtitle, timestamp=False)
 
 
-async def get_dominant_color(url: str, fallback: int = 0x2A2B2F) -> int:
+async def get_dominant_color(url: str, fallback: int = 0x5865F2) -> int:
     """Fetch image and return dominant color using colorthief."""
     if not url:
         return fallback
@@ -119,7 +119,7 @@ async def get_dominant_color(url: str, fallback: int = 0x2A2B2F) -> int:
 async def get_bot_dominant_color(bot) -> int:
     if bot.user and bot.user.display_avatar:
         return await get_dominant_color(str(bot.user.display_avatar.url))
-    return 0x2A2B2F
+    return 0x5865F2
 
 
 def build_repost_container(
