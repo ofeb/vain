@@ -10,6 +10,7 @@ from core.discord.package import Package
 from core.discord.ctx import Context
 from core.discord.hybrid import describe, group, hybrid
 from core.managers.values import color, emojis, music_enabled
+from core.tools.aesthetic import aesthetic_embed, panel_embed
 
 from .api import SpotifyUserAPI, redirect_uri
 
@@ -81,12 +82,13 @@ class Spotify(Package):
             return
         tracks = result["tracks"]["items"]
         entries = [_track_line(i, track) for i, track in enumerate(tracks[:5], 1)]
-        embed = discord.Embed(
+        embed = panel_embed(
             title=f"Spotify Search — {query}",
-            description="\n".join(entries),
             color=color.base,
+            lines=entries,
+            footer="Use `spotify login` to control playback",
+            timestamp=False,
         )
-        embed.set_footer(text="Use `spotify login` to control playback")
         await ctx.send(embed=embed)
 
     @spotify.command(name="login", description="Grant Vain access to your Spotify account")
@@ -98,16 +100,19 @@ class Spotify(Package):
             state = self.api.new_state()
             self._login_states[ctx.author.id] = state
             url = self.api.build_login_url(state=state)
-            embed = discord.Embed(
+            embed = panel_embed(
                 title="Spotify Login",
-                description=(
-                    "Authorize Vain to control your Spotify account.\n\n"
-                    f"**1.** [Click here to authorize]({url})\n"
-                    f"**2.** Copy the full redirect URL or authorization code\n"
-                    f"**3.** Run `{ctx.clean_prefix}spotify login <code>`\n\n"
-                    f"Redirect URI: `{redirect_uri()}`"
-                ),
                 color=color.base,
+                lines=[
+                    "Authorize Vain to control your Spotify account.",
+                    "",
+                    f"**1.** [Click here to authorize]({url})",
+                    f"**2.** Copy the full redirect URL or authorization code",
+                    f"**3.** Run `{ctx.clean_prefix}spotify login <code>`",
+                    "",
+                    f"Redirect URI: `{redirect_uri()}`",
+                ],
+                timestamp=False,
             )
             return await ctx.send(embed=embed)
 
@@ -353,10 +358,11 @@ class Spotify(Package):
         if not items:
             return await ctx.warn("No top tracks found.")
         lines = [_track_line(i, track) for i, track in enumerate(items, 1)]
-        embed = discord.Embed(
+        embed = panel_embed(
             title=f"Top Tracks — {duration}",
-            description="\n".join(lines),
             color=color.base,
+            lines=lines,
+            timestamp=False,
         )
         await ctx.send(embed=embed)
 
@@ -379,10 +385,11 @@ class Spotify(Package):
         if not items:
             return await ctx.warn("No top artists found.")
         lines = [f"`{i}.` **{artist['name']}**" for i, artist in enumerate(items, 1)]
-        embed = discord.Embed(
+        embed = panel_embed(
             title=f"Top Artists — {duration}",
-            description="\n".join(lines),
             color=color.base,
+            lines=lines,
+            timestamp=False,
         )
         await ctx.send(embed=embed)
 
@@ -411,7 +418,7 @@ class Spotify(Package):
         for index, device in enumerate(devices, 1):
             active = " (active)" if device.get("is_active") else ""
             lines.append(f"`{index}.` **{device['name']}** — {device.get('type', 'device')}{active}")
-        embed = discord.Embed(title="Spotify Devices", description="\n".join(lines), color=color.base)
+        embed = panel_embed(title="Spotify Devices", color=color.base, lines=lines, timestamp=False)
         await ctx.send(embed=embed)
 
     @spotify_device.command(name="set", description="Switch to a device by position")
@@ -471,10 +478,11 @@ class Spotify(Package):
             await ctx.warn("Could not find that track.")
             return
         artists = ", ".join(a["name"] for a in track["artists"])
-        embed = discord.Embed(
+        embed = panel_embed(
             title=track["name"],
-            description=f"By **{artists}**\nAlbum: {track['album']['name']}",
             color=color.base,
+            lines=[f"By **{artists}**", f"Album: {track['album']['name']}"],
+            timestamp=False,
         )
         embed.add_field(name="Duration", value=_format_ms(track["duration_ms"]), inline=True)
         embed.add_field(name="Popularity", value=f"{track['popularity']}/100", inline=True)
@@ -492,7 +500,12 @@ class Spotify(Package):
             await ctx.warn("Could not find that album.")
             return
         artists = ", ".join(a["name"] for a in album["artists"])
-        embed = discord.Embed(title=album["name"], description=f"By **{artists}**", color=color.base)
+        embed = panel_embed(
+            title=album["name"],
+            color=color.base,
+            lines=[f"By **{artists}**"],
+            timestamp=False,
+        )
         embed.add_field(name="Tracks", value=str(album["total_tracks"]), inline=True)
         embed.add_field(name="Release Date", value=album["release_date"], inline=True)
         embed.add_field(name="Open on Spotify", value=f"[Link]({album['external_urls']['spotify']})", inline=True)
@@ -523,12 +536,14 @@ class Spotify(Package):
             query_value = f"{resolved[0]} {resolved[1]}"
 
         url = f"https://open.spotify.com/search/{quote_plus(query_value)}"
-        embed = discord.Embed(
+        embed = panel_embed(
             title="Spotify album search",
-            description="Open Spotify album results for your query.",
             color=color.base,
+            lines=["Open Spotify album results for your query."],
+            author=ctx.author.display_name,
+            author_icon=ctx.author.display_avatar.url,
+            timestamp=False,
         )
-        embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
         view = discord.ui.View(timeout=None)
         view.add_item(
             discord.ui.Button(style=discord.ButtonStyle.link, emoji="🟢", label="Spotify", url=url)
@@ -558,12 +573,14 @@ class Spotify(Package):
             query_value = f"{resolved[0]} {resolved[1]}"
 
         url = f"https://open.spotify.com/search/{quote_plus(query_value)}"
-        embed = discord.Embed(
+        embed = panel_embed(
             title="Spotify track search",
-            description="Open Spotify track results for your query.",
             color=color.base,
+            lines=["Open Spotify track results for your query."],
+            author=ctx.author.display_name,
+            author_icon=ctx.author.display_avatar.url,
+            timestamp=False,
         )
-        embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
         view = discord.ui.View(timeout=None)
         view.add_item(
             discord.ui.Button(style=discord.ButtonStyle.link, emoji="🟢", label="Spotify", url=url)

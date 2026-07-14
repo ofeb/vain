@@ -7,6 +7,7 @@ import discord
 from discord.ext.commands import Context
 
 from core.managers.values import color, emojis
+from core.tools.aesthetic import reply_embed
 
 Page = Union[discord.Embed, str]
 
@@ -16,9 +17,9 @@ def needs_pagination(pages: list[Page]) -> bool:
 
 
 def _warning_embed(user: discord.abc.User, message: str) -> discord.Embed:
-    return discord.Embed(
+    return reply_embed(
         color=color.warn,
-        description=f"{emojis.warn} {user.mention}: {message}",
+        message=f"{emojis.warn} {user.mention}: {message}",
     )
 
 

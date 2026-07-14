@@ -14,6 +14,7 @@ from core.discord.package import Package
 from lib.classes.embed import Script
 
 from core.managers.permissions import has_permissions
+from core.tools.aesthetic import panel_embed
 SPACE_RE = re.compile(r"\s+")
 DISCORD_NAME_RE = re.compile("discord", re.IGNORECASE)
 CLYDE_NAME_RE = re.compile("clyde", re.IGNORECASE)
@@ -204,8 +205,14 @@ class WebhookCommands(Package):
                 f"`{index:02d}` `{row['identifier']}` **{row['name']}** - {channel_label}{locked}"
             )
 
-        embed = discord.Embed(title="Webhooks", color=self.color)
-        embed.set_author(name=str(ctx.author), icon_url=ctx.author.display_avatar.url)
+        embed = panel_embed(
+            title="Webhooks",
+            color=self.color,
+            author=str(ctx.author),
+            author_icon=ctx.author.display_avatar.url,
+            lines=[],
+            timestamp=False,
+        )
         await ctx.paginate(embed, lines)
 
     @webhook.command(

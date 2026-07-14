@@ -23,3 +23,4 @@ watchfiles
 xxhash
 yt-dlp
 lava-lyra
+discord-chat-exporter

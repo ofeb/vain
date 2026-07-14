@@ -91,6 +91,10 @@ class TicketControlView(discord.ui.View):
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await self.cog.close_ticket(interaction)
 
+    @discord.ui.button(label="Transcript", style=discord.ButtonStyle.secondary, custom_id="ticket:transcript")
+    async def transcript(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await self.cog.transcript_ticket(interaction)
+
     @discord.ui.button(label="Delete", style=discord.ButtonStyle.danger, custom_id="ticket:delete")
     async def delete(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await self.cog.delete_ticket(interaction)

@@ -16,6 +16,7 @@ from core.discord.package import Package
 
 from .events import MiscellaneousEvents
 from core.managers.values import color
+from core.tools.aesthetic import aesthetic_embed, body, caption, compose
 from ..information.lookup import GOOGLE_FOOTER_ICON
 
 if TYPE_CHECKING:
@@ -44,10 +45,11 @@ class Miscellaneous(MiscellaneousEvents, Package):
         delta = now - self.bot.started_at
         hours, remainder = divmod(int(delta.total_seconds()), 3600)
         minutes, seconds = divmod(remainder, 60)
-        embed = discord.Embed(
+        embed = aesthetic_embed(
             title="Uptime",
-            description=f"**{hours}h {minutes}m {seconds}s**",
             color=color.base,
+            message=f"**{hours}h {minutes}m {seconds}s**",
+            timestamp=False,
         )
         await ctx.send(embed=embed)
 
@@ -57,10 +59,11 @@ class Miscellaneous(MiscellaneousEvents, Package):
     )
     async def invite(self, ctx: Context) -> None:
         bot_id = self.bot.user.id if self.bot.user else "0"
-        embed = discord.Embed(
+        embed = aesthetic_embed(
             title="Invite Vain",
-            description="Use the buttons below to invite me or join the support server!",
             color=color.base,
+            message="Use the buttons below to invite me or join the support server!",
+            timestamp=False,
         )
         view = discord.ui.View()
         view.add_item(discord.ui.Button(
@@ -95,10 +98,11 @@ class Miscellaneous(MiscellaneousEvents, Package):
         except Exception:
             pass
 
-        embed = discord.Embed(
+        embed = aesthetic_embed(
             title="AFK",
-            description=f"{ctx.author.mention} is now AFK: **{reason}**",
             color=color.base,
+            message=f"{ctx.author.mention} is now AFK: **{reason}**",
+            timestamp=False,
         )
         await ctx.send(embed=embed)
     @hybrid(
@@ -107,12 +111,13 @@ class Miscellaneous(MiscellaneousEvents, Package):
     )
     @describe(question="The poll question")
     async def poll(self, ctx: Context, *, question: str) -> None:
-        embed = discord.Embed(
+        embed = aesthetic_embed(
             title="Poll",
-            description=question,
             color=color.base,
+            message=question,
+            footer=f"Started by {ctx.author.display_name}",
+            timestamp=False,
         )
-        embed.set_footer(text=f"Started by {ctx.author.display_name}")
         msg = await ctx.send(embed=embed)
         await msg.add_reaction("👍")
         await msg.add_reaction("👎")
@@ -141,9 +146,11 @@ class Miscellaneous(MiscellaneousEvents, Package):
     @describe(user="User whose avatar to view")
     async def avatar(self, ctx: Context, *, user: discord.User = None) -> None:
         user = user or ctx.author
-        embed = discord.Embed(
+        embed = aesthetic_embed(
             title=f"{user.display_name}'s Avatar",
             color=color.base,
+            message="",
+            timestamp=False,
         )
         embed.set_image(url=user.display_avatar.url)
         await ctx.send(embed=embed)
@@ -202,10 +209,12 @@ class Miscellaneous(MiscellaneousEvents, Package):
             lines = [f"`{code}` — {name}" for code, name in sorted(lang_codes.items())]
             embed = discord.Embed(
                 title="Supported Languages",
-                description="\n".join(lines),
                 color=color.base,
+                description=compose(
+                    body(*lines),
+                    caption(f"Use {ctx.clean_prefix}translate <language> <text> to translate"),
+                ),
             )
-            embed.set_footer(text=f"Use {ctx.clean_prefix}translate <language> <text> to translate")
             return await ctx.send(embed=embed)
 
         if text is None:
@@ -243,8 +252,8 @@ class Miscellaneous(MiscellaneousEvents, Package):
 
             embed = discord.Embed(
                 title=f"Translated from {detected_name} to {target_name}",
-                description=f"```{translated[:1000]}```",
                 color=color.base,
+                description=compose(body(f"```{translated[:1000]}```")),
             )
             embed.set_author(
                 name=ctx.author.display_name,
@@ -267,6 +276,7 @@ class Miscellaneous(MiscellaneousEvents, Package):
         roles = [r.mention for r in user.roles if r != ctx.guild.default_role]
         embed = discord.Embed(
             color=user.color if user.color.value else color.base,
+            description=compose(caption(f"ID: {user.id}")),
         )
         embed.set_author(
             name=f"{user.display_name} ({user})",
@@ -275,22 +285,29 @@ class Miscellaneous(MiscellaneousEvents, Package):
         embed.set_thumbnail(url=user.display_avatar.url)
         embed.add_field(
             name="Created",
-            value=f">>> {discord.utils.format_dt(user.created_at, style='D')} ({discord.utils.format_dt(user.created_at, style='R')})",
+            value=compose(
+                body(
+                    f"{discord.utils.format_dt(user.created_at, style='D')} ({discord.utils.format_dt(user.created_at, style='R')})",
+                ),
+            ),
             inline=True,
         )
         joined = getattr(user, "joined_at", None)
         if joined:
             embed.add_field(
                 name="Joined",
-                value=f">>> {discord.utils.format_dt(joined, style='D')} ({discord.utils.format_dt(joined, style='R')})",
+                value=compose(
+                    body(
+                        f"{discord.utils.format_dt(joined, style='D')} ({discord.utils.format_dt(joined, style='R')})",
+                    ),
+                ),
                 inline=False,
             )
         embed.add_field(
             name=f"Roles ({len(roles)})",
-            value=" ".join(roles[:20]) if roles else "None",
+            value=compose(body(" ".join(roles[:20]) if roles else "None")),
             inline=True,
         )
-        embed.set_footer(text=f"ID: {user.id}")
         await ctx.send(embed=embed)
 
     @hybrid(
@@ -306,9 +323,11 @@ class Miscellaneous(MiscellaneousEvents, Package):
         except ValueError:
             return await ctx.warn("Invalid hex color code.")
 
-        embed = discord.Embed(
+        embed = aesthetic_embed(
             title=f"Color: #{hex_clean.upper()}",
             color=color_val,
+            message="",
+            timestamp=False,
         )
         embed.set_thumbnail(url=f"https://singlecolorimage.com/get/{hex_clean}/200x200")
         await ctx.send(embed=embed)
@@ -325,8 +344,8 @@ class Miscellaneous(MiscellaneousEvents, Package):
             entries.append(f"`{char}` — {code} — {char.name if hasattr(char, 'name') and char.name else 'character'}")
         embed = discord.Embed(
             title="Character Info",
-            description="\n".join(entries),
             color=color.base,
+            description=compose(body(*entries)),
         )
         await ctx.send(embed=embed)
 
@@ -339,8 +358,8 @@ class Miscellaneous(MiscellaneousEvents, Package):
         embed = discord.Embed(
             title="Random Hex Color",
             color=int(hex_val, 16),
+            description=compose(body(f"#{hex_val.upper()}")),
         )
-        embed.add_field(name="Hex", value=f"#{hex_val.upper()}", inline=True)
         embed.set_thumbnail(url=f"https://singlecolorimage.com/get/{hex_val}/200x200")
         await ctx.send(embed=embed)
 
@@ -361,7 +380,12 @@ class Miscellaneous(MiscellaneousEvents, Package):
         emoji_id = match.group(3)
         url = f"https://cdn.discordapp.com/emojis/{emoji_id}.{ext}?size=256"
 
-        embed = discord.Embed(title=match.group(2), color=color.base)
+        embed = aesthetic_embed(
+            title=match.group(2),
+            color=color.base,
+            message="",
+            timestamp=False,
+        )
         embed.set_image(url=url)
         await ctx.send(embed=embed)
 

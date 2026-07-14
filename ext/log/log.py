@@ -10,6 +10,7 @@ from discord.ext.commands import group
 
 from core.discord.ctx import Context
 from core.discord.package import Package
+from core.tools.aesthetic import panel_embed
 
 from .events import LogEvents
 from core.managers.permissions import has_permissions
@@ -304,8 +305,12 @@ class Log(LogEvents, Package):
         lines = [f"`{row[0]}` — `#{row[1]}`" for row in rows]
         numbered = [f"`{i}` {ln}" for i, ln in enumerate(lines, start=1)]
         return await ctx.paginate(
-            discord.Embed(title=f"Log Colors for #{channel.name}", color=self.color).set_author(
-                name=str(ctx.author), icon_url=ctx.author.display_avatar.url
+            panel_embed(
+                color=self.color,
+                title=f"Log Colors for #{channel.name}",
+                author=str(ctx.author),
+                author_icon=ctx.author.display_avatar.url,
+                lines=[],
             ),
             numbered,
         )
@@ -381,8 +386,12 @@ class Log(LogEvents, Package):
 
         numbered = [f"`{i}` {ln}" for i, ln in enumerate(lines, start=1)]
         return await ctx.paginate(
-            discord.Embed(title="Ignored Log Targets", color=self.color).set_author(
-                name=str(ctx.author), icon_url=ctx.author.display_avatar.url
+            panel_embed(
+                color=self.color,
+                title="Ignored Log Targets",
+                author=str(ctx.author),
+                author_icon=ctx.author.display_avatar.url,
+                lines=[],
             ),
             numbered,
         )
@@ -413,8 +422,12 @@ class Log(LogEvents, Package):
 
         numbered = [f"`{i}` {ln}" for i, ln in enumerate(lines, start=1)]
         return await ctx.paginate(
-            discord.Embed(title="Logging Configuration", color=self.color).set_author(
-                name=str(ctx.author), icon_url=ctx.author.display_avatar.url
+            panel_embed(
+                color=self.color,
+                title="Logging Configuration",
+                author=str(ctx.author),
+                author_icon=ctx.author.display_avatar.url,
+                lines=[],
             ),
             numbered,
         )

@@ -8,6 +8,7 @@ from discord.ext import commands
 from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe, group
 from core.managers.values import color, emojis
+from core.tools.aesthetic import panel_embed
 from core.managers.permissions import has_permissions
 
 if TYPE_CHECKING:
@@ -135,8 +136,14 @@ class Reaction(commands.Cog):
             await ctx.warn("No Auto Channel Reactions found")
             return
         rows = [f"`{i}` {row}" for i, row in enumerate(rows, start=1)]
-        embed = discord.Embed(color=color.base, title="Auto Channel Reactions")
-        embed.set_author(name=str(ctx.author), icon_url=ctx.author.display_avatar.url)
+        embed = panel_embed(
+            color=color.base,
+            title="Auto Channel Reactions",
+            author=str(ctx.author),
+            author_icon=ctx.author.display_avatar.url,
+            lines=rows,
+            timestamp=False,
+        )
         await ctx.send(embed=embed)
 
     @reaction_group.command(
@@ -172,8 +179,14 @@ class Reaction(commands.Cog):
                     continue
             rows.append(f"{record.trigger} - {''.join(r for r in record.response)}")
         rows = [f"`{i}` {row}" for i, row in enumerate(rows, start=1)]
-        embed = discord.Embed(color=color.base, title="Reaction Triggers")
-        embed.set_author(name=str(ctx.author), icon_url=ctx.author.display_avatar.url)
+        embed = panel_embed(
+            color=color.base,
+            title="Reaction Triggers",
+            author=str(ctx.author),
+            author_icon=ctx.author.display_avatar.url,
+            lines=rows,
+            timestamp=False,
+        )
         await ctx.send(embed=embed)
 
     @reaction_group.command(

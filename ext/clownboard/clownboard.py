@@ -9,6 +9,7 @@ from discord.ext import commands
 from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe, group
 from core.managers.values import color, emojis
+from core.tools.aesthetic import aesthetic_embed, body, reply_embed
 
 if TYPE_CHECKING:
     from .events import ClownboardEvents
@@ -53,9 +54,9 @@ class ResetConfirm(discord.ui.View):
     async def _guard(self, interaction: discord.Interaction) -> bool:
         if interaction.user == self.ctx.author:
             return True
-        embed = discord.Embed(
-            description=f"{emojis.warn} {interaction.user.mention}: Your interaction is not allowed",
+        embed = reply_embed(
             color=color.base,
+            message=f"{emojis.warn} {interaction.user.mention}: Your interaction is not allowed",
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
         return False
@@ -74,9 +75,9 @@ class ResetConfirm(discord.ui.View):
         await self.ctx.bot.db.execute(
             "DELETE FROM clownboard WHERE guild_id = $1", guild_id
         )
-        embed = discord.Embed(
-            description=f"{emojis.approve} {self.ctx.author.mention}: clownboard has been **reset**",
+        embed = reply_embed(
             color=color.base,
+            message=f"{emojis.approve} {self.ctx.author.mention}: clownboard has been **reset**",
         )
         if self.message is not None:
             await self.message.edit(embed=embed, view=None)
@@ -211,10 +212,10 @@ class Clownboard(commands.Cog):
                 index += 1
                 rows.append(f"`{index}` {channel.mention} --**channel**")
         
-        embed = discord.Embed(color=color.base, title="Clownboard Blacklists")
+        embed = aesthetic_embed(color=color.base, title="Clownboard Blacklists", message="")
         for i in range(0, len(rows), 10):
             chunk = rows[i:i+10]
-            embed.add_field(name=f"Page {i//10 + 1}", value="\n".join(chunk), inline=False)
+            embed.add_field(name=f"Page {i//10 + 1}", value=body(*chunk), inline=False)
         await ctx.send(embed=embed)
 
     @clownboard.command(name="set")
@@ -270,9 +271,9 @@ class Clownboard(commands.Cog):
     @requires_clownboard()
     async def clownboard_reset(self, ctx: Context) -> None:
         """Resets guild's configuration for clownboard."""
-        embed = discord.Embed(
-            description=f"{emojis.warn} {ctx.author.mention}: Are you sure you want to **reset** your clownboard settings?",
+        embed = reply_embed(
             color=color.base,
+            message=f"{emojis.warn} {ctx.author.mention}: Are you sure you want to **reset** your clownboard settings?",
         )
         view = ResetConfirm(ctx)
         view.message = await ctx.send(embed=embed, view=view)
@@ -319,21 +320,19 @@ class Clownboard(commands.Cog):
                 "**clownboard** hasn't been setup using `{ctx.prefix}clownboard set`"
             )
 
-        description = f"**Locked:** {_toggle_emoji(clownboard['lock'])}"
-
         channel_mention = f"<#{clownboard['channel_id']}>" if clownboard['channel_id'] else "No channel set"
         color_display = f"`#{clownboard['color']}`" if clownboard.get('color') else "Author color"
-        general_value = (
-            f"**Channel:** {channel_mention}\n"
-            f"**Color:** {color_display}\n"
-            f"**Threshold:** {clownboard['threshold']}\n"
-            f"**Emoji:** {clownboard['emoji']}"
+        general_value = body(
+            f"**Channel:** {channel_mention}",
+            f"**Color:** {color_display}",
+            f"**Threshold:** {clownboard['threshold']}",
+            f"**Emoji:** {clownboard['emoji']}",
         )
-        options_value = (
-            f"**Show Attachments:** {_toggle_emoji(clownboard.get('attachments', False))}\n"
-            f"**Show Timestamps:** {_toggle_emoji(clownboard.get('ts', False))}\n"
-            f"**Show Jump URL:** {_toggle_emoji(clownboard.get('jump', False))}\n"
-            f"**Self Star:** {_toggle_emoji(clownboard.get('self_star', True))}"
+        options_value = body(
+            f"**Show Attachments:** {_toggle_emoji(clownboard.get('attachments', False))}",
+            f"**Show Timestamps:** {_toggle_emoji(clownboard.get('ts', False))}",
+            f"**Show Jump URL:** {_toggle_emoji(clownboard.get('jump', False))}",
+            f"**Self Star:** {_toggle_emoji(clownboard.get('self_star', True))}",
         )
 
         roles = channels = members = 0
@@ -346,15 +345,15 @@ class Clownboard(commands.Cog):
                 elif ctx.guild.get_role(snowflake):
                     roles += 1
 
-        count_value = (
-            f"**Blacklisted Channels:** {channels}\n"
-            f"**Blacklisted Users:** {members}\n"
-            f"**Blacklisted Roles:** {roles}"
+        count_value = body(
+            f"**Blacklisted Channels:** {channels}",
+            f"**Blacklisted Users:** {members}",
+            f"**Blacklisted Roles:** {roles}",
         )
-        embed = discord.Embed(
+        embed = aesthetic_embed(
             color=color.base,
             title="Clownboard configuration",
-            description=description,
+            message=f"**Locked:** {_toggle_emoji(clownboard['lock'])}",
         )
         embed.add_field(name="General", value=general_value, inline=True)
         embed.add_field(name="Options", value=options_value, inline=True)

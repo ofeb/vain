@@ -12,6 +12,7 @@ from core.discord.hybrid import describe, hybrid
 from core.discord.package import Package
 from core.discord.views.paginate import send_pages
 from core.managers.values import color
+from core.tools.aesthetic import label_line, panel_embed, reply_embed
 
 from .lookup import (
     build_cashapp_embed,
@@ -51,19 +52,21 @@ class InformationCommands(Package):
         latency = round(bot.latency * 1000)
         uptime = discord.utils.format_dt(bot.started_at, style="R")
         shard_count = bot.shard_count or 1
-        lines = [
-            f"## {bot.user.display_name if bot.user else 'Vain'}",
-            f"-# Commands » `{total_commands}`",
-            f"-# Latency » `{latency}ms`",
-            f"-# Uptime » {uptime}",
-            f"-# Guilds » `{guilds:,}`",
-            f"-# Users » `{users:,}`",
-            f"-# Shards » `{shard_count}`",
-            f"-# Python » `{platform.python_version()}`",
-        ]
-        embed = discord.Embed(color=color.base, description="\n".join(lines))
-        if bot.user:
-            embed.set_thumbnail(url=bot.user.display_avatar.url)
+        embed = panel_embed(
+            color=color.base,
+            title=f"{bot.user.display_name if bot.user else 'Vain'}",
+            lines=[
+                label_line("Commands", f"`{total_commands}`"),
+                label_line("Latency", f"`{latency}ms`"),
+                label_line("Uptime", uptime),
+                label_line("Guilds", f"`{guilds:,}`"),
+                label_line("Users", f"`{users:,}`"),
+                label_line("Shards", f"`{shard_count}`"),
+                label_line("Python", f"`{platform.python_version()}`"),
+            ],
+            timestamp=False,
+            thumbnail=bot.user.display_avatar.url if bot.user else None,
+        )
 
         view = discord.ui.View()
         view.add_item(discord.ui.Button(
@@ -99,37 +102,28 @@ class InformationCommands(Package):
 
         guild = inv.guild
         channel = inv.channel
-        embed = discord.Embed(
-            color=0xFFFFFF,
-        )
-        if guild:
-            embed.set_author(name=guild.name, icon_url=guild.icon.url if guild.icon else None)
-            if guild.icon:
-                embed.set_thumbnail(url=guild.icon.url)
-            if hasattr(guild, "banner") and guild.banner:
-                embed.set_image(url=guild.url)
-
         created = discord.utils.format_dt(inv.created_at, style="D") if inv.created_at else "Unknown"
         created_r = f" ({discord.utils.format_dt(inv.created_at, style='R')})" if inv.created_at else ""
-        embed.add_field(
-            name="Created",
-            value=f">>> {created}{created_r}",
-            inline=False,
-        )
         expires = discord.utils.format_dt(inv.expires_at, style="R") if inv.expires_at else "Never"
         inv_url = f"[{inv.code}](https://discord.gg/{inv.code})"
-        embed.add_field(
-            name="Invite",
-            value=f">>> Code: {inv_url}\nExpires: {expires}",
-            inline=True,
-        )
         member_count = inv.approximate_member_count or (guild.member_count if guild else "?")
         online_count = inv.approximate_presence_count or "?"
-        embed.add_field(
-            name="Server",
-            value=f">>> Members: `{member_count:,}`\nOnline: `{online_count:,}`",
-            inline=True,
+
+        embed = panel_embed(
+            color=0xFFFFFF,
+            author=guild.name if guild else "Invite Info",
+            author_icon=guild.icon.url if guild and guild.icon else None,
+            lines=[
+                label_line("Created", f"{created}{created_r}"),
+                label_line("Invite", f"{inv_url} · expires {expires}"),
+                label_line("Members", f"`{member_count:,}`"),
+                label_line("Online", f"`{online_count:,}`"),
+            ],
+            timestamp=False,
+            thumbnail=guild.icon.url if guild and guild.icon else None,
         )
+        if guild and hasattr(guild, "banner") and guild.banner:
+            embed.set_image(url=guild.banner.url)
         await ctx.send(embed=embed)
 
     @hybrid(
@@ -141,18 +135,32 @@ class InformationCommands(Package):
     @describe(channel="Channel to inspect")
     async def channelinfo(self, ctx: Context, channel: discord.abc.GuildChannel = None) -> None:
         channel = channel or ctx.channel
-        embed = discord.Embed(title=f"#{channel.name}", color=color.base)
-        embed.add_field(name="ID", value=str(channel.id), inline=True)
-        embed.add_field(name="Type", value=str(channel.type).replace("_", " ").title(), inline=True)
-        embed.add_field(name="Category", value=channel.category.name if getattr(channel, "category", None) else "None", inline=True)
-        embed.add_field(name="Created", value=discord.utils.format_dt(channel.created_at, style="R"), inline=True)
+        lines = [
+            label_line("ID", str(channel.id)),
+            label_line("Type", str(channel.type).replace("_", " ").title()),
+            label_line(
+                "Category",
+                channel.category.name if getattr(channel, "category", None) else "None",
+            ),
+            label_line("Created", discord.utils.format_dt(channel.created_at, style="R")),
+        ]
         if isinstance(channel, discord.TextChannel):
-            embed.add_field(name="Topic", value=channel.topic or "None", inline=False)
-            embed.add_field(name="NSFW", value="Yes" if channel.is_nsfw() else "No", inline=True)
-            embed.add_field(name="Slowmode", value=f"{channel.slowmode_delay}s", inline=True)
+            lines.extend([
+                label_line("Topic", channel.topic or "None"),
+                label_line("NSFW", "Yes" if channel.is_nsfw() else "No"),
+                label_line("Slowmode", f"{channel.slowmode_delay}s"),
+            ])
         if isinstance(channel, discord.VoiceChannel):
-            embed.add_field(name="Bitrate", value=str(channel.bitrate), inline=True)
-            embed.add_field(name="User Limit", value=str(channel.user_limit or "Unlimited"), inline=True)
+            lines.extend([
+                label_line("Bitrate", str(channel.bitrate)),
+                label_line("User Limit", str(channel.user_limit or "Unlimited")),
+            ])
+        embed = panel_embed(
+            title=f"#{channel.name}",
+            color=color.base,
+            lines=lines,
+            timestamp=False,
+        )
         await ctx.send(embed=embed)
 
     @hybrid(
@@ -163,19 +171,21 @@ class InformationCommands(Package):
     )
     @describe(role="Role to inspect")
     async def roleinfo(self, ctx: Context, role: discord.Role) -> None:
-        embed = discord.Embed(title=role.name, color=role.color if role.color.value else color.base)
-        embed.add_field(name="ID", value=str(role.id), inline=True)
-        embed.add_field(name="Members", value=str(len(role.members)), inline=True)
-        embed.add_field(name="Position", value=str(role.position), inline=True)
-        embed.add_field(name="Mentionable", value="Yes" if role.mentionable else "No", inline=True)
-        embed.add_field(name="Hoisted", value="Yes" if role.hoist else "No", inline=True)
-        embed.add_field(name="Managed", value="Yes" if role.managed else "No", inline=True)
-        embed.add_field(name="Created", value=discord.utils.format_dt(role.created_at, style="R"), inline=True)
         perms = [name.replace("_", " ").title() for name, value in role.permissions if value]
-        embed.add_field(
-            name="Key Permissions",
-            value=", ".join(perms[:12]) if perms else "None",
-            inline=False,
+        embed = panel_embed(
+            title=role.name,
+            color=role.color if role.color.value else color.base,
+            lines=[
+                label_line("ID", str(role.id)),
+                label_line("Members", str(len(role.members))),
+                label_line("Position", str(role.position)),
+                label_line("Mentionable", "Yes" if role.mentionable else "No"),
+                label_line("Hoisted", "Yes" if role.hoist else "No"),
+                label_line("Managed", "Yes" if role.managed else "No"),
+                label_line("Created", discord.utils.format_dt(role.created_at, style="R")),
+                label_line("Key Permissions", ", ".join(perms[:12]) if perms else "None"),
+            ],
+            timestamp=False,
         )
         await ctx.send(embed=embed)
 
@@ -189,17 +199,26 @@ class InformationCommands(Package):
     async def memberinfo(self, ctx: Context, member: discord.Member = None) -> None:
         member = member or ctx.author
         roles = [role.mention for role in member.roles if role != ctx.guild.default_role]
-        embed = discord.Embed(title=member.display_name, color=member.color if member.color.value else color.base)
-        embed.set_thumbnail(url=member.display_avatar.url)
-        embed.add_field(name="User", value=member.mention, inline=True)
-        embed.add_field(name="ID", value=str(member.id), inline=True)
-        embed.add_field(name="Bot", value="Yes" if member.bot else "No", inline=True)
-        embed.add_field(name="Joined", value=discord.utils.format_dt(member.joined_at, style="R"), inline=True)
-        embed.add_field(name="Registered", value=discord.utils.format_dt(member.created_at, style="R"), inline=True)
-        embed.add_field(name="Top Role", value=member.top_role.mention, inline=True)
-        embed.add_field(name=f"Roles ({len(roles)})", value=" ".join(roles[:20]) if roles else "None", inline=False)
+        lines = [
+            label_line("User", member.mention),
+            label_line("ID", str(member.id)),
+            label_line("Bot", "Yes" if member.bot else "No"),
+            label_line("Joined", discord.utils.format_dt(member.joined_at, style="R")),
+            label_line("Registered", discord.utils.format_dt(member.created_at, style="R")),
+            label_line("Top Role", member.top_role.mention),
+            label_line(f"Roles ({len(roles)})", " ".join(roles[:20]) if roles else "None"),
+        ]
         if member.premium_since:
-            embed.add_field(name="Boosting Since", value=discord.utils.format_dt(member.premium_since, style="R"), inline=True)
+            lines.append(
+                label_line("Boosting Since", discord.utils.format_dt(member.premium_since, style="R"))
+            )
+        embed = panel_embed(
+            title=member.display_name,
+            color=member.color if member.color.value else color.base,
+            lines=lines,
+            timestamp=False,
+            thumbnail=member.display_avatar.url,
+        )
         await ctx.send(embed=embed)
 
     @hybrid(
@@ -218,11 +237,17 @@ class InformationCommands(Package):
                 for sid, lat in self.bot.latencies:
                     if sid == shard_id:
                         latency = round(lat * 1000)
-            lines.append(f"**Shard {shard_id}** — `{len(guilds)}` guilds, `{members:,}` users, `{latency}ms`")
-        embed = discord.Embed(
+            lines.append(
+                label_line(
+                    f"Shard {shard_id}",
+                    f"`{len(guilds)}` guilds · `{members:,}` users · `{latency}ms`",
+                )
+            )
+        embed = panel_embed(
             title="Shard Info",
-            description="\n".join(lines) if lines else "Single-shard mode",
             color=color.base,
+            lines=lines or ["Single-shard mode"],
+            timestamp=False,
         )
         await ctx.send(embed=embed)
 
@@ -355,8 +380,9 @@ class InformationCommands(Package):
         else:
             label = "a while ago"
 
-        embed = discord.Embed(
-            description=f"**{member.display_name}** was last seen {label}",
+        embed = reply_embed(
+            color=color.base,
+            message=f"**{member.display_name}** was last seen {label}",
         )
         await ctx.send(embed=embed)
 

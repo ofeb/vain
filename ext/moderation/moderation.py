@@ -8,7 +8,18 @@ from discord.ext.commands import command, group
 from discord.ext.commands import CommandError
 
 from core.discord.package import Package
-
+from core.tools.moderation_args import (
+    ParsedModerationArgs,
+    format_duration_token,
+    parse_duration_seconds,
+    parse_moderation_args,
+)
+from core.tools.aesthetic import label_line, panel_embed, reply_embed
+from core.tools.moderation_logs import (
+    build_modlog_embed,
+    send_invoke_dm,
+    send_invoke_response,
+)
 
 from core.managers.permissions import has_permissions
 
@@ -42,9 +53,12 @@ class _BoostConfirmView(discord.ui.View):
         self.stop()
 
     async def prompt(self) -> bool:
-        embed = discord.Embed(
-            description=f"Are you sure you want to **{self._action}** {self.member.mention}?\nThey are currently boosting the server.",
+        embed = reply_embed(
             color=0x2A2B2F,
+            message=(
+                f"Are you sure you want to **{self._action}** {self.member.mention}?\n"
+                f"They are currently boosting the server."
+            ),
         )
         msg = await self.ctx.send(embed=embed, view=self)
         await self.wait()
@@ -97,6 +111,7 @@ class ModerationCommands(Package):
             "h": 3600,
             "d": 86400,
             "w": 604800,
+            "y": 31536000,
         }
         if len(raw) < 2 or raw[-1] not in units or not raw[:-1].isdigit():
             return None
@@ -120,6 +135,85 @@ class ModerationCommands(Package):
             if len(parts) == 2:
                 break
         return ", ".join(parts) if parts else "0 seconds"
+
+    async def _ensure_jail_ready(self, ctx) -> dict | None:
+        row = await self.db.fetchrow(
+            "SELECT jail_channel_id, jail_role_id, jail_remove_roles, jail_message FROM server_settings WHERE guild_id = $1",
+            ctx.guild.id,
+        )
+        if not row:
+            row = {}
+
+        jail_role = ctx.guild.get_role(row.get("jail_role_id") or 0)
+        if jail_role is None:
+            jail_role = discord.utils.get(ctx.guild.roles, name="Jailed")
+            if jail_role is None:
+                jail_role = await ctx.guild.create_role(
+                    name="Jailed",
+                    reason="Jail system setup",
+                    permissions=discord.Permissions.none(),
+                )
+            await self.db.set_server_settings(ctx.guild.id, jail_role_id=jail_role.id)
+            row = dict(row)
+            row["jail_role_id"] = jail_role.id
+
+        jail_channel = ctx.guild.get_channel(row.get("jail_channel_id") or 0)
+        if jail_channel is None:
+            jail_cat = discord.utils.get(ctx.guild.categories, name="jail")
+            if jail_cat is None:
+                jail_cat = await ctx.guild.create_category("jail", reason="Jail system setup")
+            jail_channel = discord.utils.get(jail_cat.text_channels, name="jailed")
+            if jail_channel is None:
+                overwrites = {
+                    ctx.guild.default_role: discord.PermissionOverwrite(view_channel=False),
+                    ctx.guild.me: discord.PermissionOverwrite(
+                        view_channel=True,
+                        send_messages=True,
+                        manage_messages=True,
+                    ),
+                    jail_role: discord.PermissionOverwrite(
+                        view_channel=True,
+                        send_messages=True,
+                        read_message_history=True,
+                    ),
+                }
+                jail_channel = await jail_cat.create_text_channel(
+                    "jailed",
+                    overwrites=overwrites,
+                    reason="Jail system setup",
+                )
+            await self.db.set_server_settings(ctx.guild.id, jail_channel_id=jail_channel.id)
+            row = dict(row)
+            row["jail_channel_id"] = jail_channel.id
+
+        await self._sync_jail_permissions(ctx.guild, jail_role, jail_channel)
+        row["jail_role"] = jail_role
+        row["jail_channel"] = jail_channel
+        return row
+
+    async def _sync_jail_permissions(
+        self,
+        guild: discord.Guild,
+        jail_role: discord.Role,
+        jail_channel: discord.TextChannel,
+    ) -> None:
+        for channel in guild.channels:
+            if isinstance(channel, discord.TextChannel):
+                if channel.id == jail_channel.id:
+                    await channel.set_permissions(
+                        jail_role,
+                        view_channel=True,
+                        send_messages=True,
+                        read_message_history=True,
+                    )
+                else:
+                    await channel.set_permissions(
+                        jail_role,
+                        view_channel=False,
+                        send_messages=False,
+                    )
+            elif isinstance(channel, discord.VoiceChannel):
+                await channel.set_permissions(jail_role, connect=False, speak=False)
 
     async def _ensure_targetable(self, ctx, member: discord.Member) -> bool:
         """Check if a member can be moderated. Returns True if OK, False if blocked (sends warning)."""
@@ -185,6 +279,7 @@ class ModerationCommands(Package):
         target: discord.abc.User | None,
         case_id: int | None,
         reason: str | None,
+        extra: str | None = None,
     ) -> None:
         if getattr(self.db, "pool", None) is None:
             return
@@ -195,18 +290,61 @@ class ModerationCommands(Package):
         if not isinstance(channel, discord.TextChannel):
             return
 
-        target_label = str(target) if target else "Unknown User"
-        embed = discord.Embed(
+        target_label = target.mention if target else "Unknown User"
+        embed = build_modlog_embed(
             color=self.color,
-            title=f"Case #{case_id}" if case_id is not None else "Moderation action",
-            description=(
-                f"**Action:** {action}\n"
-                f"**Target:** {target_label}\n"
-                f"**Moderator:** {ctx.author}\n"
-                f"**Reason:** {self._default_reason(reason)}"
-            ),
+            action=action,
+            target_label=target_label,
+            moderator_label=ctx.author.mention,
+            reason=self._default_reason(reason),
+            case_id=case_id,
+            extra=extra,
         )
         await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+
+    async def _invoke_dm(
+        self,
+        ctx,
+        member: discord.abc.User,
+        action: str,
+        *,
+        reason: str | None,
+        case_id: int | None = None,
+        duration: str | None = None,
+    ) -> None:
+        await send_invoke_dm(
+            self.bot,
+            self.db,
+            member=member,
+            guild=ctx.guild,
+            moderator=ctx.author,
+            action=action,
+            reason=reason,
+            case_id=case_id,
+            duration=duration,
+        )
+
+    async def _invoke_response(
+        self,
+        ctx,
+        action: str,
+        *,
+        user: discord.abc.User,
+        reason: str | None,
+        case_id: int | None = None,
+        duration: str | None = None,
+    ) -> bool:
+        return await send_invoke_response(
+            self.bot,
+            self.db,
+            ctx,
+            action=action,
+            user=user,
+            moderator=ctx.author,
+            reason=reason,
+            case_id=case_id,
+            duration=duration,
+        )
 
     def _dispatch_antinuke_action(
         self,
@@ -227,47 +365,50 @@ class ModerationCommands(Package):
             meta,
         )
 
-    @command(
-        name="tempban",
-        description="No description given",
-    )
-    @has_permissions(ban_members=True)
-    async def tempban(
+    async def _run_tempban(
         self,
         ctx,
-        member: discord.Member,
-        duration: str,
+        parsed: ParsedModerationArgs,
         *,
-        reason: str = None,
-    ):
-        """temporarily ban a member"""
+        duration_token: str | None = None,
+    ) -> None:
+        member = parsed.member
+        reason = parsed.reason
         if not await self._ensure_targetable(ctx, member):
             return
         if not await self._confirm_if_booster(ctx, member, "tempban"):
             return await ctx.warn("Action cancelled.")
 
-        seconds = self._parse_duration_seconds(duration)
+        seconds = parsed.duration_seconds
+        if duration_token:
+            seconds = parse_duration_seconds(duration_token) or self._parse_duration_seconds(duration_token)
         if not seconds or seconds < 1:
-            raise CommandError("duration must look like `30m`, `2h`, `7d`, or `1w`")
+            raise CommandError("duration must look like `30m`, `2h`, `7d`, `1w`, or `1y`")
 
         target_display = str(member)
         target_id = member.id
-        role_ids = [
-            role.id
-            for role in member.roles
-            if role != ctx.guild.default_role
-        ]
+        role_ids = [role.id for role in member.roles if role != ctx.guild.default_role]
         unban_at = discord.utils.utcnow() + timedelta(seconds=seconds)
+        duration_label = self._format_duration(seconds)
 
-        await member.ban(
-            delete_message_seconds=0,
-            reason=self._audit_reason(ctx, reason),
-        )
         case_id = await self._create_case(
             ctx,
             action="tempban",
             target_id=target_id,
             reason=reason,
+        )
+        await self._invoke_dm(
+            ctx,
+            member,
+            "tempban",
+            reason=reason,
+            case_id=case_id,
+            duration=duration_label,
+        )
+
+        await member.ban(
+            delete_message_seconds=0,
+            reason=self._audit_reason(ctx, reason),
         )
         await self.db.add_tempban(
             ctx.guild.id,
@@ -283,6 +424,7 @@ class ModerationCommands(Package):
             target=member,
             case_id=case_id,
             reason=reason,
+            extra=f"**Duration** » {duration_label}",
         )
         self._dispatch_antinuke_action(
             ctx,
@@ -294,18 +436,62 @@ class ModerationCommands(Package):
                 "role_ids": role_ids,
             },
         )
+        if await self._invoke_response(
+            ctx,
+            "tempban",
+            user=member,
+            reason=reason,
+            case_id=case_id,
+            duration=duration_label,
+        ):
+            return
         return await ctx.success(
-            f"Tempbanned **{target_display}** for **{self._format_duration(seconds)}** - {self._default_reason(reason)}"
+            f"Tempbanned **{target_display}** for **{duration_label}** - {self._default_reason(reason)}"
         )
+
+    @command(
+        name="tempban",
+        usage="(duration) (member) <reason>",
+        example="3h @member spamming",
+        description="Temporarily ban a member",
+    )
+    @has_permissions(ban_members=True)
+    async def tempban(self, ctx):
+        """temporarily ban a member"""
+        parsed = await parse_moderation_args(ctx, command_names=("tempban",), allow_duration=True)
+        if not parsed.duration_seconds:
+            raise CommandError("you must provide a duration like `3h`, `2d`, `1w`, or `1y`")
+        await self._run_tempban(ctx, parsed)
 
     @command(
         name="warn",
         description="Warns the mentioned user and private messages them the warning",
     )
     @has_permissions(manage_messages=True)
-    async def warn(self, ctx, member, *, reason=None):
+    async def warn(self, ctx, member: discord.Member, *, reason=None):
         """warn a member"""
-        pass
+        if not await self._ensure_targetable(ctx, member):
+            return
+
+        case_id = await self._create_case(
+            ctx,
+            action="warn",
+            target_id=member.id,
+            reason=reason,
+        )
+        await self._invoke_dm(ctx, member, "warn", reason=reason, case_id=case_id)
+        await self._send_modlog(
+            ctx,
+            action="warn",
+            target=member,
+            case_id=case_id,
+            reason=reason,
+        )
+        if await self._invoke_response(ctx, "warn", user=member, reason=reason, case_id=case_id):
+            return
+        return await ctx.success(
+            f"Warned **{member}** - {self._default_reason(reason)}"
+        )
 
     @command(
         name="moveall",
@@ -383,33 +569,26 @@ class ModerationCommands(Package):
 
     @command(
         name="jail",
+        usage="[duration] (member) <reason>",
+        example="2d @member spamming",
         description="Jails the mentioned user",
     )
     @has_permissions(manage_messages=True)
-    async def jail(self, ctx, member: discord.Member, *, reason=None):
+    async def jail(self, ctx):
         """jail a member"""
+        parsed = await parse_moderation_args(ctx, command_names=("jail",), allow_duration=True)
+        member = parsed.member
+        reason = parsed.reason
         if not await self._ensure_targetable(ctx, member):
             return
 
-        row = await self.db.fetchrow(
-            "SELECT jail_channel_id, jail_role_id, jail_remove_roles FROM server_settings WHERE guild_id = $1",
-            ctx.guild.id,
-        )
+        row = await self._ensure_jail_ready(ctx)
         if not row:
-            return await ctx.warn("Jail is not configured — use `,settings jail` first")
-        jail_channel_id = row["jail_channel_id"]
-        jail_role_id = row["jail_role_id"]
-        if not jail_channel_id or not jail_role_id:
-            return await ctx.warn("Jail channel or jail role is not configured — use `,settings jail`")
+            return await ctx.warn("Failed to configure jail — try `,setupjail`")
 
-        jail_channel = ctx.guild.get_channel(jail_channel_id)
-        jail_role = ctx.guild.get_role(jail_role_id)
-        if not jail_channel:
-            return await ctx.warn("The configured jail channel no longer exists")
-        if not jail_role:
-            return await ctx.warn("The configured jail role no longer exists")
+        jail_role = row["jail_role"]
+        jail_channel = row["jail_channel"]
 
-        
         existing = await self.db.fetchrow(
             "SELECT 1 FROM jailed WHERE guild_id = $1 AND user_id = $2",
             ctx.guild.id, member.id,
@@ -417,29 +596,29 @@ class ModerationCommands(Package):
         if existing:
             return await ctx.warn(f"**{member}** is already jailed")
 
-        
         role_ids = [r.id for r in member.roles if r != ctx.guild.default_role]
 
-        
         try:
-            if row["jail_remove_roles"] and role_ids:
+            if row.get("jail_remove_roles", True) and role_ids:
                 roles_to_remove = [ctx.guild.get_role(rid) for rid in role_ids if ctx.guild.get_role(rid)]
                 if roles_to_remove:
-                    await member.remove_roles(*roles_to_remove, reason=f"Jailed by {ctx.author}: {reason or 'no reason'}")
-            await member.add_roles(jail_role, reason=f"Jailed by {ctx.author}: {reason or 'no reason'}")
+                    await member.remove_roles(
+                        *roles_to_remove,
+                        reason=f"Jailed by {ctx.author}: {self._default_reason(reason)}",
+                    )
+            await member.add_roles(
+                jail_role,
+                reason=f"Jailed by {ctx.author}: {self._default_reason(reason)}",
+            )
         except discord.Forbidden:
             return await ctx.warn("I don't have permission to manage this member's roles")
         except discord.HTTPException as e:
             return await ctx.warn(f"Failed to update roles: {e}")
 
-        
-        if isinstance(member.voice.channel, discord.VoiceChannel):
-            try:
-                await member.move_to(jail_channel, reason=f"Jailed by {ctx.author}")
-            except (discord.Forbidden, discord.HTTPException):
-                pass
+        if member.voice and member.voice.channel:
+            with contextlib.suppress(discord.Forbidden, discord.HTTPException):
+                await member.move_to(None, reason=f"Jailed by {ctx.author}")
 
-        
         await self.db.execute(
             """INSERT INTO jailed (guild_id, user_id, role_ids, moderator_id, reason)
                VALUES ($1, $2, $3, $4, $5)
@@ -451,11 +630,39 @@ class ModerationCommands(Package):
         case_id = await self._create_case(
             ctx, action="jail", target_id=member.id, reason=reason,
         )
+        await self._invoke_dm(ctx, member, "jail", reason=reason, case_id=case_id)
         await self._send_modlog(
             ctx, action="jail", target=member, case_id=case_id, reason=reason,
         )
 
-        return await ctx.success(f"Jailed **{member}** - {self._default_reason(reason)}")
+        jail_message = row.get("jail_message")
+        if jail_message:
+            with contextlib.suppress(Exception):
+                await self.bot.send_embed(
+                    jail_channel,
+                    jail_message,
+                    user=member,
+                    member=member,
+                    moderator=ctx.author,
+                    guild=ctx.guild,
+                    reason=self._default_reason(reason),
+                )
+        else:
+            embed = build_modlog_embed(
+                color=self.color,
+                action="jailed",
+                target_label=member.mention,
+                moderator_label=ctx.author.mention,
+                reason=self._default_reason(reason),
+                case_id=case_id,
+            )
+            await jail_channel.send(content=member.mention, embed=embed)
+
+        if await self._invoke_response(ctx, "jail", user=member, reason=reason, case_id=case_id):
+            return
+        return await ctx.success(
+            f"Jailed **{member}** in {jail_channel.mention} - {self._default_reason(reason)}"
+        )
 
     @command(
         name="unjail",
@@ -502,10 +709,12 @@ class ModerationCommands(Package):
         case_id = await self._create_case(
             ctx, action="unjail", target_id=member.id, reason=reason,
         )
+        await self._invoke_dm(ctx, member, "unjail", reason=reason, case_id=case_id)
         await self._send_modlog(
             ctx, action="unjail", target=member, case_id=case_id, reason=reason,
         )
-
+        if await self._invoke_response(ctx, "unjail", user=member, reason=reason, case_id=case_id):
+            return
         return await ctx.success(f"Unjailed **{member}** - {self._default_reason(reason)}")
 
     @command(
@@ -556,12 +765,13 @@ class ModerationCommands(Package):
             mod = ctx.guild.get_member(row["moderator_id"])
             mod_name = mod.mention if mod else "`unknown`"
             reason = row["reason"] or "no reason"
-            lines.append(f"{name} — jailed by {mod_name}: {reason}")
+            lines.append(label_line(name, f"jailed by {mod_name} — {reason}"))
 
-        embed = discord.Embed(
+        embed = panel_embed(
             title="Jailed Members",
-            description="\n".join(lines),
             color=self.color,
+            lines=lines,
+            timestamp=False,
         )
         await ctx.send(embed=embed)
 
@@ -634,6 +844,7 @@ class ModerationCommands(Package):
         role_label = {"": "text-muted", "i": "image-muted", "r": "reaction-muted"}.get(mute_type, mute_type)
 
         expires_at = None
+        seconds = None
         if duration:
             seconds = self._parse_duration_seconds(duration)
             if not seconds:
@@ -642,6 +853,20 @@ class ModerationCommands(Package):
 
         if role in member.roles:
             return await ctx.warn(f"**{member}** is already {role_label}.")
+
+        case_id = await self._create_case(
+            ctx, action=role_label, target_id=member.id, reason=reason,
+        )
+        duration_label = self._format_duration(seconds) if duration and expires_at else None
+        if mute_type == "":
+            await self._invoke_dm(
+                ctx,
+                member,
+                "mute",
+                reason=reason,
+                case_id=case_id,
+                duration=duration_label,
+            )
 
         await member.add_roles(role, reason=self._audit_reason(ctx, reason))
         await self.bot.db.execute(
@@ -652,21 +877,26 @@ class ModerationCommands(Package):
             ctx.guild.id, member.id, ctx.author.id, mute_type or "text",
             role.id, expires_at, self._default_reason(reason),
         )
-
-        case_id = await self._create_case(
-            ctx, action=role_label, target_id=member.id, reason=reason,
-        )
         await self._send_modlog(
-            ctx, action=role_label, target=member, case_id=case_id, reason=reason,
+            ctx,
+            action=role_label,
+            target=member,
+            case_id=case_id,
+            reason=reason,
+            extra=f"**Duration** » {duration_label}" if duration_label else None,
         )
         self._dispatch_antinuke_action(
             ctx, action=role_label, case_id=case_id,
             meta={"target_id": member.id, "target_display": str(member)},
         )
 
+        if mute_type == "" and await self._invoke_response(
+            ctx, "mute", user=member, reason=reason, case_id=case_id, duration=duration_label
+        ):
+            return
         parts = [f"{role_label.title()} **{member}**"]
-        if expires_at:
-            parts.append(f"for **{self._format_duration(seconds)}**")
+        if duration_label:
+            parts.append(f"for **{duration_label}**")
         parts.append(f"- {self._default_reason(reason)}")
         return await ctx.success(" ".join(parts))
 
@@ -698,16 +928,28 @@ class ModerationCommands(Package):
         )
 
         role_label = {"": "text-muted", "i": "image-muted", "r": "reaction-muted"}.get(mute_type, mute_type)
+        if mute_type == "":
+            await self._invoke_dm(ctx, member, "unmute", reason=reason)
+            if await self._invoke_response(ctx, "unmute", user=member, reason=reason):
+                return
         return await ctx.success(f"Un{mute_type if mute_type else 'mute'}d **{member}** - {self._default_reason(reason)}")
 
     @command(
         name="mute",
+        usage="[duration] (member) <reason>",
+        example="30m @member spamming",
         description="Mute a member",
     )
     @has_permissions(moderate_members=True)
-    async def mute(self, ctx, member: discord.Member, duration: str = None, *, reason: str = None):
+    async def mute(self, ctx):
         """mute a member"""
-        await self._mute_member(ctx, member, "", duration=duration, reason=reason)
+        parsed = await parse_moderation_args(ctx, command_names=("mute",), allow_duration=True)
+        duration = (
+            format_duration_token(parsed.duration_seconds)
+            if parsed.duration_seconds
+            else None
+        )
+        await self._mute_member(ctx, parsed.member, "", duration=duration, reason=parsed.reason)
 
     @command(
         name="unmute",
@@ -844,6 +1086,14 @@ class ModerationCommands(Package):
         target_display = str(member)
         target_id = member.id
 
+        case_id = await self._create_case(
+            ctx,
+            action="softban",
+            target_id=target_id,
+            reason=reason,
+        )
+        await self._invoke_dm(ctx, member, "softban", reason=reason, case_id=case_id)
+
         await member.ban(
             delete_message_seconds=delete_days * 86400,
             reason=self._audit_reason(ctx, reason),
@@ -852,13 +1102,6 @@ class ModerationCommands(Package):
             discord.Object(id=target_id),
             reason=self._audit_reason(ctx, "softban removal"),
         )
-
-        case_id = await self._create_case(
-            ctx,
-            action="softban",
-            target_id=target_id,
-            reason=reason,
-        )
         await self._send_modlog(
             ctx,
             action="softban",
@@ -876,57 +1119,61 @@ class ModerationCommands(Package):
                 "role_ids": role_ids,
             },
         )
+        if await self._invoke_response(ctx, "softban", user=member, reason=reason, case_id=case_id):
+            return
         return await ctx.success(
             f"Softbanned **{target_display}** - {self._default_reason(reason)}"
         )
 
     @command(
         name="ban",
-        usage="(user) (delete history) <reason>",
-        example="jonathan 1d Threatening members",
+        usage="[duration] (member) [delete history] <reason>",
+        example="2d @member Threatening members",
         description="Bans the mentioned user",
     )
     @has_permissions(ban_members=True)
-    async def ban(
-        self,
-        ctx,
-        member: discord.Member,
-        delete_history: str = "0",
-        *,
-        reason: str = None,
-    ):
+    async def ban(self, ctx):
         """Bans the mentioned user"""
+        parsed = await parse_moderation_args(
+            ctx,
+            command_names=("ban",),
+            allow_duration=True,
+            allow_delete_days=True,
+        )
+        if parsed.duration_seconds:
+            return await self._run_tempban(ctx, parsed)
+
+        member = parsed.member
+        reason = parsed.reason
         if not await self._ensure_targetable(ctx, member):
             return
         if not await self._confirm_if_booster(ctx, member, "ban"):
             return await ctx.warn("Action cancelled.")
 
-        delete_days = self._coerce_delete_days(delete_history, default=0)
-        role_ids = [
-            role.id
-            for role in member.roles
-            if role != ctx.guild.default_role
-        ]
+        delete_days = parsed.delete_days or 0
+        role_ids = [role.id for role in member.roles if role != ctx.guild.default_role]
         target_display = str(member)
         target_id = member.id
+
+        case_id = await self._create_case(
+            ctx,
+            action="ban",
+            target_id=target_id,
+            reason=reason,
+        )
+        await self._invoke_dm(ctx, member, "ban", reason=reason, case_id=case_id)
 
         await member.ban(
             delete_message_seconds=delete_days * 86400,
             reason=self._audit_reason(ctx, reason),
         )
-
-        case_id = await self._create_case(
-            ctx,
-            action="ban",
-            target_id=target_id,
-            reason=reason,
-        )
         await self._send_modlog(
             ctx,
             action="ban",
             target=member,
             case_id=case_id,
             reason=reason,
+            extra=f"**Message purge** » {delete_days} day(s)" if delete_days else None,
         )
         self._dispatch_antinuke_action(
             ctx,
@@ -938,37 +1185,33 @@ class ModerationCommands(Package):
                 "role_ids": role_ids,
             },
         )
+        if await self._invoke_response(ctx, "ban", user=member, reason=reason, case_id=case_id):
+            return
+        purge = f" (purged **{delete_days}d**)" if delete_days else ""
         return await ctx.success(
-            f"Banned **{target_display}** - {self._default_reason(reason)}"
+            f"Banned **{target_display}**{purge} - {self._default_reason(reason)}"
         )
 
     @command(
         name="kick",
+        usage="(member) <reason>",
+        example="@member spamming",
         description="Kick the mentioned user",
     )
     @has_permissions(kick_members=True)
-    async def kick(
-        self,
-        ctx,
-        member: discord.Member,
-        *,
-        reason: str = None,
-    ):
+    async def kick(self, ctx):
         """kick a member"""
+        parsed = await parse_moderation_args(ctx, command_names=("kick",), allow_duration=False)
+        member = parsed.member
+        reason = parsed.reason
         if not await self._ensure_targetable(ctx, member):
             return
         if not await self._confirm_if_booster(ctx, member, "kick"):
             return await ctx.warn("Action cancelled.")
 
-        role_ids = [
-            role.id
-            for role in member.roles
-            if role != ctx.guild.default_role
-        ]
+        role_ids = [role.id for role in member.roles if role != ctx.guild.default_role]
         target_display = str(member)
         target_id = member.id
-
-        await member.kick(reason=self._audit_reason(ctx, reason))
 
         case_id = await self._create_case(
             ctx,
@@ -976,6 +1219,9 @@ class ModerationCommands(Package):
             target_id=target_id,
             reason=reason,
         )
+        await self._invoke_dm(ctx, member, "kick", reason=reason, case_id=case_id)
+
+        await member.kick(reason=self._audit_reason(ctx, reason))
         await self._send_modlog(
             ctx,
             action="kick",
@@ -993,6 +1239,8 @@ class ModerationCommands(Package):
                 "role_ids": role_ids,
             },
         )
+        if await self._invoke_response(ctx, "kick", user=member, reason=reason, case_id=case_id):
+            return
         return await ctx.success(
             f"Kicked **{target_display}** - {self._default_reason(reason)}"
         )
@@ -1137,13 +1385,8 @@ class ModerationCommands(Package):
             logs_cat = await self._ensure_category(ctx, "logs")
             await logs_cat.edit(overwrites=overwrites_logs)
 
-            jail_role_id = None
-            jail_row = await self.bot.db.fetchrow(
-                "SELECT jail_role_id FROM server_settings WHERE guild_id = $1",
-                ctx.guild.id,
-            )
-            if jail_row and jail_row.get("jail_role_id"):
-                jail_role_id = jail_row["jail_role_id"]
+            jail_config = await self._ensure_jail_ready(ctx)
+            jail_role_id = jail_config["jail_role_id"] if jail_config else None
 
             overwrites_jail = {
                 ctx.guild.default_role: discord.PermissionOverwrite(read_messages=False, send_messages=False),
@@ -1155,7 +1398,10 @@ class ModerationCommands(Package):
             if jail_role_id:
                 jail_role = ctx.guild.get_role(jail_role_id)
                 if jail_role:
-                    overwrites_jail[jail_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+                    overwrites_jail[jail_role] = discord.PermissionOverwrite(
+                        read_messages=True,
+                        send_messages=True,
+                    )
 
             jail_cat = await self._ensure_category(ctx, "jail")
             await jail_cat.edit(overwrites=overwrites_jail)
@@ -1184,6 +1430,11 @@ class ModerationCommands(Package):
                    VALUES ($1, $2)
                    ON CONFLICT (guild_id) DO UPDATE SET channel_id = $2""",
                 ctx.guild.id, modlog_ch.id,
+            )
+            await self.bot.db.set_security_log_channels(
+                ctx.guild.id,
+                antinuke_channel_id=antinuke_ch.id,
+                antiraid_channel_id=antiraid_ch.id,
             )
             await self.bot.db.execute(
                 """INSERT INTO server_settings (guild_id, jail_channel_id)
@@ -1230,6 +1481,28 @@ class ModerationCommands(Package):
             await ctx.warn("No setup channels found to remove.")
 
     @command(
+        name="setupjail",
+        description="Sets up the jail role, channel, and permissions",
+    )
+    @has_permissions(manage_guild=True, manage_channels=True)
+    async def setupjail(self, ctx):
+        """setup jail system"""
+        async with ctx.typing():
+            row = await self._ensure_jail_ready(ctx)
+            if not row:
+                return await ctx.warn("Failed to set up jail.")
+        embed = build_modlog_embed(
+            color=self.color,
+            action="jail setup",
+            target_label=row["jail_channel"].mention,
+            moderator_label=ctx.author.mention,
+            reason="Jail role and channel configured",
+            extra=f"**Role** » {row['jail_role'].mention}",
+        )
+        embed.title = "Jail Setup Complete"
+        await ctx.send(embed=embed)
+
+    @command(
         name="setupmute",
         description="Sets up muted roles and channel permissions",
     )
@@ -1272,16 +1545,16 @@ class ModerationCommands(Package):
                 await channel.set_permissions(imuted_role, attach_files=False, embed_links=False)
                 await channel.set_permissions(rmuted_role, add_reactions=False)
 
-        embed = discord.Embed(
+        embed = panel_embed(
             color=self.bot.color,
             title="Mute Setup Complete",
-            description=(
-                f"✅ Created/verified mute roles:\n"
-                f"  • {muted_role.mention} (text mute)\n"
-                f"  • {imuted_role.mention} (image mute)\n"
-                f"  • {rmuted_role.mention} (reaction mute)\n\n"
-                f"Permissions have been applied to all text channels."
-            ),
+            lines=[
+                label_line("Text Mute", muted_role.mention),
+                label_line("Image Mute", imuted_role.mention),
+                label_line("Reaction Mute", rmuted_role.mention),
+                "Permissions have been applied to all text channels.",
+            ],
+            timestamp=False,
         )
         await ctx.send(embed=embed)
 

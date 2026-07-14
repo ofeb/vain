@@ -16,6 +16,7 @@ from core.discord.package import Package
 from .events import TicketsEvents
 from core.managers.permissions import has_permissions
 from core.managers.values import color
+from core.tools.aesthetic import aesthetic_embed, body
 
 from .views import TicketControlView, TicketFormModal, TicketOpenView
 
@@ -24,9 +25,27 @@ if TYPE_CHECKING:
 
 DEFAULT_PANEL_SCRIPT = (
     "{embed}$v{title: Support Tickets}$v"
-    "{description: Click a button below to open a ticket with our staff team.}$v"
+    "{description: > Click a button below to open a ticket with our staff.\n"
+    "-# Please include as much detail as possible when you open one.}$v"
     "{color: #2B2D31}"
 )
+
+
+def _ticket_embed(
+    title: str,
+    message: str,
+    *,
+    footer: str | None = None,
+    author: str | None = None,
+) -> discord.Embed:
+    embed = aesthetic_embed(
+        color=color.base,
+        title=title,
+        message=message,
+        footer=footer,
+        author=author,
+    )
+    return embed
 
 
 class Tickets(TicketsEvents, Package):
@@ -63,10 +82,10 @@ class Tickets(TicketsEvents, Package):
                     return embed
             except Exception:
                 pass
-        return discord.Embed(
-            title="Support Tickets",
-            description="Click a button below to open a ticket.",
-            color=color.base,
+        return _ticket_embed(
+            "Support Tickets",
+            "Click a button below to open a ticket.",
+            footer="Staff will respond as soon as possible",
         )
 
     async def _send_panel_message(self, guild: discord.Guild, panel: dict, options: list[dict]) -> discord.Message:
@@ -89,7 +108,10 @@ class Tickets(TicketsEvents, Package):
             return
         settings = await self._settings(interaction.guild.id)
         if interaction.user.id in (settings.get("blacklist_user_ids") or []):
-            await interaction.response.send_message("You are **blacklisted** from opening tickets.", ephemeral=True)
+            await interaction.response.send_message(
+                embed=_ticket_embed("Access Denied", "You are **blacklisted** from opening tickets."),
+                ephemeral=True,
+            )
             return
 
         option = await self.db.fetchrow(
@@ -153,13 +175,22 @@ class Tickets(TicketsEvents, Package):
         category_id = option.get("category_id") or settings.get("category_id")
         category = interaction.guild.get_channel(int(category_id)) if category_id else None
 
-        name_format = settings.get("channel_name_format") or "ticket-{user}"
-        channel_name = (
-            name_format.replace("{user}", interaction.user.name.lower())
-            .replace("{id}", str(interaction.user.id))
-            .replace("{option}", str(option.get("name") or "ticket"))
-        )
-        channel_name = re.sub(r"[^a-z0-9-]", "-", channel_name.lower())[:100]
+        if settings.get("counter_enabled"):
+            counter = int(settings.get("ticket_counter") or 0) + 1
+            channel_name = f"ticket-{counter:04d}"
+            await self.db.execute(
+                "UPDATE ticket_settings SET ticket_counter = $2 WHERE guild_id = $1",
+                interaction.guild.id,
+                counter,
+            )
+        else:
+            name_format = settings.get("channel_name_format") or "ticket-{user}"
+            channel_name = (
+                name_format.replace("{user}", interaction.user.name.lower())
+                .replace("{id}", str(interaction.user.id))
+                .replace("{option}", str(option.get("name") or "ticket"))
+            )
+            channel_name = re.sub(r"[^a-z0-9-]", "-", channel_name.lower())[:100]
 
         overwrites = {
             interaction.guild.default_role: discord.PermissionOverwrite(view_channel=False),
@@ -209,34 +240,40 @@ class Tickets(TicketsEvents, Package):
         )
 
         greeting = settings.get("greeting_message") or (
-            f"{interaction.user.mention}, thanks for opening a ticket.\n"
-            f"**Type:** {option.get('label') or option.get('name')}\n"
-            "A staff member will be with you shortly."
+            f"{interaction.user.mention} thanks for opening a ticket.\n"
+            f"**Type:** {option.get('label') or option.get('name')}"
         )
         if answers:
             answer_lines = "\n".join(f"**{key}:** {value}" for key, value in answers.items())
-            greeting += f"\n\n**Responses**\n{answer_lines}"
+            greeting += f"\n\n{answer_lines}"
 
-        embed = discord.Embed(description=greeting, color=color.base)
-        embed.set_author(name=str(option.get("label") or option.get("name")))
+        embed = _ticket_embed(
+            str(option.get("label") or option.get("name")),
+            greeting,
+            footer="A staff member will be with you shortly",
+        )
         view = TicketControlView(self)
         self.bot.add_view(view)
         await channel.send(content=interaction.user.mention, embed=embed, view=view)
 
+        success_embed = _ticket_embed(
+            "Ticket Created",
+            f"Your ticket is ready in {channel.mention}",
+            footer=f"#{ticket_id} · {option.get('label') or option.get('name')}",
+        )
         if interaction.response.is_done():
-            await interaction.followup.send(f"Created {channel.mention}", ephemeral=True)
+            await interaction.followup.send(embed=success_embed, ephemeral=True)
         else:
-            await interaction.response.send_message(f"Created {channel.mention}", ephemeral=True)
+            await interaction.response.send_message(embed=success_embed, ephemeral=True)
 
         log_channel_id = settings.get("log_channel_id")
         if log_channel_id:
             log_channel = interaction.guild.get_channel(int(log_channel_id))
             if isinstance(log_channel, discord.TextChannel):
-                log_embed = discord.Embed(
-                    title="Ticket Opened",
-                    description=f"{interaction.user.mention} opened **{option.get('label')}** in {channel.mention}",
-                    color=color.base,
-                    timestamp=discord.utils.utcnow(),
+                log_embed = _ticket_embed(
+                    "Ticket Opened",
+                    f"{interaction.user.mention} opened **{option.get('label')}** in {channel.mention}",
+                    footer=f"Ticket **#{ticket_id}**",
                 )
                 await log_channel.send(embed=log_embed)
 
@@ -306,8 +343,44 @@ class Tickets(TicketsEvents, Package):
             interaction.user.id,
         )
         close_message = settings.get("close_message") or "This ticket has been closed."
-        await channel.send(embed=discord.Embed(description=close_message, color=color.base))
-        await interaction.response.send_message("Ticket closed.", ephemeral=True)
+        await channel.send(
+            embed=_ticket_embed("Ticket Closed", close_message, footer=f"Closed by {interaction.user.display_name}")
+        )
+        await interaction.response.send_message(
+            embed=_ticket_embed("Done", "Ticket has been closed."),
+            ephemeral=True,
+        )
+
+    async def transcript_ticket(self, interaction: discord.Interaction) -> None:
+        if not interaction.guild or not isinstance(interaction.user, discord.Member) or not interaction.channel:
+            return
+        ticket = await self.db.fetchrow(
+            "SELECT * FROM tickets WHERE channel_id = $1",
+            interaction.channel.id,
+        )
+        if not ticket:
+            await interaction.response.send_message("Ticket not found.", ephemeral=True)
+            return
+        settings = await self._settings(interaction.guild.id)
+        if not await self._is_staff(interaction.user, settings):
+            await interaction.response.send_message("You cannot save transcripts for this ticket.", ephemeral=True)
+            return
+        channel = interaction.guild.get_channel(int(ticket["channel_id"]))
+        if not isinstance(channel, discord.TextChannel):
+            await interaction.response.send_message("Ticket channel is gone.", ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=True)
+        await self._publish_transcript(
+            interaction.guild,
+            channel,
+            dict(ticket),
+            settings,
+            closed_by=interaction.user,
+        )
+        await interaction.followup.send(
+            embed=_ticket_embed("Transcript Saved", "HTML transcript posted to the log channel."),
+            ephemeral=True,
+        )
 
     async def delete_ticket(self, interaction: discord.Interaction) -> None:
         if not interaction.guild or not isinstance(interaction.user, discord.Member) or not interaction.channel:
@@ -324,30 +397,77 @@ class Tickets(TicketsEvents, Package):
             await interaction.response.send_message("You cannot delete this ticket.", ephemeral=True)
             return
         channel = interaction.guild.get_channel(int(ticket["channel_id"]))
-        transcript = ""
         if isinstance(channel, discord.TextChannel):
+            await self._publish_transcript(
+                interaction.guild,
+                channel,
+                ticket,
+                settings,
+                closed_by=interaction.user,
+            )
+            await channel.delete(reason=f"Ticket deleted by {interaction.user}")
+        await self.db.execute("DELETE FROM tickets WHERE id = $1", ticket["id"])
+        done_embed = _ticket_embed("Deleted", "Ticket deleted and transcript saved.")
+        if interaction.response.is_done():
+            await interaction.followup.send(embed=done_embed, ephemeral=True)
+        else:
+            await interaction.response.send_message(embed=done_embed, ephemeral=True)
+
+    async def _build_html_transcript(self, channel: discord.TextChannel) -> str:
+        try:
+            import chat_exporter
+        except ImportError:
             lines = []
             async for message in channel.history(limit=500, oldest_first=True):
                 lines.append(f"[{message.created_at:%Y-%m-%d %H:%M}] {message.author}: {message.content}")
-            transcript = "\n".join(lines) or "No messages."
-            transcript_channel_id = settings.get("transcript_channel_id") or settings.get("log_channel_id")
-            if transcript_channel_id:
-                log_channel = interaction.guild.get_channel(int(transcript_channel_id))
-                if isinstance(log_channel, discord.TextChannel):
-                    file = discord.File(
-                        io.BytesIO(transcript.encode("utf-8")),
-                        filename=f"ticket-{ticket['id']}.txt",
-                    )
-                    await log_channel.send(
-                        content=f"Transcript for ticket **#{ticket['id']}** closed by {interaction.user.mention}",
-                        file=file,
-                    )
-            await channel.delete(reason=f"Ticket deleted by {interaction.user}")
-        await self.db.execute("DELETE FROM tickets WHERE id = $1", ticket["id"])
-        if interaction.response.is_done():
-            await interaction.followup.send("Ticket deleted.", ephemeral=True)
-        else:
-            await interaction.response.send_message("Ticket deleted.", ephemeral=True)
+            return f"<html><body><pre>{'&#10;'.join(lines) or 'No messages.'}</pre></body></html>"
+
+        return await chat_exporter.export(
+            channel,
+            limit=500,
+            tz_info="UTC",
+            bot=self.bot,
+        )
+
+    async def _publish_transcript(
+        self,
+        guild: discord.Guild,
+        channel: discord.TextChannel,
+        ticket: dict,
+        settings: dict,
+        *,
+        closed_by: discord.abc.User,
+    ) -> None:
+        html = await self._build_html_transcript(channel)
+        filename = f"ticket-{ticket['id']}-{channel.id}.html"
+        transcript_channel_id = settings.get("transcript_channel_id") or settings.get("log_channel_id")
+        if not transcript_channel_id:
+            return
+
+        log_channel = guild.get_channel(int(transcript_channel_id))
+        if not isinstance(log_channel, discord.TextChannel):
+            return
+
+        opener = guild.get_member(int(ticket["user_id"]))
+        opener_label = opener.mention if opener else f"`{ticket['user_id']}`"
+        embed = _ticket_embed(
+            "Ticket Transcript",
+            f"**Opener:** {opener_label}\n**Channel:** `#{channel.name}`\n**Closed by:** {closed_by.mention}",
+            footer=f"Ticket **#{ticket['id']}**",
+        )
+        file = discord.File(io.BytesIO(html.encode("utf-8")), filename=filename)
+        await log_channel.send(embed=embed, file=file)
+        await self.db.execute(
+            """
+            INSERT INTO ticket_transcripts (guild_id, ticket_id, channel_id, created_by, filename)
+            VALUES ($1, $2, $3, $4, $5)
+            """,
+            guild.id,
+            ticket["id"],
+            channel.id,
+            closed_by.id,
+            filename,
+        )
 
     @group(name="tickets", aliases=["ticket"], invoke_without_command=True, guild_only=True)
     @has_permissions(manage_guild=True)
@@ -419,7 +539,12 @@ class Tickets(TicketsEvents, Package):
             + (f" • [message](https://discord.com/channels/{ctx.guild.id}/{row['channel_id']}/{row['message_id']})" if row["message_id"] else "")
             for row in rows
         ]
-        await ctx.send(embed=discord.Embed(title="Ticket Panels", description="\n".join(lines), color=color.base))
+        await ctx.send(embed=discord.Embed(
+            title="Ticket Panels",
+            description=body(*lines),
+            color=color.base,
+            timestamp=discord.utils.utcnow(),
+        ))
 
     @tickets_panels.command(name="remove", aliases=["delete"])
     async def tickets_panels_remove(self, ctx: Context, name: str) -> None:
@@ -538,7 +663,12 @@ class Tickets(TicketsEvents, Package):
             + (" `(inactive)`" if not row["active"] else "")
             for row in rows
         ]
-        await ctx.send(embed=discord.Embed(title=f"Options for {panel}", description="\n".join(lines), color=color.base))
+        await ctx.send(embed=discord.Embed(
+            title=f"Options for {panel}",
+            description=body(*lines),
+            color=color.base,
+            timestamp=discord.utils.utcnow(),
+        ))
 
     @tickets.group(name="forms", invoke_without_command=True)
     async def tickets_forms(self, ctx: Context) -> None:
@@ -582,7 +712,12 @@ class Tickets(TicketsEvents, Package):
             if isinstance(questions, str):
                 questions = json.loads(questions)
             lines.append(f"**`{row['name']}`** — {len(questions)} question(s)")
-        await ctx.send(embed=discord.Embed(title="Ticket Forms", description="\n".join(lines), color=color.base))
+        await ctx.send(embed=discord.Embed(
+            title="Ticket Forms",
+            description=body(*lines),
+            color=color.base,
+            timestamp=discord.utils.utcnow(),
+        ))
 
     @tickets_forms.command(name="remove", aliases=["delete"])
     async def tickets_forms_remove(self, ctx: Context, name: str) -> None:
@@ -636,6 +771,26 @@ class Tickets(TicketsEvents, Package):
             ticket["id"],
         )
         await ctx.success("Reopened this ticket.")
+
+    @tickets.command(name="transcript")
+    async def tickets_transcript_cmd(self, ctx: Context) -> None:
+        ticket = await self._ticket_row(ctx.channel.id)
+        if not ticket:
+            return await ctx.warn("This is not a ticket channel.")
+        settings = await self._settings(ctx.guild.id)
+        if not await self._is_staff(ctx.author, settings):
+            return await ctx.warn("You cannot save transcripts for this ticket.")
+        channel = ctx.guild.get_channel(int(ticket["channel_id"]))
+        if not isinstance(channel, discord.TextChannel):
+            return await ctx.warn("Ticket channel is gone.")
+        await self._publish_transcript(
+            ctx.guild,
+            channel,
+            ticket,
+            settings,
+            closed_by=ctx.author,
+        )
+        await ctx.success("HTML transcript saved to the log channel.")
 
     @tickets.command(name="delete")
     async def tickets_delete(self, ctx: Context) -> None:
@@ -699,11 +854,118 @@ class Tickets(TicketsEvents, Package):
         ids = settings.get("blacklist_user_ids") or []
         if not ids:
             return await ctx.warn("No users are blacklisted from tickets.")
-        await ctx.send(embed=discord.Embed(
-            title="Ticket Blacklist",
-            description=" ".join(f"<@{user_id}>" for user_id in ids),
+        await ctx.send(embed=aesthetic_embed(
             color=color.base,
+            title="Ticket Blacklist",
+            message=" ".join(f"<@{user_id}>" for user_id in ids),
         ))
+
+    @tickets.group(name="transcripts", invoke_without_command=True)
+    async def tickets_transcripts(self, ctx: Context) -> None:
+        if ctx.invoked_subcommand is None:
+            await ctx.send_help(ctx.command)
+
+    @tickets_transcripts.command(name="channel")
+    async def tickets_transcripts_channel(
+        self,
+        ctx: Context,
+        channel: discord.TextChannel,
+    ) -> None:
+        await self.db.execute(
+            """
+            INSERT INTO ticket_settings (guild_id, transcript_channel_id)
+            VALUES ($1, $2)
+            ON CONFLICT (guild_id) DO UPDATE SET transcript_channel_id = EXCLUDED.transcript_channel_id
+            """,
+            ctx.guild.id,
+            channel.id,
+        )
+        await ctx.success(f"Transcripts will be posted in {channel.mention}.")
+
+    @tickets.group(name="admin", invoke_without_command=True)
+    async def tickets_admin(self, ctx: Context) -> None:
+        if ctx.invoked_subcommand is None:
+            await ctx.send_help(ctx.command)
+
+    @tickets_admin.command(name="add")
+    async def tickets_admin_add(self, ctx: Context, member: discord.Member) -> None:
+        settings = await self._settings(ctx.guild.id)
+        ids = list(settings.get("transcript_admin_ids") or [])
+        if member.id in ids:
+            return await ctx.warn(f"{member.mention} is already a transcript admin.")
+        ids.append(member.id)
+        await self.db.execute(
+            "UPDATE ticket_settings SET transcript_admin_ids = $2 WHERE guild_id = $1",
+            ctx.guild.id,
+            ids,
+        )
+        await ctx.success(f"Added {member.mention} as a transcript admin.")
+
+    @tickets_admin.command(name="remove")
+    async def tickets_admin_remove(self, ctx: Context, member: discord.Member) -> None:
+        settings = await self._settings(ctx.guild.id)
+        ids = [value for value in (settings.get("transcript_admin_ids") or []) if value != member.id]
+        await self.db.execute(
+            "UPDATE ticket_settings SET transcript_admin_ids = $2 WHERE guild_id = $1",
+            ctx.guild.id,
+            ids,
+        )
+        await ctx.success(f"Removed {member.mention} from transcript admins.")
+
+    @tickets_admin.command(name="list")
+    async def tickets_admin_list(self, ctx: Context) -> None:
+        settings = await self._settings(ctx.guild.id)
+        ids = settings.get("transcript_admin_ids") or []
+        if not ids:
+            return await ctx.warn("No transcript admins configured.")
+        await ctx.send(
+            embed=_ticket_embed(
+                "Transcript Admins",
+                " ".join(f"<@{user_id}>" for user_id in ids),
+            )
+        )
+
+    @tickets.group(name="counter", invoke_without_command=True)
+    async def tickets_counter(self, ctx: Context, option: str = None) -> None:
+        if option is None:
+            return await ctx.send_help(ctx.command)
+        enabled = option.lower() in {"on", "enable", "enabled", "true", "yes"}
+        await self.db.execute(
+            """
+            INSERT INTO ticket_settings (guild_id, counter_enabled)
+            VALUES ($1, $2)
+            ON CONFLICT (guild_id) DO UPDATE SET counter_enabled = EXCLUDED.counter_enabled
+            """,
+            ctx.guild.id,
+            enabled,
+        )
+        await ctx.success(f"Ticket counter naming is now **{'enabled' if enabled else 'disabled'}**.")
+
+    @tickets.command(name="greeting")
+    async def tickets_greeting(self, ctx: Context, *, message: str) -> None:
+        await self.db.execute(
+            """
+            INSERT INTO ticket_settings (guild_id, greeting_message)
+            VALUES ($1, $2)
+            ON CONFLICT (guild_id) DO UPDATE SET greeting_message = EXCLUDED.greeting_message
+            """,
+            ctx.guild.id,
+            message,
+        )
+        await ctx.success("Updated ticket greeting message.")
+
+    @tickets.command(name="closemessage", aliases=["closemsg"])
+    async def tickets_closemessage(self, ctx: Context, *, message: str) -> None:
+        await self.db.execute(
+            """
+            INSERT INTO ticket_settings (guild_id, close_message)
+            VALUES ($1, $2)
+            ON CONFLICT (guild_id) DO UPDATE SET close_message = EXCLUDED.close_message
+            """,
+            ctx.guild.id,
+            message,
+        )
+        await ctx.success("Updated ticket close message.")
 
     @tickets.command(name="support")
     async def tickets_support(self, ctx: Context, *roles: discord.Role) -> None:

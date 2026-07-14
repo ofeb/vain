@@ -127,15 +127,15 @@ class Role(Package):
         if not isinstance(channel, discord.TextChannel):
             return
 
-        embed = discord.Embed(
+        from core.tools.moderation_logs import build_modlog_embed
+
+        embed = build_modlog_embed(
             color=self.color,
-            title=f"Case #{case_id}" if case_id is not None else "Moderation action",
-            description=(
-                f"**Action:** {action}\n"
-                f"**Target:** {target_name}\n"
-                f"**Moderator:** {ctx.author}\n"
-                f"**Reason:** {self._default_reason(reason)}"
-            ),
+            action=action,
+            target_label=target_name,
+            moderator_label=ctx.author.mention,
+            reason=self._default_reason(reason),
+            case_id=case_id,
         )
         await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 

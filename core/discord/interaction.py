@@ -15,6 +15,8 @@ from typing import Optional
 
 import discord
 
+from core.tools.aesthetic import body
+
 
 def _build_embed(
     interaction: discord.Interaction,
@@ -25,7 +27,7 @@ def _build_embed(
 ) -> discord.Embed:
     return discord.Embed(
         color=color,
-        description=f"{emoji} {interaction.user.mention}: {message}",
+        description=body(f"{emoji} {interaction.user.mention}: {message}"),
     )
 
 

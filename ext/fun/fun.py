@@ -14,6 +14,7 @@ from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe, linked_family
 from core.discord.views.paginate import send_pages
 from core.managers.values import color, emojis
+from core.tools.aesthetic import aesthetic_embed, body, compose
 
 from .games import start_connect4, start_rps, start_ttt
 from .search import (
@@ -106,8 +107,10 @@ class Fun(Package):
         response = random.choice(responses)
         embed = discord.Embed(
             title="🎱 Magic 8-Ball",
-            description=f"**Question:** {question}\n**Answer:** {response}",
             color=color.base,
+            description=compose(
+                body(f"**Question:** {question}", f"**Answer:** {response}"),
+            ),
         )
         await ctx.send(embed=embed)
 
@@ -128,8 +131,13 @@ class Fun(Package):
         
         embed = discord.Embed(
             title="🎲 Dice Roll",
-            description=f"**Results:** {', '.join(map(str, results))}\n**Total:** {total}",
             color=color.base,
+            description=compose(
+                body(
+                    f"**Results:** {', '.join(map(str, results))}",
+                    f"**Total:** {total}",
+                ),
+            ),
         )
         await ctx.send(embed=embed)
 
@@ -140,10 +148,11 @@ class Fun(Package):
     async def flip(self, ctx: Context) -> None:
         """Flip a coin."""
         result = random.choice(["Heads", "Tails"])
-        embed = discord.Embed(
+        embed = aesthetic_embed(
             title="🪙 Coin Flip",
-            description=f"**Result:** {result}",
             color=color.base,
+            message=f"**Result:** {result}",
+            timestamp=False,
         )
         await ctx.send(embed=embed)
 
@@ -161,8 +170,10 @@ class Fun(Package):
         result = random.choice(choices)
         embed = discord.Embed(
             title="🎯 Random Choice",
-            description=f"**Options:** {', '.join(choices)}\n**Chosen:** {result}",
             color=color.base,
+            description=compose(
+                body(f"**Options:** {', '.join(choices)}", f"**Chosen:** {result}"),
+            ),
         )
         await ctx.send(embed=embed)
 
@@ -174,10 +185,11 @@ class Fun(Package):
     async def rate(self, ctx: Context, *, thing: str) -> None:
         """Rate something out of 10."""
         rating = random.randint(1, 10)
-        embed = discord.Embed(
+        embed = aesthetic_embed(
             title="⭐ Rating",
-            description=f"**{thing}** gets a **{rating}/10**",
             color=color.base,
+            message=f"**{thing}** gets a **{rating}/10**",
+            timestamp=False,
         )
         await ctx.send(embed=embed)
 
@@ -194,9 +206,11 @@ class Fun(Package):
         if not user.banner:
             return await ctx.warn(f"{member.mention} doesn't have a banner")
         
-        embed = discord.Embed(
+        embed = aesthetic_embed(
             title=f"{member.display_name}'s Banner",
             color=color.base,
+            message="",
+            timestamp=False,
         )
         embed.set_image(url=user.banner.url)
         await ctx.send(embed=embed)
@@ -218,23 +232,27 @@ class Fun(Package):
         
         ship_name = f"{member1.display_name[:len(member1.display_name)//2]}{member2.display_name[len(member2.display_name)//2:]}"
         
+        if compatibility >= 80:
+            match_line = "🌟 Perfect match!"
+        elif compatibility >= 60:
+            match_line = "✨ Great match!"
+        elif compatibility >= 40:
+            match_line = "💫 Could work!"
+        else:
+            match_line = "💔 Not a great match..."
+
         embed = discord.Embed(
             title="💕 Ship Calculator",
-            description=f"**{member1.display_name}** ❤️ **{member2.display_name}**\n"
-                        f"**Ship Name:** {ship_name}\n"
-                        f"**Compatibility:** {compatibility}% ❤️",
             color=color.base,
+            description=compose(
+                body(
+                    f"**{member1.display_name}** ❤️ **{member2.display_name}**",
+                    f"**Ship Name:** {ship_name}",
+                    f"**Compatibility:** {compatibility}% ❤️",
+                    match_line,
+                ),
+            ),
         )
-        
-        if compatibility >= 80:
-            embed.description += "\n\n🌟 Perfect match!"
-        elif compatibility >= 60:
-            embed.description += "\n\n✨ Great match!"
-        elif compatibility >= 40:
-            embed.description += "\n\n💫 Could work!"
-        else:
-            embed.description += "\n\n💔 Not a great match..."
-        
         await ctx.send(embed=embed)
 
     @hybrid(
@@ -255,10 +273,11 @@ class Fun(Package):
             "Cows have best friends and get stressed when separated.",
             "The first oranges weren't orange - they were green.",
         ]
-        embed = discord.Embed(
+        embed = aesthetic_embed(
             title="🎉 Fun Fact",
-            description=random.choice(facts),
             color=color.base,
+            message=random.choice(facts),
+            timestamp=False,
         )
         await ctx.send(embed=embed)
 
@@ -280,10 +299,11 @@ class Fun(Package):
             "What do you call a fish without eyes? A fsh!",
             "Why did the math book look so sad? Because it had too many problems!",
         ]
-        embed = discord.Embed(
+        embed = aesthetic_embed(
             title="😂 Joke",
-            description=random.choice(jokes),
             color=color.base,
+            message=random.choice(jokes),
+            timestamp=False,
         )
         await ctx.send(embed=embed)
 
@@ -382,10 +402,11 @@ class Fun(Package):
             return await ctx.warn("Provide an image URL or attach an image.")
 
         query = urllib.parse.quote(url)
-        embed = discord.Embed(
+        embed = aesthetic_embed(
             title="Reverse Image Search",
-            description=f"[Reverse search this image on Google](https://lens.google.com/uploadbyurl?url={query})",
             color=color.base,
+            message=f"[Reverse search this image on Google](https://lens.google.com/uploadbyurl?url={query})",
+            timestamp=False,
         )
         embed.set_thumbnail(url=url)
         await ctx.send(embed=embed)
@@ -398,10 +419,11 @@ class Fun(Package):
     @describe(search="Search query")
     async def image(self, ctx: Context, *, search: str) -> None:
         query = urllib.parse.quote(search)
-        embed = discord.Embed(
+        embed = aesthetic_embed(
             title="Image Search",
-            description=f"[Search for **{search}** images on Google](https://www.google.com/search?q={query}&tbm=isch)",
             color=color.base,
+            message=f"[Search for **{search}** images on Google](https://www.google.com/search?q={query}&tbm=isch)",
+            timestamp=False,
         )
         await ctx.send(embed=embed)
 
@@ -413,10 +435,11 @@ class Fun(Package):
     @describe(keyword="Search keyword")
     async def giphy(self, ctx: Context, *, keyword: str) -> None:
         query = urllib.parse.quote(keyword)
-        embed = discord.Embed(
+        embed = aesthetic_embed(
             title="Giphy Search",
-            description=f"[Search for **{keyword}** on Giphy](https://giphy.com/search/{query})",
             color=color.base,
+            message=f"[Search for **{keyword}** on Giphy](https://giphy.com/search/{query})",
+            timestamp=False,
         )
         await ctx.send(embed=embed)
 
@@ -427,10 +450,11 @@ class Fun(Package):
     @describe(keyword="Search keyword")
     async def tenor(self, ctx: Context, *, keyword: str) -> None:
         query = urllib.parse.quote(keyword)
-        embed = discord.Embed(
+        embed = aesthetic_embed(
             title="Tenor Search",
-            description=f"[Search for **{keyword}** on Tenor](https://tenor.com/search/{query})",
             color=color.base,
+            message=f"[Search for **{keyword}** on Tenor](https://tenor.com/search/{query})",
+            timestamp=False,
         )
         await ctx.send(embed=embed)
 
@@ -442,10 +466,11 @@ class Fun(Package):
     @describe(query="What you want to learn how to do")
     async def wikihow(self, ctx: Context, *, query: str) -> None:
         query_encoded = urllib.parse.quote(query)
-        embed = discord.Embed(
+        embed = aesthetic_embed(
             title="WikiHow",
-            description=f"[How to {query}?](https://www.wikihow.com/wikiHowTo?search={query_encoded})",
             color=color.base,
+            message=f"[How to {query}?](https://www.wikihow.com/wikiHowTo?search={query_encoded})",
+            timestamp=False,
         )
         await ctx.send(embed=embed)
 
@@ -456,10 +481,11 @@ class Fun(Package):
     @describe(query="Question to search for")
     async def brainly(self, ctx: Context, *, query: str) -> None:
         query_encoded = urllib.parse.quote(query)
-        embed = discord.Embed(
+        embed = aesthetic_embed(
             title="Brainly",
-            description=f"[Search for **{query}** on Brainly](https://brainly.com/app/ask?q={query_encoded})",
             color=color.base,
+            message=f"[Search for **{query}** on Brainly](https://brainly.com/app/ask?q={query_encoded})",
+            timestamp=False,
         )
         await ctx.send(embed=embed)
 
@@ -486,8 +512,8 @@ class Fun(Package):
             return await ctx.warn("Could not find lyrics for that track.")
         embed = discord.Embed(
             title=f"{title.strip()} — {artist.strip()}",
-            description=lyrics_text[:4000],
             color=color.base,
+            description=compose(body(lyrics_text[:4000])),
         )
         await ctx.send(embed=embed)
 
@@ -574,8 +600,8 @@ class Fun(Package):
 
         embed = discord.Embed(
             title="Would You Rather?",
-            description=f"**1:** {option1}\n**2:** {option2}",
             color=color.base,
+            description=compose(body(f"**1:** {option1}", f"**2:** {option2}")),
         )
         msg = await ctx.send(embed=embed)
         try:

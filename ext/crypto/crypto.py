@@ -9,6 +9,7 @@ from discord.ext import commands
 from core.discord.ctx import Context
 from core.discord.hybrid import describe, hybrid
 from core.managers.values import color
+from core.tools.aesthetic import aesthetic_embed, panel_embed
 
 if TYPE_CHECKING:
     pass
@@ -98,9 +99,12 @@ class Crypto(commands.Cog):
         elif change < 0:
             arrow, emoji = "▼", "red"
 
-        embed = discord.Embed(
+        embed = panel_embed(
             title=f"{coin.upper()} / USD",
             color=color.base,
+            lines=[],
+            footer="Powered by CoinGecko",
+            timestamp=False,
         )
         embed.add_field(name="Price", value=f"${usd:,.2f}", inline=True)
         embed.add_field(
@@ -110,7 +114,6 @@ class Crypto(commands.Cog):
         )
         embed.add_field(name="Market Cap", value=f"${cap:,.0f}", inline=True)
         embed.add_field(name="24h Volume", value=f"${vol:,.0f}", inline=True)
-        embed.set_footer(text="Powered by CoinGecko")
         await ctx.send(embed=embed)
 
     @hybrid(
@@ -133,14 +136,16 @@ class Crypto(commands.Cog):
         elif change < 0:
             arrow = "▼"
 
-        embed = discord.Embed(
+        embed = panel_embed(
             title=f"Bitcoin (BTC) / USD — ${usd:,.2f}",
             color=color.base,
+            lines=[],
+            footer="Powered by CoinGecko",
+            thumbnail="https://assets.coingecko.com/coins/images/1/large/bitcoin.png",
+            timestamp=False,
         )
         embed.add_field(name="24h Change", value=f"{arrow} {change:+.2f}%", inline=True)
         embed.add_field(name="Market Cap", value=f"${cap:,.0f}", inline=True)
-        embed.set_thumbnail(url="https://assets.coingecko.com/coins/images/1/large/bitcoin.png")
-        embed.set_footer(text="Powered by CoinGecko")
         await ctx.send(embed=embed)
 
     @hybrid(
@@ -163,14 +168,16 @@ class Crypto(commands.Cog):
         elif change < 0:
             arrow = "▼"
 
-        embed = discord.Embed(
+        embed = panel_embed(
             title=f"Ethereum (ETH) / USD — ${usd:,.2f}",
             color=color.base,
+            lines=[],
+            footer="Powered by CoinGecko",
+            thumbnail="https://assets.coingecko.com/coins/images/279/large/ethereum.png",
+            timestamp=False,
         )
         embed.add_field(name="24h Change", value=f"{arrow} {change:+.2f}%", inline=True)
         embed.add_field(name="Market Cap", value=f"${cap:,.0f}", inline=True)
-        embed.set_thumbnail(url="https://assets.coingecko.com/coins/images/279/large/ethereum.png")
-        embed.set_footer(text="Powered by CoinGecko")
         await ctx.send(embed=embed)
 
     @hybrid(
@@ -192,13 +199,15 @@ class Crypto(commands.Cog):
         elif change < 0:
             arrow = "▼"
 
-        embed = discord.Embed(
+        embed = panel_embed(
             title=f"Solana (SOL) / USD — ${usd:,.2f}",
             color=color.base,
+            lines=[],
+            footer="Powered by CoinGecko",
+            thumbnail="https://assets.coingecko.com/coins/images/4128/large/solana.png",
+            timestamp=False,
         )
         embed.add_field(name="24h Change", value=f"{arrow} {change:+.2f}%", inline=True)
-        embed.set_thumbnail(url="https://assets.coingecko.com/coins/images/4128/large/solana.png")
-        embed.set_footer(text="Powered by CoinGecko")
         await ctx.send(embed=embed)
 
     @hybrid(
@@ -229,14 +238,16 @@ class Crypto(commands.Cog):
             await ctx.fail("Could not fetch gas prices.")
             return
 
-        embed = discord.Embed(
+        embed = panel_embed(
             title="ETH Gas Prices",
             color=color.base,
+            lines=[],
+            footer="Powered by Etherscan",
+            timestamp=False,
         )
         embed.add_field(name="Low", value=f"{result.get('SafeGasPrice', 'N/A')} Gwei", inline=True)
         embed.add_field(name="Average", value=f"{result.get('ProposeGasPrice', 'N/A')} Gwei", inline=True)
         embed.add_field(name="Fast", value=f"{result.get('FastGasPrice', 'N/A')} Gwei", inline=True)
-        embed.set_footer(text="Powered by Etherscan")
         await ctx.send(embed=embed)
 
     @hybrid(
@@ -247,16 +258,17 @@ class Crypto(commands.Cog):
     )
     @describe(hash="Transaction hash")
     async def transaction(self, ctx: Context, *, hash: str) -> None:
-        embed = discord.Embed(
+        embed = panel_embed(
             title="Transaction Lookup",
-            description=(
-                f"[View on Blockchain](https://www.blockchain.com/btc/tx/{hash})\n"
-                f"[View on Etherscan](https://etherscan.io/tx/{hash})\n"
-                f"[View on Blockchair (LTC)](https://blockchair.com/litecoin/transaction/{hash})"
-            ),
             color=color.base,
+            lines=[
+                f"[View on Blockchain](https://www.blockchain.com/btc/tx/{hash})",
+                f"[View on Etherscan](https://etherscan.io/tx/{hash})",
+                f"[View on Blockchair (LTC)](https://blockchair.com/litecoin/transaction/{hash})",
+            ],
+            footer="Click a link to view the transaction on the respective explorer",
+            timestamp=False,
         )
-        embed.set_footer(text="Click a link to view the transaction on the respective explorer")
         await ctx.send(embed=embed)
 
     @hybrid(
@@ -267,10 +279,11 @@ class Crypto(commands.Cog):
     )
     @describe(hash="Transaction hash to watch")
     async def subscribe(self, ctx: Context, *, hash: str) -> None:
-        embed = discord.Embed(
+        embed = aesthetic_embed(
             title="Transaction Subscribed",
-            description=f"Now watching `{hash}` for confirmations.",
+            message=f"Now watching `{hash}` for confirmations.",
             color=color.base,
+            timestamp=False,
         )
         embed.set_footer(text="You'll be notified when the transaction is confirmed")
         await ctx.send(embed=embed)

@@ -11,6 +11,7 @@ from core.discord.hybrid import describe, hybrid
 from core.discord.package import Package
 from core.managers.permissions import has_permissions
 from core.managers.values import color
+from core.tools.aesthetic import aesthetic_embed, body
 
 if TYPE_CHECKING:
     from core.vain import Vain
@@ -97,8 +98,9 @@ class EmbedCommands(Package):
         ]
         embed = discord.Embed(
             title=f"Saved Embeds ({len(lines)})",
-            description="\n".join(lines[:40]),
+            description=body(*lines[:40]),
             color=color.base,
+            timestamp=discord.utils.utcnow(),
         )
         await ctx.send(embed=embed)
 
@@ -143,7 +145,12 @@ class EmbedCommands(Package):
         code = self._embed_to_code(msg.embeds[0])
         if len(code) > 2000:
             return await ctx.warn("Embed code is too long to send here.")
-        await ctx.send(embed=discord.Embed(title="Embed Code", description=f"```{code}```", color=color.base))
+        await ctx.send(embed=aesthetic_embed(
+            color=color.base,
+            title="Embed Code",
+            message=f"```{code}```",
+            timestamp=False,
+        ))
 
     @embed.command(name="delete", description="Delete a saved embed template", aliases=["remove"])
     @describe(name="Template name")

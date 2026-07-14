@@ -7,6 +7,7 @@ import discord
 from core.discord.hybrid import hybrid
 from core.discord.package import Package
 from core.discord.views.paginate import send_pages
+from core.tools.aesthetic import aesthetic_embed, body, caption, compose
 from core.tools.embed import BadEmbed, ParseError, PreparedScript, parse
 
 
@@ -173,23 +174,28 @@ class ServerCommands(Package):
             cat = categories[category]
             lines = [f"`{var}` — {desc}" for var, desc in cat["variables"].items()]
             embed = discord.Embed(
-                title=f"{cat['description']}",
-                description="\n".join(lines),
                 color=self.color,
+                title=cat["description"],
+                description=compose(
+                    body(*lines),
+                    caption("Use these variables in embedcreate, autoresponders, and more"),
+                ),
+                timestamp=discord.utils.utcnow(),
             )
-            embed.set_footer(text="Use these variables in embedcreate, autoresponders, and more")
             return await ctx.send(embed=embed)
 
         pages = []
         for cat in categories.values():
             lines = [f"`{var}` — {desc}" for var, desc in cat["variables"].items()]
-            page = discord.Embed(
-                title=cat["description"],
-                description="\n".join(lines),
+            pages.append(discord.Embed(
                 color=self.color,
-            )
-            page.set_footer(text=f"Use {ctx.clean_prefix}variables <category> for more details")
-            pages.append(page)
+                title=cat["description"],
+                description=compose(
+                    body(*lines),
+                    caption(f"Use {ctx.clean_prefix}variables <category> for more details"),
+                ),
+                timestamp=discord.utils.utcnow(),
+            ))
 
         await send_pages(ctx, pages)
 
@@ -202,7 +208,7 @@ class ServerCommands(Package):
     async def serverinfo(self, ctx):
         """show server info"""
         g = ctx.guild
-        e = discord.Embed(title=g.name, color=self.color)
+        e = aesthetic_embed(color=self.color, title=g.name, message="", timestamp=True)
 
         if g.icon:
             e.set_thumbnail(url=g.icon.url)
@@ -249,22 +255,38 @@ class ServerCommands(Package):
 
         e.add_field(
             name=f"Members ({g.member_count})",
-            value=f">>> Boosters: `{booster_count}`\nHumans: `{humans}`\nBots: `{bots}`",
+            value=body(
+                f"Boosters: `{booster_count}`",
+                f"Humans: `{humans}`",
+                f"Bots: `{bots}`",
+            ),
             inline=True,
         )
         e.add_field(
             name=f"Counts ({total_channels})",
-            value=f">>> Stickers: `{len(g.stickers)}/{sticker_limit}`\nEmojis: `{len(g.emojis)}/{emoji_limit}`\nRoles: `{len(g.roles)}/{role_limit}`",
+            value=body(
+                f"Stickers: `{len(g.stickers)}/{sticker_limit}`",
+                f"Emojis: `{len(g.emojis)}/{emoji_limit}`",
+                f"Roles: `{len(g.roles)}/{role_limit}`",
+            ),
             inline=True,
         )
         e.add_field(
             name=f"Channels ({total_channels})",
-            value=f">>> Categories: `{categories}`\nText: `{text_channels}`\nVoice: `{voice_channels}`",
+            value=body(
+                f"Categories: `{categories}`",
+                f"Text: `{text_channels}`",
+                f"Voice: `{voice_channels}`",
+            ),
             inline=True,
         )
         e.add_field(
             name="Boosts",
-            value=f">>> Level: `{g.premium_tier}`\nBoosts: `{g.premium_subscription_count or 0}`\nBoosters: `{booster_count}`",
+            value=body(
+                f"Level: `{g.premium_tier}`",
+                f"Boosts: `{g.premium_subscription_count or 0}`",
+                f"Boosters: `{booster_count}`",
+            ),
             inline=True,
         )
 
@@ -277,22 +299,36 @@ class ServerCommands(Package):
             splash_url = f"[view]({g.splash.url})"
         e.add_field(
             name="Design",
-            value=f">>> Icon: {icon_url}\nBanner: {banner_url}\nSplash: {splash_url}",
+            value=body(
+                f"Icon: {icon_url}",
+                f"Banner: {banner_url}",
+                f"Splash: {splash_url}",
+            ),
             inline=True,
         )
         e.add_field(
             name="System",
-            value=f">>> Verification: `{str(g.verification_level).replace('_', ' ').title()}`\nMfa level: `{mfa}`\nVanity: `{vanity}`",
+            value=body(
+                f"Verification: `{str(g.verification_level).replace('_', ' ').title()}`",
+                f"Mfa level: `{mfa}`",
+                f"Vanity: `{vanity}`",
+            ),
             inline=True,
         )
         if features_str:
             e.add_field(
                 name=f"Features ({len(features)})",
-                value=f">>> {features_str}",
+                value=body(features_str),
                 inline=False,
             )
 
-        e.set_footer(text=f"ID: {g.id} • Shard {g.shard_id if g.shard_id is not None else 0} • Cluster ID {getattr(g, 'cluster_id', 'N/A')}")
+        e.description = compose(
+            e.description or "",
+            caption(
+                f"ID: {g.id} • Shard {g.shard_id if g.shard_id is not None else 0} • "
+                f"Cluster ID {getattr(g, 'cluster_id', 'N/A')}"
+            ),
+        )
         await ctx.send(embed=e)
 
     @command(
@@ -306,10 +342,10 @@ class ServerCommands(Package):
         if not lines:
             from discord.ext.commands import CommandError
             raise CommandError("no roles in this server")
-        e = discord.Embed(
-            title=f"Roles ({len(lines)})",
-            description=" ".join(lines),
+        e = aesthetic_embed(
             color=self.color,
+            title=f"Roles ({len(lines)})",
+            message=" ".join(lines),
         )
         await ctx.send(embed=e)
 
@@ -320,10 +356,10 @@ class ServerCommands(Package):
     async def bots(self, ctx):
         """list all bots"""
         bots = [m for m in ctx.guild.members if m.bot]
-        e = discord.Embed(
-            title=f"Bots ({len(bots)})",
-            description=" ".join(b.mention for b in bots) or "none",
+        e = aesthetic_embed(
             color=self.color,
+            title=f"Bots ({len(bots)})",
+            message=" ".join(b.mention for b in bots) or "none",
         )
         await ctx.send(embed=e)
 
@@ -337,7 +373,7 @@ class ServerCommands(Package):
         if not ctx.guild.icon:
             from discord.ext.commands import CommandError
             raise CommandError("this server has no icon")
-        e = discord.Embed(color=self.color)
+        e = aesthetic_embed(color=self.color, message="", timestamp=False)
         e.set_image(url=ctx.guild.icon.url)
         e.set_author(name=ctx.guild.name)
         await ctx.send(embed=e)
@@ -352,7 +388,7 @@ class ServerCommands(Package):
         if not ctx.guild.banner:
             from discord.ext.commands import CommandError
             raise CommandError("this server has no banner")
-        e = discord.Embed(color=self.color)
+        e = aesthetic_embed(color=self.color, message="", timestamp=False)
         e.set_image(url=ctx.guild.banner.url)
         e.set_author(name=ctx.guild.name)
         await ctx.send(embed=e)

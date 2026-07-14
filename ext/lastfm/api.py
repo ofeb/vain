@@ -16,6 +16,7 @@ import discord
 
 from core.discord.ctx import Context
 from core.managers.values import api as api_values
+from core.tools.aesthetic import aesthetic_embed
 
 from .constants import LASTFM_EMBED_FOOTER_ICON_URL
 
@@ -512,11 +513,11 @@ class LastFMApiClient:
                     with contextlib.suppress(discord.HTTPException):
                         user = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
                         if user:
-                            embed = discord.Embed(
-                                description=(
-                                    f"Your **Last.fm** account has been linked as `{username}`."
-                                ),
+                            embed = aesthetic_embed(
+                                message=f"Your **Last.fm** account has been linked as `{username}`.",
                                 color=self._lastfm_color(),
+                                footer="Last.fm",
+                                timestamp=False,
                             )
                             embed.set_footer(
                                 text="Last.fm",

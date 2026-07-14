@@ -21,6 +21,7 @@ from .events import VoiceMasterEvents
 from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe, group
 from core.managers.values import bot as bot_config, color, emojis
+from core.tools.aesthetic import panel_embed
 from .views import VoiceInterface
 from core.managers.permissions import has_permissions
 
@@ -71,14 +72,13 @@ class VoiceMaster(VoiceMasterEvents, Package):
 
     def _interface_embed(self, guild: discord.Guild) -> discord.Embed:
         """Build the Vain-style VoiceMaster interface embed."""
-        embed = discord.Embed(
+        embed = panel_embed(
             color=color.base,
             title="VoiceMaster Interface",
-            description="Click the buttons below to control your voice channel",
-        )
-        embed.set_author(
-            name=guild.name,
-            icon_url=guild.icon.url if guild.icon else None,
+            lines=["Click the buttons below to control your voice channel"],
+            author=guild.name,
+            author_icon=guild.icon.url if guild.icon else None,
+            timestamp=False,
         )
         if self.bot.user is not None:
             embed.set_thumbnail(url=self.bot.user.display_avatar.url)
@@ -411,7 +411,7 @@ class VoiceMaster(VoiceMasterEvents, Package):
         if not config:
             return await ctx.warn("The server is not configured")
         
-        embed = discord.Embed(title="VoiceMaster Defaults", color=color.base)
+        embed = panel_embed(title="VoiceMaster Defaults", color=color.base, lines=[], timestamp=False)
         embed.add_field(name="Bitrate", value=f"{config.get('bitrate', 64000) // 1000}kbps", inline=True)
         embed.add_field(name="Region", value=config.get('region', 'auto'), inline=True)
         embed.add_field(name="Default Role", value=f"<@{config.get('role_id', 0)}>", inline=True)
@@ -491,7 +491,7 @@ class VoiceMaster(VoiceMasterEvents, Package):
         """See current configuration for current voice channel."""
         channel = ctx.author.voice.channel
         
-        embed = discord.Embed(title=channel.name, color=color.base)
+        embed = panel_embed(title=channel.name, color=color.base, lines=[], timestamp=False)
         embed.add_field(name="Owner", value=f"<@{ctx.author.id}>", inline=True)
         embed.add_field(name="Locked", value="Yes" if not channel.permissions_for(ctx.guild.default_role).connect else "No", inline=True)
         embed.add_field(name="Members", value=f"{len(channel.members)}", inline=True)

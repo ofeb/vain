@@ -12,6 +12,7 @@ from core.discord.ctx import Context
 from core.discord.hybrid import describe, group, hybrid
 from core.managers.permissions import has_permissions
 from core.managers.values import color
+from core.tools.aesthetic import aesthetic_embed, panel_embed
 
 if TYPE_CHECKING:
     from core.vain import Vain
@@ -62,11 +63,13 @@ class Level(LevelEvents, Package):
             xp_in_level = xp - sum(xp_for_level(i) for i in range(lvl))
             xp_needed = current_level_xp
 
-            embed = discord.Embed(
+            embed = panel_embed(
                 title=f"Level — {member.display_name}",
                 color=color.base,
+                lines=[],
+                thumbnail=member.display_avatar.url,
+                timestamp=False,
             )
-            embed.set_thumbnail(url=member.display_avatar.url)
             embed.add_field(name="Level", value=str(lvl), inline=True)
             embed.add_field(name="XP", value=f"{xp_in_level}/{xp_needed}", inline=True)
             embed.add_field(name="Total XP", value=str(xp), inline=True)
@@ -101,10 +104,11 @@ class Level(LevelEvents, Package):
                 lvl = level_from_xp(row[1])
                 entries.append(f"`{i}.` **{name}** — Level {lvl} ({row[1]} XP)")
 
-            embed = discord.Embed(
+            embed = panel_embed(
                 title=f"Leaderboard — {ctx.guild.name}",
-                description="\n".join(entries),
                 color=color.base,
+                lines=entries,
+                timestamp=False,
             )
             await ctx.send(embed=embed)
         except Exception:
@@ -131,10 +135,11 @@ class Level(LevelEvents, Package):
                 if role:
                     entries.append(f"Level **{row[1]}** — {role.mention}")
 
-            embed = discord.Embed(
+            embed = panel_embed(
                 title="Level Rewards",
-                description="\n".join(entries),
                 color=color.base,
+                lines=entries,
+                timestamp=False,
             )
             await ctx.send(embed=embed)
         except Exception:
@@ -189,9 +194,11 @@ class Level(LevelEvents, Package):
             roles = await self.bot.db.fetch(
                 "SELECT COUNT(*) FROM level_roles WHERE guild_id = $1", ctx.guild.id,
             )
-            embed = discord.Embed(
+            embed = panel_embed(
                 title="Level Configuration",
                 color=color.base,
+                lines=[],
+                timestamp=False,
             )
             embed.add_field(name="Tracked Members", value=str(total), inline=True)
             embed.add_field(name="Reward Roles", value=str(roles[0][0] if roles else 0), inline=True)

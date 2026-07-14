@@ -17,6 +17,7 @@ from core.discord.package import Package
 from core.discord.ctx import Context
 from core.discord.hybrid import describe, group, hybrid
 from core.managers.values import color
+from core.tools.aesthetic import aesthetic_embed, panel_embed
 
 SC_API_URL = "https://api-v2.soundcloud.com"
 DEFAULT_CLIENT_ID = "a3e059563d7fd3372b49b37f00a00bcf"
@@ -81,12 +82,13 @@ class Soundcloud(Package):
             duration = self._format_duration(track.get("duration", 0))
             entries.append(f"`{i}.` **{track['title']}** — {track['user']['username']} ({duration})")
 
-        embed = discord.Embed(
+        embed = panel_embed(
             title=f"SoundCloud Search — {query}",
-            description="\n".join(entries),
             color=color.base,
+            lines=entries,
+            footer="Powered by SoundCloud API",
+            timestamp=False,
         )
-        embed.set_footer(text="Powered by SoundCloud API")
         await ctx.send(embed=embed)
 
     @soundcloud.command(
@@ -108,12 +110,14 @@ class Soundcloud(Package):
             await ctx.fail("Could not retrieve track info.")
             return
 
-        embed = discord.Embed(
+        embed = panel_embed(
             title=data.get("title", "Unknown Track"),
-            description=data.get("description", "")[:200] or "No description",
             color=color.base,
+            lines=[data.get("description", "")[:200] or "No description"],
+            author=data["user"]["username"],
+            url=data["user"].get("permalink_url"),
+            timestamp=False,
         )
-        embed.set_author(name=data["user"]["username"], url=data["user"].get("permalink_url"))
         embed.add_field(name="Duration", value=self._format_duration(data.get("duration", 0)), inline=True)
         embed.add_field(name="Plays", value=f"{data.get('playback_count', 0):,}", inline=True)
         embed.add_field(name="Likes", value=f"{data.get('favoritings_count', 0):,}", inline=True)

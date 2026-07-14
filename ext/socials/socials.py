@@ -20,6 +20,7 @@ from core.discord.ctx import Context
 from core.discord.hybrid import describe, group, hybrid
 from core.managers.permissions import has_permissions
 from core.managers.values import color
+from core.tools.aesthetic import aesthetic_embed, body
 
 if TYPE_CHECKING:
     from core.vain import Vain
@@ -169,10 +170,10 @@ class Socials(Package):
     )
     @has_permissions(manage_guild=True)
     async def socials_list(self, ctx: Context) -> None:
-        embed = discord.Embed(
-            title="Social Feeds",
-            description="No social feeds configured.",
+        embed = aesthetic_embed(
             color=color.base,
+            title="Social Feeds",
+            message="No social feeds configured.",
         )
         await ctx.send(embed=embed)
 
@@ -192,17 +193,18 @@ class Socials(Package):
             await ctx.fail(f"Could not find Instagram user `{username}`.")
             return
 
-        embed = discord.Embed(
-            title=f"{data['full_name'] or data['username']} (@{data['username']})",
-            description=data["bio"][:200] or "No bio",
+        bio = data["bio"][:200] or "No bio"
+        embed = aesthetic_embed(
             color=color.base,
+            title=f"{data['full_name'] or data['username']} (@{data['username']})",
+            message=bio,
         )
         embed.set_thumbnail(url=data["avatar"])
-        embed.add_field(name="Followers", value=f"{data['followers']:,}", inline=True)
-        embed.add_field(name="Following", value=f"{data['following']:,}", inline=True)
-        embed.add_field(name="Posts", value=f"{data['posts']:,}", inline=True)
-        embed.add_field(name="Private", value="Yes" if data["is_private"] else "No", inline=True)
-        embed.add_field(name="Verified", value="Yes" if data["is_verified"] else "No", inline=True)
+        embed.add_field(name="Followers", value=body(f"{data['followers']:,}"), inline=True)
+        embed.add_field(name="Following", value=body(f"{data['following']:,}"), inline=True)
+        embed.add_field(name="Posts", value=body(f"{data['posts']:,}"), inline=True)
+        embed.add_field(name="Private", value=body("Yes" if data["is_private"] else "No"), inline=True)
+        embed.add_field(name="Verified", value=body("Yes" if data["is_verified"] else "No"), inline=True)
         await ctx.send(embed=embed)
 
     @group(
@@ -261,10 +263,10 @@ class Socials(Package):
         aliases=["details"],
     )
     async def tiktok_info(self, ctx: Context, *, url: str) -> None:
-        embed = discord.Embed(
-            title="TikTok Video",
-            description=f"Info for `{url}`: requires API setup.",
+        embed = aesthetic_embed(
             color=color.base,
+            title="TikTok Video",
+            message=f"Info for `{url}`: requires API setup.",
         )
         await ctx.send(embed=embed)
 

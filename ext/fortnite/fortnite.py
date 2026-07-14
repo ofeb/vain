@@ -13,6 +13,7 @@ from core.discord.package import Package
 from core.discord.ctx import Context
 from core.discord.hybrid import describe, hybrid
 from core.managers.values import color
+from core.tools.aesthetic import aesthetic_embed, panel_embed
 
 if TYPE_CHECKING:
     from core.vain import Vain
@@ -194,14 +195,15 @@ class Fortnite(Package):
                 return await ctx.fail(f"Failed to render shop image: {exc}")
 
         file = discord.File(io.BytesIO(image_bytes), filename="fortnite_shop.png")
-        embed = discord.Embed(
+        total_items = sum(len(s.items) for s in layout.sections)
+        embed = panel_embed(
             title="Fortnite Item Shop",
-            description=f"**{layout.date}**",
             color=color.base,
+            lines=[f"**{layout.date}**"],
+            footer=f"{total_items} items",
+            timestamp=False,
         )
         embed.set_image(url="attachment://fortnite_shop.png")
-        total_items = sum(len(s.items) for s in layout.sections)
-        embed.set_footer(text=f"{total_items} items")
         await ctx.send(embed=embed, file=file)
 
     @fortnite.command(
@@ -216,7 +218,7 @@ class Fortnite(Package):
         if not cosmetic:
             return await ctx.warn(f"No cosmetics found matching `{name}`.")
 
-        embed = discord.Embed(title=cosmetic.name, color=color.base)
+        embed = panel_embed(title=cosmetic.name, color=color.base, lines=[], timestamp=False)
         embed.add_field(name="Type", value=cosmetic.type_name, inline=True)
         embed.add_field(name="Rarity", value=cosmetic.rarity.title(), inline=True)
         if cosmetic.price is not None:

@@ -10,6 +10,7 @@ from core.discord.package import Package
 from core.discord.hybrid import describe
 from core.managers.permissions import has_permissions
 from core.managers.values import color, emojis
+from core.tools.aesthetic import panel_embed
 
 
 
@@ -54,10 +55,11 @@ class Embedcode(Package):
 
         try:
             await ctx.author.send(
-                embed=discord.Embed(
+                embed=panel_embed(
                     title="Embed Code",
-                    description=f"```{code}```",
                     color=color.base,
+                    lines=[f"```{code}```"],
+                    timestamp=False,
                 )
             )
             await ctx.success("Embed code sent to your DMs!")

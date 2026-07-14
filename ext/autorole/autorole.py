@@ -10,6 +10,7 @@ from discord.ext import commands
 from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe, group
 from core.managers.values import color, emojis
+from core.tools.aesthetic import panel_embed
 from core.managers.permissions import has_permissions
 
 if TYPE_CHECKING:
@@ -63,7 +64,7 @@ class Autorole(commands.Cog):
             if ctx.guild.get_role(r.role_id)
         ]
         rows = [f"`{i}` {r}" for i, r in enumerate(roles, start=1)]
-        embed = discord.Embed(title="Auto Roles", color=color.base)
+        embed = panel_embed(title="Auto Roles", color=color.base, lines=rows, timestamp=False)
         await ctx.send(embed=embed)
 
     @autorole.command(
@@ -200,9 +201,6 @@ class Autorole(commands.Cog):
     async def buttonrole_list(self, ctx: Context) -> None:
         """View a list of every button role."""
         rows = []
-        embed = discord.Embed(color=color.base, title="Button roles")
-        embed.set_author(name=str(ctx.author), icon_url=ctx.author.display_avatar.url)
-        
         i = 0
         for row in await self.bot.db.fetch(
             "SELECT message_id, channel_id, role_id FROM button_roles WHERE guild_id = $1 ORDER BY index ASC",
@@ -239,7 +237,15 @@ class Autorole(commands.Cog):
                 continue
             i += 1
             rows.append(f"`{i}` {role.mention} - [message]({message.jump_url})")
-        
+
+        embed = panel_embed(
+            color=color.base,
+            title="Button roles",
+            author=str(ctx.author),
+            author_icon=ctx.author.display_avatar.url,
+            lines=rows,
+            timestamp=False,
+        )
         await ctx.send(embed=embed)
 
     @buttonrole.command(
@@ -378,7 +384,7 @@ class Autorole(commands.Cog):
             f"`{i}` {row}"
             for i, row in enumerate([get_row(r) for r in rows if get_row(r)], start=1)
         ]
-        embed = discord.Embed(title="Reaction Roles", color=color.base)
+        embed = panel_embed(title="Reaction Roles", color=color.base, lines=rows, timestamp=False)
         await ctx.send(embed=embed)
 
     @reactionrole.command(

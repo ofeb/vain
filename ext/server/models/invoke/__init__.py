@@ -8,3 +8,5 @@ class InvocationConfig:
     command: str
     dm_code: str | None = None
     message_code: str | None = None
+    dm_enabled: bool = True
+    message_enabled: bool = True

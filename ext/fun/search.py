@@ -8,6 +8,8 @@ from urllib.parse import parse_qs, unquote, urlparse
 import aiohttp
 import discord
 
+from core.tools.aesthetic import body, compose
+
 DDG_ICON = "https://vain.bot/img/duckduckgo.png"
 GOOGLE_ICON = "https://vain.bot/img/google.png"
 _DDG_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
@@ -96,7 +98,7 @@ def build_ddg_search_pages(
             snippet = item["snippet"] or "No description available."
             embed.add_field(
                 name=f"**{item['title']}**",
-                value=f"**{item['url']}**\n{snippet[:900]}",
+                value=compose(body(f"**{item['url']}**", snippet[:900])),
                 inline=False,
             )
         embed.set_footer(
@@ -223,7 +225,10 @@ def build_image_search_pages(
         icon_url = DDG_ICON
     pages: list[discord.Embed] = []
     for index, image_url in enumerate(images, start=1):
-        embed = discord.Embed(title="Image Results", description=f"**{query}**")
+        embed = discord.Embed(
+            title="Image Results",
+            description=compose(body(f"**{query}**")),
+        )
         embed.set_author(name=author.display_name, icon_url=author.display_avatar.url)
         embed.set_image(url=image_url)
         embed.set_footer(text=f"Page {index}/{total_pages} of {footer_label}", icon_url=icon_url)

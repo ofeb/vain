@@ -1360,6 +1360,42 @@ class Database:
             guild_id,
         )
 
+    async def get_antinuke_log_channel(self, guild_id: int) -> int | None:
+        """fetch the antinuke log channel id for a guild"""
+        return await self.fetchval(
+            "SELECT antinuke_log_channel_id FROM server_settings WHERE guild_id = $1",
+            guild_id,
+        )
+
+    async def get_antiraid_log_channel(self, guild_id: int) -> int | None:
+        """fetch the antiraid log channel id for a guild"""
+        return await self.fetchval(
+            "SELECT antiraid_log_channel_id FROM server_settings WHERE guild_id = $1",
+            guild_id,
+        )
+
+    async def set_security_log_channels(
+        self,
+        guild_id: int,
+        *,
+        antinuke_channel_id: int | None = None,
+        antiraid_channel_id: int | None = None,
+    ) -> None:
+        """upsert antinuke and antiraid log channel bindings"""
+        await self.execute(
+            """
+            INSERT INTO server_settings (guild_id, antinuke_log_channel_id, antiraid_log_channel_id)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (guild_id) DO UPDATE SET
+                antinuke_log_channel_id = COALESCE(EXCLUDED.antinuke_log_channel_id, server_settings.antinuke_log_channel_id),
+                antiraid_log_channel_id = COALESCE(EXCLUDED.antiraid_log_channel_id, server_settings.antiraid_log_channel_id),
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            guild_id,
+            antinuke_channel_id,
+            antiraid_channel_id,
+        )
+
     async def create_case(
         self,
         guild_id: int,

@@ -14,6 +14,7 @@ from core.discord.ctx import Context
 from core.discord.hybrid import describe, hybrid
 from core.managers.values import color
 from core.networks.media import ffmpeg as ffm
+from core.tools import image_ops
 
 if TYPE_CHECKING:
     from core.vain import Vain
@@ -80,23 +81,43 @@ class Manipulation(Package):
         *,
         filename: str,
         processor: Callable[[bytes], Awaitable[bytes]],
+        pil_fallback: Callable[[bytes], bytes] | None = None,
     ) -> None:
         async with ctx.typing():
+            data = attachment.fp.read()
             try:
-                data = attachment.fp.read()
                 result = await processor(data)
-                await ctx.send(file=discord.File(BytesIO(result), filename=filename))
             except Exception:
-                await ctx.fail("Failed to process image")
+                if pil_fallback is None:
+                    return await ctx.fail("Failed to process image — install ffmpeg or attach a valid image")
+                try:
+                    result = pil_fallback(data)
+                except Exception:
+                    return await ctx.fail("Failed to process image — install ffmpeg or attach a valid image")
+            await ctx.send(file=discord.File(BytesIO(result), filename=filename))
 
-    async def _flux_command(self, ctx: Context, operation: str, **payload) -> None:
+    async def _flux_command(
+        self,
+        ctx: Context,
+        operation: str,
+        *,
+        pil_fallback: Callable[[bytes], bytes] | None = None,
+        **payload,
+    ) -> None:
         attachment = await PartialAttachment.imageonly_fallback(ctx)
         async with ctx.typing():
             try:
                 file = await flux(ctx, operation, attachment, **payload)
                 await ctx.send(file=file)
             except Exception:
-                await ctx.fail("Failed to process image")
+                if pil_fallback is None:
+                    return await ctx.fail("Failed to process image — flux/ffmpeg unavailable for this effect")
+                try:
+                    data = attachment.fp.read()
+                    result = pil_fallback(data)
+                    await ctx.send(file=discord.File(BytesIO(result), filename=f"{operation}.png"))
+                except Exception:
+                    await ctx.fail("Failed to process image — flux/ffmpeg unavailable for this effect")
 
     @hybrid(name="media", description="Apply effects to images and GIFs", group=True, guild_only=True)
     async def media(self, ctx: Context) -> None:
@@ -117,7 +138,7 @@ class Manipulation(Package):
 
     @media.command(name="pixelate", description="Pixelate an image")
     async def media_pixelate(self, ctx: Context) -> None:
-        await self._flux_command(ctx, "pixelate")
+        await self._flux_command(ctx, "pixelate", pil_fallback=image_ops.pil_pixelate)
 
     @media.command(name="caption", description="Add a caption to an image")
     @describe(text="Caption text")
@@ -127,16 +148,27 @@ class Manipulation(Package):
     @media.command(name="blur", description="Blur an image")
     @describe(radius="Blur radius")
     async def media_blur(self, ctx: Context, radius: int = 5) -> None:
-        await self._flux_command(ctx, "blur", radius=radius)
+        await self._flux_command(
+            ctx,
+            "blur",
+            radius=radius,
+            pil_fallback=lambda data: image_ops.pil_blur(data, radius),
+        )
 
     @media.command(name="grayscale", description="Convert an image to grayscale")
     async def media_grayscale(self, ctx: Context) -> None:
         attachment = await PartialAttachment.imageonly_fallback(ctx)
-        await self._process(ctx, attachment, filename="grayscale.gif", processor=lambda d: ffm.image_to_gif(d, "format=gray"))
+        await self._process(
+            ctx,
+            attachment,
+            filename="grayscale.png",
+            processor=lambda d: ffm.image_to_gif(d, "format=gray"),
+            pil_fallback=image_ops.pil_grayscale,
+        )
 
     @media.command(name="invert", description="Invert image colors")
     async def media_invert(self, ctx: Context) -> None:
-        await self._flux_command(ctx, "invert")
+        await self._flux_command(ctx, "invert", pil_fallback=image_ops.pil_invert)
 
     @media.command(name="reverse", description="Reverse GIF frames")
     async def media_reverse(self, ctx: Context) -> None:
@@ -160,7 +192,12 @@ class Manipulation(Package):
     @media.command(name="rotate", description="Rotate an image")
     @describe(angle="Rotation angle in degrees")
     async def media_rotate(self, ctx: Context, angle: int = 90) -> None:
-        await self._flux_command(ctx, "rotate", angle=angle)
+        await self._flux_command(
+            ctx,
+            "rotate",
+            angle=angle,
+            pil_fallback=lambda data: image_ops.pil_rotate(data, angle),
+        )
 
     @media.command(name="flip", description="Flip an image vertically")
     async def media_flip(self, ctx: Context) -> None:

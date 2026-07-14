@@ -14,6 +14,7 @@ from core.discord.ctx import Context
 from core.discord.hybrid import describe, hybrid, group
 from core.managers.permissions import has_permissions
 from core.managers.values import color
+from core.tools.aesthetic import aesthetic_embed, panel_embed
 
 if TYPE_CHECKING:
     from core.vain import Vain
@@ -44,12 +45,14 @@ class BumpReminder(BumpReminderEvents, Package):
                     continue
                 channel = guild.get_channel(data["channel_id"])
                 if channel:
-                    embed = discord.Embed(
+                    embed = panel_embed(
                         title="Bump Ready!",
-                        description="It's time to bump your server on DISBOARD!\nUse `;bump` in <#{}>".format(
-                            data.get("bump_channel_id", "")
-                        ),
                         color=color.base,
+                        lines=[
+                            "It's time to bump your server on DISBOARD!",
+                            f"Use `;bump` in <#{data.get('bump_channel_id', '')}>",
+                        ],
+                        timestamp=False,
                     )
                     try:
                         await channel.send(embed=embed)
@@ -80,10 +83,11 @@ class BumpReminder(BumpReminderEvents, Package):
             "last_bump": None,
             "next_bump": discord.utils.utcnow() + datetime.timedelta(seconds=BUMP_COOLDOWN),
         }
-        embed = discord.Embed(
+        embed = aesthetic_embed(
             title="Bump Reminder",
-            description=f"Reminders will be sent to {channel.mention}",
+            message=f"Reminders will be sent to {channel.mention}",
             color=color.base,
+            timestamp=False,
         )
         await ctx.send(embed=embed)
 
@@ -104,9 +108,11 @@ class BumpReminder(BumpReminderEvents, Package):
         last = data.get("last_bump")
         last_str = discord.utils.format_dt(last, style="R") if last else "Never"
 
-        embed = discord.Embed(
+        embed = panel_embed(
             title="Bump Reminder Config",
             color=color.base,
+            lines=[],
+            timestamp=False,
         )
         embed.add_field(name="Reminder Channel", value=channel.mention if channel else "Not set", inline=True)
         embed.add_field(name="Last Bump", value=last_str, inline=True)

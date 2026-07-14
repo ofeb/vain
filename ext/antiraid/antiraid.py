@@ -11,6 +11,7 @@ from discord.ext import commands
 from discord.ext.commands import CommandError, FlagConverter, flag, group
 
 from core.discord.package import Package
+from core.tools.moderation_logs import build_security_log_embed
 
 from .events import AntiraidEvents
 from core.tools.convert import MemberConvert, StatusConvert
@@ -54,6 +55,19 @@ class Antiraid(AntiraidEvents, Package):
         cfg = await self._cached_config(guild_id)
         cfg.raid_active = active
         self.config[guild_id] = cfg
+        guild = self.bot.get_guild(guild_id)
+        if guild:
+            await self._send_antiraid_log(
+                guild,
+                build_security_log_embed(
+                    color=self.color,
+                    title="Raid Mode Updated",
+                    lines=[
+                        f"> **Status** » {'**active**' if active else '**inactive**'}",
+                        "-# Massjoin protection " + ("engaged" if active else "cleared"),
+                    ],
+                ),
+            )
         return cfg
 
     async def _set_punish_window(
@@ -123,6 +137,18 @@ class Antiraid(AntiraidEvents, Package):
             raise CommandError("action must be `ban` or `kick`")
         return value
 
+    async def _send_antiraid_log(self, guild: discord.Guild, embed: Embed) -> None:
+        if getattr(self.db, "pool", None) is None:
+            return
+        channel_id = await self.db.get_antiraid_log_channel(guild.id)
+        if not channel_id:
+            return
+        channel = guild.get_channel(channel_id)
+        if not isinstance(channel, discord.TextChannel):
+            return
+        with contextlib.suppress(discord.Forbidden, discord.HTTPException):
+            await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+
     async def _sanction_member(
         self,
         member: discord.Member,
@@ -133,10 +159,23 @@ class Antiraid(AntiraidEvents, Package):
         if action == "ban":
             with contextlib.suppress(discord.Forbidden, discord.HTTPException):
                 await member.ban(delete_message_seconds=0, reason=reason)
-            return
+        else:
+            with contextlib.suppress(discord.Forbidden, discord.HTTPException):
+                await member.kick(reason=reason)
 
-        with contextlib.suppress(discord.Forbidden, discord.HTTPException):
-            await member.kick(reason=reason)
+        await self._send_antiraid_log(
+            member.guild,
+            build_security_log_embed(
+                color=self.color,
+                title="Antiraid Action",
+                lines=[
+                    f"> **Target** » {member.mention} (`{member.id}`)",
+                    f"> **Action** » {action}",
+                    f"> **Reason** » {reason}",
+                ],
+                footer="Automated antiraid response",
+            ),
+        )
 
     async def _locate_member(
         self,

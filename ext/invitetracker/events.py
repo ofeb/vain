@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from typing import TYPE_CHECKING
 
@@ -35,11 +36,14 @@ class InviteTrackerEvents(Package):
         self._invite_cache: dict[int, dict[str, int]] = {}
 
     async def cog_load(self) -> None:
-        self.bot.loop.create_task(self._populate_cache())
-        self._cache_refresh.start()
+        asyncio.create_task(self._populate_cache())
+        if not self._cache_refresh.is_running():
+            with contextlib.suppress(RuntimeError):
+                self._cache_refresh.start()
 
     def cog_unload(self) -> None:
-        self._cache_refresh.cancel()
+        if self._cache_refresh.is_running():
+            self._cache_refresh.cancel()
 
     @tasks.loop(minutes=5)
     async def _cache_refresh(self) -> None:

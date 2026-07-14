@@ -734,6 +734,10 @@ class Script:
         if invites is not None:
             replacements["{invites}"] = str(invites)
 
+        invite_word = kwargs.get("invite_word")
+        if invite_word is not None:
+            replacements["{invite_word}"] = str(invite_word)
+
         code = kwargs.get("code")
         if code is not None:
             replacements["{code}"] = str(code)

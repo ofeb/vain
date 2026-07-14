@@ -11,6 +11,7 @@ from core.discord.package import Package, tasks
 from core.discord.ctx import Context
 from core.discord.hybrid import describe, group, hybrid
 from core.managers.values import color
+from core.tools.aesthetic import aesthetic_embed, panel_embed
 
 if TYPE_CHECKING:
     from core.vain import Vain
@@ -68,10 +69,11 @@ class Timers(Package):
                 try:
                     user = self.bot.get_user(data["user_id"])
                     if user:
-                        embed = discord.Embed(
+                        embed = panel_embed(
                             title="⏰ Reminder",
-                            description=data["text"],
                             color=color.base,
+                            lines=[data["text"]],
+                            timestamp=False,
                         )
                         embed.add_field(name="Set", value=discord.utils.format_dt(data["created"], style="R"), inline=True)
                         await user.send(embed=embed)
@@ -112,10 +114,11 @@ class Timers(Package):
             "expires": expires,
         }
 
-        embed = discord.Embed(
+        embed = panel_embed(
             title="⏰ Timer Set",
-            description=f"I'll remind you in **{self._format_remaining(seconds)}**.",
             color=color.base,
+            lines=[f"I'll remind you in **{self._format_remaining(seconds)}**."],
+            timestamp=False,
         )
         embed.add_field(name="ID", value=f"`{timer_id}`", inline=True)
         embed.add_field(name="Expires", value=discord.utils.format_dt(expires, style="R"), inline=True)
@@ -139,10 +142,11 @@ class Timers(Package):
             remaining_str = self._format_remaining(max(0, int(remaining)))
             entries.append(f"`{tid}` — **{data['text'][:40]}** — expires {remaining_str}")
 
-        embed = discord.Embed(
+        embed = panel_embed(
             title=f"Active Timers ({len(user_timers)})",
-            description="\n".join(entries),
             color=color.base,
+            lines=entries,
+            timestamp=False,
         )
         await ctx.send(embed=embed)
 

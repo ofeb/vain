@@ -7,6 +7,7 @@ from discord.ext.commands import CommandError, group
 from core.discord.package import Package
 from core.managers.converters import EmbedConverter
 from core.managers.permissions import has_permissions
+from core.tools.moderation_logs import DEFAULT_INVOKE_DM, DEFAULT_INVOKE_RESPONSE
 
 INVOKE_USAGE = "(message or embed code)"
 
@@ -69,6 +70,30 @@ def _register_invoke_action(parent, action: str, *, has_dm: bool) -> None:
 
     action_group.__name__ = f"invoke_{action}"
 
+    @action_group.command(
+        name="on",
+        description=f"Enable {label} command response messages",
+    )
+    @has_permissions(manage_guild=True)
+    async def message_on(self, ctx):
+        """enable command response invoke"""
+        await self._set_invoke_enabled(ctx, action, "message", True)
+        return await ctx.success(f"{label} response **enabled**")
+
+    message_on.__name__ = f"invoke_{action}_on"
+
+    @action_group.command(
+        name="off",
+        description=f"Disable {label} command response messages",
+    )
+    @has_permissions(manage_guild=True)
+    async def message_off(self, ctx):
+        """disable command response invoke"""
+        await self._set_invoke_enabled(ctx, action, "message", False)
+        return await ctx.success(f"{label} response **disabled**")
+
+    message_off.__name__ = f"invoke_{action}_off"
+
     if has_dm:
 
         @action_group.group(
@@ -86,6 +111,30 @@ def _register_invoke_action(parent, action: str, *, has_dm: bool) -> None:
             return await ctx.success(f"{label} DM updated")
 
         dm_group.__name__ = f"invoke_{action}_dm"
+
+        @dm_group.command(
+            name="on",
+            description=f"Enable {label} Direct Message notifications",
+        )
+        @has_permissions(manage_guild=True)
+        async def dm_on(self, ctx):
+            """enable dm invoke"""
+            await self._set_invoke_enabled(ctx, action, "dm", True)
+            return await ctx.success(f"{label} DM **enabled**")
+
+        dm_on.__name__ = f"invoke_{action}_dm_on"
+
+        @dm_group.command(
+            name="off",
+            description=f"Disable {label} Direct Message notifications",
+        )
+        @has_permissions(manage_guild=True)
+        async def dm_off(self, ctx):
+            """disable dm invoke"""
+            await self._set_invoke_enabled(ctx, action, "dm", False)
+            return await ctx.success(f"{label} DM **disabled**")
+
+        dm_off.__name__ = f"invoke_{action}_dm_off"
 
         @dm_group.command(
             name="view",
@@ -158,6 +207,24 @@ class InvokeCommands(Package):
             code,
         )
 
+    async def _set_invoke_enabled(
+        self,
+        ctx,
+        action: str,
+        target: Literal["dm", "message"],
+        enabled: bool,
+    ) -> None:
+        column = "dm_enabled" if target == "dm" else "message_enabled"
+        await self.db.execute(
+            f"""INSERT INTO invocation (guild_id, command, {column})
+                VALUES ($1, $2, $3)
+                ON CONFLICT (guild_id, command)
+                DO UPDATE SET {column} = excluded.{column}""",
+            ctx.guild.id,
+            action,
+            enabled,
+        )
+
     async def _view_invoke(
         self,
         ctx,
@@ -172,6 +239,9 @@ class InvokeCommands(Package):
             ctx.guild.id,
             action,
         )
+        if not msg:
+            defaults = DEFAULT_INVOKE_DM if target == "dm" else DEFAULT_INVOKE_RESPONSE
+            msg = defaults.get(action)
         if not msg:
             raise CommandError(f"no {label} {kind} set")
         return await self.bot.send_embed(

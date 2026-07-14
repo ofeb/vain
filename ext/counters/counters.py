@@ -10,6 +10,7 @@ from discord.ext import commands
 from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe, group
 from core.managers.values import color
+from core.tools.aesthetic import panel_embed
 from core.managers.permissions import has_permissions
 
 if TYPE_CHECKING:
@@ -190,10 +191,10 @@ class Counters(commands.Cog):
             await ctx.warn("No category or channel are keeping track of members or boosts")
             return
         
-        embed = discord.Embed(title="Counters", color=color.base)
         rows = []
         for i, counter in enumerate(counters, start=1):
             rows.append(f"`{i}` <#{counter['channel_id']}> - **{counter['counter_type']}**")
+        embed = panel_embed(title="Counters", color=color.base, lines=rows, timestamp=False)
         await ctx.send(embed=embed)
 
 

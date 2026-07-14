@@ -12,7 +12,8 @@ from colorthief import ColorThief
 
 from core.discord.package import Package
 from core.discord.ctx import Context
-from core.discord.hybrid import hybrid, describe, command
+from core.discord.hybrid import hybrid, describe
+from core.tools.aesthetic import reply_embed
 from core.tools.human.text import ordinal
 
 from .media import fetch_action_gif
@@ -61,7 +62,7 @@ ACTION_MAP = {
     "evillaugh": "**laughs evilly at** {}",
     "facepalm": "**face palmes** {}",
     "handhold": "**holds hands with** {}",
-    "happy": "**is happy with**",
+    "happy": "**is happy with** {}",
     "headbang": "**bangs their head at** {}",
     "huh": "**missed what** {} **said**",
     "lick": "**licks** {}",
@@ -231,9 +232,9 @@ class RoleplayBackView(discord.ui.View):
             )
 
             embed_color = _extract_dominant_color(gif_bytes) or bot.color
-            embed = discord.Embed(
+            embed = reply_embed(
                 color=embed_color,
-                description=(
+                message=(
                     f"{interaction.user.mention} {ACTION_MAP[self.action].format(mention)} "
                     f"for the **{ordinal(total)}** time!"
                 ),
@@ -295,9 +296,9 @@ class RoleplayCommands(Package):
         mention = target.mention if target != ctx.author else "themselves"
 
         embed_color = _extract_dominant_color(gif_bytes) or self.bot.color
-        embed = discord.Embed(
+        embed = reply_embed(
             color=embed_color,
-            description=(
+            message=(
                 f"{ctx.author.mention} {ACTION_MAP[action].format(mention)} "
                 f"for the **{ordinal(total)}** time!"
             ),
@@ -349,17 +350,22 @@ class RoleplayCommands(Package):
 
 
 def _make_prefix_action(name: str):
-    async def action(self, ctx: Context, *, member: Optional[discord.User] = None):
+    @hybrid(
+        name=name,
+        description=f"Roleplay: {name}",
+        example=f",{name} @user",
+        guilds=True,
+        dms=True,
+        groupchats=True,
+    )
+    @describe(member="Member to roleplay with")
+    async def action(self, ctx: Context, member: Optional[discord.User] = None):
         return await self._perform_action(ctx, name, member)
 
     action.__name__ = name
     action.__qualname__ = f"RoleplayCommands.{name}"
 
-    return command(
-        name=name,
-        description=f"Roleplay: {name}",
-        example=f",{name} @user",
-    )(action)
+    return action
 
 
 for _name in ROLEPLAY_ACTIONS:

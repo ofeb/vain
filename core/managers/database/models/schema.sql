@@ -221,6 +221,8 @@ CREATE TABLE IF NOT EXISTS server_settings (
     autoplay TEXT,
     jail_message TEXT,
     jail_remove_roles BOOLEAN NOT NULL DEFAULT TRUE,
+    antinuke_log_channel_id BIGINT,
+    antiraid_log_channel_id BIGINT,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -847,9 +849,14 @@ CREATE TABLE IF NOT EXISTS invocation (
     command VARCHAR(50),
     dm_code TEXT,
     message_code TEXT,
+    dm_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    message_enabled BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (guild_id, command)
 );
+
+ALTER TABLE invocation ADD COLUMN IF NOT EXISTS dm_enabled BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE invocation ADD COLUMN IF NOT EXISTS message_enabled BOOLEAN NOT NULL DEFAULT TRUE;
 
 CREATE TABLE IF NOT EXISTS silenced (
     guild_id BIGINT NOT NULL,
@@ -1141,7 +1148,20 @@ CREATE TABLE IF NOT EXISTS ticket_settings (
     max_open_per_user INT NOT NULL DEFAULT 1,
     channel_name_format VARCHAR(100) NOT NULL DEFAULT 'ticket-{user}',
     blacklist_user_ids BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    transcript_admin_ids BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    ticket_counter INT NOT NULL DEFAULT 0,
+    counter_enabled BOOLEAN NOT NULL DEFAULT FALSE,
     config JSONB NOT NULL DEFAULT '{}'::JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS ticket_transcripts (
+    id SERIAL PRIMARY KEY,
+    guild_id BIGINT NOT NULL,
+    ticket_id INT NOT NULL,
+    channel_id BIGINT,
+    created_by BIGINT,
+    filename TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -1204,6 +1224,7 @@ CREATE INDEX IF NOT EXISTS idx_ticket_options_panel ON ticket_options(panel_id);
 CREATE INDEX IF NOT EXISTS idx_ticket_forms_guild ON ticket_forms(guild_id);
 CREATE INDEX IF NOT EXISTS idx_tickets_guild_user ON tickets(guild_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_tickets_guild_status ON tickets(guild_id, status);
+CREATE INDEX IF NOT EXISTS idx_ticket_transcripts_guild ON ticket_transcripts(guild_id);
 
 CREATE SCHEMA IF NOT EXISTS roleplay;
 

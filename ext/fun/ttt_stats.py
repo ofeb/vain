@@ -4,6 +4,9 @@ from typing import TYPE_CHECKING, Any
 
 import discord
 
+from core.managers.values import color
+from core.tools.aesthetic import body, compose
+
 if TYPE_CHECKING:
     from core.vain import Vain
 
@@ -317,11 +320,14 @@ def build_stats_embed(author: discord.User, stats: dict[str, int]) -> discord.Em
     ratio = round(wins / matches, 2) if matches else 0
     embed = discord.Embed(
         title="Tic-Tac-Toe Statistics",
-        description=(
-            f"**Wins**: {wins}\n"
-            f"**Losses**: {losses}\n"
-            f"**Matches**: {matches}\n"
-            f"**Ratio**: {ratio}"
+        color=color.base,
+        description=compose(
+            body(
+                f"**Wins**: {wins}",
+                f"**Losses**: {losses}",
+                f"**Matches**: {matches}",
+                f"**Ratio**: {ratio}",
+            ),
         ),
     )
     embed.set_author(name=author.display_name, icon_url=author.display_avatar.url)
@@ -339,7 +345,8 @@ async def build_leaderboard_pages(
     if not rows:
         embed = discord.Embed(
             title=title,
-            description="No statistics recorded yet.",
+            color=color.base,
+            description=compose(body("No statistics recorded yet.")),
         )
         embed.set_author(name=author.display_name, icon_url=author.display_avatar.url)
         return [embed]
@@ -354,7 +361,11 @@ async def build_leaderboard_pages(
             name = await user_display(bot, row["user_id"])
             wins = f"{row['wins']:,}"
             lines.append(f"`{offset}` **{name}** - `{wins}` wins")
-        embed = discord.Embed(title=title, description="\n".join(lines))
+        embed = discord.Embed(
+            title=title,
+            color=color.base,
+            description=compose(body(*lines)),
+        )
         embed.set_author(name=author.display_name, icon_url=author.display_avatar.url)
         embed.set_footer(text=f"Page {page_num}/{total_pages} ({len(rows)} {'entry' if len(rows) == 1 else 'entries'})")
         pages.append(embed)

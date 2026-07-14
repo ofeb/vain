@@ -11,6 +11,7 @@ from core.discord.package import Package
 from core.discord.views.paginate import PaginateView, needs_pagination
 from core.managers.permissions import has_permissions
 from core.managers.values import color, emojis
+from core.tools.aesthetic import body, caption, compose, reply_embed
 
 if TYPE_CHECKING:
     from core.discord.ctx import Context
@@ -40,25 +41,25 @@ class StealPaginateView(PaginateView):
                     image=image_data,
                 )
                 await interaction.response.send_message(
-                    embed=discord.Embed(
+                    embed=reply_embed(
                         color=color.base,
-                        description=f"{emojis.approve} Stole {emoji} as `:{emoji.name}:`",
+                        message=f"{emojis.approve} Stole {emoji} as `:{emoji.name}:`",
                     ),
                     ephemeral=True,
                 )
             else:
                 await interaction.response.send_message(
-                    embed=discord.Embed(
+                    embed=reply_embed(
                         color=color.warn,
-                        description=f"{emojis.warn} Cannot steal Unicode emoji.",
+                        message=f"{emojis.warn} Cannot steal Unicode emoji.",
                     ),
                     ephemeral=True,
                 )
         except discord.HTTPException as e:
             await interaction.response.send_message(
-                embed=discord.Embed(
+                embed=reply_embed(
                     color=color.warn,
-                    description=f"{emojis.warn} Failed to steal: {e}",
+                    message=f"{emojis.warn} Failed to steal: {e}",
                 ),
                 ephemeral=True,
             )
@@ -156,10 +157,15 @@ class Steal(Package):
         for i, emoji_data in enumerate(emojis_found, start=1):
             embed = discord.Embed(
                 color=color.base,
-                description=f"**Emoji:** `:{emoji_data['name']}:`\n**ID:** {emoji_data['id']}",
+                description=compose(
+                    body(
+                        f"**Emoji:** `:{emoji_data['name']}:`",
+                        f"**ID:** {emoji_data['id']}",
+                    ),
+                    caption(f"{i}/{len(emojis_found)}"),
+                ),
             )
             embed.set_thumbnail(url=emoji_data["url"])
-            embed.set_footer(text=f"{i}/{len(emojis_found)}")
             pages.append(embed)
 
         if not needs_pagination(pages):

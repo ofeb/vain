@@ -6,6 +6,7 @@ import discord
 from discord.ext.commands import Context
 
 from core.managers.values import color, emojis
+from core.tools.aesthetic import reply_embed
 
 
 class EmbedView(discord.ui.View):
@@ -19,9 +20,9 @@ class EmbedView(discord.ui.View):
     async def interaction_check(self, inter: discord.Interaction) -> bool:
         if inter.user.id != self.ctx.author.id:
             await inter.response.send_message(
-                embed=discord.Embed(
+                embed=reply_embed(
                     color=color.warn,
-                    description=(
+                    message=(
                         f"{emojis.warn} {inter.user.mention}: "
                         "You're not the **author** of this embed!"
                     ),

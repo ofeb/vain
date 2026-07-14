@@ -15,6 +15,7 @@ from core.discord.package import Package
 from core.discord.ctx import Context
 from core.discord.hybrid import group, command, describe
 from core.managers.values import color
+from core.tools.aesthetic import panel_embed
 
 if TYPE_CHECKING:
     from core.vain import Vain
@@ -40,11 +41,12 @@ class Owner(Package):
         ch = self.bot.get_channel(channel_id)
         if not ch:
             return
-        embed = discord.Embed(
-            description=message,
+        embed = panel_embed(
             color=color.base,
-            timestamp=datetime.now(timezone.utc),
+            lines=[message],
+            timestamp=False,
         )
+        embed.timestamp = datetime.now(timezone.utc)
         try:
             await ch.send(embed=embed)
         except discord.HTTPException:
@@ -173,12 +175,13 @@ class Owner(Package):
 
         pages = [entries[i : i + 15] for i in range(0, len(entries), 15)]
         page = 0
-        embed = discord.Embed(
+        embed = panel_embed(
             title=f"Guilds ({len(self.bot.guilds)})",
-            description="\n".join(pages[page]),
             color=color.base,
+            lines=pages[page],
+            footer=f"Page {page + 1}/{len(pages)}",
+            timestamp=False,
         )
-        embed.set_footer(text=f"Page {page + 1}/{len(pages)}")
         await ctx.send(embed=embed)
 
     @owner.command(
@@ -364,10 +367,11 @@ class Owner(Package):
             io.BytesIO(tb_text.encode("utf-8")),
             filename=f"traceback-{key}.txt",
         )
-        embed = discord.Embed(
+        embed = panel_embed(
             title=f"Traceback #{key}",
-            description=f"```\n{tb_text[:1800]}\n```" if len(tb_text) < 1900 else "See attached file",
             color=color.deny,
+            lines=[f"```\n{tb_text[:1800]}\n```" if len(tb_text) < 1900 else "See attached file"],
+            timestamp=False,
         )
         await ctx.send(embed=embed, file=file)
 
@@ -554,7 +558,7 @@ class Owner(Package):
             elif row["guild_id"]:
                 values.append(f"Guild: `{row['guild_id']}`")
 
-        embed = discord.Embed(title="Blacklist", color=color.base)
+        embed = panel_embed(title="Blacklist", color=color.base, lines=[], timestamp=False)
         return await ctx.paginate(embed, values)
 
     

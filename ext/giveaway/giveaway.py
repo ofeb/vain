@@ -10,6 +10,7 @@ from discord.ext import commands
 from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe, group
 from core.managers.values import color
+from core.tools.aesthetic import panel_embed
 from core.managers.permissions import has_permissions
 
 if TYPE_CHECKING:
@@ -36,6 +37,24 @@ class Giveaway(commands.Cog):
             for role_id in record["required_roles"]:
                 r.append(f"Must have **<@&{role_id}>**")
         return r
+
+    def _giveaway_embed_lines(
+        self,
+        end_time,
+        winners: int,
+        hosts_string: str,
+        requirements: List[str] | None = None,
+    ) -> List[str]:
+        lines = [
+            "React with 🎉 to enter the giveaway.",
+            f"**Ends:** {discord.utils.format_dt(end_time, style='R')} ({discord.utils.format_dt(end_time, style='F')})",
+            f"**Winners:** {winners}",
+            f"**Hosted by:** {hosts_string}",
+        ]
+        if requirements:
+            lines.append("**Requirements**")
+            lines.extend(requirements)
+        return lines
 
     @group(
         name="giveaway",
@@ -90,9 +109,12 @@ class Giveaway(commands.Cog):
         ]
         new_winners = sample(entries, winners)
         winners_string = ", ".join(m.mention for m in new_winners)
-        embed = discord.Embed(
+        embed = panel_embed(
             title=f"Winners for {shorten(giveaway['prize'], 25)}",
-            description=f"{winners_string} {'have' if winners > 1 else 'has'} won the giveaway from <@{giveaway['host']}>",
+            lines=[
+                f"{winners_string} {'have' if winners > 1 else 'has'} won the giveaway from <@{giveaway['host']}>",
+            ],
+            timestamp=False,
         )
         await message.edit(embed=embed)
         await ctx.message.add_reaction("👍")
@@ -179,15 +201,13 @@ class Giveaway(commands.Cog):
             )
         hosts_string = ", ".join(f"{str(m)}" for m in hosts if m is not None)
         requirements = self.get_requirements(giveaway)
-        requirements_string = "**Requirements**\n"
-        r = "\n".join(f"> {requirement}" for requirement in requirements)
-        requirements_string += r
-        embed = discord.Embed(
+        embed = panel_embed(
             title=giveaway["prize"],
-            description=f"React with 🎉 to enter the giveaway.\n**Ends:** {discord.utils.format_dt(end_time, style='R')} ({discord.utils.format_dt(end_time, style='F')})\n**Winners:** {winners}\n**Hosted by:** {hosts_string}\n{requirements_string}",
-            timestamp=giveaway["created_at"],
             color=color.base,
+            lines=self._giveaway_embed_lines(end_time, winners, hosts_string, requirements),
+            timestamp=False,
         )
+        embed.timestamp = giveaway["created_at"]
         await message.edit(embed=embed)
         await ctx.message.add_reaction("👍")
 
@@ -283,15 +303,13 @@ class Giveaway(commands.Cog):
             )
         hosts_string = ", ".join(f"{str(m)}" for m in hosts if m is not None)
         requirements = self.get_requirements(giveaway)
-        requirements_string = "**Requirements**\n"
-        r = "\n".join(f"> {requirement}" for requirement in requirements)
-        requirements_string += r
-        embed = discord.Embed(
+        embed = panel_embed(
             title=giveaway["prize"],
-            description=f"React with 🎉 to enter the giveaway.\n**Ends:** {discord.utils.format_dt(end_time, style='R')} ({discord.utils.format_dt(end_time, style='F')})\n**Winners:** {winners}\n**Hosted by:** {hosts_string}\n{requirements_string}",
-            timestamp=giveaway["created_at"],
             color=color.base,
+            lines=self._giveaway_embed_lines(end_time, winners, hosts_string, requirements),
+            timestamp=False,
         )
+        embed.timestamp = giveaway["created_at"]
         await message.edit(embed=embed)
         await ctx.success(f"Set the expiration of the giveaway to {discord.utils.format_dt(end_time, style='R')}")
 
@@ -318,12 +336,13 @@ class Giveaway(commands.Cog):
         channel = channel or ctx.channel
         end_time = datetime.now() + timedelta(seconds=duration)
         
-        embed = discord.Embed(
+        embed = panel_embed(
             title=prize,
-            description=f"React with 🎉 to enter the giveaway.\n**Ends:** {discord.utils.format_dt(end_time, style='R')} ({discord.utils.format_dt(end_time, style='F')})\n**Winners:** {winners}\n**Hosted by:** {ctx.author.mention}",
-            timestamp=datetime.now(),
             color=color.base,
+            lines=self._giveaway_embed_lines(end_time, winners, ctx.author.mention),
+            timestamp=False,
         )
+        embed.timestamp = datetime.now()
         
         message = await channel.send(embed=embed)
         await message.add_reaction("🎉")

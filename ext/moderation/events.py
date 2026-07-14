@@ -7,6 +7,7 @@ import discord
 from asyncio import Lock
 
 from core.discord.package import Package
+from core.tools.aesthetic import label_line, panel_embed
 
 
 class ModerationEvents(Package):
@@ -94,26 +95,17 @@ class ModerationEvents(Package):
         added_roles = set(after.roles) - set(before.roles)
         removed_roles = set(before.roles) - set(after.roles)
         
-        embed = discord.Embed(
-            title="Role Changes",
-            description=f"Roles updated for {after.mention}",
-            color=0xD4B8D0
-        )
-        
+        lines = [f"Roles updated for {after.mention}"]
         if added_roles:
-            embed.add_field(
-                name="Added Roles",
-                value=", ".join(role.mention for role in added_roles),
-                inline=False
-            )
-        
+            lines.append(label_line("Added Roles", ", ".join(role.mention for role in added_roles)))
         if removed_roles:
-            embed.add_field(
-                name="Removed Roles",
-                value=", ".join(role.mention for role in removed_roles),
-                inline=False
-            )
-        
+            lines.append(label_line("Removed Roles", ", ".join(role.mention for role in removed_roles)))
+
+        embed = panel_embed(
+            title="Role Changes",
+            color=0xD4B8D0,
+            lines=lines,
+        )
         await log_channel.send(embed=embed)
 
     @Package.listener("on_member_ban")
@@ -130,13 +122,14 @@ class ModerationEvents(Package):
         
         async for entry in guild.audit_logs(limit=5, action=discord.AuditLogAction.ban):
             if entry.target.id == user.id:
-                embed = discord.Embed(
-                    title="Member Banned",
-                    description=f"{user.name} was banned by {entry.user.mention}",
-                    color=0xE07A7A
-                )
+                lines = [f"{user.name} was banned by {entry.user.mention}"]
                 if entry.reason:
-                    embed.add_field(name="Reason", value=entry.reason, inline=False)
+                    lines.append(label_line("Reason", entry.reason))
+                embed = panel_embed(
+                    title="Member Banned",
+                    color=0xE07A7A,
+                    lines=lines,
+                )
                 await log_channel.send(embed=embed)
                 break
 
@@ -154,10 +147,10 @@ class ModerationEvents(Package):
         
         async for entry in guild.audit_logs(limit=5, action=discord.AuditLogAction.unban):
             if entry.target.id == user.id:
-                embed = discord.Embed(
+                embed = panel_embed(
                     title="Member Unbanned",
-                    description=f"{user.name} was unbanned by {entry.user.mention}",
-                    color=0xA8D8A8
+                    color=0xA8D8A8,
+                    lines=[f"{user.name} was unbanned by {entry.user.mention}"],
                 )
                 await log_channel.send(embed=embed)
                 break

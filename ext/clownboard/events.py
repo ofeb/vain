@@ -12,6 +12,7 @@ import discord
 from discord.ext import commands
 
 from core.managers.values import color
+from core.tools.aesthetic import panel_embed
 
 if TYPE_CHECKING:
     from .clownboard import Clownboard
@@ -307,13 +308,12 @@ class ClownboardEvents(commands.Cog):
         ):
             embed = source_embed
         else:
-            embed = discord.Embed(
-                color=(
-                    discord.Colour(int(config["color"], 16))
-                    if config.get("color")
-                    else message.author.color
-                )
+            embed_color = (
+                int(config["color"], 16)
+                if config.get("color")
+                else message.author.color.value
             )
+            embed = panel_embed(color=embed_color, lines=[], timestamp=False)
 
         embed.set_author(
             name=message.author.display_name,

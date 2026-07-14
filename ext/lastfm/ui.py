@@ -6,6 +6,7 @@ import discord
 
 from core.discord.ctx import Context
 from core.managers.values import color, emojis
+from core.tools.aesthetic import reply_embed
 
 
 def build_link_view(*items: tuple[str, str, str | None]) -> discord.ui.View | None:
@@ -25,9 +26,9 @@ def build_link_view(*items: tuple[str, str, str | None]) -> discord.ui.View | No
 
 
 def _warning_embed(user: discord.abc.User, message: str) -> discord.Embed:
-    return discord.Embed(
+    return reply_embed(
         color=color.warn,
-        description=f"{emojis.warn} {user.mention}: {message}",
+        message=f"{emojis.warn} {user.mention}: {message}",
     )
 
 

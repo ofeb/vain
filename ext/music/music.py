@@ -12,6 +12,7 @@ from core.discord.package import Package
 from core.discord.ctx import Context
 from core.discord.hybrid import describe, hybrid
 from core.managers.values import color, music as nl, music_enabled
+from core.tools.aesthetic import aesthetic_embed, panel_embed
 
 from .events import MusicEvents
 
@@ -431,20 +432,22 @@ class Music(MusicEvents, Package):
                     state.tracks.insert(0, track)
                 else:
                     state.tracks.append(track)
-                return await ctx.send(embed=discord.Embed(
+                return await ctx.send(embed=aesthetic_embed(
                     title="queued",
-                    description=f"**{track.title}** — {track.author}",
+                    message=f"**{track.title}** — {track.author}",
                     color=color.base,
+                    timestamp=False,
                 ))
 
             state.current = track
             await player.play(track)
             if state.active_preset:
                 await self._apply_preset(player, state.active_preset)
-            await ctx.send(embed=discord.Embed(
+            await ctx.send(embed=aesthetic_embed(
                 title="now playing",
-                description=f"**{track.title}** — {track.author}",
+                message=f"**{track.title}** — {track.author}",
                 color=color.base,
+                timestamp=False,
             ))
         except NodeRestException as exc:
             log.error("play failed for %r: %s", query, exc)
@@ -462,10 +465,11 @@ class Music(MusicEvents, Package):
             return await ctx.warn("queue is empty")
         lines = [f"**now:** {state.current.title}"] if state.current else []
         lines.extend(f"`{i}.` **{t.title}** — {t.author}" for i, t in enumerate(state.tracks[:15], 1))
-        await ctx.send(embed=discord.Embed(
+        await ctx.send(embed=panel_embed(
             title=f"queue ({len(state.tracks)})",
-            description="\n".join(lines),
             color=color.base,
+            lines=lines,
+            timestamp=False,
         ))
 
     @queue.command(name="remove", description="Remove a track from the queue")

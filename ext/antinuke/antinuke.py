@@ -16,6 +16,7 @@ from core.discord.package import Package
 from .events import AntinukeEvents
 from core.tools.convert import MemberConvert, StatusConvert
 from core.tools.flags import AntiNukeFlags
+from core.tools.moderation_logs import build_modlog_embed, build_security_log_embed
 from core.tools.permissions import DANGEROUS_PERMISSIONS, normalize_dangerous_permission
 
 from .models import AntinukeConfig, PermissionWatch
@@ -332,6 +333,18 @@ class Antinuke(AntinukeEvents, Package):
                 return entry
         return None
 
+    async def _send_antinuke_log(self, guild: discord.Guild, embed: Embed) -> None:
+        if getattr(self.db, "pool", None) is None:
+            return
+        channel_id = await self.db.get_antinuke_log_channel(guild.id)
+        if not channel_id:
+            return
+        channel = guild.get_channel(channel_id)
+        if not isinstance(channel, discord.TextChannel):
+            return
+        with contextlib.suppress(discord.Forbidden, discord.HTTPException):
+            await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+
     async def _alert_guild_owner(self, guild: discord.Guild, body: str) -> None:
         owner = guild.owner
         if owner is None:
@@ -342,7 +355,7 @@ class Antinuke(AntinukeEvents, Package):
                 owner = await self.bot.fetch_user(guild.owner_id)
         if owner is None:
             return
-        embed = Embed(color=self.color, description=body)
+        embed = Embed(color=self.color, description=f"> {body.replace(chr(10), chr(10) + '> ')}")
         with contextlib.suppress(discord.Forbidden, discord.HTTPException):
             await owner.send(embed=embed)
 
@@ -413,16 +426,13 @@ class Antinuke(AntinukeEvents, Package):
         if not isinstance(channel, discord.TextChannel):
             return case_id
 
-        embed = Embed(
+        embed = build_modlog_embed(
             color=self.color,
-            title=f"Case #{case_id}",
-            description=(
-                f"**Action:** {action}\n"
-                f"**User:** <@{target_id}> (`{target_id}`)\n"
-                f"**Staff:** {getattr(moderator, 'mention', str(moderator))} (`{moderator.id}`)\n"
-                f"> **Cause:** {reason or 'no reason provided'}"
-            ),
-            timestamp=discord.utils.utcnow(),
+            action=action,
+            target_label=f"<@{target_id}> (`{target_id}`)",
+            moderator_label=getattr(moderator, "mention", str(moderator)),
+            reason=reason or "no reason provided",
+            case_id=case_id,
         )
         with contextlib.suppress(discord.Forbidden, discord.HTTPException):
             await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
@@ -576,6 +586,7 @@ class Antinuke(AntinukeEvents, Package):
             module.punishment,
             reason=base_reason,
         )
+        case_id = None
         if sanctioned:
             auto_action = f"{module.punishment} (auto)"
             case_id = await self._record_case(
@@ -609,7 +620,27 @@ class Antinuke(AntinukeEvents, Package):
             )
         if not sanctioned:
             lines.append("I could not take action due to insufficient permissions.")
-        await self._alert_guild_owner(guild, "\n".join(lines))
+        owner_body = "\n".join(lines)
+        await self._alert_guild_owner(guild, owner_body)
+
+        log_lines = [
+            f"> **Module** » {MODULE_NAMES.get(module_name, module_name)}",
+            f"> **Offender** » {actor.mention} (`{actor.id}`)",
+            f"> **Action** » {self._owner_verb(module.punishment)}",
+        ]
+        if used_count is not None and used_limit is not None and window_tag is not None:
+            log_lines.append(f"> **Rate** » {used_count}/{used_limit} ({window_tag})")
+        if not sanctioned:
+            log_lines.append("> **Status** » action failed (missing permissions)")
+        await self._send_antinuke_log(
+            guild,
+            build_security_log_embed(
+                color=self.color,
+                title="Antinuke Triggered",
+                lines=log_lines,
+                footer=f"Case **#{case_id}**" if sanctioned and case_id else None,
+            ),
+        )
         return True
 
     async def _audit_perm_change(
@@ -681,6 +712,28 @@ class Antinuke(AntinukeEvents, Package):
         if not sanctioned:
             lines.append("I could not take action due to insufficient permissions.")
         await self._alert_guild_owner(guild, "\n".join(lines))
+
+        perm_log_lines = [
+            f"> **Type** » permission change",
+            f"> **Offender** » {actor.mention} (`{actor.id}`)",
+            f"> **Detail** » {label}",
+            f"> **Action** » {self._owner_verb(penalty)}",
+        ]
+        if revert is not None:
+            perm_log_lines.append(
+                "> **Rollback** » "
+                + ("successful" if reverted else "failed")
+            )
+        if not sanctioned:
+            perm_log_lines.append("> **Status** » action failed (missing permissions)")
+        await self._send_antinuke_log(
+            guild,
+            build_security_log_embed(
+                color=self.color,
+                title="Antinuke Permission Alert",
+                lines=perm_log_lines,
+            ),
+        )
         return True
 
     async def _delete_webhook(

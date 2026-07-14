@@ -8,6 +8,7 @@ from discord import ui
 from discord.utils import format_dt
 
 from core.managers.values import emojis, color
+from core.tools.aesthetic import panel_embed, reply_embed
 
 if TYPE_CHECKING:
     from .voicemaster import VoiceMaster
@@ -65,9 +66,9 @@ def _message_embed(
     emoji: str = "",
 ) -> discord.Embed:
     prefix = f"{emoji} " if emoji else ""
-    return discord.Embed(
-        description=f"{prefix}{interaction.user.mention}: {text}",
+    return reply_embed(
         color=color_value,
+        message=f"{prefix}{interaction.user.mention}: {text}",
     )
 
 
@@ -346,23 +347,22 @@ class VoiceInterface(ui.View):
         channel = interaction.user.voice.channel
         locked = channel.permissions_for(interaction.guild.default_role).connect is False
 
-        embed = discord.Embed(
+        connected = f"`{len(channel.members)}`"
+        if channel.user_limit:
+            connected += f"/`{channel.user_limit}`"
+        embed = panel_embed(
             title=channel.name,
-            description=(
-                f"**Owner:** {interaction.user} (`{interaction.user.id}`)"
-                + "\n**Locked:** "
-                + (emojis.approve if locked else emojis.deny)
-                + "\n**Created:** "
-                + format_dt(channel.created_at, style="R")
-                + f"\n**Bitrate:** {int(channel.bitrate / 1000)}kbps"
-                + f"\n**Connected:** `{len(channel.members)}`"
-                + (f"/`{channel.user_limit}`" if channel.user_limit else "")
-            ),
             color=color.neutral,
-        )
-        embed.set_author(
-            name=interaction.user.display_name,
-            icon_url=interaction.user.display_avatar,
+            lines=[
+                f"**Owner:** {interaction.user} (`{interaction.user.id}`)",
+                f"**Locked:** {emojis.approve if locked else emojis.deny}",
+                f"**Created:** {format_dt(channel.created_at, style='R')}",
+                f"**Bitrate:** {int(channel.bitrate / 1000)}kbps",
+                f"**Connected:** {connected}",
+            ],
+            author=interaction.user.display_name,
+            author_icon=interaction.user.display_avatar.url,
+            timestamp=False,
         )
 
         roles_permitted = [

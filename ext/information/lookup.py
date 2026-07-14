@@ -11,6 +11,8 @@ import aiohttp
 import discord
 from PIL import Image
 
+from core.tools.aesthetic import label_line, panel_embed
+
 WEATHER_COLOR = 0xD4B8D0
 DEFINE_COLOR = 0xBBA0D2
 CASHAPP_GREEN = 0xA8D8A8
@@ -66,25 +68,28 @@ def build_weather_embed(data: dict[str, Any], author: discord.User) -> discord.E
     humidity = int(main.get("humidity", 0))
     visibility_km = float(data.get("visibility", 0)) / 1000
 
-    embed = discord.Embed(
+    lines = [
+        label_line("Temperature", f"{temp_c:.2f} °C / {temp_f:.2f} °F"),
+        label_line("Wind", f"{wind_mph:.1f} mph"),
+        label_line("Humidity", f"{humidity}%"),
+    ]
+    if sunrise := sys.get("sunrise"):
+        lines.append(label_line("Sun Rise", f"<t:{int(sunrise)}:T>"))
+    if sunset := sys.get("sunset"):
+        lines.append(label_line("Sun Set", f"<t:{int(sunset)}:T>"))
+    lines.append(label_line("Visibility", f"{visibility_km:.1f} km"))
+
+    icon = weather.get("icon")
+    return panel_embed(
         title=f"{description} in {place}",
         url=f"http://openweathermap.org/city/{data['id']}",
         color=WEATHER_COLOR,
+        author=author.display_name,
+        author_icon=author.display_avatar.url,
+        lines=lines,
+        timestamp=False,
+        thumbnail=f"https://openweathermap.org/img/w/{icon}.png" if icon else None,
     )
-    embed.set_author(name=author.display_name, icon_url=author.display_avatar.url)
-    icon = weather.get("icon")
-    if icon:
-        embed.set_thumbnail(url=f"https://openweathermap.org/img/w/{icon}.png")
-
-    embed.add_field(name="**Temperature**", value=f"{temp_c:.2f} °C / {temp_f:.2f} °F", inline=True)
-    embed.add_field(name="**Wind**", value=f"{wind_mph:.1f} mph", inline=True)
-    embed.add_field(name="**Humidity**", value=f"{humidity}%", inline=True)
-    if sunrise := sys.get("sunrise"):
-        embed.add_field(name="**Sun Rise**", value=f"<t:{int(sunrise)}:T>", inline=True)
-    if sunset := sys.get("sunset"):
-        embed.add_field(name="**Sun Set**", value=f"<t:{int(sunset)}:T>", inline=True)
-    embed.add_field(name="**Visibility**", value=f"{visibility_km:.1f} km", inline=True)
-    return embed
 
 
 async def fetch_dictionary(session: aiohttp.ClientSession, word: str) -> dict[str, Any]:
@@ -120,14 +125,15 @@ def build_define_embed(entry: dict[str, Any], author: discord.User) -> discord.E
             break
 
     slug = word.replace(" ", "_")
-    embed = discord.Embed(
+    return panel_embed(
         title=title,
-        description=description[:4096],
         url=f"https://en.wiktionary.org/wiki/{slug}",
         color=DEFINE_COLOR,
+        author=author.display_name,
+        author_icon=author.display_avatar.url,
+        lines=[description[:4096]],
+        timestamp=False,
     )
-    embed.set_author(name=author.display_name, icon_url=author.display_avatar.url)
-    return embed
 
 
 async def fetch_urban_dictionary(session: aiohttp.ClientSession, word: str) -> list[dict[str, Any]]:
@@ -164,18 +170,22 @@ def build_urban_embed(
     thumbs_down = int(entry.get("thumbs_down", 0))
     permalink = entry.get("permalink") or f"https://www.urbandictionary.com/define.php?term={word}"
 
-    embed = discord.Embed(
+    lines = [definition]
+    if example:
+        lines.append(label_line("Example", example))
+    lines.append(label_line("Votes", f"👍 `{thumbs_up} / {thumbs_down}` 👎"))
+
+    embed = panel_embed(
         title=word,
-        description=definition,
         url=permalink,
         color=DEFINE_COLOR,
+        author=author.display_name,
+        author_icon=author.display_avatar.url,
+        lines=lines,
+        timestamp=False,
     )
-    embed.set_author(name=author.display_name, icon_url=author.display_avatar.url)
-    if example:
-        embed.add_field(name="**Example**", value=example, inline=False)
-    embed.add_field(name="**Votes**", value=f"👍 `{thumbs_up} / {thumbs_down}` 👎", inline=False)
     embed.set_footer(
-        text=f"Page {page}/{total} of Urban Dictionary Results",
+        text=f"-# Page {page}/{total} of Urban Dictionary Results",
         icon_url=UD_FOOTER_ICON,
     )
     return embed
@@ -282,16 +292,17 @@ def build_cashapp_embed(profile: dict[str, Any], author: discord.User) -> discor
     avatar = profile.get("avatar") or {}
     image_url = avatar.get("image_url")
 
-    embed = discord.Embed(
+    embed = panel_embed(
         title=f"{display_name} (@{tag})",
-        description=f"Pay [{formatted}]({profile_url}) here.",
         url=profile_url,
         color=profile.get("_embed_color", CASHAPP_GREEN),
+        author=author.display_name,
+        author_icon=author.display_avatar.url,
+        lines=[f"Pay [{formatted}]({profile_url}) here."],
+        timestamp=False,
+        thumbnail=image_url,
     )
-    embed.set_author(name=author.display_name, icon_url=author.display_avatar.url)
-    if image_url:
-        embed.set_thumbnail(url=image_url)
-    embed.set_footer(text="CashApp", icon_url=CASHAPP_FOOTER_ICON)
+    embed.set_footer(text="-# CashApp", icon_url=CASHAPP_FOOTER_ICON)
     return embed
 
 
@@ -360,28 +371,28 @@ def build_github_embed(user: dict[str, Any], author: discord.User) -> discord.Em
     repos = user.get("_repos") or []
     public_repos = int(user.get("public_repos") or len(repos))
 
-    embed = discord.Embed(
-        title=f"{display_name} (@{login})",
-        url=profile_url,
-    )
-    embed.set_author(name=author.display_name, icon_url=author.display_avatar.url)
-
-    if avatar := user.get("avatar_url"):
-        embed.set_thumbnail(url=avatar)
-
-    if created := user.get("created_at"):
-        embed.timestamp = datetime.fromisoformat(created.replace("Z", "+00:00"))
-    embed.set_footer(text="Created on", icon_url=GITHUB_CREATED_ICON)
-
+    lines: list[str] = []
     info_lines = _github_info_lines(user)
     if info_lines:
-        embed.add_field(name="**Information**", value="\n".join(info_lines), inline=False)
-
+        lines.append(label_line("Information", "\n".join(info_lines)))
     if repos:
-        embed.add_field(
-            name=f"**Repositories ({public_repos})**",
-            value=_format_github_repos(login, repos),
-            inline=True,
+        lines.append(
+            label_line(
+                f"Repositories ({public_repos})",
+                _format_github_repos(login, repos),
+            )
         )
 
+    embed = panel_embed(
+        title=f"{display_name} (@{login})",
+        url=profile_url,
+        author=author.display_name,
+        author_icon=author.display_avatar.url,
+        lines=lines,
+        timestamp=False,
+        thumbnail=user.get("avatar_url"),
+    )
+    if created := user.get("created_at"):
+        embed.timestamp = datetime.fromisoformat(created.replace("Z", "+00:00"))
+    embed.set_footer(text="-# Created on", icon_url=GITHUB_CREATED_ICON)
     return embed

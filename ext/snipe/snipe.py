@@ -11,6 +11,7 @@ from core.discord.hybrid import hybrid, describe
 from core.discord.views.paginate import PaginateView
 from core.managers.values import color, emojis
 from core.managers.permissions import has_permissions
+from core.tools.aesthetic import aesthetic_embed, body, caption, compose, reply_embed
 from core.tools.snipe import SnipeError
 
 if TYPE_CHECKING:
@@ -35,9 +36,9 @@ class SnipePaginateView(PaginateView):
             del self.pages[self.index]
         except SnipeError:
             await interaction.response.send_message(
-                embed=discord.Embed(
+                embed=reply_embed(
                     color=color.warn,
-                    description=f"{emojis.warn} No snipe found at this index.",
+                    message=f"{emojis.warn} No snipe found at this index.",
                 ),
                 ephemeral=True,
             )
@@ -45,9 +46,9 @@ class SnipePaginateView(PaginateView):
 
         if not self.pages:
             await interaction.response.edit_message(
-                embed=discord.Embed(
+                embed=reply_embed(
                     color=color.base,
-                    description=f"{emojis.approve} All snipes cleared for {self.ctx.channel.mention}",
+                    message=f"{emojis.approve} All snipes cleared for {self.ctx.channel.mention}",
                 ),
                 view=None,
             )
@@ -67,24 +68,7 @@ def _build_snipe_embed(snipe: dict, index: int, total: int, snipe_type: str) -> 
         if any(x in content.lower() for x in ["discord.gg/", "discord.com/", "discordapp.com/"]):
             content = "*snipe had filtered content*"
 
-    embed = discord.Embed(
-        color=color.base,
-        description=content or "",
-        timestamp=datetime.datetime.fromtimestamp(snipe.get("timestamp", 0)),
-    )
-
     author = snipe.get("author", {})
-    if author:
-        embed.set_author(
-            name=author.get("name", "Unknown"),
-            icon_url=author.get("avatar", ""),
-        )
-
-    if att := snipe.get("attachments"):
-        embed.set_image(url=att[0])
-    elif sticks := snipe.get("stickers"):
-        embed.set_image(url=sticks[0])
-
     label = {"snipe": "Deleted", "editsnipe": "Edited", "reactionsnipe": "Reaction"}.get(snipe_type, "Deleted")
     ts = snipe.get("timestamp", 0)
     if isinstance(ts, (int, float)):
@@ -97,7 +81,27 @@ def _build_snipe_embed(snipe: dict, index: int, total: int, snipe_type: str) -> 
         time_str = f"yesterday at {discord.utils.format_dt(ts, style='t')}"
     else:
         time_str = discord.utils.format_dt(ts, style='f')
-    embed.set_footer(text=f"{label} {time_str} \u2219 {index}/{total}")
+
+    description = compose(
+        body(*content.splitlines()) if content else "",
+        caption(f"{label} {time_str} \u2219 {index}/{total}"),
+    )
+    embed = discord.Embed(
+        color=color.base,
+        description=description,
+        timestamp=datetime.datetime.fromtimestamp(snipe.get("timestamp", 0)),
+    )
+
+    if author:
+        embed.set_author(
+            name=author.get("name", "Unknown"),
+            icon_url=author.get("avatar", ""),
+        )
+
+    if att := snipe.get("attachments"):
+        embed.set_image(url=att[0])
+    elif sticks := snipe.get("stickers"):
+        embed.set_image(url=sticks[0])
 
     return embed
 
@@ -204,11 +208,15 @@ class Snipe(commands.Cog):
         else:
             time_str = discord.utils.format_dt(ts, style='f')
 
-        embed = discord.Embed(
+        embed = aesthetic_embed(
             color=color.base,
-            description=f"**{snipe.get('author', {}).get('name', 'Unknown')}** reacted with {reaction_display} {time_str}",
+            message=(
+                f"**{snipe.get('author', {}).get('name', 'Unknown')}** reacted with "
+                f"{reaction_display} {time_str}"
+            ),
+            footer=f"Reaction \u2219 {index}/{total}",
+            timestamp=False,
         )
-        embed.set_footer(text=f"Reaction \u2219 {index}/{total}")
 
         await ctx.send(embed=embed)
 
@@ -254,11 +262,13 @@ class Snipe(commands.Cog):
                 user = await self.bot.fetch_user(record.user_id)
             rows.append(f"`{i}` **{str(user)}** added {str(record.reaction)} {discord.utils.format_dt(record.ts, style='R')}")
 
-        embed = discord.Embed(
-            title="Reaction history",
-            url=message.jump_url,
+        embed = aesthetic_embed(
             color=color.base,
+            title="Reaction history",
+            message="",
+            timestamp=False,
         )
+        embed.url = message.jump_url
         embed.set_author(
             name=str(ctx.author.display_name),
             icon_url=ctx.author.display_avatar.url,

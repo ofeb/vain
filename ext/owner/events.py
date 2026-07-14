@@ -9,6 +9,7 @@ from discord.ext import tasks
 
 from core.discord.package import Package
 from core.managers.values import color
+from core.tools.aesthetic import panel_embed
 
 if TYPE_CHECKING:
     from core.vain import Vain
@@ -33,13 +34,14 @@ class OwnerEvents(Package):
         owner = guild.owner
         owner_str = str(owner) if owner else "Unknown"
 
-        embed = discord.Embed(
+        embed = panel_embed(
             title=f"{guild.name} joined",
             color=0xD4B8D0,
-            timestamp=datetime.now(timezone.utc),
+            lines=[],
+            thumbnail=guild.icon.url if guild.icon else None,
+            timestamp=False,
         )
-        if guild.icon:
-            embed.set_thumbnail(url=guild.icon.url)
+        embed.timestamp = datetime.now(timezone.utc)
         embed.add_field(name="Owner", value=owner_str, inline=True)
         embed.add_field(name="Guild ID", value=f"`{guild.id}`", inline=True)
         embed.add_field(
@@ -72,13 +74,14 @@ class OwnerEvents(Package):
         owner = guild.owner
         owner_str = str(owner) if owner else "Unknown"
 
-        embed = discord.Embed(
+        embed = panel_embed(
             title=f"{guild.name} left",
             color=0xE07A7A,
-            timestamp=datetime.now(timezone.utc),
+            lines=[],
+            thumbnail=guild.icon.url if guild.icon else None,
+            timestamp=False,
         )
-        if guild.icon:
-            embed.set_thumbnail(url=guild.icon.url)
+        embed.timestamp = datetime.now(timezone.utc)
         embed.add_field(name="Owner", value=owner_str, inline=True)
         embed.add_field(name="Guild ID", value=f"`{guild.id}`", inline=True)
         embed.add_field(

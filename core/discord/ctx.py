@@ -12,6 +12,7 @@ from discord.ext import commands
 
 from core.managers.app_emojis import format_embed_emoji
 from core.managers.values import color, emojis, lastfm_color, lastfm_color
+from core.tools.aesthetic import body
 
 
 class Cache:
@@ -137,10 +138,10 @@ class Context(commands.Context):
         emoji: str = "",
         color_value: Optional[int] = None,
     ) -> discord.Embed:
-        prefix = f"{emoji} " if emoji else "> "
+        line = f"{emoji} {self.author.mention}: {message}" if emoji else f"{self.author.mention}: {message}"
         return discord.Embed(
             color=color_value or self.bot.color,
-            description=f"{prefix}{self.author.mention}: {message}",
+            description=body(line),
         )
 
     async def _send_embed_response(

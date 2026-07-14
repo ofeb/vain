@@ -25,6 +25,7 @@ from core.discord.package import Package
 
 from .events import LastfmEvents
 from core.managers.values import emojis, api as api_values, lastfm_color as lastfm_color_config, lastfm_callback
+from core.tools.aesthetic import body, panel_embed
 from core.tools.guild_members import collect_guild_members
 from core.tools import embed as embed_builder
 from .api import LastFMApiClient
@@ -250,7 +251,7 @@ class Lastfm(LastfmEvents, Package):
 
     @staticmethod
     def _quote_block(*lines: str) -> str:
-        return "\n".join(f"> {line}" for line in lines if line)
+        return body(*lines)
 
     @staticmethod
     def _line_block(*lines: str) -> str:
@@ -624,10 +625,11 @@ class Lastfm(LastfmEvents, Package):
         total_pages = max(1, (total + per_page - 1) // per_page)
         for index in range(total_pages):
             chunk = lines[index * per_page : (index + 1) * per_page]
-            embed = discord.Embed(
+            embed = panel_embed(
                 title=title,
-                description=self._lastfm_embed_description("\n".join(chunk)),
+                lines=chunk,
                 color=color or self._info_color(),
+                timestamp=False,
             )
             self._set_lastfm_user_author(embed, author)
             footer = f"Page {index + 1}/{total_pages} • {total} entries"
@@ -808,17 +810,16 @@ class Lastfm(LastfmEvents, Package):
 
         color = await self._resolve_color(target.id)
         insights = self._quote_block(*metric_lines) if metric_lines else "> No additional insights available."
-        embed = discord.Embed(
+        embed = panel_embed(
             title=user.get("name", username),
-            description=self._lastfm_embed_description(
-                self._quote_block(
-                    f"**Scrobbles**: {playcount}",
-                    f"**Joined**: {joined_value}",
-                    f"**Subscriber**: {subscriber}",
-                )
-            ),
             url=profile_url,
             color=color,
+            lines=[
+                f"**Scrobbles**: {playcount}",
+                f"**Joined**: {joined_value}",
+                f"**Subscriber**: {subscriber}",
+            ],
+            timestamp=False,
         )
         embed.add_field(
             name="Library",
@@ -907,25 +908,29 @@ class Lastfm(LastfmEvents, Package):
         album = track.get("album", {}).get("#text") or "Unknown album"
         url = track.get("url", "https://www.last.fm")
         if mode == "minimal":
-            embed = discord.Embed(
-                description=(
-                    f"**{track_name}** - [{artist}](https://www.last.fm/music/{quote_plus(artist)})\n"
-                    f"Album: {album}"
-                ),
+            embed = panel_embed(
                 color=color,
+                lines=[
+                    f"**{track_name}** - [{artist}](https://www.last.fm/music/{quote_plus(artist)})",
+                    f"Album: {album}",
+                ],
+                timestamp=False,
             )
         elif mode == "compact":
-            embed = discord.Embed(
-                description=(
-                    f"**Track:** [{track_name}]({url})\n"
-                    f"**Artist:** [{artist}](https://www.last.fm/music/{quote_plus(artist)})\n"
-                    f"**Album:** {album}"
-                ),
+            embed = panel_embed(
                 color=color,
+                lines=[
+                    f"**Track:** [{track_name}]({url})",
+                    f"**Artist:** [{artist}](https://www.last.fm/music/{quote_plus(artist)})",
+                    f"**Album:** {album}",
+                ],
+                timestamp=False,
             )
         else:
-            embed = discord.Embed(
+            embed = panel_embed(
                 color=color,
+                lines=[],
+                timestamp=False,
             )
             embed.add_field(name="**Track**", value=f"[{track_name}]({url})", inline=True)
             embed.add_field(
@@ -1296,17 +1301,16 @@ class Lastfm(LastfmEvents, Package):
         )
         target = member or ctx.author
         color = await self._resolve_color(target.id)
-        embed = discord.Embed(
+        embed = panel_embed(
             title=artist_data.get("name", artist_name),
             url=artist_data.get("url") or f"https://www.last.fm/music/{quote_plus(artist_name)}",
-            description=self._lastfm_embed_description(
-                self._quote_block(
-                    f"**Your plays**: {self._plays_text(stats.get('userplaycount'))}",
-                    f"**Listeners**: {self._listeners_text(stats.get('listeners'))}",
-                    f"**Global plays**: {self._plays_text(stats.get('playcount'))}",
-                )
-            ),
             color=color,
+            lines=[
+                f"**Your plays**: {self._plays_text(stats.get('userplaycount'))}",
+                f"**Listeners**: {self._listeners_text(stats.get('listeners'))}",
+                f"**Global plays**: {self._plays_text(stats.get('playcount'))}",
+            ],
+            timestamp=False,
         )
         if tag_names:
             embed.add_field(
@@ -1378,18 +1382,17 @@ class Lastfm(LastfmEvents, Package):
         target = member or ctx.author
         color = await self._resolve_color(target.id)
         track_count = self._format_number(len(tracks)) if tracks else "n/a"
-        embed = discord.Embed(
+        embed = panel_embed(
             title=album_data.get("name", album_name),
             url=album_data.get("url") or f"https://www.last.fm/music/{quote_plus(artist_name)}/{quote_plus(album_name)}",
-            description=self._lastfm_embed_description(
-                self._quote_block(
-                    f"**Artist**: {album_data.get('artist', artist_name)}",
-                    f"**Your plays**: {self._plays_text(album_data.get('userplaycount'))}",
-                    f"**Listeners**: {self._listeners_text(album_data.get('listeners'))}",
-                    f"**Global plays**: {self._plays_text(album_data.get('playcount'))}",
-                )
-            ),
             color=color,
+            lines=[
+                f"**Artist**: {album_data.get('artist', artist_name)}",
+                f"**Your plays**: {self._plays_text(album_data.get('userplaycount'))}",
+                f"**Listeners**: {self._listeners_text(album_data.get('listeners'))}",
+                f"**Global plays**: {self._plays_text(album_data.get('playcount'))}",
+            ],
+            timestamp=False,
         )
         tag_names = [tag.get("name") for tag in tags if tag.get("name")]
         embed.add_field(
@@ -1458,19 +1461,18 @@ class Lastfm(LastfmEvents, Package):
         duration_value = self._format_duration(self._number_value(track_data.get("duration")))
         target = member or ctx.author
         color = await self._resolve_color(target.id)
-        embed = discord.Embed(
+        embed = panel_embed(
             title=track_data.get("name", track_name),
             url=track_data.get("url") or f"https://www.last.fm/music/{quote_plus(artist_name)}/_/{quote_plus(track_name)}",
-            description=self._lastfm_embed_description(
-                self._quote_block(
-                    f"**Artist**: {track_data.get('artist', {}).get('name') or artist_name}",
-                    f"**Album**: {album_data.get('title') or 'Unknown album'}",
-                    f"**Your plays**: {self._plays_text(track_data.get('userplaycount'))}",
-                    f"**Listeners**: {self._listeners_text(track_data.get('listeners'))}",
-                    f"**Global plays**: {self._plays_text(track_data.get('playcount'))}",
-                )
-            ),
             color=color,
+            lines=[
+                f"**Artist**: {track_data.get('artist', {}).get('name') or artist_name}",
+                f"**Album**: {album_data.get('title') or 'Unknown album'}",
+                f"**Your plays**: {self._plays_text(track_data.get('userplaycount'))}",
+                f"**Listeners**: {self._listeners_text(track_data.get('listeners'))}",
+                f"**Global plays**: {self._plays_text(track_data.get('playcount'))}",
+            ],
+            timestamp=False,
         )
         tag_names = [tag.get("name") for tag in top_tags if tag.get("name")]
         embed.add_field(
@@ -1540,16 +1542,15 @@ class Lastfm(LastfmEvents, Package):
             return
         target = member or ctx.author
         color = await self._resolve_color(target.id)
-        embed = discord.Embed(
+        embed = panel_embed(
             title=f"{album_data.get('name', album_name)} cover",
             url=album_data.get("url") or f"https://www.last.fm/music/{quote_plus(artist_name)}/{quote_plus(album_name)}",
-            description=self._lastfm_embed_description(
-                self._quote_block(
-                    f"**Artist**: {album_data.get('artist', artist_name)}",
-                    f"**Artwork source**: {'Custom override' if await self._get_album_artwork((member or ctx.author).id, artist_name, album_name) else 'Last.fm'}",
-                )
-            ),
             color=color,
+            lines=[
+                f"**Artist**: {album_data.get('artist', artist_name)}",
+                f"**Artwork source**: {'Custom override' if await self._get_album_artwork((member or ctx.author).id, artist_name, album_name) else 'Last.fm'}",
+            ],
+            timestamp=False,
         )
         embed.set_image(url=artwork)
         self._set_lastfm_user_author(embed, target)
@@ -1619,15 +1620,14 @@ class Lastfm(LastfmEvents, Package):
                 break
         target = member or ctx.author
         color = await self._resolve_color(target.id)
-        embed = discord.Embed(
+        embed = panel_embed(
             title=f"{username}'s listening streak",
-            description=self._lastfm_embed_description(
-                self._quote_block(
-                    f"**Current streak**: {self._format_number(streak)} day(s)",
-                    f"**Last scrobble**: <t:{last_ts}:R>" if last_ts else None,
-                )
-            ),
             color=color,
+            lines=[
+                f"**Current streak**: {self._format_number(streak)} day(s)",
+                f"**Last scrobble**: <t:{last_ts}:R>" if last_ts else None,
+            ],
+            timestamp=False,
         )
         self._set_lastfm_user_author(embed, target)
         self._set_lastfm_footer(embed, self._meta_line("Recent listening", username))
@@ -1672,17 +1672,16 @@ class Lastfm(LastfmEvents, Package):
             claimed_text = f"<t:{int(claimed_at.timestamp())}:R>"
 
         color = await self._resolve_color(owner_id if owner_member else ctx.author.id)
-        embed = discord.Embed(
+        embed = panel_embed(
             title=f"👑 Crown for {crown.get('artist_name', artist)}",
-            description=self._lastfm_embed_description(
-                self._quote_block(
-                    f"**Current holder**: {owner_display}",
-                    f"**Plays**: {plays}",
-                    f"**Claimed**: {claimed_text}",
-                )
-            ),
             color=color,
             url=f"https://www.last.fm/music/{quote_plus(crown.get('artist_name', artist))}",
+            lines=[
+                f"**Current holder**: {owner_display}",
+                f"**Plays**: {plays}",
+                f"**Claimed**: {claimed_text}",
+            ],
+            timestamp=False,
         )
         history_rows = await self._list_crown_history(ctx.guild.id, crown.get("artist_name", artist), limit=10)
         steals = [row for row in history_rows if row.get("previous_user_id") is not None]
@@ -1781,15 +1780,16 @@ class Lastfm(LastfmEvents, Package):
             raise RuntimeError("internal lastfm upstream unavailable")
             return
         user = data["user"]
-        embed = discord.Embed(
+        embed = panel_embed(
             title=f"{username}'s Last.fm score",
-            description=(
-                f"**Scrobbles**: {self._format_number(user.get('playcount', '0'))}\n"
-                f"**Artists**: {self._format_number(user.get('artist_count', '0'))}\n"
-                f"**Albums**: {self._format_number(user.get('album_count', '0'))}\n"
-                f"**Tracks**: {self._format_number(user.get('track_count', '0'))}"
-            ),
             color=self._info_color(),
+            lines=[
+                f"**Scrobbles**: {self._format_number(user.get('playcount', '0'))}",
+                f"**Artists**: {self._format_number(user.get('artist_count', '0'))}",
+                f"**Albums**: {self._format_number(user.get('album_count', '0'))}",
+                f"**Tracks**: {self._format_number(user.get('track_count', '0'))}",
+            ],
+            timestamp=False,
         )
         self._set_lastfm_footer(embed, f"{ctx.author.display_name} - Last.fm")
         await ctx.send(embed=embed)
@@ -2145,15 +2145,17 @@ class Lastfm(LastfmEvents, Package):
             score_f = 0.0
         names = self._taste_shared_artist_names(cmp_block)
         period_note = PERIOD_LABELS.get(period_param, period_param)
-        description = f"**Compatibility** ({period_note}): {score_f * 100:.2f}%"
+        compare_lines = [f"**Compatibility** ({period_note}): {score_f * 100:.2f}%"]
         if names:
-            description += "\n**Shared artists**: " + ", ".join(names[:5])
-        embed = discord.Embed(
+            compare_lines.append("**Shared artists**: " + ", ".join(names[:5]))
+        embed = panel_embed(
             title=f"{ctx.author.display_name} vs {target.display_name}",
-            description=description,
             color=self._info_color(),
+            lines=compare_lines,
+            author=ctx.author.display_name,
+            author_icon=ctx.author.display_avatar.url,
+            timestamp=False,
         )
-        embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
         await ctx.send(embed=embed)
 
     @lastfm.command(name="milestone")
@@ -2194,12 +2196,14 @@ class Lastfm(LastfmEvents, Package):
         name = track.get("name", "Unknown track")
         artist = track.get("artist", {}).get("#text") or "Unknown artist"
         url = track.get("url", "https://www.last.fm")
-        embed = discord.Embed(
+        embed = panel_embed(
             title=f"Milestone #{number}",
-            description=f"**{name}** - {artist}",
             color=self._info_color(),
+            lines=[f"**{name}** - {artist}"],
+            author=ctx.author.display_name,
+            author_icon=ctx.author.display_avatar.url,
+            timestamp=False,
         )
-        embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
         image = track.get("image", [])
         if image:
             embed.set_thumbnail(url=image[-1].get("#text") or image[0].get("#text"))
@@ -2512,19 +2516,18 @@ class Lastfm(LastfmEvents, Package):
         total_scrobbles = self._format_number(user.get("playcount"))
         last_line = f"<t:{last_ts}:R>" if last_ts else "n/a"
         sample_count = len(tracks)
-        embed = discord.Embed(
+        embed = panel_embed(
             title=f"{target.display_name}'s Last.fm overview",
-            description=self._lastfm_embed_description(
-                self._quote_block(
-                    f"**Total scrobbles**: {total_scrobbles}",
-                    f"**Today**: {self._format_number(today_scrobbles)}",
-                    f"**Last 7 days**: {self._format_number(week_scrobbles)}",
-                    f"**Current streak**: {self._format_number(streak)} day(s)",
-                    f"**Last scrobble**: {last_line}",
-                )
-            ),
             color=color,
             url=self._user_url(username),
+            lines=[
+                f"**Total scrobbles**: {total_scrobbles}",
+                f"**Today**: {self._format_number(today_scrobbles)}",
+                f"**Last 7 days**: {self._format_number(week_scrobbles)}",
+                f"**Current streak**: {self._format_number(streak)} day(s)",
+                f"**Last scrobble**: {last_line}",
+            ],
+            timestamp=False,
         )
         embed.add_field(
             name="Recent Sample",
@@ -2622,15 +2625,14 @@ class Lastfm(LastfmEvents, Package):
             url = pick.get("url", "https://www.last.fm")
             playcount = self._number_value(pick.get("playcount"))
         color = await self._resolve_color(target.id)
-        embed = discord.Embed(
+        embed = panel_embed(
             title="Last.fm recommendation",
-            description=self._lastfm_embed_description(
-                self._quote_block(
-                    f"Try **{name}** next.",
-                    f"**Your plays**: {self._plays_text(playcount)}" if playcount > 0 else None,
-                )
-            ),
             color=color,
+            lines=[
+                f"Try **{name}** next.",
+                f"**Your plays**: {self._plays_text(playcount)}" if playcount > 0 else None,
+            ],
+            timestamp=False,
         )
         self._set_lastfm_user_author(embed, target)
         self._set_lastfm_footer(embed, self._meta_line("Random pick from your library", username))
@@ -2881,12 +2883,14 @@ class Lastfm(LastfmEvents, Package):
         artist = track.get("artist", {}).get("#text") or ""
         query = quote_plus(f"{artist} {name}")
         url = f"https://soundcloud.com/search?q={query}"
-        embed = discord.Embed(
+        embed = panel_embed(
             title="SoundCloud",
-            description="Search this current track on SoundCloud.",
             color=self._info_color(),
+            lines=["Search this current track on SoundCloud."],
+            author=ctx.author.display_name,
+            author_icon=ctx.author.display_avatar.url,
+            timestamp=False,
         )
-        embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
         view = self._link_view(("☁️", "SoundCloud", url))
         await ctx.send(embed=embed, view=view)
 
@@ -2909,12 +2913,14 @@ class Lastfm(LastfmEvents, Package):
         artist = track.get("artist", {}).get("#text") or ""
         query = quote_plus(f"{artist} {name}")
         url = f"https://open.spotify.com/search/{query}"
-        embed = discord.Embed(
+        embed = panel_embed(
             title="Spotify",
-            description="Search this current track on Spotify.",
             color=self._info_color(),
+            lines=["Search this current track on Spotify."],
+            author=ctx.author.display_name,
+            author_icon=ctx.author.display_avatar.url,
+            timestamp=False,
         )
-        embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
         view = self._link_view(("🟢", "Spotify", url))
         await ctx.send(embed=embed, view=view)
 
@@ -2967,11 +2973,13 @@ class Lastfm(LastfmEvents, Package):
         if not lyrics:
             await ctx.warn("Could not find lyrics for that track.")
             return
-        embed = discord.Embed(
+        embed = panel_embed(
             title=f"{title.strip()} — {artist.strip()}",
-            description=lyrics[:4000],
             color=self._lastfm_color(),
+            lines=[],
+            timestamp=False,
         )
+        embed.description = lyrics[:4000]
         await ctx.send(embed=embed)
     @lastfm.command(name="update")
     async def lastfm_update(self, ctx: Context, *, parameters: str | None = None) -> None:
@@ -3201,11 +3209,14 @@ class Lastfm(LastfmEvents, Package):
             raise RuntimeError("internal collage generator returned invalid image")
 
         period_label = PERIOD_LABELS.get(period_param, period_param)
-        embed = discord.Embed(
+        embed = panel_embed(
             title=f"{username}'s {period_label} album collage",
             color=self._info_color(),
+            lines=[],
+            author=ctx.author.display_name,
+            author_icon=ctx.author.display_avatar.url,
+            timestamp=False,
         )
-        embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
         embed.set_image(url="attachment://collage.png")
         await ctx.send(
             embed=embed,

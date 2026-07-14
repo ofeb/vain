@@ -11,6 +11,7 @@ from core.discord.package import Package
 from core.tools.convert import MemberConvert, RoleConvert, StatusConvert
 
 from core.managers.permissions import has_permissions
+from core.tools.aesthetic import aesthetic_embed, body, caption, compose
 DEFAULT_UPVOTE = "\u2705"
 DEFAULT_DOWNVOTE = "\u274c"
 SUGGEST_SEPARATOR = " • "
@@ -452,16 +453,20 @@ class SuggestCommands(Package):
         return f"https://discord.com/channels/{guild_id}/{channel_id}/{message_id}"
 
     async def _build_public_embed(self, guild: discord.Guild, row) -> discord.Embed:
+        content = str(row["content"]).strip()
         embed = discord.Embed(
-            description=str(row["content"]).strip(),
             color=self.color,
+            description=compose(
+                body(*content.splitlines()) if content else "",
+                caption(self._suggestion_footer(row)),
+            ),
+            timestamp=discord.utils.utcnow(),
         )
         author_name, author_icon = await self._resolve_author(guild, int(row["author_id"]))
         if author_icon:
             embed.set_author(name=author_name, icon_url=author_icon)
         else:
             embed.set_author(name=author_name)
-        embed.set_footer(text=self._suggestion_footer(row))
         return embed
 
     async def _build_review_embed(self, guild: discord.Guild, row) -> discord.Embed:
@@ -469,14 +474,14 @@ class SuggestCommands(Package):
         member = guild.get_member(int(row["author_id"]))
         embed.add_field(
             name="Submitted By",
-            value=member.mention if member else f"<@{row['author_id']}>",
+            value=body(member.mention if member else f"<@{row['author_id']}>"),
             inline=False,
         )
         public_link = self._message_jump_url(guild.id, row["channel_id"], row["message_id"])
         if public_link:
             embed.add_field(
                 name="Public Message",
-                value=f"[jump to message]({public_link})",
+                value=body(f"[jump to message]({public_link})"),
                 inline=False,
             )
         return embed
@@ -898,27 +903,28 @@ class SuggestCommands(Package):
         suggestion_channel = await self._resolve_channel(ctx.guild, settings.get("channel_id"))
         review_channel = await self._resolve_channel(ctx.guild, settings.get("review_channel_id"))
 
-        embed = discord.Embed(
+        embed = aesthetic_embed(
             color=self.color,
             title="Suggestion settings",
+            message="",
         )
         embed.add_field(
             name="General",
-            value=(
-                f"**State:** {'unlocked' if settings.get('enabled') else 'locked'}"
-                f"\n**Channel:** {suggestion_channel.mention if suggestion_channel else 'not set'}"
-                f"\n**Review:** {'enabled' if settings.get('review_enabled') else 'disabled'}"
-                f"\n**Review Channel:** {review_channel.mention if review_channel else 'not set'}"
+            value=body(
+                f"**State:** {'unlocked' if settings.get('enabled') else 'locked'}",
+                f"**Channel:** {suggestion_channel.mention if suggestion_channel else 'not set'}",
+                f"**Review:** {'enabled' if settings.get('review_enabled') else 'disabled'}",
+                f"**Review Channel:** {review_channel.mention if review_channel else 'not set'}",
             ),
             inline=False,
         )
         embed.add_field(
             name="Options",
-            value=(
-                f"**Threads:** {'enabled' if settings.get('threads_enabled') else 'disabled'}"
-                f"\n**Upvote:** {settings.get('upvote_emoji') or DEFAULT_UPVOTE}"
-                f"\n**Downvote:** {settings.get('downvote_emoji') or DEFAULT_DOWNVOTE}"
-                f"\n**Ignored Entries:** {len(ignored)}"
+            value=body(
+                f"**Threads:** {'enabled' if settings.get('threads_enabled') else 'disabled'}",
+                f"**Upvote:** {settings.get('upvote_emoji') or DEFAULT_UPVOTE}",
+                f"**Downvote:** {settings.get('downvote_emoji') or DEFAULT_DOWNVOTE}",
+                f"**Ignored Entries:** {len(ignored)}",
             ),
             inline=False,
         )
@@ -1004,7 +1010,11 @@ class SuggestCommands(Package):
                 label = member.mention if member else f"unknown member (`{entry['target_id']}`)"
             lines.append(f"**{entry['target_type']}**: {label}")
 
-        embed = discord.Embed(title="Ignored Suggestions", color=self.color)
+        embed = aesthetic_embed(
+            color=self.color,
+            title="Ignored Suggestions",
+            message="",
+        )
         await ctx.paginate(embed, lines)
 
     @suggest.command(

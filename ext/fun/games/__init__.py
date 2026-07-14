@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Optional
 import discord
 
 from core.managers.values import color
+from core.tools.aesthetic import body, compose, reply_embed
 from .connect4_board import render_connect4_board
 
 if TYPE_CHECKING:
@@ -42,9 +43,9 @@ def _bot_thinking_line(*, emoji: str) -> str:
 async def _warn_interaction(ctx: "Context", interaction: discord.Interaction, message: str) -> None:
     emoji = await ctx._get_emoji("warn")
     color_value = await ctx._get_color("warn")
-    embed = discord.Embed(
+    embed = reply_embed(
         color=color_value,
-        description=f"{emoji} {interaction.user.mention}: {message}",
+        message=f"{emoji} {interaction.user.mention}: {message}",
     )
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -100,7 +101,7 @@ async def _end_game(message: discord.Message | None, text: str) -> None:
     with contextlib.suppress(discord.HTTPException, discord.Forbidden):
         if message.embeds:
             embed = message.embeds[0].copy()
-            embed.description = text
+            embed.description = compose(body(*text.split("\n")))
             embed.set_footer(text="Game ended")
             await message.edit(embed=embed, view=None)
         else:
@@ -168,7 +169,11 @@ class RPSView(discord.ui.View):
             desc = self._waiting_text()
             if self.current_round > 1:
                 desc = f"**Round {self.current_round}/{self.rounds}**\n{desc}"
-        embed = discord.Embed(title="Rock Paper Scissors", description=desc, color=color.base)
+        embed = discord.Embed(
+            title="Rock Paper Scissors",
+            color=color.base,
+            description=compose(body(*desc.split("\n"))),
+        )
         if not self.finished:
             embed.set_footer(text=f"Round {self.current_round} of {self.rounds}")
         return embed
@@ -236,13 +241,18 @@ class RPSView(discord.ui.View):
             for child in self.children:
                 child.disabled = True
             embed = self._embed()
-            embed.description = round_text + "\n\n" + (embed.description or "")
+            final_lines = (round_text + "\n\n" + (embed.description or "")).split("\n")
+            embed.description = compose(body(*final_lines))
         else:
             self.current_round += 1
             embed = discord.Embed(
                 title="Rock Paper Scissors",
-                description=round_text + f"\n\n**Round {self.current_round}/{self.rounds}**\n{self._waiting_text()}",
                 color=color.base,
+                description=compose(
+                    body(
+                        *(round_text + f"\n\n**Round {self.current_round}/{self.rounds}**\n{self._waiting_text()}").split("\n"),
+                    ),
+                ),
             )
             embed.set_footer(text=f"Round {self.current_round} of {self.rounds}")
 
@@ -602,19 +612,27 @@ class Connect4View(discord.ui.View):
         p2_name = BOT_OPPONENT if self.vs_me else self.player2.display_name
         embed = discord.Embed(
             title="Connect Four",
-            description=f"**{self.player1.display_name}** vs **{p2_name}**",
             color=color.base,
+            description=compose(
+                body(f"**{self.player1.display_name}** vs **{p2_name}**"),
+            ),
         )
         if status:
-            embed.add_field(name="Result", value=status, inline=False)
+            embed.add_field(name="Result", value=compose(body(status)), inline=False)
         elif not self.finished:
             if self.vs_me and self.turn == 2:
-                embed.add_field(name="Turn", value=_bot_thinking_line(emoji="🟡"), inline=False)
+                embed.add_field(
+                    name="Turn",
+                    value=compose(body(_bot_thinking_line(emoji="🟡"))),
+                    inline=False,
+                )
             else:
                 marker = "🔴" if self.turn == 1 else "🟡"
                 embed.add_field(
                     name="Turn",
-                    value=f"{marker} {self._current_player().mention}, pick a column.",
+                    value=compose(
+                        body(f"{marker} {self._current_player().mention}, pick a column."),
+                    ),
                     inline=False,
                 )
         embed.set_image(url="attachment://connect4.jpg")

@@ -1,9 +1,11 @@
 ﻿from __future__ import annotations
 
+import contextlib
 from asyncio import Lock, sleep
 from collections import defaultdict
 
 from asyncpg import UniqueViolationError
+import discord
 from discord import Embed, Member, Message, TextChannel
 from discord.ext.commands import group
 
@@ -129,6 +131,16 @@ class BoostCommands(Package):
 
     async def on_member_boost(self, member: Member) -> None:
         """send boost messages when a member starts boosting"""
+        award_row = await self.bot.db.fetchrow(
+            "SELECT award_id FROM booster_roles WHERE guild_id = $1",
+            member.guild.id,
+        )
+        if award_row and award_row.get("award_id"):
+            award_role = member.guild.get_role(int(award_row["award_id"]))
+            if award_role and award_role not in member.roles:
+                with contextlib.suppress(discord.Forbidden, discord.HTTPException):
+                    await member.add_roles(award_role, reason="Booster award role")
+
         rate = await self.bot.object_cache.ratelimited(
             f"boost_messages:{member.guild.id}", 1, 5
         )

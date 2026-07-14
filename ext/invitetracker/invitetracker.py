@@ -10,6 +10,7 @@ from core.discord.package import Package
 from core.discord.ctx import Context
 from core.discord.hybrid import group
 from core.managers.permissions import has_permissions
+from core.tools.aesthetic import panel_embed
 
 
 class InviteTracker(Package):
@@ -58,18 +59,19 @@ class InviteTracker(Package):
         data = await self._get_invites(ctx.guild.id, user.id)
         real = data["invites"] - data["leaves"] - data["fake"] + data["bonus"]
 
-        embed = discord.Embed(
+        embed = panel_embed(
             color=self.color,
-            description=(
-                f"**{user.display_name}**'s invites\n"
-                f"Regular: **{data['invites']}**\n"
-                f"Left: **{data['leaves']}**\n"
-                f"Fake: **{data['fake']}**\n"
-                f"Bonus: **{data['bonus']}**\n"
-                f"Net: **{real}**"
-            ),
+            lines=[
+                f"**{user.display_name}**'s invites",
+                f"Regular: **{data['invites']}**",
+                f"Left: **{data['leaves']}**",
+                f"Fake: **{data['fake']}**",
+                f"Bonus: **{data['bonus']}**",
+                f"Net: **{real}**",
+            ],
+            thumbnail=user.display_avatar.url,
+            timestamp=False,
         )
-        embed.set_thumbnail(url=user.display_avatar.url)
         return await ctx.send(embed=embed)
 
     @invites.command(
@@ -100,7 +102,7 @@ class InviteTracker(Package):
                 f"({row['invites']} regular, {row['leaves']} left, {row['fake']} fake)"
             )
 
-        embed = discord.Embed(title="Invite Leaderboard", color=self.color)
+        embed = panel_embed(title="Invite Leaderboard", color=self.color, lines=[], timestamp=False)
         return await ctx.paginate(embed, values)
 
     @invites.command(
@@ -204,8 +206,7 @@ class InviteTracker(Package):
         if invite_lines:
             description += "\n\n**Active invites:**\n" + "\n".join(invite_lines)
 
-        embed = discord.Embed(description=description, color=self.color)
-        embed.set_thumbnail(url=user.display_avatar.url)
+        embed = panel_embed(color=self.color, lines=description.split("\n"), thumbnail=user.display_avatar.url, timestamp=False)
         return await ctx.send(embed=embed)
 
     
@@ -337,7 +338,7 @@ class InviteTracker(Package):
         config = await self._get_config(ctx.guild.id)
         channel = ctx.guild.get_channel(config["channel_id"]) if config["channel_id"] else None
 
-        embed = discord.Embed(title="Invite Join Config", color=self.color)
+        embed = panel_embed(title="Invite Join Config", color=self.color, lines=[], timestamp=False)
         embed.add_field(name="Enabled", value=str(config["enabled"]), inline=True)
         embed.add_field(
             name="Channel",
@@ -467,7 +468,7 @@ class InviteTracker(Package):
         config = await self._get_config(ctx.guild.id)
         channel = ctx.guild.get_channel(config["channel_id"]) if config["channel_id"] else None
 
-        embed = discord.Embed(title="Invite Leave Config", color=self.color)
+        embed = panel_embed(title="Invite Leave Config", color=self.color, lines=[], timestamp=False)
         embed.add_field(name="Enabled", value=str(config["enabled"]), inline=True)
         embed.add_field(
             name="Channel",

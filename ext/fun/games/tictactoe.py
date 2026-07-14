@@ -6,6 +6,7 @@ import discord
 from discord.ext import commands
 
 from core.managers.values import color
+from core.tools.aesthetic import reply_embed
 
 
 class TicTacToeButton(discord.ui.Button):
@@ -123,9 +124,9 @@ class TicTacToe(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.player.id:
-            embed = discord.Embed(
-                description=f"It is not your **turn** yet - waiting on {self.player.mention} rn!",
+            embed = reply_embed(
                 color=color.base,
+                message=f"It is not your **turn** yet - waiting on {self.player.mention} rn!",
             )
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return False

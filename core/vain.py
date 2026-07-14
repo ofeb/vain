@@ -27,6 +27,7 @@ from .tools.errors import Ratelimited
 from .tools.ratelimit import global_ratelimit
 from .tools.snipe import Snipe
 from .managers.values import token, bot, color, database, redis, emojis, music_enabled
+from .tools.aesthetic import reply_embed
 from .managers.filetypes import CACHE_REDIS_FILE, ensure_storage_files
 
 from .discord.interaction import patch_interaction
@@ -577,9 +578,9 @@ class Vain(commands.AutoShardedBot):
             ctx = await self.get_context(inter, cls=Context)
             emoji = await ctx._get_emoji("cooldown")
             color_value = await ctx._get_color("cooldown")
-            embed = discord.Embed(
+            embed = reply_embed(
                 color=color_value,
-                description=(
+                message=(
                     f"{emoji} {inter.user.mention}: Please wait "
                     f"**{orig.retry_after:.2f} seconds** before using any command again"
                 ),
@@ -591,9 +592,9 @@ class Vain(commands.AutoShardedBot):
             ctx = await self.get_context(inter, cls=Context)
             emoji = await ctx._get_emoji("cooldown")
             color_value = await ctx._get_color("cooldown")
-            embed = discord.Embed(
+            embed = reply_embed(
                 color=color_value,
-                description=(
+                message=(
                     f"{emoji} {inter.user.mention}: Please wait "
                     f"**{err.retry_after:.2f} seconds** before using this command again"
                 ),
