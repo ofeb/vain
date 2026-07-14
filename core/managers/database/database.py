@@ -8,7 +8,7 @@ from datetime import datetime
 @dataclass
 class Guild:
     guild_id: int
-    prefix: str = ";"
+    prefix: str = ","
     language: str = "en"
     muted_role_id: Optional[int] = None
     auto_role_id: Optional[int] = None

@@ -314,8 +314,8 @@ def _build_mock_context(bot, guild, author) -> MagicMock:
     ctx.guild = guild
     ctx.author = author
     ctx.channel = guild.text_channels[0]
-    ctx.prefix = ";"
-    ctx.clean_prefix = ";"
+    ctx.prefix = ","
+    ctx.clean_prefix = ","
     ctx.send = AsyncMock()
     ctx.success = AsyncMock()
     ctx.fail = AsyncMock()

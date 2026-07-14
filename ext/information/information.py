@@ -56,7 +56,6 @@ class InformationCommands(Package):
         shard_count = bot.shard_count or 1
         started = discord.utils.format_dt(bot.started_at, style="F")
 
-        
         try:
             dom_color = await get_bot_dominant_color(bot)
         except Exception:
@@ -73,10 +72,48 @@ class InformationCommands(Package):
             label_line("Started", started),
         ]
 
-        
+        bot_name = bot.user.display_name if bot.user else "bleed"
+
+        try:
+            cont = discord.ui.Container(accent_colour=dom_color)
+            cont.add_item(discord.ui.TextDisplay(f"**{bot_name}**"))
+            cont.add_item(discord.ui.TextDisplay("-# Bot Information"))
+            for line in info_lines:
+                cont.add_item(discord.ui.TextDisplay(f"-# {line}"))
+            cont.add_item(discord.ui.Separator())
+
+            # Buttons row inside container
+            row = discord.ui.ActionRow()
+            row.add_item(discord.ui.Button(
+                label="Website",
+                style=discord.ButtonStyle.link,
+                url="https://vain.bot",
+                emoji="\U0001f310",
+            ))
+            if bot.user:
+                row.add_item(discord.ui.Button(
+                    label="Invite",
+                    style=discord.ButtonStyle.link,
+                    url=f"https://discord.com/oauth2/authorize?client_id={bot.user.id}&scope=bot+applications.commands&permissions=8",
+                    emoji="\U0001f517",
+                ))
+            row.add_item(discord.ui.Button(
+                label="Support",
+                style=discord.ButtonStyle.link,
+                url="https://discord.gg/vainbot",
+                emoji="\U0001f4ac",
+            ))
+            cont.add_item(row)
+
+            await ctx.send(components=[cont], flags=discord.MessageFlags.components_v2)
+            return
+        except Exception:
+            pass
+
+        # Fallback to classic embed + view
         embed = panel_embed(
             color=dom_color,
-            title=f"{bot.user.display_name if bot.user else 'bleed'}",
+            title=bot_name,
             lines=info_lines,
             timestamp=True,
             thumbnail=bot.user.display_avatar.url if bot.user else None,
@@ -84,30 +121,16 @@ class InformationCommands(Package):
         if bot.user:
             embed.set_author(name=bot.user.name, icon_url=bot.user.display_avatar.url)
 
-        
         embed.add_field(
             name="Links",
-            value="\n".join(
+            value="\n".join([
                 "[Support](https://discord.gg/vainbot)",
                 "[Invite](https://discord.com/oauth2/authorize?client_id=" + str(bot.user.id) + "&scope=bot+applications.commands&permissions=8)",
                 "[Website](https://vain.bot)"
-            ),
+            ]),
             inline=True
         )
 
-        try:
-            cont = discord.ui.Container(accent_colour=dom_color)
-            cont.add_item(discord.ui.TextDisplay(f"**{bot.user.display_name if bot.user else 'bleed'}**"))
-            cont.add_item(discord.ui.TextDisplay("-# Bot Information"))
-            for line in info_lines:
-                cont.add_item(discord.ui.TextDisplay(f"-# {line}"))
-            cont.add_item(discord.ui.Separator())
-            comps = [cont]
-            await ctx.send(components=comps, flags=discord.MessageFlags.components_v2)
-            return
-        except Exception:
-            pass
-        
         view = discord.ui.View()
         view.add_item(discord.ui.Button(
             label="Website",

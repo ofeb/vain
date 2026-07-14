@@ -407,9 +407,15 @@ def _syntax(cmd: Command, prefix: str) -> str:
     # Never leak ctx/interaction into the visible syntax
     syntax = _strip_hidden_params_from_text(syntax)
     lowered = syntax.lower()
-    if any(lowered == name or lowered.startswith(f"{name} ") for name in _command_names(cmd)):
-        return syntax
-    return f"{command_display_name(cmd)} {syntax}".strip()
+    name = command_display_name(cmd)
+    if any(lowered == n or lowered.startswith(f"{n} ") for n in _command_names(cmd)):
+        pass
+    else:
+        syntax = f"{name} {syntax}".strip()
+    # Prepend the actual (dynamic) prefix for display in syntax/examples
+    if prefix and not syntax.startswith(prefix):
+        syntax = f"{prefix}{syntax}"
+    return syntax.strip()
 
 
 def _strip_hidden_params_from_text(text: str) -> str:
@@ -481,12 +487,20 @@ def _example(cmd: Command, prefix: str) -> str | None:
     if raw:
         raw = _strip_hidden_params_from_text(raw)
         lowered = raw.lower()
-        if any(lowered == name or lowered.startswith(f"{name} ") for name in _command_names(cmd)):
-            return raw
-        return f"{command_display_name(cmd)} {raw}".strip()
+        name = command_display_name(cmd)
+        if any(lowered == n or lowered.startswith(f"{n} ") for n in _command_names(cmd)):
+            pass
+        else:
+            raw = f"{name} {raw}".strip()
+        if prefix and not raw.startswith(prefix):
+            raw = f"{prefix}{raw}"
+        return raw.strip()
     _, usage_example = _normalize_usage_and_example(str(cmd.usage or ""), prefix=str(prefix))
     if usage_example:
-        return _strip_hidden_params_from_text(usage_example)
+        ue = _strip_hidden_params_from_text(usage_example)
+        if prefix and not ue.startswith(prefix):
+            ue = f"{prefix}{ue}"
+        return ue
     return None
 
 
@@ -639,9 +653,9 @@ def _detail_embed(
     page_index: int | None = None,
     total_pages: int | None = None,
 ) -> Embed:
-    prefix = getattr(ctx, "clean_prefix", None) or ctx.prefix or ";"
+    prefix = getattr(ctx, "clean_prefix", None) or getattr(ctx, "prefix", ",")
     if isinstance(prefix, list):
-        prefix = prefix[0] if prefix else ";"
+        prefix = prefix[0] if prefix else ","
     is_group = group_title or isinstance(cmd, Group)
     title = ("Group: " if is_group else "Command: ") + command_display_name(cmd)
     desc = _description(cmd)
@@ -695,9 +709,9 @@ def _detail_embed(
 
 def _build_v2_detail(cmd: Command, ctx: Context, *, page_info: str | None = None) -> list:
     """Build v2 Container help matching the desired aesthetic style (inspired by examples)."""
-    prefix = getattr(ctx, "clean_prefix", None) or ctx.prefix or ";"
+    prefix = getattr(ctx, "clean_prefix", None) or getattr(ctx, "prefix", ",")
     if isinstance(prefix, list):
-        prefix = prefix[0] if prefix else ";"
+        prefix = prefix[0] if prefix else ","
     is_grp = isinstance(cmd, Group)
     name = command_display_name(cmd)
     desc = _description(cmd) or "No description provided."
@@ -747,9 +761,9 @@ def _build_v2_detail(cmd: Command, ctx: Context, *, page_info: str | None = None
 
 
 def _brief_embed(cmd: Command, ctx: Context) -> Embed:
-    prefix = getattr(ctx, "clean_prefix", None) or ctx.prefix or ";"
+    prefix = getattr(ctx, "clean_prefix", None) or getattr(ctx, "prefix", ",")
     if isinstance(prefix, list):
-        prefix = prefix[0] if prefix else ";"
+        prefix = prefix[0] if prefix else ","
     e = Embed(
         color=ctx.bot.color,
         title=("Group Command: " if isinstance(cmd, Group) else "Command: ") + command_display_name(cmd),
@@ -788,10 +802,6 @@ class _CategorySelect(ui.Select):
         self._v = view
 
     async def callback(self, inter: Interaction) -> None:
-        prefix = getattr(self._v.ctx, "clean_prefix", None) or self._v.ctx.prefix or ";"
-        if isinstance(prefix, list):
-            prefix = prefix[0] if prefix else ";"
-
         if self.values[0] == _HOME:
             try:
                 accent = 0x2A2B2F
@@ -830,38 +840,27 @@ class _CategorySelect(ui.Select):
                 home_c = ui.Container(accent_colour=accent)
                 for it in items:
                     home_c.add_item(it)
-                # Edit the existing help message (do not send new)
-                await inter.response.defer()
-                if inter.message:
-                    await inter.message.edit(components=[home_c], view=self._v)
+                # Edit the existing help message directly (components only)
+                await inter.response.edit_message(components=[home_c], view=self._v)
             except Exception:
-                # Always stay in V2 components - edit only
-                await inter.response.defer()
-                if inter.message:
-                    await inter.message.edit(components=[ui.Container().add_item(ui.TextDisplay("Help • Select a category"))], view=self._v)
+                # Always stay in V2 components
+                await inter.response.edit_message(components=[ui.Container().add_item(ui.TextDisplay("Help • Select a category"))], view=self._v)
             return
 
         comps = await self._v.cat_embed(self.values[0])
         try:
-            # Edit the existing help message (do not send new)
-            await inter.response.defer()
-            if inter.message:
-                await inter.message.edit(components=comps, view=self._v)
+            # Edit the existing help message directly with category components
+            await inter.response.edit_message(components=comps, view=self._v)
         except Exception:
-            # Never fall back to content= (avoids "help message edited" and plain text)
-            # Always provide components - edit only
+            # Fallback to safe components (no content= to avoid "edited" text)
             try:
                 safe = ui.Container(accent_colour=0x2A2B2F)
                 safe.add_item(ui.TextDisplay(f"**{self.values[0]}**"))
                 safe.add_item(ui.Separator(visible=True, spacing=1))
-                safe.add_item(ui.TextDisplay(f"-# Category selected. Use the dropdown or `{prefix}help <command>`."))
-                await inter.response.defer()
-                if inter.message:
-                    await inter.message.edit(components=[safe], view=self._v)
+                safe.add_item(ui.TextDisplay(f"-# Category selected. Use the dropdown."))
+                await inter.response.edit_message(components=[safe], view=self._v)
             except Exception:
-                await inter.response.defer()
-                if inter.message:
-                    await inter.message.edit(components=[ui.Container().add_item(ui.TextDisplay("Select a category to browse commands."))], view=self._v)
+                await inter.response.edit_message(components=[ui.Container().add_item(ui.TextDisplay("Select a category to browse commands."))], view=self._v)
 
 
 class HelpView(ui.View):
@@ -890,9 +889,7 @@ class HelpView(ui.View):
 
     async def cat_embed(self, label: str) -> list:
         """Return V2 components for category using dividers, author=category, title=cog desc, commands in codeblock."""
-        prefix = getattr(self.ctx, "clean_prefix", None) or self.ctx.prefix or ";"
-        if isinstance(prefix, list):
-            prefix = prefix[0] if prefix else ";"
+        prefix = self._get_prefix(self.ctx)
         try:
             accent = await get_bot_dominant_color(self.ctx.bot)
         except Exception:
@@ -916,23 +913,21 @@ class HelpView(ui.View):
         # Divider
         container.add_item(ui.Separator(visible=True, spacing=1))
 
-        # Commands list (user wants ```command1, command2``` style)
+        # Commands list 
         commands_block = f"**Commands:**\n```{cmd_list if cmd_list else 'none'}```"
         container.add_item(ui.TextDisplay(commands_block))
 
         # Footer divider + note
         container.add_item(ui.Separator(visible=True, spacing=1))
-        container.add_item(ui.TextDisplay(f"-# Use `{prefix}help <command>` for details on a specific command."))
+        container.add_item(ui.TextDisplay(f"-# Use `{prefix}help <command>` for details."))
 
         return [container]
 
     def _home_embed(self) -> Embed:
-        p = getattr(self.ctx, "clean_prefix", None) or self.ctx.prefix or ";"
-        if isinstance(p, list):
-            p = p[0] if p else ";"
+        p = self._get_prefix(self.ctx)
         lines = [
             f"> Use `{p}help <command>` for a specific command.",
-            f"> Use `{p}help <category>` to list commands in a module.",
+            "> Select a category below to browse commands.",
             "",
             "-# ( ) required  [ ] optional",
         ]
@@ -1043,11 +1038,17 @@ class VainHelp:
         @bot.command(
             name="help",
             aliases=["h", "commands"],
-            description="Browse command help, categories, syntax and examples. Use help <cmd> or help <category>",
-            example=",help purge",
+            description="Browse command help, categories, syntax and examples.",
+            example="help purge",
         )
         async def _help(ctx: Context, *, command: str | None = None) -> None:
             await self.invoke(ctx, command)
+
+    def _get_prefix(self, ctx: Context) -> str:
+        p = getattr(ctx, "clean_prefix", None) or getattr(ctx, "prefix", ",")
+        if isinstance(p, list):
+            p = p[0] if p else ","
+        return p
 
     async def invoke(self, ctx: Context, query: str | None = None) -> None:
         bot = ctx.bot
@@ -1057,14 +1058,7 @@ class VainHelp:
             await self._send_home(ctx, bot, owner)
             return
 
-        cog = bot.get_cog(query)
-        if cog is not None:
-            if _hidden(cog, owner=owner):
-                await self._not_found(ctx, query)
-                return
-            await self._send_cog(ctx, cog)
-            return
-
+        # Categories are only accessible via the dropdown in ,h (no ,help <category>)
         cmd = self._find(bot, query)
         if cmd is None or _cmd_hidden(cmd, owner=owner):
             await self._not_found(ctx, query)
@@ -1107,7 +1101,7 @@ class VainHelp:
         return node
 
     def _prefix(self) -> str:
-        p = getattr(self.ctx, "clean_prefix", None) or self.ctx.prefix or ";"
+        p = getattr(self.ctx, "clean_prefix", None) or self.ctx.prefix or ","
         return p[0] if isinstance(p, list) else str(p)
 
     def _base_embed(self, *, title: str | None = None, description: str | None = None) -> Embed:
@@ -1161,6 +1155,7 @@ class VainHelp:
         if self._dedup(ctx):
             return
         cats = self._build_cats(bot, owner)
+        pfx = self._get_prefix(ctx)
         
         try:
             accent = await get_bot_dominant_color(bot)
@@ -1198,7 +1193,7 @@ class VainHelp:
             items.append(section_text)
 
         items.append(ui.Separator(visible=True, spacing=1))
-        items.append(ui.TextDisplay("-# `[...]` optional  `<...>` required  •  Select a category below to browse commands."))
+        items.append(ui.TextDisplay(f"-# `[...]` optional  `<...>` required  •  Select a category below to browse commands."))
 
         home_container = ui.Container(accent_colour=accent)
         for it in items:
@@ -1307,11 +1302,9 @@ class VainHelp:
         container.add_item(ui.Separator(visible=True, spacing=1))
         commands_block = f"**Commands:**\n```{cmd_list if cmd_list else 'none'}```"
         container.add_item(ui.TextDisplay(commands_block))
-        p = getattr(ctx, "clean_prefix", None) or getattr(ctx, "prefix", ";")
-        if isinstance(p, list):
-            p = p[0] if p else ";"
+        pfx = self._get_prefix(ctx)
         container.add_item(ui.Separator(visible=True, spacing=1))
-        container.add_item(ui.TextDisplay(f"-# Use `{p}help <command>` for details."))
+        container.add_item(ui.TextDisplay(f"-# Use `{pfx}help <command>` for details."))
 
         await self._send_v2(ctx, [container])
 
