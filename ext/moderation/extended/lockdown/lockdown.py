@@ -170,7 +170,7 @@ class Lockdown(Package):
 
     @group(
         name="unlockdown",
-        aliases=["uld", "unlock"],
+        aliases=["uld"],
         description="Unlock a locked channel",
         invoke_without_command=True,
         example=",unlockdown #general",
