@@ -142,10 +142,10 @@ class InviteTrackerEvents(Package):
             if not before:
                 log.warning("No invites found in %s, skipping", guild.name)
                 return
-            # Store as cache so subsequent joins work correctly
+            
             self._invite_cache[guild.id] = before
 
-        # Wait for Discord to update invite counts
+        
         await asyncio.sleep(2)
 
         after = await self._snapshot_invites(guild)

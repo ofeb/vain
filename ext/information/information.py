@@ -12,7 +12,7 @@ from core.discord.hybrid import describe, hybrid
 from core.discord.package import Package
 from core.discord.views.paginate import send_pages
 from core.managers.values import color
-from core.tools.aesthetic import label_line, panel_embed, reply_embed
+from core.tools.aesthetic import label_line, panel_embed, reply_embed, get_bot_dominant_color
 
 from .lookup import (
     build_cashapp_embed,
@@ -53,6 +53,14 @@ class InformationCommands(Package):
         latency = round(bot.latency * 1000)
         uptime = discord.utils.format_dt(bot.started_at, style="R")
         shard_count = bot.shard_count or 1
+        started = discord.utils.format_dt(bot.started_at, style="F")
+
+        
+        try:
+            dom_color = await get_bot_dominant_color(bot)
+        except Exception:
+            dom_color = color.base or 0x5865F2
+
         info_lines = [
             label_line("Commands", f"`{total_commands}`"),
             label_line("Latency", f"`{latency}ms`"),
@@ -61,21 +69,36 @@ class InformationCommands(Package):
             label_line("Users", f"`{users:,}`"),
             label_line("Shards", f"`{shard_count}`"),
             label_line("Python", f"`{platform.python_version()}`"),
+            label_line("Started", started),
         ]
+
+        
         embed = panel_embed(
-            color=color.base,
-            title=f"{bot.user.display_name if bot.user else 'Vain'}",
+            color=dom_color,
+            title=f"{bot.user.display_name if bot.user else 'bleed'}",
             lines=info_lines,
-            timestamp=False,
+            timestamp=True,
             thumbnail=bot.user.display_avatar.url if bot.user else None,
         )
+        if bot.user:
+            embed.set_author(name=bot.user.name, icon_url=bot.user.display_avatar.url)
 
-        # v2 container for botinfo to be aesthetic and modern
+        
+        embed.add_field(
+            name="Links",
+            value=body(
+                "[Support](https://discord.gg/vainbot)",
+                "[Invite](https://discord.com/oauth2/authorize?client_id=" + str(bot.user.id) + "&scope=bot+applications.commands&permissions=8)",
+                "[Website](https://vain.bot)"
+            ),
+            inline=True
+        )
+
         try:
-            cont = discord.ui.Container(accent_colour=color.base)
+            cont = discord.ui.Container(accent_colour=dom_color)
             cont.add_item(discord.ui.TextDisplay(f"**{bot.user.display_name if bot.user else 'bleed'}**"))
-            cont.add_item(discord.ui.TextDisplay("-# bot information"))
-            for line in (info_lines or []):
+            cont.add_item(discord.ui.TextDisplay("-# Bot Information"))
+            for line in info_lines:
                 cont.add_item(discord.ui.TextDisplay(f"-# {line}"))
             cont.add_item(discord.ui.Separator())
             cont.add_item(discord.ui.TextDisplay("-# @hroe • general"))
@@ -84,7 +107,7 @@ class InformationCommands(Package):
             return
         except Exception:
             pass
-        # fallback
+        
         view = discord.ui.View()
         view.add_item(discord.ui.Button(
             label="Website",
@@ -172,9 +195,13 @@ class InformationCommands(Package):
                 label_line("Bitrate", str(channel.bitrate)),
                 label_line("User Limit", str(channel.user_limit or "Unlimited")),
             ])
+        try:
+            dom = await get_bot_dominant_color(self.bot)
+        except Exception:
+            dom = color.base
         embed = panel_embed(
             title=f"#{channel.name}",
-            color=color.base,
+            color=dom,
             lines=lines,
             timestamp=False,
         )
@@ -189,9 +216,13 @@ class InformationCommands(Package):
     @describe(role="Role to inspect")
     async def roleinfo(self, ctx: Context, role: discord.Role) -> None:
         perms = [name.replace("_", " ").title() for name, value in role.permissions if value]
+        try:
+            dom = await get_bot_dominant_color(self.bot)
+        except Exception:
+            dom = color.base
         embed = panel_embed(
             title=role.name,
-            color=role.color if role.color.value else color.base,
+            color=role.color if role.color.value else dom,
             lines=[
                 label_line("ID", str(role.id)),
                 label_line("Members", str(len(role.members))),
@@ -229,9 +260,13 @@ class InformationCommands(Package):
             lines.append(
                 label_line("Boosting Since", discord.utils.format_dt(member.premium_since, style="R"))
             )
+        try:
+            dom = await get_bot_dominant_color(self.bot)
+        except Exception:
+            dom = color.base
         embed = panel_embed(
             title=member.display_name,
-            color=member.color if member.color.value else color.base,
+            color=member.color if member.color.value else dom,
             lines=lines,
             timestamp=False,
             thumbnail=member.display_avatar.url,
@@ -260,9 +295,13 @@ class InformationCommands(Package):
                     f"`{len(guilds)}` guilds · `{members:,}` users · `{latency}ms`",
                 )
             )
+        try:
+            dom = await get_bot_dominant_color(self.bot)
+        except Exception:
+            dom = color.base
         embed = panel_embed(
             title="Shard Info",
-            color=color.base,
+            color=dom,
             lines=lines or ["Single-shard mode"],
             timestamp=False,
         )

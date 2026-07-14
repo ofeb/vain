@@ -15,7 +15,7 @@ from core.discord.package import Package
 from core.discord.ctx import Context
 from core.discord.hybrid import group, command, describe
 from core.managers.values import color
-from core.tools.aesthetic import panel_embed
+from core.tools.aesthetic import panel_embed, get_bot_dominant_color
 
 if TYPE_CHECKING:
     from core.vain import Vain
@@ -41,12 +41,15 @@ class Owner(Package):
         ch = self.bot.get_channel(channel_id)
         if not ch:
             return
+        try:
+            dom = await get_bot_dominant_color(self.bot)
+        except Exception:
+            dom = color.base
         embed = panel_embed(
-            color=color.base,
+            color=dom,
             lines=[message],
-            timestamp=False,
+            timestamp=True,
         )
-        embed.timestamp = datetime.now(timezone.utc)
         try:
             await ch.send(embed=embed)
         except discord.HTTPException:
@@ -167,7 +170,13 @@ class Owner(Package):
             ),
             1,
         ):
-            owner_name = str(guild.owner) if guild.owner else "Unknown"
+            owner = guild.owner
+            if owner is None:
+                try:
+                    owner = await guild.fetch_member(guild.owner_id)
+                except Exception:
+                    owner = None
+            owner_name = f"{owner} (`{getattr(owner, 'id', guild.owner_id)}`)" if owner else f"Unknown (`{guild.owner_id}`)"
             entries.append(
                 f"`{i}.` **{guild.name}** (`{guild.id}`) — "
                 f"{guild.member_count} members — Owner: {owner_name}"
@@ -175,9 +184,13 @@ class Owner(Package):
 
         pages = [entries[i : i + 15] for i in range(0, len(entries), 15)]
         page = 0
+        try:
+            dom = await get_bot_dominant_color(self.bot)
+        except Exception:
+            dom = color.base
         embed = panel_embed(
             title=f"Guilds ({len(self.bot.guilds)})",
-            color=color.base,
+            color=dom,
             lines=pages[page],
             footer=f"Page {page + 1}/{len(pages)}",
             timestamp=False,

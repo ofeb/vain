@@ -660,9 +660,9 @@ class CustomizeCommands(Package):
         await self.db.set_guild_customize(ctx.guild.id, "voicemaster_emoji", vm_dict)
         return await ctx.success(f"set **decrease** emoji to {emoji}")
 
-    # === TOP LEVEL context GROUP ===
-    # context self ...   -> personal per-user (no special perms)
-    # context ...        -> server context settings (requires manage_guild)
+    
+    
+    
     @group(
         name="context",
         aliases=["ctx"],
@@ -686,7 +686,7 @@ class CustomizeCommands(Package):
         """Personal custom context (colors/emojis for your responses). No perms needed."""
         await ctx.send_help(ctx.command)
 
-    # Server level under context (gated by the parent has_permissions manage_guild)
+    
     @context.group(name="color", invoke_without_command=True)
     async def context_server_color(self, ctx):
         await ctx.send_help(ctx.command)
@@ -695,7 +695,7 @@ class CustomizeCommands(Package):
     async def context_server_emoji(self, ctx):
         await ctx.send_help(ctx.command)
 
-    # --- Personal (context self) logic attached here (no perm) ---
+    
     async def _personal_set_color(self, ctx, key: str, hex_code: str | None, nice: str):
         gid = getattr(ctx.guild, "id", 0) if ctx.guild else 0
         if not hex_code or str(hex_code).lower() in CLEAR_WORDS:
@@ -775,7 +775,7 @@ class CustomizeCommands(Package):
         await self.db.reset_user_customize(ctx.author.id, gid)
         return await ctx.success("reset all your **personal** customizations")
 
-    # Legacy personal entry under customize (still works)
+    
     @customize.group(
         name="context",
         aliases=["selfcontext", "self"],

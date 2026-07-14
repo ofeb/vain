@@ -20,7 +20,8 @@ from core.discord.ctx import Context
 from core.discord.hybrid import describe, group, hybrid
 from core.managers.permissions import has_permissions
 from core.managers.values import color
-from core.tools.aesthetic import aesthetic_embed, body
+from core.tools.aesthetic import aesthetic_embed, body, build_repost_container, get_dominant_color
+from core.networks.social.ig import Instagram
 
 if TYPE_CHECKING:
     from core.vain import Vain
@@ -272,45 +273,68 @@ class Socials(Package):
 
     @hybrid(
         name="repost",
-        description="Repost media from TikTok, YouTube Shorts, Instagram, or Twitter",
-        example=",repost https://www.tiktok.com/user/video/123",
+        description="Repost Instagram / TikTok / YT with a clean aesthetic v2 container",
+        example=",repost https://www.instagram.com/reel/xxxx",
         guilds=True,
         dms=False,
         groupchats=True,
     )
-    @describe(url="Social media URL to repost")
+    @describe(url="Social media post URL")
     async def repost(self, ctx: Context, *, url: str) -> None:
         async with ctx.typing():
+            platform = "instagram" if "instagram" in url or "instagr.am" in url else ("tiktok" if "tiktok" in url else "media")
+            accent = await get_dominant_color(str(ctx.bot.user.display_avatar.url)) if ctx.bot.user else 0xE1306C
+
+            ig_data = None
+            if platform == "instagram":
+                try:
+                    ig = Instagram()
+                    ig_data = await ig.post(url)
+                except Exception:
+                    ig_data = None
+
+            
             try:
                 loop = asyncio.get_running_loop()
                 with tempfile.TemporaryDirectory(prefix="repost-") as tmp:
-                    result = await loop.run_in_executor(
-                        None, _ytdlp_download_sync, url, tmp
-                    )
+                    result = await loop.run_in_executor(None, _ytdlp_download_sync, url, tmp)
                     if not result or not result.get("filepath"):
-                        await ctx.fail("Could not download media from that URL.")
+                        await ctx.fail("Could not fetch that post.")
                         return
 
                     filepath = result["filepath"]
-                    if not os.path.exists(filepath):
-                        await ctx.fail("Downloaded file not found.")
-                        return
-
-                    file_size = os.path.getsize(filepath)
-                    if file_size > 25_000_000:
-                        await ctx.fail("File exceeds Discord's 25MB upload limit.")
+                    if os.path.getsize(filepath) > 25_000_000:
+                        await ctx.fail("File too large.")
                         return
 
                     with open(filepath, "rb") as f:
-                        data = f.read()
+                        file_data = f.read()
 
-                    filename = result.get("filename", "repost.mp4")
-                    fp = io.BytesIO(data)
-                    file = discord.File(fp, filename=filename)
-                    await ctx.send(file=file)
+                    file = discord.File(io.BytesIO(file_data), filename=result.get("filename", "repost.mp4"))
 
+                    
+                    username = (ig_data or {}).get("username") or result.get("uploader", "unknown")
+                    caption = (ig_data or {}).get("caption") or result.get("title", "")
+                    media_list = [(ig_data or {}).get("media_url")] if (ig_data or {}).get("media_url") else []
+                    stats = ""
+                    if ig_data:
+                        stats = f"♥ {ig_data.get('like_count', 0)}  💬 {ig_data.get('comment_count', 0)}"
+                    source = (ig_data or {}).get("url") or url
+
+                    comps = build_repost_container(
+                        platform=platform,
+                        username=username,
+                        caption=caption,
+                        media_urls=[u for u in media_list if u],
+                        stats=stats,
+                        source_url=source,
+                        accent=accent,
+                    )
+
+                    await ctx.send(components=comps, files=[file], flags=discord.MessageFlags.components_v2)
+                    return
             except Exception as e:
-                await ctx.fail(f"Download failed: {str(e)[:200]}")
+                await ctx.fail(f"Repost failed: {str(e)[:150]}")
 
     async def _generate_quote_image(
         self,
@@ -440,5 +464,106 @@ class Socials(Package):
             await ctx.send(file=file)
 
 
+
+
+
+class EmbedBuilderModal(discord.ui.Modal, title="Edit Embed Part"):
+    def __init__(self, key: str, current: str = ""):
+        super().__init__()
+        self.key = key
+        self.input = discord.ui.TextInput(
+            label=key.title(),
+            style=discord.TextStyle.paragraph if key in ("description", "fields") else discord.TextStyle.short,
+            default=current[:100] if current else "",
+            required=False,
+        )
+        self.add_item(self.input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        self.value = self.input.value
+        await interaction.response.defer()
+
+class EmbedBuilderView(discord.ui.View):
+    def __init__(self, author_id: int):
+        super().__init__(timeout=300)
+        self.author_id = author_id
+        self.data = {"title": "", "description": "", "color": "2b2d31", "image": "", "thumbnail": ""}
+        self.message: discord.Message | None = None
+
+    async def interaction_check(self, inter: discord.Interaction) -> bool:
+        return inter.user.id == self.author_id
+
+    @discord.ui.select(
+        placeholder="Choose what to edit...",
+        options=[
+            discord.SelectOption(label="Title", value="title"),
+            discord.SelectOption(label="Description", value="description"),
+            discord.SelectOption(label="Color (hex)", value="color"),
+            discord.SelectOption(label="Image URL", value="image"),
+            discord.SelectOption(label="Thumbnail URL", value="thumbnail"),
+        ]
+    )
+    async def choose(self, inter: discord.Interaction, select: discord.ui.Select):
+        key = select.values[0]
+        modal = EmbedBuilderModal(key, self.data.get(key, ""))
+        await inter.response.send_modal(modal)
+        await modal.wait()
+        if hasattr(modal, "value"):
+            self.data[key] = modal.value or ""
+        
+        if self.message:
+            await self._update_preview(inter)
+
+    async def _update_preview(self, inter: discord.Interaction):
+        script = self._to_script()
+        try:
+            await self.message.edit(content=f"```yaml\n{script}\n```")
+        except Exception:
+            pass
+        await inter.response.defer()
+
+    def _to_script(self) -> str:
+        parts = ["{embed}"]
+        if self.data.get("title"):
+            parts.append(f"$v{{title: {self.data['title']}}}")
+        if self.data.get("description"):
+            parts.append(f"$v{{description: {self.data['description']}}}")
+        if self.data.get("color"):
+            parts.append(f"$v{{color: #{self.data['color'].lstrip('#')}}}")
+        if self.data.get("image"):
+            parts.append(f"$v{{image: {self.data['image']}}}")
+        if self.data.get("thumbnail"):
+            parts.append(f"$v{{thumbnail: {self.data['thumbnail']}}}")
+        return "\n".join(parts)
+
+    @discord.ui.button(label="Approve & Copy Script", style=discord.ButtonStyle.success, emoji="✅")
+    async def approve(self, inter: discord.Interaction, button: discord.ui.Button):
+        script = self._to_script()
+        await inter.response.send_message(f"```yaml\n{script}\n```", ephemeral=True)
+        
+        try:
+            await inter.channel.send(f"**Embed script:**\n```yaml\n{script}\n```")
+        except Exception:
+            pass
+        self.stop()
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.danger)
+    async def cancel(self, inter: discord.Interaction, button: discord.ui.Button):
+        await inter.response.edit_message(content="Embed builder cancelled.", view=None)
+        self.stop()
+
 async def setup(bot: Vain):
-    await bot.add_cog(Socials(bot))
+    cog = Socials(bot)
+    
+    eb = hybrid(
+        name="embedbuilder",
+        description="Interactive Components v2 embed builder. Dropdowns open modals. Approve to get the script.",
+        example=",embedbuilder",
+    )(lambda ctx: None)  
+    async def _run_eb(ctx: Context):
+        view = EmbedBuilderView(ctx.author.id)
+        m = await ctx.send("**Embed Builder** (v2)\nSelect fields from the menu, fill modals, then Approve.", view=view)
+        view.message = m
+    eb.callback = _run_eb
+    bot.add_command(eb)
+    await bot.add_cog(cog)

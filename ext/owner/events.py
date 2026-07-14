@@ -9,7 +9,7 @@ from discord.ext import tasks
 
 from core.discord.package import Package
 from core.managers.values import color
-from core.tools.aesthetic import panel_embed
+from core.tools.aesthetic import panel_embed, get_bot_dominant_color
 
 if TYPE_CHECKING:
     from core.vain import Vain
@@ -32,25 +32,34 @@ class OwnerEvents(Package):
             return
 
         owner = guild.owner
-        owner_str = str(owner) if owner else "Unknown"
+        if owner is None:
+            try:
+                owner = await guild.fetch_member(guild.owner_id)
+            except Exception:
+                owner = None
+        owner_str = f"{owner} (`{getattr(owner, 'id', guild.owner_id)}`)" if owner else f"Unknown (`{guild.owner_id}`)"
+
+        try:
+            dom = await get_bot_dominant_color(self.bot)
+        except Exception:
+            dom = 0xD4B8D0
+
+        
+        lines = [
+            f"**Owner**: {owner_str}",
+            f"**Members**: {guild.member_count}",
+            f"**Created**: <t:{int(guild.created_at.timestamp())}:R>",
+            f"**ID**: `{guild.id}`",
+            f"**Boost Tier**: {guild.premium_tier}",
+            f"**Features**: {len(guild.features or [])}",
+        ]
 
         embed = panel_embed(
-            title=f"{guild.name} joined",
-            color=0xD4B8D0,
-            lines=[],
+            title=f"📥 Joined {guild.name}",
+            color=dom,
+            lines=lines,
             thumbnail=guild.icon.url if guild.icon else None,
-            timestamp=False,
-        )
-        embed.timestamp = datetime.now(timezone.utc)
-        embed.add_field(name="Owner", value=owner_str, inline=True)
-        embed.add_field(name="Guild ID", value=f"`{guild.id}`", inline=True)
-        embed.add_field(
-            name="Member Count", value=str(guild.member_count), inline=True
-        )
-        embed.add_field(
-            name="Created",
-            value=f"<t:{int(guild.created_at.timestamp())}:R>",
-            inline=True,
+            timestamp=True,
         )
 
         channel_id = await self.db.fetchval(
@@ -72,20 +81,30 @@ class OwnerEvents(Package):
             return
 
         owner = guild.owner
-        owner_str = str(owner) if owner else "Unknown"
+        if owner is None:
+            try:
+                owner = await guild.fetch_member(guild.owner_id)
+            except Exception:
+                owner = None
+        owner_str = f"{owner} (`{getattr(owner, 'id', guild.owner_id)}`)" if owner else f"Unknown (`{guild.owner_id}`)"
+
+        try:
+            dom = await get_bot_dominant_color(self.bot)
+        except Exception:
+            dom = 0xE07A7A
+
+        lines = [
+            f"**Owner**: {owner_str}",
+            f"**Members**: {guild.member_count}",
+            f"**ID**: `{guild.id}`",
+        ]
 
         embed = panel_embed(
-            title=f"{guild.name} left",
-            color=0xE07A7A,
-            lines=[],
+            title=f"📤 Left {guild.name}",
+            color=dom,
+            lines=lines,
             thumbnail=guild.icon.url if guild.icon else None,
-            timestamp=False,
-        )
-        embed.timestamp = datetime.now(timezone.utc)
-        embed.add_field(name="Owner", value=owner_str, inline=True)
-        embed.add_field(name="Guild ID", value=f"`{guild.id}`", inline=True)
-        embed.add_field(
-            name="Member Count", value=str(guild.member_count), inline=True
+            timestamp=True,
         )
 
         channel_id = await self.db.fetchval(

@@ -18,7 +18,7 @@ class Instagram:
     }
 
     async def post(self, url: str) -> Optional[dict]:
-        """get metadata for a post or reel via i.instagram.com"""
+        """get rich metadata for a post or reel via i.instagram.com"""
         m = _SHORT_RE.match(url)
         if not m:
             return None
@@ -30,8 +30,27 @@ class Instagram:
                     if r.status != 200:
                         return None
                     data = await r.json()
-                    items = data.get("items") or []
-                    return items[0] if items else None
+                    item = (data.get("items") or [None])[0]
+                    if not item:
+                        return None
+                    
+                    user = item.get("user", {})
+                    caption = (item.get("caption") or {}).get("text", "") or ""
+                    video_url = item.get("video_versions", [{}])[0].get("url") if item.get("video_versions") else None
+                    image_url = item.get("image_versions2", {}).get("candidates", [{}])[0].get("url")
+                    media_url = video_url or image_url
+                    return {
+                        "shortcode": code,
+                        "username": user.get("username"),
+                        "full_name": user.get("full_name"),
+                        "avatar": user.get("profile_pic_url"),
+                        "caption": caption[:1500],
+                        "media_url": media_url,
+                        "is_video": bool(video_url),
+                        "like_count": item.get("like_count", 0),
+                        "comment_count": item.get("comment_count", 0),
+                        "url": f"https://www.instagram.com/p/{code}/",
+                    }
             except Exception:
                 return None
 

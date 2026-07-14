@@ -7,7 +7,7 @@ import discord
 from core.discord.hybrid import hybrid
 from core.discord.package import Package
 from core.discord.views.paginate import send_pages
-from core.tools.aesthetic import aesthetic_embed, body, caption, compose
+from core.tools.aesthetic import aesthetic_embed, body, caption, compose, get_bot_dominant_color
 from core.tools.embed import BadEmbed, ParseError, PreparedScript, parse
 
 
@@ -29,6 +29,25 @@ class ServerCommands(Package):
 
     async def _send_embed_script(self, ctx, script: str):
         normalized = self._normalize_embed_script(script)
+
+        
+        
+        try:
+            from core.tools.embed import Script
+            sc = Script(normalized, user=ctx.author)
+            
+            rendered = sc.render(
+                guild=ctx.guild,
+                channel=ctx.channel,
+                member=ctx.author,
+                user=ctx.author,
+                date=discord.utils.utcnow().strftime("%Y-%m-%d"),
+                time=discord.utils.utcnow().strftime("%H:%M"),
+                datetime=str(discord.utils.utcnow()),
+            )
+            normalized = self._normalize_embed_script(rendered)
+        except Exception:
+            pass  
 
         from core.tools.embed import is_embed_script
         if not is_embed_script(normalized):
@@ -208,7 +227,12 @@ class ServerCommands(Package):
     async def serverinfo(self, ctx):
         """show server info"""
         g = ctx.guild
-        e = aesthetic_embed(color=self.color, title=g.name, message="", timestamp=True)
+        try:
+            dom_color = await get_bot_dominant_color(self.bot)
+        except Exception:
+            dom_color = self.color
+
+        e = aesthetic_embed(color=dom_color, title=g.name, message=f"Server created <t:{int(g.created_at.timestamp())}:R> • ID: `{g.id}`", timestamp=True)
 
         if g.icon:
             e.set_thumbnail(url=g.icon.url)
@@ -217,7 +241,12 @@ class ServerCommands(Package):
             e.set_image(url=g.banner.url)
 
         owner = g.owner
-        owner_text = f"{owner} — {owner.id}" if owner else "Unknown"
+        if owner is None:
+            try:
+                owner = await g.fetch_member(g.owner_id)
+            except Exception:
+                owner = None
+        owner_text = f"{owner} — `{getattr(owner, 'id', g.owner_id)}`" if owner else f"Unknown (`{g.owner_id}`)"
         owner_icon = owner.display_avatar.url if owner else None
         e.set_author(name=f"owned by {owner_text}", icon_url=owner_icon)
 

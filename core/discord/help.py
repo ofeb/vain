@@ -15,6 +15,7 @@ from core.discord.package import Package
 from core.discord.hybrid import command_display_name, family_root, family_help_name
 
 from core.managers.values import color, emojis
+from core.tools.aesthetic import get_bot_dominant_color, get_dominant_color
 
 if TYPE_CHECKING:
     from .ctx import Context
@@ -523,7 +524,7 @@ def _usage_block(cmd: Command, prefix: str) -> str:
     block = [f"Syntax: {_syntax(cmd, prefix)}"]
     if example := _example(cmd, prefix):
         block.append(f"Example: {example}")
-    # Use a clean code block, user prefers this style in screenshot
+    
     return "```ansi\n" + "\n".join(block) + "\n```"
 
 
@@ -637,7 +638,7 @@ def _detail_embed(
     title = ("Group: " if is_group else "Command: ") + command_display_name(cmd)
     desc = _description(cmd)
 
-    # Aesthetic description using user preferred formatting
+    
     parts = []
     if desc:
         parts.append(desc)
@@ -659,12 +660,16 @@ def _detail_embed(
     if usage:
         parts.append(usage)
 
+    try:
+        dom = ctx.bot.loop.run_until_complete(get_bot_dominant_color(ctx.bot))
+    except Exception:
+        dom = ctx.bot.color
     e = Embed(
         title=title,
         description="\n".join(parts) if parts else desc,
-        color=ctx.bot.color,
+        color=dom,
     )
-    # Use user's nick/name like in screenshot, channel suggestion in footer
+    
     display_name = getattr(ctx.author, "display_name", ctx.author.name)
     e.set_author(name=f"{display_name}", icon_url=ctx.author.display_avatar.url)
 
@@ -673,48 +678,44 @@ def _detail_embed(
     if total_pages and page_index and total_pages > 1:
         footer_bits.append(f"Page {page_index}/{total_pages}")
     footer_bits.append(f"Module: {module}")
-    # Example user info per request: @hroe / h , channel cmds or general
+    
     footer_bits.append("hroe • cmds")
     e.set_footer(text=" • ".join(footer_bits))
     return e
 
 
 def _build_v2_detail(cmd: Command, ctx: Context, *, page_info: str | None = None) -> list:
-    """Build Discord Components v2 Container for aesthetic help like screenshot."""
+    """Very aesthetic, minimal v2 help detail for ,help <command>."""
     prefix = getattr(ctx, "clean_prefix", None) or ctx.prefix or ";"
     if isinstance(prefix, list):
         prefix = prefix[0] if prefix else ";"
     is_grp = isinstance(cmd, Group)
     name = command_display_name(cmd)
-    title_text = f"**{'Group' if is_grp else 'Command'}:** {name}"
-    desc = _description(cmd) or "No description provided."
+    title = f"**{'Group' if is_grp else 'Command'}:** {name}"
+    desc = _description(cmd) or "No description."
     aliases = _aliases(cmd)
-    perms = _information(cmd).get("permissions") or _information(cmd).get("cooldown") or "n/a"
-    syntax_ex = _usage_block(cmd, prefix).replace("```ansi\n", "").replace("\n```", "").strip()
+    perm = _information(cmd).get("permissions") or "Anyone"
+    syntax = _syntax(cmd, prefix)
+    ex = _example(cmd, prefix) or name
 
-    # Build container - aesthetic minimal v2 matching the provided screenshot style
-    c = ui.Container(accent_colour=ctx.bot.color or 0x2b2d31)
-    # Header
-    nick = getattr(ctx.author, "display_name", "h")
-    ch = getattr(ctx.channel, "name", "cmds") or "cmds"
-    c.add_item(ui.TextDisplay(f"-# {nick} • {ch}"))
+    try:
+        accent = ctx.bot.loop.run_until_complete(get_bot_dominant_color(ctx.bot))
+    except Exception:
+        accent = ctx.bot.color or 0x2b2d31
+
+    c = ui.Container(accent_colour=accent)
+    c.add_item(ui.TextDisplay(f"-# @hroe • h"))
     c.add_item(ui.Separator())
-    c.add_item(ui.TextDisplay(title_text))
+    c.add_item(ui.TextDisplay(title))
     c.add_item(ui.TextDisplay(desc))
     if aliases and aliases != "n/a":
         c.add_item(ui.TextDisplay(f"-# Aliases: {aliases}"))
-    c.add_item(ui.TextDisplay(f"-# Permissions: {perms}"))
+    c.add_item(ui.TextDisplay(f"-# Permissions: {perm}"))
     c.add_item(ui.Separator())
-    # Syntax / example block (clean)
-    c.add_item(ui.TextDisplay(f"**Syntax:** {syntax_ex.split('Syntax: ',1)[-1].split(chr(10))[0] if 'Syntax:' in syntax_ex else syntax_ex}"))
-    if "Example:" in syntax_ex:
-        ex = syntax_ex.split("Example: ",1)[-1].strip()
-        c.add_item(ui.TextDisplay(f"**Example:** {ex}"))
-    if page_info:
-        c.add_item(ui.TextDisplay(f"-# {page_info} • Module: {_module(cmd)}"))
-    else:
-        c.add_item(ui.TextDisplay(f"-# Module: {_module(cmd)}"))
-    c.add_item(ui.Separator())
+    c.add_item(ui.TextDisplay(f"**Syntax:** {syntax}"))
+    c.add_item(ui.TextDisplay(f"**Example:** {ex}"))
+    mod = _module(cmd)
+    c.add_item(ui.TextDisplay(f"-# {mod}"))
     return [c]
 
 
@@ -795,10 +796,14 @@ class HelpView(ui.View):
         prefix = getattr(self.ctx, "clean_prefix", None) or self.ctx.prefix or ";"
         if isinstance(prefix, list):
             prefix = prefix[0] if prefix else ";"
+        try:
+            dom = self.ctx.bot.loop.run_until_complete(get_bot_dominant_color(self.ctx.bot))
+        except Exception:
+            dom = self.ctx.bot.color
         e = Embed(
             title=f"{label} Commands",
             description=_fmt_commands(self.cats[label]),
-            color=self.ctx.bot.color,
+            color=dom,
         )
         if self.ctx.bot.user:
             e.set_author(name=self.ctx.bot.user.display_name, icon_url=self.ctx.bot.user.display_avatar.url)
@@ -809,21 +814,16 @@ class HelpView(ui.View):
         p = getattr(self.ctx, "clean_prefix", None) or self.ctx.prefix or ";"
         if isinstance(p, list):
             p = p[0] if p else ";"
-        # Nice aesthetic home per request
         lines = [
-            f"> Use `{p}help <command>` for command help.",
-            f"> Use `{p}help <category>` to browse a module.",
+            f"> Use `{p}help <command>` for a specific command.",
+            f"> Use `{p}help <category>` to list commands in a module.",
             "",
-            f"-# Parameters in ( ) required, [ ] optional.",
-            f"-# Username: @hroe  Nick: h  • Channel: cmds",
+            "-# ( ) required  [ ] optional",
+            "-# @hroe  •  h",
         ]
-        e = Embed(
-            color=self.ctx.bot.color,
-            description="\n".join(lines),
-        )
+        e = Embed(color=self.ctx.bot.color, description="\n".join(lines))
         if self.ctx.bot.user:
             e.set_author(name=self.ctx.bot.user.display_name, icon_url=self.ctx.bot.user.display_avatar.url)
-        e.set_footer(text="bleed • aesthetic help")
         return e
 
     async def on_timeout(self) -> None:
@@ -962,6 +962,23 @@ class VainHelp:
         if self._dedup():
             return
         cats = self._build_cats(bot, owner)
+        
+        try:
+            accent = bot.loop.run_until_complete(get_bot_dominant_color(bot))
+        except Exception:
+            accent = bot.color or 0x2b2d31
+        c = ui.Container(accent_colour=accent)
+        c.add_item(ui.TextDisplay("**help**"))
+        c.add_item(ui.TextDisplay("-# @hroe • h"))
+        c.add_item(ui.Separator())
+        cat_lines = " • ".join(list(cats.keys())[:8])
+        c.add_item(ui.TextDisplay(f"Categories: {cat_lines}"))
+        c.add_item(ui.TextDisplay("-# Use help <category> or help <command>"))
+        try:
+            await self._send_v2([c])
+            return
+        except Exception:
+            pass
         view = HelpView(self.ctx, cats)
         view.msg = await self._send(view.home, view=view)
 
