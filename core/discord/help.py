@@ -704,7 +704,6 @@ def _build_v2_detail(cmd: Command, ctx: Context, *, page_info: str | None = None
         accent = ctx.bot.color or 0x2b2d31
 
     c = ui.Container(accent_colour=accent)
-    c.add_item(ui.TextDisplay(f"-# @hroe • h"))
     c.add_item(ui.Separator())
     c.add_item(ui.TextDisplay(title))
     c.add_item(ui.TextDisplay(desc))
@@ -819,7 +818,6 @@ class HelpView(ui.View):
             f"> Use `{p}help <category>` to list commands in a module.",
             "",
             "-# ( ) required  [ ] optional",
-            "-# @hroe  •  h",
         ]
         e = Embed(color=self.ctx.bot.color, description="\n".join(lines))
         if self.ctx.bot.user:
@@ -969,7 +967,6 @@ class VainHelp:
             accent = bot.color or 0x2b2d31
         c = ui.Container(accent_colour=accent)
         c.add_item(ui.TextDisplay("**help**"))
-        c.add_item(ui.TextDisplay("-# @hroe • h"))
         c.add_item(ui.Separator())
         cat_lines = " • ".join(list(cats.keys())[:8])
         c.add_item(ui.TextDisplay(f"Categories: {cat_lines}"))

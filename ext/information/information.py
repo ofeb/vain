@@ -101,7 +101,6 @@ class InformationCommands(Package):
             for line in info_lines:
                 cont.add_item(discord.ui.TextDisplay(f"-# {line}"))
             cont.add_item(discord.ui.Separator())
-            cont.add_item(discord.ui.TextDisplay("-# @hroe • general"))
             comps = [cont]
             await ctx.send(components=comps, flags=discord.MessageFlags.components_v2)
             return
