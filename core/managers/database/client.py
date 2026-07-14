@@ -1444,6 +1444,235 @@ class Database:
             guild_id,
         )
 
+    async def fetch_modlog_case(self, guild_id: int, case_id: int):
+        return await self.fetchrow(
+            """
+            SELECT *
+            FROM modlog_cases
+            WHERE guild_id = $1 AND case_id = $2
+            """,
+            guild_id,
+            case_id,
+        )
+
+    async def fetch_modlog_cases_for_user(
+        self,
+        guild_id: int,
+        target_id: int,
+        *,
+        action: str | None = None,
+        limit: int = 50,
+    ):
+        if action:
+            return await self.fetch(
+                """
+                SELECT *
+                FROM modlog_cases
+                WHERE guild_id = $1 AND target_id = $2 AND action = $3
+                ORDER BY case_id DESC
+                LIMIT $4
+                """,
+                guild_id,
+                target_id,
+                action,
+                limit,
+                cached=False,
+            )
+        return await self.fetch(
+            """
+            SELECT *
+            FROM modlog_cases
+            WHERE guild_id = $1 AND target_id = $2
+            ORDER BY case_id DESC
+            LIMIT $3
+            """,
+            guild_id,
+            target_id,
+            limit,
+            cached=False,
+        )
+
+    async def fetch_modlog_cases_by_moderator(
+        self,
+        guild_id: int,
+        moderator_id: int,
+        *,
+        action: str | None = None,
+        limit: int = 50,
+    ):
+        if action:
+            return await self.fetch(
+                """
+                SELECT *
+                FROM modlog_cases
+                WHERE guild_id = $1 AND moderator_id = $2 AND action = $3
+                ORDER BY case_id DESC
+                LIMIT $4
+                """,
+                guild_id,
+                moderator_id,
+                action,
+                limit,
+                cached=False,
+            )
+        return await self.fetch(
+            """
+            SELECT *
+            FROM modlog_cases
+            WHERE guild_id = $1 AND moderator_id = $2
+            ORDER BY case_id DESC
+            LIMIT $3
+            """,
+            guild_id,
+            moderator_id,
+            limit,
+            cached=False,
+        )
+
+    async def count_modlog_cases(
+        self,
+        guild_id: int,
+        target_id: int,
+        *,
+        action: str | None = None,
+    ) -> int:
+        if action:
+            return int(
+                await self.fetchval(
+                    """
+                    SELECT COUNT(*)
+                    FROM modlog_cases
+                    WHERE guild_id = $1 AND target_id = $2 AND action = $3
+                    """,
+                    guild_id,
+                    target_id,
+                    action,
+                )
+                or 0
+            )
+        return int(
+            await self.fetchval(
+                """
+                SELECT COUNT(*)
+                FROM modlog_cases
+                WHERE guild_id = $1 AND target_id = $2
+                """,
+                guild_id,
+                target_id,
+            )
+            or 0
+        )
+
+    async def add_hardban(
+        self,
+        guild_id: int,
+        user_id: int,
+        moderator_id: int | None,
+        reason: str | None,
+    ) -> None:
+        await self.execute(
+            """
+            INSERT INTO hardbans (guild_id, user_id, moderator_id, reason)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (guild_id, user_id)
+            DO UPDATE SET moderator_id = EXCLUDED.moderator_id,
+                          reason = EXCLUDED.reason
+            """,
+            guild_id,
+            user_id,
+            moderator_id,
+            reason,
+        )
+
+    async def remove_hardban(self, guild_id: int, user_id: int) -> None:
+        await self.execute(
+            "DELETE FROM hardbans WHERE guild_id = $1 AND user_id = $2",
+            guild_id,
+            user_id,
+        )
+
+    async def is_hardbanned(self, guild_id: int, user_id: int) -> bool:
+        row = await self.fetchrow(
+            "SELECT 1 FROM hardbans WHERE guild_id = $1 AND user_id = $2",
+            guild_id,
+            user_id,
+        )
+        return row is not None
+
+    async def fetch_hardbans(self, guild_id: int):
+        return await self.fetch(
+            """
+            SELECT *
+            FROM hardbans
+            WHERE guild_id = $1
+            ORDER BY created_at DESC
+            """,
+            guild_id,
+            cached=False,
+        )
+
+    async def add_temprole(
+        self,
+        guild_id: int,
+        user_id: int,
+        role_id: int,
+        expires_at,
+        moderator_id: int | None,
+    ) -> None:
+        await self.execute(
+            """
+            INSERT INTO temproles (guild_id, user_id, role_id, expires_at, moderator_id)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (guild_id, user_id, role_id)
+            DO UPDATE SET expires_at = EXCLUDED.expires_at,
+                          moderator_id = EXCLUDED.moderator_id
+            """,
+            guild_id,
+            user_id,
+            role_id,
+            expires_at,
+            moderator_id,
+        )
+
+    async def remove_temprole(
+        self,
+        guild_id: int,
+        user_id: int,
+        role_id: int,
+    ) -> None:
+        await self.execute(
+            """
+            DELETE FROM temproles
+            WHERE guild_id = $1 AND user_id = $2 AND role_id = $3
+            """,
+            guild_id,
+            user_id,
+            role_id,
+        )
+
+    async def fetch_temproles(self, guild_id: int):
+        return await self.fetch(
+            """
+            SELECT *
+            FROM temproles
+            WHERE guild_id = $1
+            ORDER BY expires_at ASC
+            """,
+            guild_id,
+            cached=False,
+        )
+
+    async def fetch_due_temproles(self):
+        return await self.fetch(
+            """
+            SELECT *
+            FROM temproles
+            WHERE expires_at <= CURRENT_TIMESTAMP
+            ORDER BY expires_at
+            """,
+            cached=False,
+        )
+
     async def add_tempban(
         self,
         guild_id: int,

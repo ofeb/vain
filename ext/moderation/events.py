@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 from collections import defaultdict
 from datetime import datetime
 
@@ -35,6 +36,19 @@ class ModerationEvents(Package):
             return True
         
         return False
+
+    @Package.listener("on_member_join")
+    async def on_hardban_reban(self, member: discord.Member) -> None:
+        if getattr(self.db, "pool", None) is None:
+            return
+        if not await self.db.is_hardbanned(member.guild.id, member.id):
+            return
+        with contextlib.suppress(discord.Forbidden, discord.HTTPException):
+            await member.guild.ban(
+                member,
+                delete_message_seconds=0,
+                reason="hardban - member rejoined",
+            )
 
     @Package.listener("on_member_join")
     async def on_mute_restore(self, member: discord.Member):

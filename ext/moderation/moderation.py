@@ -1,21 +1,26 @@
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import discord
 from datetime import timedelta
 from discord.ext import tasks
-from discord.ext.commands import command, group
+from discord.ext import commands
+from discord.ext.commands import Greedy, command, group
 from discord.ext.commands import CommandError
 
 from core.discord.package import Package
 from core.tools.moderation_args import (
     ParsedModerationArgs,
+    command_tail,
     format_duration_token,
+    parse_amount_and_reason,
     parse_duration_seconds,
     parse_moderation_args,
 )
 from core.tools.aesthetic import label_line, panel_embed, reply_embed
 from core.tools.moderation_logs import (
+    DEFAULT_INVOKE_DM,
     build_modlog_embed,
     send_invoke_dm,
     send_invoke_response,
@@ -70,13 +75,23 @@ class _BoostConfirmView(discord.ui.View):
 class ModerationCommands(Package):
     """standalone moderation commands"""
 
+    def __init__(self, bot) -> None:
+        super().__init__(bot)
+        self._unbanall_tasks: dict[int, asyncio.Task] = {}
+
     async def cog_load(self) -> None:
         if self.db.pool is not None:
             self.tempban_watcher.start()
+            self.temprole_watcher.start()
 
     async def cog_unload(self) -> None:
         if self.tempban_watcher.is_running():
             self.tempban_watcher.cancel()
+        if self.temprole_watcher.is_running():
+            self.temprole_watcher.cancel()
+        for task in self._unbanall_tasks.values():
+            if not task.done():
+                task.cancel()
 
     def _audit_reason(self, ctx, reason: str | None) -> str:
         base = reason or "no reason provided"
@@ -364,6 +379,119 @@ class ModerationCommands(Package):
             case_id or 0,
             meta,
         )
+
+    def _format_case_line(self, row) -> str:
+        target = f"`{row['target_id']}`" if row.get("target_id") else "unknown"
+        moderator = f"`{row['moderator_id']}`" if row.get("moderator_id") else "unknown"
+        reason = row.get("reason") or "no reason provided"
+        created = row.get("created_at")
+        stamp = created.strftime("%m/%d/%y") if hasattr(created, "strftime") else "unknown"
+        return label_line(
+            f"Case #{row['case_id']} · {row['action']}",
+            f"{target} · {moderator} · {reason} · {stamp}",
+        )
+
+    async def _build_case_embed(self, ctx, case_id: int) -> discord.Embed | None:
+        if getattr(self.db, "pool", None) is None:
+            return None
+        row = await self.db.fetch_modlog_case(ctx.guild.id, int(case_id))
+        if not row:
+            return None
+        target = ctx.guild.get_member(row["target_id"])
+        target_label = target.mention if target else f"`{row['target_id']}`"
+        moderator = ctx.guild.get_member(row["moderator_id"])
+        moderator_label = moderator.mention if moderator else f"`{row['moderator_id']}`"
+        return build_modlog_embed(
+            color=self.color,
+            action=str(row["action"]),
+            target_label=target_label,
+            moderator_label=moderator_label,
+            reason=row.get("reason") or "no reason provided",
+            case_id=row["case_id"],
+        )
+
+    async def _ban_member(
+        self,
+        ctx,
+        member: discord.Member,
+        *,
+        reason: str | None,
+        delete_days: int = 0,
+        action: str = "ban",
+        duration_label: str | None = None,
+        respond: bool = True,
+    ) -> bool:
+        if not await self._ensure_targetable(ctx, member):
+            return False
+        if respond and not await self._confirm_if_booster(ctx, member, action):
+            await ctx.warn("Action cancelled.")
+            return False
+        if not respond and getattr(member, "premium_since", None):
+            return False
+
+        role_ids = [role.id for role in member.roles if role != ctx.guild.default_role]
+        target_display = str(member)
+        target_id = member.id
+
+        case_id = await self._create_case(
+            ctx,
+            action=action,
+            target_id=target_id,
+            reason=reason,
+        )
+        if action in DEFAULT_INVOKE_DM:
+            await self._invoke_dm(
+                ctx,
+                member,
+                action,
+                reason=reason,
+                case_id=case_id,
+                duration=duration_label,
+            )
+
+        await member.ban(
+            delete_message_seconds=delete_days * 86400,
+            reason=self._audit_reason(ctx, reason),
+        )
+        extra_parts = []
+        if delete_days:
+            extra_parts.append(f"**Message purge** » {delete_days} day(s)")
+        if duration_label:
+            extra_parts.append(f"**Duration** » {duration_label}")
+        await self._send_modlog(
+            ctx,
+            action=action,
+            target=member,
+            case_id=case_id,
+            reason=reason,
+            extra="\n".join(extra_parts) if extra_parts else None,
+        )
+        self._dispatch_antinuke_action(
+            ctx,
+            action=action,
+            case_id=case_id,
+            meta={
+                "target_id": target_id,
+                "target_display": target_display,
+                "role_ids": role_ids,
+            },
+        )
+        if respond:
+            if await self._invoke_response(
+                ctx,
+                action,
+                user=member,
+                reason=reason,
+                case_id=case_id,
+                duration=duration_label,
+            ):
+                return True
+            purge = f" (purged **{delete_days}d**)" if delete_days else ""
+            duration = f" for **{duration_label}**" if duration_label else ""
+            await ctx.success(
+                f"{action.title()}ned **{target_display}**{duration}{purge} - {self._default_reason(reason)}"
+            )
+        return True
 
     async def _run_tempban(
         self,
@@ -722,27 +850,77 @@ class ModerationCommands(Package):
         description="No description given",
     )
     @has_permissions(manage_messages=True)
-    async def modstats(self, ctx, member):
+    async def modstats(self, ctx, member: discord.Member):
         """view moderation stats for a member"""
-        pass
+        if getattr(self.db, "pool", None) is None:
+            return await ctx.warn("Database is unavailable")
+        total = await self.db.count_modlog_cases(ctx.guild.id, member.id)
+        warns = await self.db.count_modlog_cases(ctx.guild.id, member.id, action="warn")
+        as_staff = len(
+            await self.db.fetch_modlog_cases_by_moderator(ctx.guild.id, member.id, limit=1000)
+        )
+        embed = panel_embed(
+            title="Moderation Stats",
+            color=self.color,
+            lines=[
+                label_line("Member", member.mention),
+                label_line("Cases against", str(total)),
+                label_line("Warnings", str(warns)),
+                label_line("Actions taken", str(as_staff)),
+            ],
+            timestamp=False,
+        )
+        await ctx.send(embed=embed)
 
     @command(
         name="warnings",
         description="View warnings for a member",
     )
     @has_permissions(manage_messages=True)
-    async def warnings(self, ctx, member):
+    async def warnings(self, ctx, member: discord.Member):
         """view warnings for a member"""
-        pass
+        if getattr(self.db, "pool", None) is None:
+            return await ctx.warn("Database is unavailable")
+        rows = await self.db.fetch_modlog_cases_for_user(
+            ctx.guild.id, member.id, action="warn", limit=25
+        )
+        if not rows:
+            return await ctx.warn(f"{member.mention} has **no warnings**")
+        embed = panel_embed(
+            title=f"Warnings — {member}",
+            color=self.color,
+            lines=[self._format_case_line(row) for row in rows],
+            timestamp=False,
+        )
+        await ctx.send(embed=embed)
 
     @command(
         name="moderationhistory",
         description="View moderation actions from a staff member",
     )
     @has_permissions(manage_messages=True)
-    async def moderationhistory(self, ctx, member, command):
+    async def moderationhistory(self, ctx, member: discord.Member, command: str | None = None):
         """view moderation history for a staff member"""
-        pass
+        if getattr(self.db, "pool", None) is None:
+            return await ctx.warn("Database is unavailable")
+        rows = await self.db.fetch_modlog_cases_by_moderator(
+            ctx.guild.id,
+            member.id,
+            action=command.lower() if command else None,
+            limit=25,
+        )
+        if not rows:
+            return await ctx.warn(f"{member.mention} has **no recorded actions**")
+        title = f"Moderation History — {member}"
+        if command:
+            title += f" ({command})"
+        embed = panel_embed(
+            title=title,
+            color=self.color,
+            lines=[self._format_case_line(row) for row in rows],
+            timestamp=False,
+        )
+        await ctx.send(embed=embed)
 
     @command(
         name="jaillist",
@@ -780,9 +958,12 @@ class ModerationCommands(Package):
         description="View a case log",
     )
     @has_permissions(manage_messages=True)
-    async def caselog(self, ctx, case_id):
+    async def caselog(self, ctx, case_id: int):
         """view case log"""
-        pass
+        embed = await self._build_case_embed(ctx, case_id)
+        if embed is None:
+            return await ctx.warn(f"Case **#{case_id}** was not found")
+        await ctx.send(embed=embed)
 
     @group(
         name="timeout",
@@ -790,9 +971,46 @@ class ModerationCommands(Package):
         invoke_without_command=True,
     )
     @has_permissions(moderate_members=True)
-    async def timeout(self, ctx, member, duration, *, reason=None):
+    async def timeout(self, ctx, member: discord.Member, duration: str, *, reason=None):
         """timeout a member"""
-        pass
+        if not await self._ensure_targetable(ctx, member):
+            return
+        seconds = self._parse_duration_seconds(duration)
+        if not seconds or seconds < 60:
+            return await ctx.warn("Duration must be at least **60 seconds**")
+        if seconds > 28 * 86400:
+            return await ctx.warn("Duration cannot exceed **28 days**")
+
+        duration_label = self._format_duration(seconds)
+        until = discord.utils.utcnow() + timedelta(seconds=seconds)
+        case_id = await self._create_case(
+            ctx, action="timeout", target_id=member.id, reason=reason,
+        )
+        await self._invoke_dm(
+            ctx, member, "timeout", reason=reason, case_id=case_id, duration=duration_label,
+        )
+        try:
+            await member.timeout(until, reason=self._audit_reason(ctx, reason))
+        except discord.Forbidden:
+            return await ctx.fail("I don't have permission to timeout this member")
+        except discord.HTTPException as e:
+            return await ctx.fail(f"Failed to timeout **{member}**: {e}")
+
+        await self._send_modlog(
+            ctx,
+            action="timeout",
+            target=member,
+            case_id=case_id,
+            reason=reason,
+            extra=f"**Duration** » {duration_label}",
+        )
+        if await self._invoke_response(
+            ctx, "timeout", user=member, reason=reason, case_id=case_id, duration=duration_label,
+        ):
+            return
+        return await ctx.success(
+            f"Timed out **{member}** for **{duration_label}** - {self._default_reason(reason)}"
+        )
 
     @timeout.command(
         name="list",
@@ -801,16 +1019,54 @@ class ModerationCommands(Package):
     @has_permissions(moderate_members=True)
     async def timeout_list(self, ctx):
         """list timed out members"""
-        pass
+        now = discord.utils.utcnow()
+        timed_out = [
+            member
+            for member in ctx.guild.members
+            if member.timed_out_until and member.timed_out_until > now
+        ]
+        if not timed_out:
+            return await ctx.warn("No members are currently **timed out**")
+        lines = []
+        for member in timed_out[:25]:
+            remaining = discord.utils.format_dt(member.timed_out_until, style="R")
+            lines.append(label_line(str(member), f"until {remaining}"))
+        embed = panel_embed(
+            title="Timed Out Members",
+            color=self.color,
+            lines=lines,
+            footer=f"{len(timed_out)} total" if len(timed_out) > 25 else None,
+            timestamp=False,
+        )
+        await ctx.send(embed=embed)
 
     @command(
         name="untimeout",
         description="Removes a timeout for a member",
     )
     @has_permissions(moderate_members=True)
-    async def untimeout(self, ctx, member, *, reason=None):
+    async def untimeout(self, ctx, member: discord.Member, *, reason=None):
         """remove timeout from a member"""
-        pass
+        if not member.timed_out_until or member.timed_out_until <= discord.utils.utcnow():
+            return await ctx.warn(f"{member.mention} is not **timed out**")
+        case_id = await self._create_case(
+            ctx, action="untimeout", target_id=member.id, reason=reason,
+        )
+        await self._invoke_dm(ctx, member, "untimeout", reason=reason, case_id=case_id)
+        try:
+            await member.timeout(None, reason=self._audit_reason(ctx, reason))
+        except discord.Forbidden:
+            return await ctx.fail("I don't have permission to remove this timeout")
+        except discord.HTTPException as e:
+            return await ctx.fail(f"Failed to remove timeout: {e}")
+        await self._send_modlog(
+            ctx, action="untimeout", target=member, case_id=case_id, reason=reason,
+        )
+        if await self._invoke_response(ctx, "untimeout", user=member, reason=reason, case_id=case_id):
+            return
+        return await ctx.success(
+            f"Removed timeout for **{member}** - {self._default_reason(reason)}"
+        )
 
     async def _mute_member(
         self,
@@ -1000,9 +1256,43 @@ class ModerationCommands(Package):
         name="hardban",
         description="Keep a member banned",
     )
-    async def hardban(self, ctx, member, *, reason=None):
+    @has_permissions(ban_members=True)
+    async def hardban(self, ctx, member: discord.Member, *, reason=None):
         """hardban a member"""
-        pass
+        if not await self._ensure_targetable(ctx, member):
+            return
+        if not await self._confirm_if_booster(ctx, member, "hardban"):
+            return await ctx.warn("Action cancelled.")
+
+        case_id = await self._create_case(
+            ctx, action="hardban", target_id=member.id, reason=reason,
+        )
+        try:
+            await member.ban(
+                delete_message_seconds=0,
+                reason=self._audit_reason(ctx, reason),
+            )
+        except discord.Forbidden:
+            return await ctx.fail("I don't have permission to ban this member")
+        except discord.HTTPException as e:
+            return await ctx.fail(f"Failed to hardban **{member}**: {e}")
+
+        if getattr(self.db, "pool", None) is not None:
+            await self.db.add_hardban(
+                ctx.guild.id,
+                member.id,
+                ctx.author.id,
+                self._default_reason(reason),
+            )
+
+        await self._send_modlog(
+            ctx, action="hardban", target=member, case_id=case_id, reason=reason,
+        )
+        if await self._invoke_response(ctx, "hardban", user=member, reason=reason, case_id=case_id):
+            return
+        return await ctx.success(
+            f"Hardbanned **{member}** - {self._default_reason(reason)}"
+        )
 
     @command(
         name="hardban list",
@@ -1011,25 +1301,65 @@ class ModerationCommands(Package):
     @has_permissions(administrator=True)
     async def hardban_list(self, ctx):
         """list hardbanned members"""
-        pass
+        if getattr(self.db, "pool", None) is None:
+            return await ctx.warn("Database is unavailable")
+        rows = await self.db.fetch_hardbans(ctx.guild.id)
+        if not rows:
+            return await ctx.warn("No **hardbanned** members")
+        lines = []
+        for row in rows[:25]:
+            user = self.bot.get_user(row["user_id"]) or f"`{row['user_id']}`"
+            reason = row.get("reason") or "no reason provided"
+            lines.append(label_line(str(user), reason))
+        embed = panel_embed(
+            title="Hardbanned Members",
+            color=self.color,
+            lines=lines,
+            timestamp=False,
+        )
+        await ctx.send(embed=embed)
 
     @command(
         name="clearinvites",
         description="Remove all existing invites in guild",
     )
     @has_permissions(manage_guild=True)
-    async def clearinvites(self, ctx, params):
+    async def clearinvites(self, ctx, params: str | None = None):
         """clear all invites"""
-        pass
+        invites = await ctx.guild.invites()
+        if not invites:
+            return await ctx.warn("This server has **no invites**")
+        deleted = 0
+        for invite in invites:
+            with contextlib.suppress(discord.HTTPException, discord.Forbidden):
+                await invite.delete(reason=f"clearinvites by {ctx.author}")
+                deleted += 1
+        return await ctx.success(f"Deleted **{deleted}** invite(s)")
 
     @command(
         name="drag",
         description="Drag member(s) to the specified Voice Channel",
     )
     @has_permissions(move_members=True)
-    async def drag(self, ctx, members, channel):
+    async def drag(
+        self,
+        ctx,
+        members: Greedy[discord.Member],
+        channel: discord.VoiceChannel,
+    ):
         """drag members to voice channel"""
-        pass
+        if not members:
+            return await ctx.warn("You must mention at least **one member**")
+        moved = 0
+        for member in members:
+            if not member.voice or not member.voice.channel:
+                continue
+            with contextlib.suppress(discord.HTTPException, discord.Forbidden):
+                await member.move_to(channel, reason=f"drag by {ctx.author}")
+                moved += 1
+        if not moved:
+            return await ctx.warn("No members could be moved")
+        return await ctx.success(f"Moved **{moved}** member(s) to {channel.mention}")
 
     @command(
         name="unbanall",
@@ -1038,7 +1368,40 @@ class ModerationCommands(Package):
     @has_permissions(ban_members=True)
     async def unbanall(self, ctx):
         """unban all members"""
-        pass
+        existing = self._unbanall_tasks.get(ctx.guild.id)
+        if existing and not existing.done():
+            return await ctx.warn("An **unban all** task is already running")
+
+        try:
+            bans = [entry async for entry in ctx.guild.bans()]
+        except discord.Forbidden:
+            return await ctx.fail("I don't have permission to view bans")
+
+        if not bans:
+            return await ctx.warn("No members are **banned**")
+
+        channel = ctx.channel
+
+        async def _run() -> None:
+            count = 0
+            for entry in bans:
+                with contextlib.suppress(discord.HTTPException, discord.Forbidden):
+                    await ctx.guild.unban(
+                        entry.user,
+                        reason=f"unbanall by {ctx.author}",
+                    )
+                    count += 1
+                    await asyncio.sleep(0.75)
+            embed = reply_embed(
+                color=self.color,
+                message=f"Unbanned **{count}** member(s)",
+            )
+            with contextlib.suppress(discord.HTTPException):
+                await channel.send(embed=embed)
+
+        task = asyncio.create_task(_run())
+        self._unbanall_tasks[ctx.guild.id] = task
+        return await ctx.success(f"Started unbanning **{len(bans)}** member(s)")
 
     @command(
         name="unbanall cancel",
@@ -1047,16 +1410,63 @@ class ModerationCommands(Package):
     @has_permissions(ban_members=True)
     async def unbanall_cancel(self, ctx):
         """cancel unban all task"""
-        pass
+        task = self._unbanall_tasks.get(ctx.guild.id)
+        if not task or task.done():
+            return await ctx.warn("No **unban all** task is running")
+        task.cancel()
+        self._unbanall_tasks.pop(ctx.guild.id, None)
+        return await ctx.success("Cancelled the **unban all** task")
 
     @command(
         name="unban",
+        usage="(user id or mention) <reason>",
+        example="1269433308945711135 appealed",
         description="Unbans the mentioned user",
     )
     @has_permissions(ban_members=True)
-    async def unban(self, ctx, user, *, reason=None):
+    async def unban(self, ctx, user: discord.User, *, reason=None):
         """unban a user"""
-        pass
+        try:
+            await ctx.guild.fetch_ban(user)
+        except discord.NotFound:
+            return await ctx.warn(f"**{user}** is not banned")
+        except discord.Forbidden:
+            return await ctx.warn("I don't have permission to view the ban list")
+
+        case_id = await self._create_case(
+            ctx,
+            action="unban",
+            target_id=user.id,
+            reason=reason,
+        )
+        await self._invoke_dm(ctx, user, "unban", reason=reason, case_id=case_id)
+
+        try:
+            await ctx.guild.unban(
+                user,
+                reason=self._audit_reason(ctx, reason),
+            )
+        except discord.Forbidden:
+            return await ctx.fail("I don't have permission to unban members")
+        except discord.HTTPException as e:
+            return await ctx.fail(f"Failed to unban **{user}**: {e}")
+
+        if getattr(self.db, "pool", None) is not None:
+            with contextlib.suppress(Exception):
+                await self.db.remove_tempban(ctx.guild.id, user.id)
+
+        await self._send_modlog(
+            ctx,
+            action="unban",
+            target=user,
+            case_id=case_id,
+            reason=reason,
+        )
+        if await self._invoke_response(ctx, "unban", user=user, reason=reason, case_id=case_id):
+            return
+        return await ctx.success(
+            f"Unbanned **{user}** - {self._default_reason(reason)}"
+        )
 
     @command(
         name="softban",
@@ -1267,7 +1677,26 @@ class ModerationCommands(Package):
     @has_permissions(ban_members=True)
     async def ban_recent(self, ctx):
         """Bans the most recently joined members"""
-        pass
+        tail = command_tail(ctx, ("ban", "recent"))
+        amount, reason = parse_amount_and_reason(tail, max_amount=50)
+        members = sorted(
+            [m for m in ctx.guild.members if not m.bot],
+            key=lambda m: m.joined_at or discord.utils.utcnow(),
+            reverse=True,
+        )[:amount]
+        if not members:
+            return await ctx.warn("No members found to ban")
+        banned = 0
+        for member in members:
+            if member.id in {ctx.author.id, ctx.guild.owner_id, ctx.guild.me.id}:
+                continue
+            if not await self._ensure_targetable(ctx, member):
+                continue
+            if await self._ban_member(
+                ctx, member, reason=reason, delete_days=0, action="ban", respond=False,
+            ):
+                banned += 1
+        return await ctx.success(f"Banned **{banned}** recently joined member(s)")
 
     @command(
         name="ban purge",
@@ -1276,18 +1705,59 @@ class ModerationCommands(Package):
         description="Bans all members and purges their recent messages",
     )
     @has_permissions(ban_members=True)
-    async def ban_purge(self, ctx, delete_history):
+    async def ban_purge(self, ctx, delete_history: str):
         """Bans all members and purges their recent messages"""
-        pass
+        delete_days = self._coerce_delete_days(delete_history, default=0)
+        members = [
+            m for m in ctx.guild.members
+            if not m.bot and m.id not in {ctx.author.id, ctx.guild.owner_id, ctx.guild.me.id}
+        ]
+        if not members:
+            return await ctx.warn("No members found to ban")
+        banned = 0
+        for member in members:
+            if not await self._ensure_targetable(ctx, member):
+                continue
+            if await self._ban_member(
+                ctx,
+                member,
+                reason="ban purge",
+                delete_days=delete_days,
+                action="ban",
+                respond=False,
+            ):
+                banned += 1
+        return await ctx.success(
+            f"Banned **{banned}** member(s) with **{delete_days}d** message purge"
+        )
 
     @command(
         name="temprole",
         description="No description given",
     )
     @has_permissions(manage_roles=True)
-    async def temprole(self, ctx, member, duration, role):
+    async def temprole(self, ctx, member: discord.Member, duration: str, role: discord.Role):
         """give temporary role"""
-        pass
+        if not await self._ensure_targetable(ctx, member):
+            return
+        if role >= ctx.guild.me.top_role:
+            return await ctx.warn("That role is **higher** than my top role")
+        seconds = self._parse_duration_seconds(duration)
+        if not seconds or seconds < 60:
+            return await ctx.warn("Duration must be at least **60 seconds**")
+        expires_at = discord.utils.utcnow() + timedelta(seconds=seconds)
+        try:
+            await member.add_roles(role, reason=f"temprole by {ctx.author}")
+        except discord.HTTPException as e:
+            return await ctx.fail(f"Failed to add role: {e}")
+        if getattr(self.db, "pool", None) is not None:
+            await self.db.add_temprole(
+                ctx.guild.id, member.id, role.id, expires_at, ctx.author.id,
+            )
+        label = self._format_duration(seconds)
+        return await ctx.success(
+            f"Gave {role.mention} to **{member}** for **{label}**"
+        )
 
     @command(
         name="temprole list",
@@ -1296,59 +1766,152 @@ class ModerationCommands(Package):
     @has_permissions(manage_roles=True)
     async def temprole_list(self, ctx):
         """list temporary roles"""
-        pass
+        if getattr(self.db, "pool", None) is None:
+            return await ctx.warn("Database is unavailable")
+        rows = await self.db.fetch_temproles(ctx.guild.id)
+        if not rows:
+            return await ctx.warn("No **temporary roles** are active")
+        lines = []
+        for row in rows[:25]:
+            member = ctx.guild.get_member(row["user_id"])
+            role = ctx.guild.get_role(row["role_id"])
+            member_label = member.mention if member else f"`{row['user_id']}`"
+            role_label = role.mention if role else f"`{row['role_id']}`"
+            expires = row["expires_at"]
+            when = discord.utils.format_dt(expires, style="R") if expires else "unknown"
+            lines.append(label_line(f"{member_label} · {role_label}", f"expires {when}"))
+        embed = panel_embed(
+            title="Temporary Roles",
+            color=self.color,
+            lines=lines,
+            timestamp=False,
+        )
+        await ctx.send(embed=embed)
 
     @command(
         name="dump",
         description="Dumps all members of a role",
     )
     @has_permissions(manage_roles=True)
-    async def dump(self, ctx, role, flags):
+    async def dump(self, ctx, role: discord.Role, flags: str | None = None):
         """dump role members"""
-        pass
+        members = role.members
+        if not members:
+            return await ctx.warn(f"No members have {role.mention}")
+        lines = [member.mention for member in members[:50]]
+        embed = panel_embed(
+            title=f"Members — {role.name}",
+            color=role.color.value or self.color,
+            lines=lines,
+            footer=f"{len(members)} total" if len(members) > 50 else None,
+            timestamp=False,
+        )
+        await ctx.send(embed=embed)
 
     @command(
         name="newmembers",
         description="View list of recently joined members",
     )
-    async def newmembers(self, ctx, count):
+    async def newmembers(self, ctx, count: int = 10):
         """view new members"""
-        pass
+        count = max(1, min(count, 50))
+        members = sorted(
+            [m for m in ctx.guild.members if m.joined_at],
+            key=lambda m: m.joined_at,
+            reverse=True,
+        )[:count]
+        if not members:
+            return await ctx.warn("No members found")
+        lines = [
+            label_line(
+                member.mention,
+                discord.utils.format_dt(member.joined_at, style="R"),
+            )
+            for member in members
+        ]
+        embed = panel_embed(
+            title="Recently Joined",
+            color=self.color,
+            lines=lines,
+            timestamp=False,
+        )
+        await ctx.send(embed=embed)
 
     @command(
         name="recentban",
         description="Chunk ban recently joined members",
     )
     @has_permissions(ban_members=True)
-    async def recentban(self, ctx, count, *, reason):
+    async def recentban(self, ctx, count: int, *, reason: str | None = None):
         """ban recent members"""
-        pass
+        count = max(1, min(count, 50))
+        members = sorted(
+            [m for m in ctx.guild.members if not m.bot],
+            key=lambda m: m.joined_at or discord.utils.utcnow(),
+            reverse=True,
+        )[:count]
+        banned = 0
+        for member in members:
+            if member.id in {ctx.author.id, ctx.guild.owner_id, ctx.guild.me.id}:
+                continue
+            if not await self._ensure_targetable(ctx, member):
+                continue
+            if await self._ban_member(
+                ctx, member, reason=reason, action="ban", respond=False,
+            ):
+                banned += 1
+        return await ctx.success(f"Banned **{banned}** recent member(s)")
 
     @command(
         name="talk",
         description="Toggle a channel to text for a role",
     )
     @has_permissions(manage_channels=True)
-    async def talk(self, ctx, channel, role):
+    async def talk(self, ctx, channel: discord.TextChannel, role: discord.Role):
         """toggle channel text for role"""
-        pass
+        overwrite = channel.overwrites_for(role)
+        if overwrite.send_messages is False:
+            overwrite.send_messages = True
+            state = "enabled"
+        else:
+            overwrite.send_messages = False
+            state = "disabled"
+        await channel.set_permissions(role, overwrite=overwrite, reason=f"talk by {ctx.author}")
+        return await ctx.success(
+            f"Text in {channel.mention} **{state}** for {role.mention}"
+        )
 
     @command(
         name="unhide",
         description="Unhide a channel from a role or member",
     )
-    async def unhide(self, ctx, channel, role_or_member):
+    @has_permissions(manage_channels=True)
+    async def unhide(self, ctx, channel: discord.abc.GuildChannel, role_or_member):
         """unhide channel from role or member"""
-        pass
+        try:
+            target = await commands.RoleConverter().convert(ctx, str(role_or_member))
+        except CommandError:
+            target = await commands.MemberConverter().convert(ctx, str(role_or_member))
+        overwrite = channel.overwrites_for(target)
+        overwrite.view_channel = True
+        await channel.set_permissions(target, overwrite=overwrite, reason=f"unhide by {ctx.author}")
+        return await ctx.success(f"Unhid {channel.mention} from {target.mention}")
 
     @command(
         name="hide",
         description="Hide a channel from a role or member",
     )
     @has_permissions(manage_channels=True)
-    async def hide(self, ctx, channel, role_or_member):
+    async def hide(self, ctx, channel: discord.abc.GuildChannel, role_or_member):
         """hide channel from role or member"""
-        pass
+        try:
+            target = await commands.RoleConverter().convert(ctx, str(role_or_member))
+        except CommandError:
+            target = await commands.MemberConverter().convert(ctx, str(role_or_member))
+        overwrite = channel.overwrites_for(target)
+        overwrite.view_channel = False
+        await channel.set_permissions(target, overwrite=overwrite, reason=f"hide by {ctx.author}")
+        return await ctx.success(f"Hid {channel.mention} from {target.mention}")
 
     async def _ensure_category(self, ctx, name: str) -> discord.CategoryChannel:
         existing = discord.utils.get(ctx.guild.categories, name=name)
@@ -1562,59 +2125,187 @@ class ModerationCommands(Package):
         name="rename",
         description="Assigns the mentioned user a new nickname in the guild",
     )
-    async def rename(self, ctx, member, newnick):
+    @has_permissions(manage_nicknames=True)
+    async def rename(self, ctx, member: discord.Member, *, newnick: str):
         """rename a member"""
-        pass
+        if not await self._ensure_targetable(ctx, member):
+            return
+        try:
+            await member.edit(
+                nick=newnick[:32],
+                reason=f"rename by {ctx.author}",
+            )
+        except discord.Forbidden:
+            return await ctx.fail("I don't have permission to rename this member")
+        except discord.HTTPException as e:
+            return await ctx.fail(f"Failed to rename member: {e}")
+        return await ctx.success(f"Renamed **{member}** to **{newnick[:32]}**")
 
     @command(
         name="raid",
         description="Remove all members that joined in the time provided in the event of a raid",
     )
-    async def raid(self, ctx, time, action, *, reason):
+    @has_permissions(ban_members=True, kick_members=True)
+    async def raid(self, ctx, time: str, action: str, *, reason: str | None = None):
         """raid mode"""
-        pass
+        seconds = self._parse_duration_seconds(time)
+        if not seconds:
+            return await ctx.warn("Provide a valid time like `30m`, `2h`, or `1d`")
+        action = action.lower().strip()
+        if action not in {"ban", "kick"}:
+            return await ctx.warn("Action must be **ban** or **kick**")
+
+        cutoff = discord.utils.utcnow() - timedelta(seconds=seconds)
+        targets = [
+            m for m in ctx.guild.members
+            if not m.bot
+            and m.joined_at
+            and m.joined_at >= cutoff
+            and m.id not in {ctx.author.id, ctx.guild.owner_id, ctx.guild.me.id}
+        ]
+        if not targets:
+            return await ctx.warn("No members joined in that window")
+
+        affected = 0
+        for member in targets:
+            if not await self._ensure_targetable(ctx, member):
+                continue
+            if action == "ban":
+                if await self._ban_member(
+                    ctx, member, reason=reason, action="ban", respond=False,
+                ):
+                    affected += 1
+            else:
+                case_id = await self._create_case(
+                    ctx, action="kick", target_id=member.id, reason=reason,
+                )
+                with contextlib.suppress(discord.HTTPException, discord.Forbidden):
+                    await member.kick(reason=self._audit_reason(ctx, reason))
+                    await self._send_modlog(
+                        ctx, action="kick", target=member, case_id=case_id, reason=reason,
+                    )
+                    affected += 1
+        return await ctx.success(
+            f"**{action.title()}ed** **{affected}** member(s) who joined in the last **{self._format_duration(seconds)}**"
+        )
 
     @command(
         name="topic",
         description="Change the current channel topic",
     )
     @has_permissions(manage_channels=True)
-    async def topic(self, ctx, *, text):
+    async def topic(self, ctx, *, text: str):
         """change channel topic"""
-        pass
+        if not isinstance(ctx.channel, discord.TextChannel):
+            return await ctx.warn("This command only works in **text channels**")
+        await ctx.channel.edit(topic=text[:1024], reason=f"topic by {ctx.author}")
+        return await ctx.success("Updated this channel's **topic**")
 
     @command(
         name="naughty",
         description="Temporarily make a channel NSFW for 30 seconds",
     )
     @has_permissions(manage_channels=True)
-    async def naughty(self, ctx, channel):
+    async def naughty(self, ctx, channel: discord.TextChannel):
         """make channel nsfw temporarily"""
-        pass
+        await channel.edit(nsfw=True, reason=f"naughty by {ctx.author}")
+        await ctx.success(f"{channel.mention} is **NSFW** for 30 seconds")
+        await asyncio.sleep(30)
+        with contextlib.suppress(discord.HTTPException):
+            await channel.edit(nsfw=False, reason="naughty expired")
 
     @command(
         name="permissions",
         description="Check permissions for member or myself",
     )
     @has_permissions(manage_roles=True, manage_channels=True)
-    async def permissions(self, ctx, member, channel):
+    async def permissions(
+        self,
+        ctx,
+        member: discord.Member,
+        channel: discord.abc.GuildChannel | None = None,
+    ):
         """check permissions"""
-        pass
+        channel = channel or ctx.channel
+        perms = channel.permissions_for(member)
+        keys = (
+            "view_channel", "send_messages", "read_message_history", "attach_files",
+            "embed_links", "add_reactions", "manage_messages", "manage_channels",
+            "manage_roles", "ban_members", "kick_members", "moderate_members",
+        )
+        lines = [
+            label_line(key.replace("_", " ").title(), "yes" if getattr(perms, key) else "no")
+            for key in keys
+        ]
+        embed = panel_embed(
+            title=f"Permissions — {member.display_name}",
+            color=self.color,
+            lines=lines,
+            footer=channel.mention,
+            timestamp=False,
+        )
+        await ctx.send(embed=embed)
 
     @command(
         name="unlock",
         description="Unlock a channel",
     )
     @has_permissions(manage_channels=True)
-    async def unlock(self, ctx, channel, *, reason):
+    async def unlock(self, ctx, channel: discord.TextChannel, *, reason: str = "No reason provided"):
         """unlock a channel"""
-        pass
+        everyone = ctx.guild.default_role
+        overwrite = channel.overwrites_for(everyone)
+        overwrite.send_messages = None
+        await channel.set_permissions(
+            everyone, overwrite=overwrite, reason=f"Unlock by {ctx.author}: {reason}",
+        )
+        await self.db.execute(
+            "DELETE FROM lockdowns WHERE guild_id = $1 AND channel_id = $2",
+            ctx.guild.id, channel.id,
+        )
+        return await ctx.success(f"{channel.mention} has been **unlocked** — {reason}")
 
     @command(
         name="unlock all",
         description="Unlocks every channel",
     )
     @has_permissions(manage_channels=True)
-    async def unlock_all(self, ctx, *, reason):
+    async def unlock_all(self, ctx, *, reason: str = "No reason provided"):
         """unlock all channels"""
-        pass
+        everyone = ctx.guild.default_role
+        unlocked = 0
+        for channel in ctx.guild.channels:
+            if not isinstance(channel, discord.TextChannel):
+                continue
+            overwrite = channel.overwrites_for(everyone)
+            if overwrite.send_messages is False:
+                overwrite.send_messages = None
+                await channel.set_permissions(
+                    everyone,
+                    overwrite=overwrite,
+                    reason=f"Unlock all by {ctx.author}: {reason}",
+                )
+                unlocked += 1
+        await self.db.execute("DELETE FROM lockdowns WHERE guild_id = $1", ctx.guild.id)
+        if not unlocked:
+            return await ctx.warn("No channels are currently **locked**")
+        return await ctx.success(f"**Unlocked** **{unlocked}** channel(s) — {reason}")
+
+    @tasks.loop(seconds=30)
+    async def temprole_watcher(self) -> None:
+        if getattr(self.db, "pool", None) is None:
+            return
+        for entry in await self.db.fetch_due_temproles():
+            guild = self.bot.get_guild(int(entry["guild_id"]))
+            if guild is None:
+                continue
+            member = guild.get_member(int(entry["user_id"]))
+            role = guild.get_role(int(entry["role_id"]))
+            if member and role and role in member.roles:
+                with contextlib.suppress(discord.Forbidden, discord.HTTPException):
+                    await member.remove_roles(role, reason="temprole expired")
+            await self.db.remove_temprole(
+                int(entry["guild_id"]),
+                int(entry["user_id"]),
+                int(entry["role_id"]),
+            )

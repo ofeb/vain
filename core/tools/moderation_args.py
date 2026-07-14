@@ -23,6 +23,10 @@ class ParsedModerationArgs:
     duration_before_member: bool = False
 
 
+def command_tail(ctx, command_names: tuple[str, ...]) -> str:
+    return _command_tail(ctx, command_names)
+
+
 def _command_tail(ctx, command_names: tuple[str, ...]) -> str:
     content = (ctx.message.content or "").strip()
     if not content:
@@ -152,3 +156,21 @@ async def parse_moderation_args(
         reason=reason,
         duration_before_member=duration_before_member,
     )
+
+
+def parse_amount_and_reason(
+    tail: str,
+    *,
+    max_amount: int = 100,
+    default_amount: int | None = None,
+) -> tuple[int, str | None]:
+    tokens = tail.split()
+    if not tokens:
+        if default_amount is None:
+            raise CommandError("you must provide an amount")
+        return default_amount, None
+    if not tokens[0].isdigit():
+        raise CommandError("amount must be a number")
+    amount = max(1, min(int(tokens[0]), max_amount))
+    reason = " ".join(tokens[1:]).strip() or None
+    return amount, reason

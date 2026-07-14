@@ -261,6 +261,25 @@ CREATE TABLE IF NOT EXISTS tempbans (
     PRIMARY KEY (guild_id, user_id)
 );
 
+CREATE TABLE IF NOT EXISTS hardbans (
+    guild_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    moderator_id BIGINT,
+    reason TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS temproles (
+    guild_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    role_id BIGINT NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    moderator_id BIGINT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, user_id, role_id)
+);
+
 CREATE TABLE IF NOT EXISTS users (
     user_id BIGINT,
     guild_id BIGINT,
@@ -1103,6 +1122,8 @@ CREATE INDEX IF NOT EXISTS idx_antiraid_modules_guild ON antiraid_modules(guild_
 CREATE INDEX IF NOT EXISTS idx_antinuke_actions_lookup ON antinuke_actions(guild_id, user_id, action, created_at);
 CREATE INDEX IF NOT EXISTS idx_staff_roles_guild ON staff_roles(guild_id);
 CREATE INDEX IF NOT EXISTS idx_modlog_cases_guild ON modlog_cases(guild_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_hardbans_guild ON hardbans(guild_id);
+CREATE INDEX IF NOT EXISTS idx_temproles_expires ON temproles(expires_at);
 CREATE INDEX IF NOT EXISTS idx_custom_roles_guild ON custom_roles(guild_id);
 CREATE INDEX IF NOT EXISTS idx_mutes_guild_user ON mutes(guild_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_mutes_expires ON mutes(expires_at);

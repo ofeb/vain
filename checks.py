@@ -619,6 +619,32 @@ async def main():
     else:
         fail("unmute command not registered")
 
+    ctx_unban = _build_mock_context(bot, guild, admin)
+    unban_cmd = bot.get_command("unban")
+    unban_inst = unban_cmd.cog if unban_cmd else None
+    banned_user = MagicMock(spec=discord.User)
+    banned_user.id = 1269433308945711135
+    banned_user.__str__ = lambda self: "BannedUser"
+    if unban_cmd:
+        ok("unban command found")
+        ctx_unban.command = unban_cmd
+        guild.fetch_ban = AsyncMock(return_value=MagicMock(user=banned_user))
+        guild.unban = AsyncMock()
+        bot.send_embed = AsyncMock()
+        await unban_cmd.callback(
+            unban_inst, ctx_unban, banned_user, reason="test unban"
+        )
+        _results["commands_invoked"] += 1
+        if guild.unban.called and (
+            ctx_unban.success.called or bot.send_embed.called
+        ):
+            _results["commands_pass"] += 1
+            ok("unban invoked successfully")
+        else:
+            fail("unban did not unban or respond")
+    else:
+        fail("unban command not registered")
+
     ctx6 = _build_mock_context(bot, guild, admin)
     setup_cmd = bot.get_command("setup")
     setup_inst = setup_cmd.cog if setup_cmd else None
@@ -1115,6 +1141,8 @@ async def main():
             "characters",
             "ticket_transcripts",
             "ticket_settings",
+            "hardbans",
+            "temproles",
         }
         defined = set(tables)
         missing = needed - defined
