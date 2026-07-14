@@ -82,7 +82,7 @@ class InformationCommands(Package):
                 cont.add_item(discord.ui.TextDisplay(f"-# {line}"))
             cont.add_item(discord.ui.Separator())
 
-            # Buttons row inside container
+            
             row = discord.ui.ActionRow()
             row.add_item(discord.ui.Button(
                 label="Website",
@@ -110,7 +110,7 @@ class InformationCommands(Package):
         except Exception:
             pass
 
-        # Fallback to classic embed + view
+        
         embed = panel_embed(
             color=dom_color,
             title=bot_name,

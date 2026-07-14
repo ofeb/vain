@@ -279,7 +279,7 @@ class Context(commands.Context):
                     subs = [target for target in family if target is not entity]
                     if subs:
                         return await help_handler._send_group(
-                            self,  # pass the current context
+                            self,  
                             entity,
                             targets=family,
                         )

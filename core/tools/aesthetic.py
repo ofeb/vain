@@ -105,7 +105,7 @@ async def get_dominant_color(url: str, fallback: int = 0x2A2B2F) -> int:
         def _extract():
             ct = ColorThief(BytesIO(data))
             r, g, b = ct.get_color(quality=1)
-            # brighten very dark colors a bit (kept from previous logic)
+            
             if (r + g + b) < 80:
                 r = min(r + 60, 255)
                 g = min(g + 60, 255)
