@@ -63,7 +63,7 @@ class Antiraid(AntiraidEvents, Package):
                     color=self.color,
                     title="Raid Mode Updated",
                     lines=[
-                        f"> **Status** » {'**active**' if active else '**inactive**'}",
+                        f"> **Status** : {'**active**' if active else '**inactive**'}",
                         "-# Massjoin protection " + ("engaged" if active else "cleared"),
                     ],
                 ),
@@ -169,9 +169,9 @@ class Antiraid(AntiraidEvents, Package):
                 color=self.color,
                 title="Antiraid Action",
                 lines=[
-                    f"> **Target** » {member.mention} (`{member.id}`)",
-                    f"> **Action** » {action}",
-                    f"> **Reason** » {reason}",
+                    f"> **Target** : {member.mention} (`{member.id}`)",
+                    f"> **Action** : {action}",
+                    f"> **Reason** : {reason}",
                 ],
                 footer="Automated antiraid response",
             ),

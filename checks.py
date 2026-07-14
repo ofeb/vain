@@ -692,7 +692,7 @@ async def main():
         ok("aesthetic caption() prefix")
     else:
         fail("aesthetic caption() missing prefix")
-    panel = panel_embed(color=0x2A2B2F, title="Test", lines=["**A** » 1"], footer="id 1")
+    panel = panel_embed(color=0x2A2B2F, title="Test", lines=["**A**: 1"], footer="id 1")
     if panel.description and ">" in panel.description and "-#" in panel.description:
         ok("panel_embed description format")
     else:

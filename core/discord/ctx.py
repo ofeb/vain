@@ -73,7 +73,16 @@ class Context(commands.Context):
     also tracks flags for parsed command args"""
 
     def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
+        # Defensive init to survive jishaku debug / alt_ctx / accidental converter use for param named "ctx"
+        try:
+            if args and len(args) == 1 and not isinstance(args[0], (discord.Message, discord.Interaction)):
+                # being called as Context("string") from converter machinery for a param named ctx
+                super().__init__()
+            else:
+                super().__init__(*args, **kwargs)
+        except Exception:
+            # last resort minimal init
+            super().__init__()
         self.flags: dict[str, Any] = {}
         self._custom_emoji: dict | None = None
         self._custom_color: dict | None = None
@@ -138,7 +147,9 @@ class Context(commands.Context):
         emoji: str = "",
         color_value: Optional[int] = None,
     ) -> discord.Embed:
-        line = f"{emoji} {self.author.mention}: {message}" if emoji else f"{self.author.mention}: {message}"
+        # Aesthetic using > -# ** where makes sense, colon style
+        prefix = f"{emoji} " if emoji else ""
+        line = f"{prefix}**{self.author.display_name}**: {message}"
         return discord.Embed(
             color=color_value or self.bot.color,
             description=body(line),

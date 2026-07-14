@@ -41,8 +41,9 @@ class InformationCommands(Package):
 
     @hybrid(
         name="botinfo",
-        description="View information about the bot",
+        description="View information about the bot, stats, uptime and links",
         aliases=["bi", "stats"],
+        example=",botinfo",
     )
     async def botinfo(self, ctx: Context) -> None:
         bot = self.bot
@@ -52,22 +53,38 @@ class InformationCommands(Package):
         latency = round(bot.latency * 1000)
         uptime = discord.utils.format_dt(bot.started_at, style="R")
         shard_count = bot.shard_count or 1
+        info_lines = [
+            label_line("Commands", f"`{total_commands}`"),
+            label_line("Latency", f"`{latency}ms`"),
+            label_line("Uptime", uptime),
+            label_line("Guilds", f"`{guilds:,}`"),
+            label_line("Users", f"`{users:,}`"),
+            label_line("Shards", f"`{shard_count}`"),
+            label_line("Python", f"`{platform.python_version()}`"),
+        ]
         embed = panel_embed(
             color=color.base,
             title=f"{bot.user.display_name if bot.user else 'Vain'}",
-            lines=[
-                label_line("Commands", f"`{total_commands}`"),
-                label_line("Latency", f"`{latency}ms`"),
-                label_line("Uptime", uptime),
-                label_line("Guilds", f"`{guilds:,}`"),
-                label_line("Users", f"`{users:,}`"),
-                label_line("Shards", f"`{shard_count}`"),
-                label_line("Python", f"`{platform.python_version()}`"),
-            ],
+            lines=info_lines,
             timestamp=False,
             thumbnail=bot.user.display_avatar.url if bot.user else None,
         )
 
+        # v2 container for botinfo to be aesthetic and modern
+        try:
+            cont = discord.ui.Container(accent_colour=color.base)
+            cont.add_item(discord.ui.TextDisplay(f"**{bot.user.display_name if bot.user else 'bleed'}**"))
+            cont.add_item(discord.ui.TextDisplay("-# bot information"))
+            for line in (info_lines or []):
+                cont.add_item(discord.ui.TextDisplay(f"-# {line}"))
+            cont.add_item(discord.ui.Separator())
+            cont.add_item(discord.ui.TextDisplay("-# @hroe • general"))
+            comps = [cont]
+            await ctx.send(components=comps, flags=discord.MessageFlags.components_v2)
+            return
+        except Exception:
+            pass
+        # fallback
         view = discord.ui.View()
         view.add_item(discord.ui.Button(
             label="Website",

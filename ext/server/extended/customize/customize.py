@@ -8,6 +8,7 @@ from discord import Embed
 from discord.ext.commands import group
 
 from core.discord.package import Package
+from core.managers.permissions import has_permissions
 
 BIO_LINKS = ("https://vain.bot/", "discord.gg/vainbot")
 BIO_MAX_LENGTH = 190
@@ -659,15 +660,131 @@ class CustomizeCommands(Package):
         await self.db.set_guild_customize(ctx.guild.id, "voicemaster_emoji", vm_dict)
         return await ctx.success(f"set **decrease** emoji to {emoji}")
 
-    @customize.group(
-        name="selfcontext",
-        aliases=["self"],
+    # === TOP LEVEL context GROUP ===
+    # context self ...   -> personal per-user (no special perms)
+    # context ...        -> server context settings (requires manage_guild)
+    @group(
+        name="context",
+        aliases=["ctx"],
         usage="(subcommand) <args>",
-        description="Customize your personal embed appearance",
+        description="Server or personal context customization (colors, emojis for embeds)",
+        invoke_without_command=True,
+    )
+    @has_permissions(manage_guild=True)
+    async def context(self, ctx):
+        """Server context settings (manage_guild). Use 'context self' for personal."""
+        await ctx.send_help(ctx.command)
+
+    @context.group(
+        name="self",
+        aliases=["me", "personal"],
+        usage="(subcommand) <args>",
+        description="Personal per-user embed customization (no special perms required)",
+        invoke_without_command=True,
+    )
+    async def context_self(self, ctx):
+        """Personal custom context (colors/emojis for your responses). No perms needed."""
+        await ctx.send_help(ctx.command)
+
+    # Server level under context (gated by the parent has_permissions manage_guild)
+    @context.group(name="color", invoke_without_command=True)
+    async def context_server_color(self, ctx):
+        await ctx.send_help(ctx.command)
+
+    @context.group(name="emoji", invoke_without_command=True)
+    async def context_server_emoji(self, ctx):
+        await ctx.send_help(ctx.command)
+
+    # --- Personal (context self) logic attached here (no perm) ---
+    async def _personal_set_color(self, ctx, key: str, hex_code: str | None, nice: str):
+        gid = getattr(ctx.guild, "id", 0) if ctx.guild else 0
+        if not hex_code or str(hex_code).lower() in CLEAR_WORDS:
+            s = await self.db.get_user_customize(ctx.author.id, gid)
+            c = s.get("color", {})
+            c.pop(key, None)
+            await self.db.set_user_customize(ctx.author.id, gid, "color", c)
+            return await ctx.success(f"reset your **{nice}** color to default")
+        h = str(hex_code).lstrip("#")
+        try:
+            int(h, 16)
+        except Exception:
+            return await ctx.warn("provide a valid hex")
+        s = await self.db.get_user_customize(ctx.author.id, gid)
+        c = s.get("color", {})
+        c[key] = h
+        await self.db.set_user_customize(ctx.author.id, gid, "color", c)
+        return await ctx.success(f"set your **{nice}** color to `#{h}`")
+
+    async def _personal_set_emoji(self, ctx, key: str, emoji: str | None, nice: str):
+        gid = getattr(ctx.guild, "id", 0) if ctx.guild else 0
+        if not emoji or str(emoji).lower() in CLEAR_WORDS:
+            s = await self.db.get_user_customize(ctx.author.id, gid)
+            e = s.get("emoji", {})
+            e.pop(key, None)
+            await self.db.set_user_customize(ctx.author.id, gid, "emoji", e)
+            return await ctx.success(f"reset your **{nice}** emoji to default")
+        s = await self.db.get_user_customize(ctx.author.id, gid)
+        e = s.get("emoji", {})
+        e[key] = emoji
+        await self.db.set_user_customize(ctx.author.id, gid, "emoji", e)
+        return await ctx.success(f"set your **{nice}** emoji to {emoji}")
+
+    @context_self.group(name="color", invoke_without_command=True)
+    async def context_self_color(self, ctx):
+        await ctx.send_help(ctx.command)
+
+    @context_self_color.command(name="approve", aliases=["success"], description="Set your personal approve/success color", example="#a8ea7b")
+    async def cself_color_approve(self, ctx, hex_code: str = None):
+        return await self._personal_set_color(ctx, "approve", hex_code, "approve")
+
+    @context_self_color.command(name="base", description="Set your personal base color", example="#373737")
+    async def cself_color_base(self, ctx, hex_code: str = None):
+        return await self._personal_set_color(ctx, "base", hex_code, "base")
+
+    @context_self_color.command(name="list", aliases=["view"], description="List your personal colors", example="")
+    async def cself_color_list(self, ctx):
+        gid = getattr(ctx.guild, "id", 0) if ctx.guild else 0
+        s = await self.db.get_user_customize(ctx.author.id, gid)
+        cur = s.get("color", {})
+        lines = [f"**{k}**: `#{v}`" for k, v in cur.items()] or ["(none)"]
+        await ctx.send(embed=Embed(description="\n".join(lines), color=self.color))
+
+    @context_self.group(name="emoji", invoke_without_command=True)
+    async def context_self_emoji(self, ctx):
+        await ctx.send_help(ctx.command)
+
+    @context_self_emoji.command(name="success", aliases=["approve"], description="Set your personal success emoji", example=":white_check_mark:")
+    async def cself_emoji_success(self, ctx, emoji: str = None):
+        return await self._personal_set_emoji(ctx, "success", emoji, "success")
+
+    @context_self_emoji.command(name="warn", description="Set your personal warn emoji", example=":warning:")
+    async def cself_emoji_warn(self, ctx, emoji: str = None):
+        return await self._personal_set_emoji(ctx, "warn", emoji, "warn")
+
+    @context_self_emoji.command(name="list", aliases=["view"], description="List your personal emojis")
+    async def cself_emoji_list(self, ctx):
+        gid = getattr(ctx.guild, "id", 0) if ctx.guild else 0
+        s = await self.db.get_user_customize(ctx.author.id, gid)
+        cur = s.get("emoji", {})
+        lines = [f"**{k}**: {v}" for k, v in cur.items()] or ["(none)"]
+        await ctx.send(embed=Embed(description="\n".join(lines), color=self.color))
+
+    @context_self.command(name="reset", description="Reset all your personal customizations")
+    async def cself_reset(self, ctx):
+        gid = getattr(ctx.guild, "id", 0) if ctx.guild else 0
+        await self.db.reset_user_customize(ctx.author.id, gid)
+        return await ctx.success("reset all your **personal** customizations")
+
+    # Legacy personal entry under customize (still works)
+    @customize.group(
+        name="context",
+        aliases=["selfcontext", "self"],
+        usage="(subcommand) <args>",
+        description="Personal custom (legacy; prefer top-level ,context self)",
         invoke_without_command=True,
     )
     async def customize_context(self, ctx):
-        """Customize your personal embed appearance."""
+        """Personal custom (legacy)."""
         await ctx.send_help(ctx.command)
 
     @customize_context.command(
@@ -708,7 +825,7 @@ class CustomizeCommands(Package):
             description="\n".join(lines),
             color=self.color,
         )
-        embed.set_footer(text=f"Use {ctx.clean_prefix}customize selfcontext emoji <key> <emoji> to change")
+        embed.set_footer(text=f"Use {ctx.clean_prefix}context self emoji <key> <emoji>")
         await ctx.send(embed=embed)
 
     @customize_context_emoji.command(
@@ -1064,7 +1181,7 @@ class CustomizeCommands(Package):
             description="\n".join(lines),
             color=self.color,
         )
-        embed.set_footer(text=f"Use {ctx.clean_prefix}customize selfcontext color <key> <hex> to change")
+        embed.set_footer(text=f"Use {ctx.clean_prefix}context self color <key> <hex>")
         await ctx.send(embed=embed)
 
     @customize_context_color.command(

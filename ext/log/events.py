@@ -154,7 +154,7 @@ class LogEvents:
             author="Message Deleted",
             author_icon=message.author.display_avatar.url,
             lines=lines,
-            footer=f"User ID » {message.author.id}",
+            footer=f"User ID : {message.author.id}",
         )
         await self._log(message.guild.id, "messages", embed)
 
@@ -204,7 +204,7 @@ class LogEvents:
         embed = panel_embed(
             title="Bulk Message Delete",
             lines=lines,
-            footer=f"Channel ID » {channel.id}",
+            footer=f"Channel ID : {channel.id}",
         )
 
         file_content = "\n".join(lines).encode() if lines else None
@@ -234,7 +234,7 @@ class LogEvents:
                 label_line("Before", before.content[:1024] or "*empty*"),
                 label_line("After", after.content[:1024] or "*empty*"),
             ],
-            footer=f"User ID » {before.author.id}",
+            footer=f"User ID : {before.author.id}",
         )
         await self._log(before.guild.id, "messages", embed)
 
@@ -250,7 +250,7 @@ class LogEvents:
                 f"{member.mention} joined the server",
                 label_line("Account Created", f"<t:{int(member.created_at.timestamp())}:R>"),
             ],
-            footer=f"User ID » {member.id}",
+            footer=f"User ID : {member.id}",
             thumbnail=member.display_avatar.url,
         )
         await self._log(member.guild.id, "members", embed)
@@ -271,7 +271,7 @@ class LogEvents:
                 author="Member Kicked",
                 author_icon=member.display_avatar.url,
                 lines=lines,
-                footer=f"User ID » {member.id}",
+                footer=f"User ID : {member.id}",
             )
             await self._log(member.guild.id, "members", embed)
             return
@@ -283,7 +283,7 @@ class LogEvents:
             author="Member Left",
             author_icon=member.display_avatar.url,
             lines=lines,
-            footer=f"User ID » {member.id}",
+            footer=f"User ID : {member.id}",
         )
         await self._log(member.guild.id, "members", embed)
 
@@ -303,7 +303,7 @@ class LogEvents:
                     label_line("Before", before.nick or before.name),
                     label_line("After", after.nick or after.name),
                 ],
-                footer=f"User ID » {after.id}",
+                footer=f"User ID : {after.id}",
             )
             await self._log(after.guild.id, "members", embed)
 
@@ -321,7 +321,7 @@ class LogEvents:
                     author="Member Timed Out",
                     author_icon=after.display_avatar.url,
                     lines=lines,
-                    footer=f"User ID » {after.id}",
+                    footer=f"User ID : {after.id}",
                 )
                 await self._log(after.guild.id, "members", embed)
             elif before_timeout and (
@@ -336,7 +336,7 @@ class LogEvents:
                     author="Member Timed Out",
                     author_icon=after.display_avatar.url,
                     lines=lines,
-                    footer=f"User ID » {after.id}",
+                    footer=f"User ID : {after.id}",
                 )
                 await self._log(after.guild.id, "members", embed)
 
@@ -357,7 +357,7 @@ class LogEvents:
                 author="Member Roles Updated",
                 author_icon=after.display_avatar.url,
                 lines=lines,
-                footer=f"User ID » {after.id}",
+                footer=f"User ID : {after.id}",
             )
             await self._log(after.guild.id, "roles", embed)
 
@@ -375,7 +375,7 @@ class LogEvents:
                 author="Member Roles Updated",
                 author_icon=after.display_avatar.url,
                 lines=lines,
-                footer=f"User ID » {after.id}",
+                footer=f"User ID : {after.id}",
             )
             await self._log(after.guild.id, "roles", embed)
 
@@ -396,7 +396,7 @@ class LogEvents:
             author="Member Banned",
             author_icon=user.display_avatar.url,
             lines=lines,
-            footer=f"User ID » {user.id}",
+            footer=f"User ID : {user.id}",
         )
         await self._log(guild.id, "members", embed)
 
@@ -411,7 +411,7 @@ class LogEvents:
             author="Member Unbanned",
             author_icon=user.display_avatar.url,
             lines=lines,
-            footer=f"User ID » {user.id}",
+            footer=f"User ID : {user.id}",
         )
         await self._log(guild.id, "members", embed)
 
@@ -426,7 +426,7 @@ class LogEvents:
             author_icon = None
             if entry and entry.user:
                 lines.append(label_line("Moderator", f"{entry.user.mention} (`{entry.user.id}`)"))
-                footer = f"User ID » {entry.user.id}"
+                footer = f"User ID : {entry.user.id}"
                 author_icon = entry.user.display_avatar.url
             embed = panel_embed(
                 title="Bulk Role Create",
@@ -454,7 +454,7 @@ class LogEvents:
             author="Role Created",
             author_icon=entry.user.display_avatar.url if entry and entry.user else None,
             lines=lines,
-            footer=f"User ID » {entry.user.id}" if entry and entry.user else None,
+            footer=f"User ID : {entry.user.id}" if entry and entry.user else None,
             color=role_color,
         )
         await self._log(role.guild.id, "roles", embed)
@@ -469,7 +469,7 @@ class LogEvents:
             author_icon = None
             if entry and entry.user:
                 lines.append(label_line("Moderator", f"{entry.user.mention} (`{entry.user.id}`)"))
-                footer = f"User ID » {entry.user.id}"
+                footer = f"User ID : {entry.user.id}"
                 author_icon = entry.user.display_avatar.url
             embed = panel_embed(
                 title="Bulk Role Delete",
@@ -498,7 +498,7 @@ class LogEvents:
             author="Role Deleted",
             author_icon=entry.user.display_avatar.url if entry and entry.user else None,
             lines=lines,
-            footer=f"User ID » {entry.user.id}" if entry and entry.user else None,
+            footer=f"User ID : {entry.user.id}" if entry and entry.user else None,
         )
         await self._log(role.guild.id, "roles", embed)
 
@@ -551,7 +551,7 @@ class LogEvents:
             author="Role Updated",
             author_icon=moderator.display_avatar.url if moderator else None,
             lines=lines,
-            footer=f"User ID » {moderator.id}" if moderator else None,
+            footer=f"User ID : {moderator.id}" if moderator else None,
         )
         await self._log(after.guild.id, "roles", embed)
 
@@ -567,7 +567,7 @@ class LogEvents:
             author_icon = None
             if entry and entry.user:
                 lines.append(label_line("Moderator", f"{entry.user.mention} (`{entry.user.id}`)"))
-                footer = f"User ID » {entry.user.id}"
+                footer = f"User ID : {entry.user.id}"
                 author_icon = entry.user.display_avatar.url
             embed = panel_embed(
                 title="Bulk Channel Create",
@@ -592,7 +592,7 @@ class LogEvents:
             author="Channel Created",
             author_icon=entry.user.display_avatar.url if entry and entry.user else None,
             lines=lines,
-            footer=f"User ID » {entry.user.id}" if entry and entry.user else None,
+            footer=f"User ID : {entry.user.id}" if entry and entry.user else None,
         )
         await self._log(channel.guild.id, "channels", embed)
 
@@ -608,7 +608,7 @@ class LogEvents:
             author_icon = None
             if entry and entry.user:
                 lines.append(label_line("Moderator", f"{entry.user.mention} (`{entry.user.id}`)"))
-                footer = f"User ID » {entry.user.id}"
+                footer = f"User ID : {entry.user.id}"
                 author_icon = entry.user.display_avatar.url
             embed = panel_embed(
                 title="Bulk Channel Delete",
@@ -638,7 +638,7 @@ class LogEvents:
             author="Channel Deleted",
             author_icon=entry.user.display_avatar.url if entry and entry.user else None,
             lines=lines,
-            footer=f"User ID » {entry.user.id}" if entry and entry.user else None,
+            footer=f"User ID : {entry.user.id}" if entry and entry.user else None,
         )
         await self._log(channel.guild.id, "channels", embed)
 
@@ -699,7 +699,7 @@ class LogEvents:
             author="Channel Updated",
             author_icon=moderator.display_avatar.url if moderator else None,
             lines=lines,
-            footer=f"User ID » {moderator.id}" if moderator else None,
+            footer=f"User ID : {moderator.id}" if moderator else None,
         )
         await self._log(after.guild.id, "channels", embed)
 
@@ -719,7 +719,7 @@ class LogEvents:
                 author="Voice State Updated",
                 author_icon=member.display_avatar.url,
                 lines=lines,
-                footer=f"User ID » {member.id}",
+                footer=f"User ID : {member.id}",
             )
 
         if before.channel != after.channel:
@@ -731,7 +731,7 @@ class LogEvents:
                         title="Bulk Voice Join",
                         author="Bulk Voice Join",
                         lines=[f"**{count}** members joined {after.channel.mention}"],
-                        footer=f"Channel ID » {after.channel.id}",
+                        footer=f"Channel ID : {after.channel.id}",
                     )
                     await self._log(member.guild.id, "voice", embed)
                     return
@@ -745,7 +745,7 @@ class LogEvents:
                         f"{member.mention} joined **{after.channel.name}**",
                         label_line("Current Channel", after.channel.mention),
                     ],
-                    footer=f"User ID » {member.id}",
+                    footer=f"User ID : {member.id}",
                 )
                 await self._log(member.guild.id, "voice", embed)
             elif after.channel is None and before.channel is not None:
@@ -756,7 +756,7 @@ class LogEvents:
                         f"{member.mention} left **{before.channel.name}**",
                         label_line("Old Channel", before.channel.mention),
                     ],
-                    footer=f"User ID » {member.id}",
+                    footer=f"User ID : {member.id}",
                 )
                 await self._log(member.guild.id, "voice", embed)
             else:
@@ -768,7 +768,7 @@ class LogEvents:
                         label_line("Old Channel", before.channel.mention),
                         label_line("Current Channel", after.channel.mention),
                     ],
-                    footer=f"User ID » {member.id}",
+                    footer=f"User ID : {member.id}",
                 )
                 await self._log(member.guild.id, "voice", embed)
 
@@ -824,7 +824,7 @@ class LogEvents:
                     author="Emoji Created",
                     author_icon=entry.user.display_avatar.url if entry and entry.user else None,
                     lines=lines,
-                    footer=f"User ID » {entry.user.id}" if entry and entry.user else None,
+                    footer=f"User ID : {entry.user.id}" if entry and entry.user else None,
                     thumbnail=emoji.url,
                 )
                 await self._log(guild.id, "emojis", embed)
@@ -841,7 +841,7 @@ class LogEvents:
                     author="Emoji Deleted",
                     author_icon=entry.user.display_avatar.url if entry and entry.user else None,
                     lines=lines,
-                    footer=f"User ID » {entry.user.id}" if entry and entry.user else None,
+                    footer=f"User ID : {entry.user.id}" if entry and entry.user else None,
                 )
                 await self._log(guild.id, "emojis", embed)
 
@@ -859,7 +859,7 @@ class LogEvents:
                     author="Emoji Updated",
                     author_icon=entry.user.display_avatar.url if entry and entry.user else None,
                     lines=lines,
-                    footer=f"User ID » {entry.user.id}" if entry and entry.user else None,
+                    footer=f"User ID : {entry.user.id}" if entry and entry.user else None,
                     thumbnail=after_emoji.url,
                 )
                 await self._log(guild.id, "emojis", embed)
@@ -874,7 +874,7 @@ class LogEvents:
                 author="Invite Created",
                 author_icon=invite.inviter.display_avatar.url,
                 lines=[f"New Invite {invite_url} created by {invite.inviter.mention}"],
-                footer=f"User ID » {invite.inviter.id}",
+                footer=f"User ID : {invite.inviter.id}",
             )
         else:
             embed = panel_embed(
@@ -932,7 +932,7 @@ class LogEvents:
                 author=title,
                 author_icon=moderator.display_avatar.url if moderator else None,
                 lines=lines,
-                footer=f"User ID » {moderator.id}" if moderator else None,
+                footer=f"User ID : {moderator.id}" if moderator else None,
             )
             await self._log(after.guild.id, "channels", embed)
 
@@ -944,7 +944,7 @@ class LogEvents:
                 author="Thread Created",
                 author_icon=thread.owner.display_avatar.url,
                 lines=lines,
-                footer=f"User ID » {thread.owner_id}",
+                footer=f"User ID : {thread.owner_id}",
             )
         else:
             embed = panel_embed(

@@ -455,9 +455,9 @@ class ModerationCommands(Package):
         )
         extra_parts = []
         if delete_days:
-            extra_parts.append(f"**Message purge** » {delete_days} day(s)")
+            extra_parts.append(f"**Message purge** : {delete_days} day(s)")
         if duration_label:
-            extra_parts.append(f"**Duration** » {duration_label}")
+            extra_parts.append(f"**Duration** : {duration_label}")
         await self._send_modlog(
             ctx,
             action=action,
@@ -552,7 +552,7 @@ class ModerationCommands(Package):
             target=member,
             case_id=case_id,
             reason=reason,
-            extra=f"**Duration** » {duration_label}",
+            extra=f"**Duration** : {duration_label}",
         )
         self._dispatch_antinuke_action(
             ctx,
@@ -1002,7 +1002,7 @@ class ModerationCommands(Package):
             target=member,
             case_id=case_id,
             reason=reason,
-            extra=f"**Duration** » {duration_label}",
+            extra=f"**Duration** : {duration_label}",
         )
         if await self._invoke_response(
             ctx, "timeout", user=member, reason=reason, case_id=case_id, duration=duration_label,
@@ -1139,7 +1139,7 @@ class ModerationCommands(Package):
             target=member,
             case_id=case_id,
             reason=reason,
-            extra=f"**Duration** » {duration_label}" if duration_label else None,
+            extra=f"**Duration** : {duration_label}" if duration_label else None,
         )
         self._dispatch_antinuke_action(
             ctx, action=role_label, case_id=case_id,
@@ -1583,7 +1583,7 @@ class ModerationCommands(Package):
             target=member,
             case_id=case_id,
             reason=reason,
-            extra=f"**Message purge** » {delete_days} day(s)" if delete_days else None,
+            extra=f"**Message purge** : {delete_days} day(s)" if delete_days else None,
         )
         self._dispatch_antinuke_action(
             ctx,
@@ -2060,7 +2060,7 @@ class ModerationCommands(Package):
             target_label=row["jail_channel"].mention,
             moderator_label=ctx.author.mention,
             reason="Jail role and channel configured",
-            extra=f"**Role** » {row['jail_role'].mention}",
+            extra=f"**Role** : {row['jail_role'].mention}",
         )
         embed.title = "Jail Setup Complete"
         await ctx.send(embed=embed)

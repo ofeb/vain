@@ -20,7 +20,7 @@ def compose(*parts: str) -> str:
 
 
 def label_line(label: str, value: str) -> str:
-    return f"**{label}** » {value}"
+    return f"**{label}**: {value}"
 
 
 def panel_embed(

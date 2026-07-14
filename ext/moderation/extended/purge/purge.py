@@ -91,7 +91,8 @@ class Purge(Package):
     @purge.command(
         name="attachments",
         aliases=["files", "attachment", "file"],
-        description="Purge files/attachments from chat",
+        description="Purge messages that contain attachments or files",
+        example=",purge attachments 50",
     )
     @has_permissions(manage_messages=True)
     async def purge_attachments(self, ctx: Context, search: Optional[int] = 100):
@@ -159,7 +160,7 @@ class Purge(Package):
         await self.delete_messages(messages[:search])
         return await ctx.send("👍")
 
-    @purge.command(name="emoji", description="Purge emojis from chat")
+    @purge.command(name="emoji", description="Purge messages containing custom emojis", example=",purge emoji 20")
     @has_permissions(manage_messages=True)
     async def purge_emoji(self, ctx: Context, search: Optional[int] = 100):
         def check(message: Message) -> bool:
@@ -189,7 +190,7 @@ class Purge(Package):
         await self.delete_messages(messages)
         return await ctx.send("👍")
 
-    @purge.command(name="stickers", description="Purge stickers from chat")
+    @purge.command(name="stickers", description="Purge messages with stickers", example=",purge stickers 30")
     @has_permissions(manage_messages=True)
     async def purge_stickers(self, ctx: Context, search: Optional[int] = 100):
         def check(message: Message) -> bool:

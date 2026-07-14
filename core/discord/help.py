@@ -7,7 +7,7 @@ import time
 from typing import TYPE_CHECKING, Any, Iterable, get_args, get_origin
 
 import discord
-from discord import Embed, Interaction, SelectOption, ui
+from discord import Embed, Interaction, SelectOption, ui, MessageFlags
 from discord.ext import commands
 from discord.ext.commands import Command, Group
 
@@ -523,7 +523,8 @@ def _usage_block(cmd: Command, prefix: str) -> str:
     block = [f"Syntax: {_syntax(cmd, prefix)}"]
     if example := _example(cmd, prefix):
         block.append(f"Example: {example}")
-    return "```" + "\n".join(block) + "\n```"
+    # Use a clean code block, user prefers this style in screenshot
+    return "```ansi\n" + "\n".join(block) + "\n```"
 
 
 def _permission_label(cmd: Command) -> str | None:
@@ -632,21 +633,89 @@ def _detail_embed(
     prefix = getattr(ctx, "clean_prefix", None) or ctx.prefix or ";"
     if isinstance(prefix, list):
         prefix = prefix[0] if prefix else ";"
-    title = ("Group Command: " if group_title or isinstance(cmd, Group) else "Command: ") + command_display_name(cmd)
+    is_group = group_title or isinstance(cmd, Group)
+    title = ("Group: " if is_group else "Command: ") + command_display_name(cmd)
     desc = _description(cmd)
-    e = Embed(title=title, description=desc, color=ctx.bot.color)
-    e.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
-    e.add_field(name="**Aliases**", value=_aliases(cmd), inline=True)
-    e.add_field(name="**Parameters**", value=_parameter_value(cmd, str(prefix)), inline=True)
-    e.add_field(name="**Information**", value=_information_value(cmd), inline=True)
-    e.add_field(name="**Usage**", value=_usage_block(cmd, str(prefix)), inline=False)
+
+    # Aesthetic description using user preferred formatting
+    parts = []
+    if desc:
+        parts.append(desc)
+    aliases = _aliases(cmd)
+    if aliases and aliases != "n/a":
+        parts.append(f"-# Aliases: {aliases}")
+    params = _parameter_value(cmd, str(prefix))
+    if params and params != "n/a":
+        parts.append(f"-# Parameters: {params}")
+    info = _information(cmd)
+    if info:
+        info_lines = []
+        for k, v in info.items():
+            info_lines.append(f"{k}: {v}")
+        if info_lines:
+            parts.append("-# " + " | ".join(info_lines))
+
+    usage = _usage_block(cmd, str(prefix))
+    if usage:
+        parts.append(usage)
+
+    e = Embed(
+        title=title,
+        description="\n".join(parts) if parts else desc,
+        color=ctx.bot.color,
+    )
+    # Use user's nick/name like in screenshot, channel suggestion in footer
+    display_name = getattr(ctx.author, "display_name", ctx.author.name)
+    e.set_author(name=f"{display_name}", icon_url=ctx.author.display_avatar.url)
+
     module = _module(cmd)
+    footer_bits = []
     if total_pages and page_index and total_pages > 1:
-        entry_word = "entry" if total_pages == 1 else "entries"
-        e.set_footer(text=f"Page {page_index}/{total_pages} ({total_pages} {entry_word}) ∙ Module: {module}")
-    else:
-        e.set_footer(text=f"Module: {module}")
+        footer_bits.append(f"Page {page_index}/{total_pages}")
+    footer_bits.append(f"Module: {module}")
+    # Example user info per request: @hroe / h , channel cmds or general
+    footer_bits.append("hroe • cmds")
+    e.set_footer(text=" • ".join(footer_bits))
     return e
+
+
+def _build_v2_detail(cmd: Command, ctx: Context, *, page_info: str | None = None) -> list:
+    """Build Discord Components v2 Container for aesthetic help like screenshot."""
+    prefix = getattr(ctx, "clean_prefix", None) or ctx.prefix or ";"
+    if isinstance(prefix, list):
+        prefix = prefix[0] if prefix else ";"
+    is_grp = isinstance(cmd, Group)
+    name = command_display_name(cmd)
+    title_text = f"**{'Group' if is_grp else 'Command'}:** {name}"
+    desc = _description(cmd) or "No description provided."
+    aliases = _aliases(cmd)
+    perms = _information(cmd).get("permissions") or _information(cmd).get("cooldown") or "n/a"
+    syntax_ex = _usage_block(cmd, prefix).replace("```ansi\n", "").replace("\n```", "").strip()
+
+    # Build container - aesthetic minimal v2 matching the provided screenshot style
+    c = ui.Container(accent_colour=ctx.bot.color or 0x2b2d31)
+    # Header
+    nick = getattr(ctx.author, "display_name", "h")
+    ch = getattr(ctx.channel, "name", "cmds") or "cmds"
+    c.add_item(ui.TextDisplay(f"-# {nick} • {ch}"))
+    c.add_item(ui.Separator())
+    c.add_item(ui.TextDisplay(title_text))
+    c.add_item(ui.TextDisplay(desc))
+    if aliases and aliases != "n/a":
+        c.add_item(ui.TextDisplay(f"-# Aliases: {aliases}"))
+    c.add_item(ui.TextDisplay(f"-# Permissions: {perms}"))
+    c.add_item(ui.Separator())
+    # Syntax / example block (clean)
+    c.add_item(ui.TextDisplay(f"**Syntax:** {syntax_ex.split('Syntax: ',1)[-1].split(chr(10))[0] if 'Syntax:' in syntax_ex else syntax_ex}"))
+    if "Example:" in syntax_ex:
+        ex = syntax_ex.split("Example: ",1)[-1].strip()
+        c.add_item(ui.TextDisplay(f"**Example:** {ex}"))
+    if page_info:
+        c.add_item(ui.TextDisplay(f"-# {page_info} • Module: {_module(cmd)}"))
+    else:
+        c.add_item(ui.TextDisplay(f"-# Module: {_module(cmd)}"))
+    c.add_item(ui.Separator())
+    return [c]
 
 
 def _brief_embed(cmd: Command, ctx: Context) -> Embed:
@@ -727,28 +796,34 @@ class HelpView(ui.View):
         if isinstance(prefix, list):
             prefix = prefix[0] if prefix else ";"
         e = Embed(
-            title=f"**{label} Commands**",
+            title=f"{label} Commands",
             description=_fmt_commands(self.cats[label]),
             color=self.ctx.bot.color,
         )
         if self.ctx.bot.user:
             e.set_author(name=self.ctx.bot.user.display_name, icon_url=self.ctx.bot.user.display_avatar.url)
+        e.set_footer(text=f"Use {prefix}help <command> • {label.lower()} module")
         return e
 
     def _home_embed(self) -> Embed:
         p = getattr(self.ctx, "clean_prefix", None) or self.ctx.prefix or ";"
         if isinstance(p, list):
             p = p[0] if p else ";"
+        # Nice aesthetic home per request
+        lines = [
+            f"> Use `{p}help <command>` for command help.",
+            f"> Use `{p}help <category>` to browse a module.",
+            "",
+            f"-# Parameters in ( ) required, [ ] optional.",
+            f"-# Username: @hroe  Nick: h  • Channel: cmds",
+        ]
         e = Embed(
             color=self.ctx.bot.color,
-            description=(
-                f"> Use `{p}help <command>` for help on a specific command.\n"
-                f"> Parameters in `(...)` are required, `[...]` are optional.\n\n"
-                f"> Join the [support server](https://discord.gg/vainbot) for more support."
-            ),
+            description="\n".join(lines),
         )
         if self.ctx.bot.user:
             e.set_author(name=self.ctx.bot.user.display_name, icon_url=self.ctx.bot.user.display_avatar.url)
+        e.set_footer(text="bleed • aesthetic help")
         return e
 
     async def on_timeout(self) -> None:
@@ -765,7 +840,12 @@ class VainHelp:
         self._seen: dict[int, float] = {}
 
     def register(self, bot: Vain) -> None:
-        @bot.command(name="help", aliases=["h", "commands"], description="view command help")
+        @bot.command(
+            name="help",
+            aliases=["h", "commands"],
+            description="Browse command help, categories, syntax and examples. Use help <cmd> or help <category>",
+            example=",help purge",
+        )
         async def _help(ctx: Context, *, command: str | None = None) -> None:
             await self.invoke(ctx, command)
 
@@ -870,6 +950,14 @@ class VainHelp:
             kw["allowed_mentions"] = discord.AllowedMentions.none()
         return await ctx.send(embed=embed, view=view, **kw)
 
+    async def _send_v2(self, components: list) -> discord.Message:
+        ctx = self.ctx
+        kw: dict[str, Any] = {"components": components, "flags": MessageFlags.components_v2}
+        if ctx.message and not ctx.interaction:
+            kw["reference"] = ctx.message.to_reference(fail_if_not_exists=False)
+            kw["allowed_mentions"] = discord.AllowedMentions.none()
+        return await ctx.send(**kw)
+
     async def _send_home(self, bot: Vain, owner: bool) -> None:
         if self._dedup():
             return
@@ -882,7 +970,11 @@ class VainHelp:
         return await self._send(_brief_embed(cmd, ctx))
 
     async def _send_cmd(self, cmd: Command) -> None:
-        await self._send(_detail_embed(cmd, self.ctx))
+        try:
+            comps = _build_v2_detail(cmd, self.ctx)
+            await self._send_v2(comps)
+        except Exception:
+            await self._send(_detail_embed(cmd, self.ctx))
 
     def _family_targets(
         self,
@@ -943,7 +1035,10 @@ class VainHelp:
             e.title = "Group Command: " + command_display_name(grp)
             embeds.append(e)
         if len(embeds) == 1:
-            await self._send(embeds[0])
+            try:
+                await self._send_v2(_build_v2_detail(grp, self.ctx))
+            except Exception:
+                await self._send(embeds[0])
         else:
             await self.ctx.paginate(embeds)
 

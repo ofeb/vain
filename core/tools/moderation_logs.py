@@ -179,17 +179,16 @@ def build_modlog_embed(
     extra: str | None = None,
 ) -> discord.Embed:
     lines = [
-        f"**Action** » `{action}`",
-        f"**Target** » {target_label}",
-        f"**Moderator** » {moderator_label}",
-        f"**Reason** » {reason}",
+        f"**Action**: `{action}`",
+        f"**Target**: {target_label}",
+        f"**Moderator**: {moderator_label}",
+        f"**Reason**: {reason}",
     ]
     if extra:
         lines.append(extra)
     footer = f"Case **#{case_id}**" if case_id is not None else None
     return panel_embed(
         color=color,
-        title="Moderation Log",
         lines=lines,
         footer=footer,
     )
