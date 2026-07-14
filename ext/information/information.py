@@ -87,7 +87,7 @@ class InformationCommands(Package):
         
         embed.add_field(
             name="Links",
-            value=body(
+            value="\n".join(
                 "[Support](https://discord.gg/vainbot)",
                 "[Invite](https://discord.com/oauth2/authorize?client_id=" + str(bot.user.id) + "&scope=bot+applications.commands&permissions=8)",
                 "[Website](https://vain.bot)"
