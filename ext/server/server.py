@@ -41,6 +41,7 @@ class ServerCommands(Package):
                 channel=ctx.channel,
                 member=ctx.author,
                 user=ctx.author,
+                target=ctx.author,
                 date=discord.utils.utcnow().strftime("%Y-%m-%d"),
                 time=discord.utils.utcnow().strftime("%H:%M"),
                 datetime=str(discord.utils.utcnow()),
@@ -78,8 +79,9 @@ class ServerCommands(Package):
     @group(
         name="embedcreate",
         aliases=["ce", "createembed"],
+        description="Create and send a custom embed using the powerful embed script syntax. Supports {guild.name}, {user}, {channel}, {date} etc.",
         usage="(script)",
-        example="{title: Hello}$v{description: This is a test}$v{color: FF0000}",
+        example="{title: Hello from {guild.name}}$v{description: Sent by {user} in {channel.name} on {date}}$v{color: #5865F2}",
         invoke_without_command=True,
     )
     async def embedcreate(self, ctx, *, script: str = None):
@@ -220,8 +222,10 @@ class ServerCommands(Package):
 
     @hybrid(
         name="serverinfo",
-        description="View information about the server",
+        description="View detailed information about the current server including members, boosts, channels, features and design",
         aliases=["si", "server", "guildinfo", "gi"],
+        usage="",
+        example=",serverinfo",
         guild_only=True,
     )
     async def serverinfo(self, ctx):
@@ -241,13 +245,17 @@ class ServerCommands(Package):
             e.set_image(url=g.banner.url)
 
         owner = g.owner
-        if owner is None:
+        if owner is None and g.owner_id:
             try:
                 owner = await g.fetch_member(g.owner_id)
             except Exception:
                 owner = None
-        owner_text = f"{owner} — `{getattr(owner, 'id', g.owner_id)}`" if owner else f"Unknown (`{g.owner_id}`)"
-        owner_icon = owner.display_avatar.url if owner else None
+        if owner:
+            owner_text = f"{owner} (`{owner.id}`)"
+            owner_icon = getattr(owner, 'display_avatar', None) and owner.display_avatar.url
+        else:
+            owner_text = f"Unknown (`{g.owner_id}`)"
+            owner_icon = None
         e.set_author(name=f"owned by {owner_text}", icon_url=owner_icon)
 
         humans = sum(1 for m in g.members if not m.bot)

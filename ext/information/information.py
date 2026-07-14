@@ -41,8 +41,9 @@ class InformationCommands(Package):
 
     @hybrid(
         name="botinfo",
-        description="View information about the bot, stats, uptime and links",
+        description="View information about the bot, stats, uptime, shards and invite links",
         aliases=["bi", "stats"],
+        usage="",
         example=",botinfo",
     )
     async def botinfo(self, ctx: Context) -> None:
