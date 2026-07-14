@@ -1017,7 +1017,7 @@ class GroupHelpView(ui.View):
         if getattr(self.ctx, "message", None) and not getattr(self.ctx, "interaction", None):
             kw["reference"] = self.ctx.message.to_reference(fail_if_not_exists=False)
             kw["allowed_mentions"] = discord.AllowedMentions.none()
-        self.msg = await self.ctx.send(**kw, view=self)
+        self.msg = await self.ctx.channel.send(**kw, view=self)
         return self.msg
 
 
@@ -1141,7 +1141,9 @@ class VainHelp:
         if ctx.message and not ctx.interaction:
             kw["reference"] = ctx.message.to_reference(fail_if_not_exists=False)
             kw["allowed_mentions"] = discord.AllowedMentions.none()
-        return await ctx.send(**kw)
+        # Use channel.send directly to reliably support components + flags for V2 layout components.
+        # ctx.send() can sometimes have signature quirks depending on patches / jishaku alt_ctx / version.
+        return await ctx.channel.send(**kw)
 
     async def _send_home(self, ctx: Context, bot: Vain, owner: bool) -> None:
         if self._dedup(ctx):
@@ -1192,7 +1194,7 @@ class VainHelp:
 
         view = HelpView(ctx, cats)
         try:
-            view.msg = await ctx.send(components=[home_container], view=view, flags=MessageFlags.components_v2)
+            view.msg = await ctx.channel.send(components=[home_container], view=view, flags=MessageFlags.components_v2)
             return
         except Exception:
             # fallback uses legacy embed + view
