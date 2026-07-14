@@ -17,6 +17,15 @@ from core.discord.hybrid import command_display_name, family_root, family_help_n
 from core.managers.values import color, emojis, bot as bot_config
 from core.tools.aesthetic import get_bot_dominant_color, get_dominant_color
 
+
+def _get_prefix(ctx: Context) -> str:
+    """Get the current prefix for a context (guild/self/user prefix aware)."""
+    p = getattr(ctx, "clean_prefix", None) or getattr(ctx, "prefix", ",")
+    if isinstance(p, list):
+        p = p[0] if p else ","
+    return p
+
+
 if TYPE_CHECKING:
     from .ctx import Context
     from core.vain import Vain
@@ -653,9 +662,7 @@ def _detail_embed(
     page_index: int | None = None,
     total_pages: int | None = None,
 ) -> Embed:
-    prefix = getattr(ctx, "clean_prefix", None) or getattr(ctx, "prefix", ",")
-    if isinstance(prefix, list):
-        prefix = prefix[0] if prefix else ","
+    prefix = _get_prefix(ctx)
     is_group = group_title or isinstance(cmd, Group)
     title = ("Group: " if is_group else "Command: ") + command_display_name(cmd)
     desc = _description(cmd)
@@ -709,9 +716,7 @@ def _detail_embed(
 
 def _build_v2_detail(cmd: Command, ctx: Context, *, page_info: str | None = None) -> list:
     """Build v2 Container help matching the desired aesthetic style (inspired by examples)."""
-    prefix = getattr(ctx, "clean_prefix", None) or getattr(ctx, "prefix", ",")
-    if isinstance(prefix, list):
-        prefix = prefix[0] if prefix else ","
+    prefix = _get_prefix(ctx)
     is_grp = isinstance(cmd, Group)
     name = command_display_name(cmd)
     desc = _description(cmd) or "No description provided."
@@ -761,9 +766,7 @@ def _build_v2_detail(cmd: Command, ctx: Context, *, page_info: str | None = None
 
 
 def _brief_embed(cmd: Command, ctx: Context) -> Embed:
-    prefix = getattr(ctx, "clean_prefix", None) or getattr(ctx, "prefix", ",")
-    if isinstance(prefix, list):
-        prefix = prefix[0] if prefix else ","
+    prefix = _get_prefix(ctx)
     e = Embed(
         color=ctx.bot.color,
         title=("Group Command: " if isinstance(cmd, Group) else "Command: ") + command_display_name(cmd),
@@ -889,7 +892,7 @@ class HelpView(ui.View):
 
     async def cat_embed(self, label: str) -> list:
         """Return V2 components for category using dividers, author=category, title=cog desc, commands in codeblock."""
-        prefix = self._get_prefix(self.ctx)
+        prefix = _get_prefix(self.ctx)
         try:
             accent = await get_bot_dominant_color(self.ctx.bot)
         except Exception:
@@ -924,7 +927,7 @@ class HelpView(ui.View):
         return [container]
 
     def _home_embed(self) -> Embed:
-        p = self._get_prefix(self.ctx)
+        p = _get_prefix(self.ctx)
         lines = [
             f"> Use `{p}help <command>` for a specific command.",
             "> Select a category below to browse commands.",
@@ -1044,12 +1047,6 @@ class VainHelp:
         async def _help(ctx: Context, *, command: str | None = None) -> None:
             await self.invoke(ctx, command)
 
-    def _get_prefix(self, ctx: Context) -> str:
-        p = getattr(ctx, "clean_prefix", None) or getattr(ctx, "prefix", ",")
-        if isinstance(p, list):
-            p = p[0] if p else ","
-        return p
-
     async def invoke(self, ctx: Context, query: str | None = None) -> None:
         bot = ctx.bot
         owner = ctx.author.id in bot.owners
@@ -1100,16 +1097,6 @@ class VainHelp:
                 node = linked
         return node
 
-    def _prefix(self) -> str:
-        p = getattr(self.ctx, "clean_prefix", None) or self.ctx.prefix or ","
-        return p[0] if isinstance(p, list) else str(p)
-
-    def _base_embed(self, *, title: str | None = None, description: str | None = None) -> Embed:
-        e = Embed(title=title, description=description, color=self.ctx.bot.color)
-        if self.ctx.bot.user:
-            e.set_author(name=self.ctx.bot.user.display_name, icon_url=self.ctx.bot.user.display_avatar.url)
-        return e
-
     def _build_cats(self, bot: Vain, owner: bool) -> dict[str, list[Command]]:
         cats: dict[str, list[Command]] = {}
         for cog in bot.cogs.values():
@@ -1155,7 +1142,7 @@ class VainHelp:
         if self._dedup(ctx):
             return
         cats = self._build_cats(bot, owner)
-        pfx = self._get_prefix(ctx)
+        pfx = _get_prefix(ctx)
         
         try:
             accent = await get_bot_dominant_color(bot)
@@ -1302,7 +1289,7 @@ class VainHelp:
         container.add_item(ui.Separator(visible=True, spacing=1))
         commands_block = f"**Commands:**\n```{cmd_list if cmd_list else 'none'}```"
         container.add_item(ui.TextDisplay(commands_block))
-        pfx = self._get_prefix(ctx)
+        pfx = _get_prefix(ctx)
         container.add_item(ui.Separator(visible=True, spacing=1))
         container.add_item(ui.TextDisplay(f"-# Use `{pfx}help <command>` for details."))
 
