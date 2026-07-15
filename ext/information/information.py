@@ -72,7 +72,7 @@ class InformationCommands(Package):
             label_line("Started", started),
         ]
 
-        bot_name = bot.user.display_name if bot.user else "bleed"
+        bot_name = bot.user.display_name if bot.user else "vain"
 
         try:
             cont = discord.ui.Container(accent_colour=dom_color)
@@ -120,16 +120,6 @@ class InformationCommands(Package):
         )
         if bot.user:
             embed.set_author(name=bot.user.name, icon_url=bot.user.display_avatar.url)
-
-        embed.add_field(
-            name="Links",
-            value="\n".join([
-                "[Support](https://discord.gg/vainbot)",
-                "[Invite](https://discord.com/oauth2/authorize?client_id=" + str(bot.user.id) + "&scope=bot+applications.commands&permissions=8)",
-                "[Website](https://vain.bot)"
-            ]),
-            inline=True
-        )
 
         view = discord.ui.View()
         view.add_item(discord.ui.Button(

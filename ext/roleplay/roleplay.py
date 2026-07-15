@@ -12,7 +12,7 @@ from colorthief import ColorThief
 
 from core.discord.package import Package
 from core.discord.ctx import Context
-from core.discord.hybrid import hybrid, describe
+from core.discord.hybrid import hybrid, describe, command
 from core.tools.aesthetic import reply_embed
 from core.tools.human.text import ordinal
 
@@ -350,15 +350,13 @@ class RoleplayCommands(Package):
 
 
 def _make_prefix_action(name: str):
-    @hybrid(
+    """Prefix-only roleplay action (,slap / ,highfive). Slash uses /roleplay only."""
+
+    @command(
         name=name,
         description=f"Roleplay: {name}",
         example=f",{name} @user",
-        guilds=True,
-        dms=True,
-        groupchats=True,
     )
-    @describe(member="Member to roleplay with")
     async def action(self, ctx: Context, member: Optional[discord.User] = None):
         return await self._perform_action(ctx, name, member)
 

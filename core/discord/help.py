@@ -7,7 +7,7 @@ import time
 from typing import TYPE_CHECKING, Any, Iterable, get_args, get_origin
 
 import discord
-from discord import Embed, Interaction, SelectOption, ui, MessageFlags
+from discord import Embed, Interaction, SelectOption, ui
 from discord.ext import commands
 from discord.ext.commands import Command, Group, Context as CommandsContext
 
@@ -15,7 +15,7 @@ from core.discord.package import Package
 from core.discord.hybrid import command_display_name, family_root, family_help_name
 
 from core.managers.values import color, emojis, bot as bot_config
-from core.tools.aesthetic import get_bot_dominant_color, get_dominant_color
+from core.tools.aesthetic import get_bot_dominant_color
 
 
 def _get_prefix(ctx: Context) -> str:
@@ -393,7 +393,7 @@ def _format_usage_token(label: str, *, required: bool) -> str:
     cleaned = label.strip()
     if not cleaned:
         return ""
-    return cleaned
+    return f"<{cleaned}>" if required else f"[{cleaned}]"
 
 
 def _derived_syntax(cmd: Command) -> str:
@@ -714,49 +714,90 @@ def _detail_embed(
     return e
 
 
-async def _build_v2_detail(cmd: Command, ctx: Context, *, page_info: str | None = None) -> list:
-    """Build v2 Container help matching the desired aesthetic style (inspired by examples)."""
+def _detail_text(
+    cmd: Command,
+    ctx: Context,
+    *,
+    group_title: bool = False,
+    page_info: str | None = None,
+) -> str:
+    """Minimal command/group detail text matching inspiration layout."""
     prefix = _get_prefix(ctx)
-    is_grp = isinstance(cmd, Group)
+    is_grp = group_title or isinstance(cmd, Group)
     name = command_display_name(cmd)
     desc = _description(cmd) or "No description provided."
     aliases = _aliases(cmd)
     if aliases == "n/a":
         aliases = "None"
     perm = _information(cmd).get("permissions") or "None"
-    syntax = _syntax(cmd, prefix)
-    ex = _example(cmd, prefix) or f"{prefix}{name}"
-
-    try:
-        accent = await get_bot_dominant_color(ctx.bot)
-    except Exception:
-        accent = getattr(ctx.bot, "color", 0x5865F2)
-
-    
-    content_lines = []
-    if is_grp:
-        content_lines.append(f"### Group: `{name}`")
-    else:
-        content_lines.append(f"### Command: `{name}`")
-    content_lines.append(f"> {desc}")
-    content_lines.append("")
-    content_lines.append(f"**Aliases:** {aliases}")
-    content_lines.append(f"**Permissions:** {perm}")
-    content_lines.append("```yaml")
-    syntax = _strip_hidden_params_from_text(syntax)
-    content_lines.append(f"Syntax: {syntax}")
-    if ex and ex != name and not ex.startswith(name):
+    syntax = _strip_hidden_params_from_text(_syntax(cmd, prefix))
+    ex = _example(cmd, prefix)
+    if ex:
         ex = _strip_hidden_params_from_text(ex)
-        content_lines.append(f"Example: {ex}")
-    content_lines.append("```")
-    footer = f"-# Module: {_module(cmd)}"
+
+    lines = [
+        f"### {'Group' if is_grp else 'Command'}: `{name}`",
+        f"> {desc}",
+        "",
+        f"**Aliases:** {aliases}",
+        f"**Permissions:** {perm}",
+        "```yaml",
+        f"Syntax: {syntax}",
+    ]
+    if ex and ex.strip() and ex.strip() != syntax.strip():
+        lines.append(f"Example: {ex}")
+    lines.append("```")
+    module = _module(cmd)
+    if module != "n/a":
+        module_label = next((k for k in _ORDER if k.lower() == module), module.title())
+        footer = f"-# Module: {module_label}"
+    else:
+        footer = "-# Module: N/A"
     if page_info:
         footer += f" · {page_info}"
-    content_lines.append(footer)
+    lines.append(footer)
+    return "\n".join(lines)
 
-    c = ui.Container(accent_colour=accent)
-    c.add_item(ui.TextDisplay("\n".join(content_lines)))
-    return [c]
+
+async def _accent_color(bot: Vain) -> int:
+    try:
+        return await get_bot_dominant_color(bot)
+    except Exception:
+        return getattr(bot, "color", None) or 0x5865F2
+
+
+def _home_text(ctx: Context) -> str:
+    """Minimal home help page."""
+    p = _get_prefix(ctx)
+    bot = ctx.bot
+    bot_name = bot.user.display_name if bot.user else "Vain"
+    website = getattr(bot_config, "website", "https://vain.bot")
+    support = getattr(bot_config, "support", "https://discord.gg/vainbot")
+    return "\n".join(
+        [
+            f"### [{bot_name}]({website})",
+            f"> Use `{p}help <command>` for help on a specific command.",
+            f"> Parameters in `<...>` are required, `[...]` are optional.",
+            "",
+            f"> Join the [support server]({support}) for more support.",
+        ]
+    )
+
+
+def _category_text(ctx: Context, label: str, cmds: list[Command]) -> str:
+    prefix = _get_prefix(ctx)
+    blurb = _BLURBS.get(label, f"{label} commands.")
+    names = sorted({command_display_name(c) for c in cmds}, key=str.lower)
+    body = ", ".join(f"`{n}`" for n in names) if names else "`none`"
+    return "\n".join(
+        [
+            f"### {label}",
+            f"> {blurb}",
+            "",
+            f"**Commands:**\n```\n{body}\n```",
+            f"-# Use `{prefix}help <command>` for details.",
+        ]
+    )
 
 
 def _brief_embed(cmd: Command, ctx: Context) -> Embed:
@@ -771,121 +812,52 @@ def _brief_embed(cmd: Command, ctx: Context) -> Embed:
     return e
 
 
-class _CategorySelect(ui.Select):
-    def __init__(self, view: HelpView) -> None:
-        opts: list[SelectOption] = []
-        labels = [l for l in _ORDER if l in view.cats]
-        labels += sorted(set(view.cats) - set(labels))
-
-        opts.append(SelectOption(
+def _category_options(cats: dict[str, list[Command]]) -> list[SelectOption]:
+    labels = [label for label in _ORDER if label in cats]
+    labels += sorted(set(cats) - set(labels))
+    opts = [
+        SelectOption(
             label="Home",
             value=_HOME,
             description="Return to the main help menu.",
-        ))
-
-        for label in labels[:24]:
-            opts.append(SelectOption(
+        )
+    ]
+    for label in labels[:24]:
+        opts.append(
+            SelectOption(
                 label=label,
                 value=label,
-                description=_BLURBS.get(label, f"{label} commands."),
-            ))
-
-        super().__init__(
-            placeholder="Select a category...",
-            min_values=1,
-            max_values=1,
-            options=opts,
+                description=(_BLURBS.get(label, f"{label} commands.")[:100]),
+            )
         )
-        self._v = view
-
-    async def callback(self, inter: Interaction) -> None:
-        # Defer first because we may do async work (dominant color fetch) which can take time.
-        # This prevents "This interaction failed."
-        await inter.response.defer()
-
-        if self.values[0] == _HOME:
-            try:
-                try:
-                    accent = await get_bot_dominant_color(self._v.ctx.bot)
-                except Exception:
-                    accent = getattr(self._v.ctx.bot, "color", None) or 0x5865F2
-
-                bot = self._v.ctx.bot
-                bot_name = bot.user.display_name if bot.user else "Vain"
-                avatar_url = str(bot.user.display_avatar.url) if bot.user and bot.user.display_avatar else None
-
-                items = []
-                items.append(ui.TextDisplay(f"### [{bot_name}](https://vain.bot)"))
-                items.append(ui.Separator(visible=True, spacing=1))
-
-                support_url = getattr(bot_config, "support", "https://discord.gg/vainbot")
-                website_url = getattr(bot_config, "website", "https://vain.bot")
-                invite_url = f"https://discord.com/oauth2/authorize?client_id={getattr(bot.user, 'id', 0)}&scope=bot+applications.commands&permissions=8"
-                desc_text = (
-                    "An **all-in-one** bot crafted with minimalism in mind.\n\n"
-                    f"[Support]({support_url})  **·**  "
-                    f"[Commands]({website_url}/commands)  **·**  "
-                    f"[Invite]({invite_url})"
-                )
-                sec_text = ui.TextDisplay(desc_text)
-                if avatar_url:
-                    try:
-                        items.append(ui.Section(sec_text, accessory=ui.Thumbnail(media=avatar_url)))
-                    except Exception:
-                        items.append(sec_text)
-                else:
-                    items.append(sec_text)
-                items.append(ui.Separator(visible=True, spacing=1))
-                items.append(ui.TextDisplay("-# `[...]` optional  `<...>` required  •  Select a category below to browse commands."))
-
-                home_c = ui.Container(accent_colour=accent)
-                for it in items:
-                    home_c.add_item(it)
-
-                await inter.edit_original_response(components=[home_c], view=self._v)
-            except Exception:
-                try:
-                    accent = await get_bot_dominant_color(self._v.ctx.bot)
-                except Exception:
-                    accent = getattr(self._v.ctx.bot, "color", None) or 0x5865F2
-                try:
-                    accent = await get_bot_dominant_color(self._v.ctx.bot)
-                except Exception:
-                    accent = getattr(self._v.ctx.bot, "color", None) or 0x5865F2
-                await inter.edit_original_response(components=[ui.Container(accent_colour=accent).add_item(ui.TextDisplay("Help • Select a category"))], view=self._v)
-            return
-
-        try:
-            comps = await self._v.cat_embed(self.values[0])
-            await inter.edit_original_response(components=comps, view=self._v)
-        except Exception:
-            try:
-                # Try to get dominant even in fallback
-                try:
-                    accent = await get_bot_dominant_color(self._v.ctx.bot)
-                except Exception:
-                    accent = getattr(self._v.ctx.bot, "color", None) or 0x5865F2
-                safe = ui.Container(accent_colour=accent)
-                safe.add_item(ui.TextDisplay(f"**{self.values[0]}**"))
-                safe.add_item(ui.Separator(visible=True, spacing=1))
-                safe.add_item(ui.TextDisplay(f"-# Category selected. Use the dropdown."))
-                await inter.edit_original_response(components=[safe], view=self._v)
-            except Exception:
-                try:
-                    accent = await get_bot_dominant_color(self._v.ctx.bot)
-                except Exception:
-                    accent = getattr(self._v.ctx.bot, "color", None) or 0x5865F2
-                await inter.edit_original_response(components=[ui.Container(accent_colour=accent).add_item(ui.TextDisplay("Select a category to browse commands."))], view=self._v)
+    return opts
 
 
-class HelpView(ui.View):
-    def __init__(self, ctx: Context, cats: dict[str, list[Command]]) -> None:
+class HelpMenu(ui.LayoutView):
+    """Home + category browser using Components V2 LayoutView (select inside container)."""
+
+    def __init__(self, ctx: Context, cats: dict[str, list[Command]], accent: int) -> None:
         super().__init__(timeout=180)
         self.ctx = ctx
         self.cats = cats
-        self.home = self._home_embed()
+        self.accent = accent
         self.msg: discord.Message | None = None
-        self.add_item(_CategorySelect(self))
+
+        self.body = ui.TextDisplay(_home_text(ctx))
+        self.container = ui.Container(accent_colour=accent)
+        self.container.add_item(self.body)
+
+        self.select_row = ui.ActionRow()
+        self.select = ui.Select(
+            placeholder="Select a category...",
+            min_values=1,
+            max_values=1,
+            options=_category_options(cats),
+        )
+        self.select.callback = self._on_select
+        self.select_row.add_item(self.select)
+        self.container.add_item(self.select_row)
+        self.add_item(self.container)
 
     async def interaction_check(self, inter: Interaction) -> bool:
         if inter.user.id == self.ctx.author.id:
@@ -902,89 +874,94 @@ class HelpView(ui.View):
         )
         return False
 
-    async def cat_embed(self, label: str) -> list:
-        """Return V2 components for category using dividers, author=category, title=cog desc, commands in codeblock."""
-        prefix = _get_prefix(self.ctx)
-        try:
-            accent = await get_bot_dominant_color(self.ctx.bot)
-        except Exception:
-            accent = getattr(self.ctx.bot, "color", None) or 0x5865F2
-
-        cmds = self.cats.get(label, [])
-        cmd_list = ", ".join(f"`{command_display_name(c)}`" for c in sorted(cmds, key=lambda x: command_display_name(x).lower()))
-        blurb = _BLURBS.get(label, f"{label} commands.")
-
-        container = ui.Container(accent_colour=accent)
-
-        # Author name = category name
-        container.add_item(ui.TextDisplay(f"**{label}**"))
-
-        # Divider
-        container.add_item(ui.Separator(visible=True, spacing=1))
-
-        # Title = description of the cog / category
-        container.add_item(ui.TextDisplay(f"### {blurb}"))
-
-        # Divider
-        container.add_item(ui.Separator(visible=True, spacing=1))
-
-        # Commands list 
-        commands_block = f"**Commands:**\n```{cmd_list if cmd_list else 'none'}```"
-        container.add_item(ui.TextDisplay(commands_block))
-
-        # Footer divider + note
-        container.add_item(ui.Separator(visible=True, spacing=1))
-        container.add_item(ui.TextDisplay(f"-# Use `{prefix}help <command>` for details."))
-
-        return [container]
-
-    def _home_embed(self) -> Embed:
-        p = _get_prefix(self.ctx)
-        lines = [
-            f"> Use `{p}help <command>` for a specific command.",
-            "> Select a category below to browse commands.",
-            "",
-            "-# ( ) required  [ ] optional",
-        ]
-        e = Embed(color=self.ctx.bot.color, description="\n".join(lines))
-        if self.ctx.bot.user:
-            e.set_author(name=self.ctx.bot.user.display_name, icon_url=self.ctx.bot.user.display_avatar.url)
-        return e
+    async def _on_select(self, inter: Interaction) -> None:
+        value = self.select.values[0]
+        if value == _HOME:
+            self.body.content = _home_text(self.ctx)
+        else:
+            self.body.content = _category_text(self.ctx, value, self.cats.get(value, []))
+        await inter.response.edit_message(view=self)
 
     async def on_timeout(self) -> None:
-        for item in self.children:
-            item.disabled = True
+        self.select.disabled = True
         if self.msg:
             with contextlib.suppress(discord.HTTPException):
                 await self.msg.edit(view=self)
 
+    async def start(self) -> discord.Message:
+        kw: dict[str, Any] = {"view": self}
+        if self.ctx.message and not self.ctx.interaction:
+            kw["reference"] = self.ctx.message.to_reference(fail_if_not_exists=False)
+            kw["allowed_mentions"] = discord.AllowedMentions.none()
+        self.msg = await self.ctx.channel.send(**kw)
+        return self.msg
 
-class GroupHelpView(ui.View):
-    """Interactive group help using Container v2 + prev/next/cancel buttons (no goto)."""
 
-    def __init__(self, ctx: Context, grp: Command, subs: list[Command]) -> None:
+class GroupHelpMenu(ui.LayoutView):
+    """Group/family help with prev/next/cancel buttons inside the V2 container."""
+
+    def __init__(
+        self,
+        ctx: Context,
+        pages: list[Command],
+        accent: int,
+    ) -> None:
         super().__init__(timeout=180)
         self.ctx = ctx
-        self.grp = grp
-        self.subs = subs or [grp]
+        self.pages = pages or []
         self.index = 0
+        self.accent = accent
         self.msg: discord.Message | None = None
-        self._update_buttons()
 
-    def _update_buttons(self) -> None:
-        
-        for child in self.children:
-            if isinstance(child, ui.Button):
-                if child.custom_id and "prev" in child.custom_id:
-                    child.disabled = self.index <= 0
-                elif child.custom_id and "next" in child.custom_id:
-                    child.disabled = self.index >= len(self.subs) - 1
+        self.body = ui.TextDisplay(self._page_text())
+        self.container = ui.Container(accent_colour=accent)
+        self.container.add_item(self.body)
 
-    async def _current_container(self) -> list:
-        sub = self.subs[self.index]
-        page_info = f"Page {self.index + 1}/{len(self.subs)}" if len(self.subs) > 1 else None
-        
-        return await _build_v2_detail(sub, self.ctx, page_info=page_info)
+        if len(self.pages) > 1:
+            self.btn_row = ui.ActionRow()
+            self.prev_btn = ui.Button(
+                style=discord.ButtonStyle.secondary,
+                emoji=discord.PartialEmoji.from_str(emojis.paginator.previous),
+            )
+            self.next_btn = ui.Button(
+                style=discord.ButtonStyle.secondary,
+                emoji=discord.PartialEmoji.from_str(emojis.paginator.next),
+            )
+            self.cancel_btn = ui.Button(
+                style=discord.ButtonStyle.danger,
+                emoji=discord.PartialEmoji.from_str(emojis.paginator.cancel),
+            )
+            self.prev_btn.callback = self._prev
+            self.next_btn.callback = self._next
+            self.cancel_btn.callback = self._cancel
+            self.btn_row.add_item(self.prev_btn)
+            self.btn_row.add_item(self.next_btn)
+            self.btn_row.add_item(self.cancel_btn)
+            self.container.add_item(self.btn_row)
+            self._sync_buttons()
+
+        self.add_item(self.container)
+
+    def _page_info(self) -> str | None:
+        if len(self.pages) <= 1:
+            return None
+        return f"Page {self.index + 1}/{len(self.pages)}"
+
+    def _page_text(self) -> str:
+        cmd = self.pages[self.index]
+        # Only actual Group roots render as "Group:"; subcommands use "Command:".
+        return _detail_text(
+            cmd,
+            self.ctx,
+            group_title=isinstance(cmd, Group),
+            page_info=self._page_info(),
+        )
+
+    def _sync_buttons(self) -> None:
+        if len(self.pages) <= 1:
+            return
+        self.prev_btn.disabled = self.index <= 0
+        self.next_btn.disabled = self.index >= len(self.pages) - 1
 
     async def interaction_check(self, inter: Interaction) -> bool:
         if inter.user.id == self.ctx.author.id:
@@ -992,36 +969,30 @@ class GroupHelpView(ui.View):
         await inter.response.send_message(
             embed=Embed(
                 color=color.warn,
-                description=f"{emojis.warn} {inter.user.mention}: You're not the **author** of this help!",
+                description=(
+                    f"{emojis.warn} {inter.user.mention}: "
+                    "You're not the **author** of this help!"
+                ),
             ),
             ephemeral=True,
         )
         return False
 
-    @ui.button(emoji=discord.PartialEmoji.from_str(emojis.paginator.previous), style=discord.ButtonStyle.secondary, custom_id="group_prev")
-    async def prev(self, inter: Interaction, _: ui.Button) -> None:
+    async def _prev(self, inter: Interaction) -> None:
         if self.index > 0:
             self.index -= 1
-        self._update_buttons()
-        try:
-            comps = await self._current_container()
-            await inter.response.edit_message(components=comps, view=self)
-        except Exception:
-            await inter.response.defer()
+        self.body.content = self._page_text()
+        self._sync_buttons()
+        await inter.response.edit_message(view=self)
 
-    @ui.button(emoji=discord.PartialEmoji.from_str(emojis.paginator.next), style=discord.ButtonStyle.secondary, custom_id="group_next")
-    async def next(self, inter: Interaction, _: ui.Button) -> None:
-        if self.index < len(self.subs) - 1:
+    async def _next(self, inter: Interaction) -> None:
+        if self.index < len(self.pages) - 1:
             self.index += 1
-        self._update_buttons()
-        try:
-            comps = await self._current_container()
-            await inter.response.edit_message(components=comps, view=self)
-        except Exception:
-            await inter.response.defer()
+        self.body.content = self._page_text()
+        self._sync_buttons()
+        await inter.response.edit_message(view=self)
 
-    @ui.button(emoji=discord.PartialEmoji.from_str(emojis.paginator.cancel), style=discord.ButtonStyle.danger, custom_id="group_cancel")
-    async def cancel(self, inter: Interaction, _: ui.Button) -> None:
+    async def _cancel(self, inter: Interaction) -> None:
         await inter.response.defer()
         if inter.message:
             with contextlib.suppress(discord.HTTPException):
@@ -1029,26 +1000,46 @@ class GroupHelpView(ui.View):
         self.stop()
 
     async def on_timeout(self) -> None:
-        for item in self.children:
-            item.disabled = True
+        for child in self.walk_children():
+            if isinstance(child, ui.Button):
+                child.disabled = True
         if self.msg:
             with contextlib.suppress(discord.HTTPException):
-                await self.msg.edit(view=None)
+                await self.msg.edit(view=self)
 
     async def start(self) -> discord.Message:
-        comps = await self._current_container()
-        kw: dict[str, Any] = {"components": comps, "flags": MessageFlags.components_v2}
-        if getattr(self.ctx, "message", None) and not getattr(self.ctx, "interaction", None):
+        kw: dict[str, Any] = {"view": self}
+        if self.ctx.message and not self.ctx.interaction:
             kw["reference"] = self.ctx.message.to_reference(fail_if_not_exists=False)
             kw["allowed_mentions"] = discord.AllowedMentions.none()
-        self.msg = await self.ctx.channel.send(**kw, view=self)
+        self.msg = await self.ctx.channel.send(**kw)
+        return self.msg
+
+
+class CommandHelpMenu(ui.LayoutView):
+    """Single non-group command help page (no pagination)."""
+
+    def __init__(self, ctx: Context, cmd: Command, accent: int) -> None:
+        super().__init__(timeout=180)
+        self.ctx = ctx
+        self.msg: discord.Message | None = None
+        body = ui.TextDisplay(_detail_text(cmd, ctx, group_title=False))
+        container = ui.Container(accent_colour=accent)
+        container.add_item(body)
+        self.add_item(container)
+
+    async def start(self) -> discord.Message:
+        kw: dict[str, Any] = {"view": self}
+        if self.ctx.message and not self.ctx.interaction:
+            kw["reference"] = self.ctx.message.to_reference(fail_if_not_exists=False)
+            kw["allowed_mentions"] = discord.AllowedMentions.none()
+        self.msg = await self.ctx.channel.send(**kw)
         return self.msg
 
 
 class VainHelp:
     def __init__(self) -> None:
-        # No shared ctx anymore to prevent cross-user race conditions when multiple
-        # people use help (especially group help) at the same time.
+        # Per-call ctx only — never store shared ctx (race conditions under load).
         self._seen: dict[int, float] = {}
 
     def register(self, bot: Vain) -> None:
@@ -1069,7 +1060,6 @@ class VainHelp:
             await self._send_home(ctx, bot, owner)
             return
 
-        # Categories are only accessible via the dropdown in ,h (no ,help <category>)
         cmd = self._find(bot, query)
         if cmd is None or _cmd_hidden(cmd, owner=owner):
             await self._not_found(ctx, query)
@@ -1143,80 +1133,37 @@ class VainHelp:
             kw["allowed_mentions"] = discord.AllowedMentions.none()
         return await ctx.send(embed=embed, view=view, **kw)
 
-    async def _send_v2(self, ctx: Context, components: list) -> discord.Message:
-        kw: dict[str, Any] = {"components": components, "flags": MessageFlags.components_v2}
+    async def _send_layout(self, ctx: Context, view: ui.LayoutView) -> discord.Message:
+        kw: dict[str, Any] = {"view": view}
         if ctx.message and not ctx.interaction:
             kw["reference"] = ctx.message.to_reference(fail_if_not_exists=False)
             kw["allowed_mentions"] = discord.AllowedMentions.none()
-        # Use channel.send directly to reliably support components + flags for V2 layout components.
-        # ctx.send() can sometimes have signature quirks depending on patches / jishaku alt_ctx / version.
         return await ctx.channel.send(**kw)
 
     async def _send_home(self, ctx: Context, bot: Vain, owner: bool) -> None:
         if self._dedup(ctx):
             return
         cats = self._build_cats(bot, owner)
-        pfx = _get_prefix(ctx)
-        
+        accent = await _accent_color(bot)
+        menu = HelpMenu(ctx, cats, accent)
         try:
-            accent = await get_bot_dominant_color(bot)
+            menu.msg = await menu.start()
         except Exception:
-            accent = getattr(bot, "color", 0x5865F2)
-
-        avatar_url = None
-        if bot.user and bot.user.display_avatar:
-            avatar_url = str(bot.user.display_avatar.url)
-
-        
-        items: list = []
-        bot_name = bot.user.display_name if bot.user else "Vain"
-        items.append(ui.TextDisplay(f"### [{bot_name}](https://vain.bot)"))
-        items.append(ui.Separator(visible=True, spacing=1))
-
-        support_url = getattr(bot_config, "support", "https://discord.gg/vainbot")
-        website_url = getattr(bot_config, "website", "https://vain.bot")
-        invite_url = f"https://discord.com/oauth2/authorize?client_id={getattr(bot.user, 'id', 0)}&scope=bot+applications.commands&permissions=8"
-
-        desc_text = (
-            "An **all-in-one** bot crafted with minimalism in mind.\n\n"
-            f"[Support]({support_url})  **·**  "
-            f"[Commands]({website_url}/commands)  **·**  "
-            f"[Invite]({invite_url})"
-        )
-        section_text = ui.TextDisplay(desc_text)
-        if avatar_url:
-            try:
-                thumb = ui.Thumbnail(media=avatar_url)
-                items.append(ui.Section(section_text, accessory=thumb))
-            except Exception:
-                items.append(section_text)
-        else:
-            items.append(section_text)
-
-        items.append(ui.Separator(visible=True, spacing=1))
-        items.append(ui.TextDisplay(f"-# `[...]` optional  `<...>` required  •  Select a category below to browse commands."))
-
-        home_container = ui.Container(accent_colour=accent)
-        for it in items:
-            home_container.add_item(it)
-
-        view = HelpView(ctx, cats)
-        try:
-            view.msg = await ctx.channel.send(components=[home_container], view=view, flags=MessageFlags.components_v2)
-            return
-        except Exception:
-            # fallback uses legacy embed + view
-            view.msg = await self._send(ctx, view.home, view=view)
+            # Classic embed fallback if LayoutView send fails
+            e = Embed(color=accent, description=_home_text(ctx).replace("### ", ""))
+            if bot.user:
+                e.set_author(name=bot.user.display_name, icon_url=bot.user.display_avatar.url)
+            await self._send(ctx, e)
 
     async def send_brief(self, ctx: Context, cmd: Command) -> discord.Message:
         return await self._send(ctx, _brief_embed(cmd, ctx))
 
     async def _send_cmd(self, ctx: Context, cmd: Command) -> None:
+        accent = await _accent_color(ctx.bot)
         try:
-            comps = await _build_v2_detail(cmd, ctx)
-            await self._send_v2(ctx, comps)
+            menu = CommandHelpMenu(ctx, cmd, accent)
+            menu.msg = await menu.start()
         except Exception:
-            
             await self._send(ctx, _detail_embed(cmd, ctx))
 
     def _family_targets(
@@ -1256,58 +1203,45 @@ class VainHelp:
     async def _send_group(self, ctx: Context, grp: Command, *, targets: list[Command] | None = None) -> None:
         owner = ctx.author.id in ctx.bot.owners
         targets = targets or self._family_targets(ctx.bot, grp, owner=owner)
-        subs = sorted(
+
+        # Build ordered pages: group root first (when applicable), then sorted children
+        children = sorted(
             [t for t in targets if t is not grp],
             key=lambda c: command_display_name(c).lower(),
         )
-        if not isinstance(grp, Group) and len(targets) > 1:
-            subs.insert(0, grp)
-        if not subs:
-            await self._send(ctx, _detail_embed(grp, ctx))
+        pages: list[Command] = []
+        if isinstance(grp, Group):
+            pages = [grp] + children
+        elif len(targets) > 1:
+            pages = [grp] + children
+        else:
+            pages = [grp]
+
+        if not pages:
+            await self._send_cmd(ctx, grp)
             return
 
-        if len(subs) <= 1:
-            
-            try:
-                await self._send_v2(ctx, await _build_v2_detail(grp, ctx))
-            except Exception:
-                await self._send(ctx, _detail_embed(grp, ctx))
-            return
-
-        
-        view = GroupHelpView(ctx, grp, subs)
+        accent = await _accent_color(ctx.bot)
         try:
-            view.msg = await view.start()
+            menu = GroupHelpMenu(ctx, pages, accent)
+            menu.msg = await menu.start()
         except Exception:
-            
-            try:
-                await self._send_v2(ctx, await _build_v2_detail(grp, ctx, page_info=None))
-            except Exception:
-                await self._send(ctx, _detail_embed(grp, ctx))
+            await self._send(ctx, _detail_embed(grp, ctx, group_title=True))
 
     async def _send_cog(self, ctx: Context, cog: Package) -> None:
         cmds = [c for c in cog.get_commands() if not c.hidden]
         label = _category(cog)
-        try:
-            accent = await get_bot_dominant_color(ctx.bot)
-        except Exception:
-            accent = getattr(ctx.bot, "color", 0x5865F2)
-        cmd_list = ", ".join(f"`{command_display_name(c)}`" for c in sorted(cmds, key=lambda x: command_display_name(x).lower()))
-        blurb = _BLURBS.get(label, f"{label} commands.")
-
-        # Use same nice V2 structure as dropdown category (dividers, author=label, title=blurb)
+        accent = await _accent_color(ctx.bot)
+        text = _category_text(ctx, label, cmds)
+        view = ui.LayoutView(timeout=180)
         container = ui.Container(accent_colour=accent)
-        container.add_item(ui.TextDisplay(f"**{label}**"))
-        container.add_item(ui.Separator(visible=True, spacing=1))
-        container.add_item(ui.TextDisplay(f"### {blurb}"))
-        container.add_item(ui.Separator(visible=True, spacing=1))
-        commands_block = f"**Commands:**\n```{cmd_list if cmd_list else 'none'}```"
-        container.add_item(ui.TextDisplay(commands_block))
-        pfx = _get_prefix(ctx)
-        container.add_item(ui.Separator(visible=True, spacing=1))
-        container.add_item(ui.TextDisplay(f"-# Use `{pfx}help <command>` for details."))
-
-        await self._send_v2(ctx, [container])
+        container.add_item(ui.TextDisplay(text))
+        view.add_item(container)
+        try:
+            await self._send_layout(ctx, view)
+        except Exception:
+            e = Embed(title=f"**{label} Commands**", description=_fmt_commands(cmds), color=accent)
+            await self._send(ctx, e)
 
     async def _not_found(self, ctx: Context, query: str) -> None:
         await ctx.warn(f"Command `{query}` does **not** exist")

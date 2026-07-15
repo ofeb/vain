@@ -273,10 +273,10 @@ class Socials(Package):
 
     @hybrid(
         name="repost",
-        description="Repost Instagram / TikTok / YT with a clean aesthetic v2 container",
+        description="Repost Instagram / TikTok / YT shorts",
         example=",repost https://www.instagram.com/reel/xxxx",
         guilds=True,
-        dms=False,
+        dms=True,
         groupchats=True,
     )
     @describe(url="Social media post URL")
