@@ -666,7 +666,8 @@ class CustomizeCommands(Package):
     @group(
         name="context",
         aliases=["ctx"],
-        usage="(subcommand) <args>",
+        usage="<subcommand>",
+        example="self emoji warn :warning:",
         description="Server or personal context customization (colors, emojis for embeds)",
         invoke_without_command=True,
     )
@@ -678,7 +679,8 @@ class CustomizeCommands(Package):
     @context.group(
         name="self",
         aliases=["me", "personal"],
-        usage="(subcommand) <args>",
+        usage="<subcommand>",
+        example="emoji warn :warning:",
         description="Personal per-user embed customization (no special perms required)",
         invoke_without_command=True,
     )
@@ -687,11 +689,23 @@ class CustomizeCommands(Package):
         await ctx.send_help(ctx.command)
 
     
-    @context.group(name="color", invoke_without_command=True)
+    @context.group(
+        name="color",
+        usage="<subcommand>",
+        example="base #373737",
+        description="Server embed color customization",
+        invoke_without_command=True,
+    )
     async def context_server_color(self, ctx):
         await ctx.send_help(ctx.command)
 
-    @context.group(name="emoji", invoke_without_command=True)
+    @context.group(
+        name="emoji",
+        usage="<subcommand>",
+        example="warn :warning:",
+        description="Server embed emoji customization",
+        invoke_without_command=True,
+    )
     async def context_server_emoji(self, ctx):
         await ctx.send_help(ctx.command)
 
@@ -729,7 +743,13 @@ class CustomizeCommands(Package):
         await self.db.set_user_customize(ctx.author.id, gid, "emoji", e)
         return await ctx.success(f"set your **{nice}** emoji to {emoji}")
 
-    @context_self.group(name="color", invoke_without_command=True)
+    @context_self.group(
+        name="color",
+        usage="<subcommand>",
+        example="approve #a8ea7b",
+        description="Personal embed color customization",
+        invoke_without_command=True,
+    )
     async def context_self_color(self, ctx):
         await ctx.send_help(ctx.command)
 
@@ -741,7 +761,7 @@ class CustomizeCommands(Package):
     async def cself_color_base(self, ctx, hex_code: str = None):
         return await self._personal_set_color(ctx, "base", hex_code, "base")
 
-    @context_self_color.command(name="list", aliases=["view"], description="List your personal colors", example="")
+    @context_self_color.command(name="list", aliases=["view"], description="List your personal colors")
     async def cself_color_list(self, ctx):
         gid = getattr(ctx.guild, "id", 0) if ctx.guild else 0
         s = await self.db.get_user_customize(ctx.author.id, gid)
@@ -749,7 +769,13 @@ class CustomizeCommands(Package):
         lines = [f"**{k}**: `#{v}`" for k, v in cur.items()] or ["(none)"]
         await ctx.send(embed=Embed(description="\n".join(lines), color=self.color))
 
-    @context_self.group(name="emoji", invoke_without_command=True)
+    @context_self.group(
+        name="emoji",
+        usage="<subcommand>",
+        example="warn :warning:",
+        description="Personal embed emoji customization",
+        invoke_without_command=True,
+    )
     async def context_self_emoji(self, ctx):
         await ctx.send_help(ctx.command)
 

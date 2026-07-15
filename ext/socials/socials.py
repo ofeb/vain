@@ -20,8 +20,14 @@ from core.discord.ctx import Context
 from core.discord.hybrid import describe, group, hybrid
 from core.managers.permissions import has_permissions
 from core.managers.values import color
-from core.tools.aesthetic import aesthetic_embed, body, build_repost_container, get_dominant_color
-from core.networks.social.ig import Instagram
+from core.tools.aesthetic import (
+    aesthetic_embed,
+    body,
+    build_social_repost_container,
+    get_bot_dominant_color,
+)
+from core.networks.social import Instagram, TikTok, is_instagram_url, is_tiktok_url
+from core.networks.social.models import SocialPost
 
 if TYPE_CHECKING:
     from core.vain import Vain
@@ -264,16 +270,35 @@ class Socials(Package):
         aliases=["details"],
     )
     async def tiktok_info(self, ctx: Context, *, url: str) -> None:
+        client = TikTok()
+        try:
+            post = await client.post(url)
+        finally:
+            await client.close()
+        if not post:
+            await ctx.fail("Could not fetch that TikTok.")
+            return
+        lines = [
+            f"**Author:** [{post.display_name}]({post.profile_url}) (@{post.username})",
+            f"**Likes:** `{post.like_count:,}` · **Comments:** `{post.comment_count:,}`",
+            f"**Shares:** `{post.share_count:,}` · **Saves:** `{post.save_count:,}`",
+        ]
+        if post.music_title:
+            lines.append(f"**Music:** {post.music_title}")
+        if post.caption:
+            lines.append(f"**Caption:** {post.caption[:300]}")
         embed = aesthetic_embed(
             color=color.base,
             title="TikTok Video",
-            message=f"Info for `{url}`: requires API setup.",
+            message="\n".join(lines),
         )
+        if post.avatar_url:
+            embed.set_thumbnail(url=post.avatar_url)
         await ctx.send(embed=embed)
 
     @hybrid(
         name="repost",
-        description="Repost Instagram / TikTok / YT shorts",
+        description="Repost Instagram / TikTok with a clean aesthetic container",
         example=",repost https://www.instagram.com/reel/xxxx",
         guilds=True,
         dms=True,
@@ -282,62 +307,70 @@ class Socials(Package):
     @describe(url="Social media post URL")
     async def repost(self, ctx: Context, *, url: str) -> None:
         async with ctx.typing():
-            platform = "instagram" if "instagram" in url or "instagr.am" in url else ("tiktok" if "tiktok" in url else "media")
-            accent = await get_dominant_color(str(ctx.bot.user.display_avatar.url)) if ctx.bot.user else 0xE1306C
-
-            ig_data = None
-            if platform == "instagram":
-                try:
-                    ig = Instagram()
-                    ig_data = await ig.post(url)
-                except Exception:
-                    ig_data = None
-
-            
             try:
-                loop = asyncio.get_running_loop()
-                with tempfile.TemporaryDirectory(prefix="repost-") as tmp:
-                    result = await loop.run_in_executor(None, _ytdlp_download_sync, url, tmp)
-                    if not result or not result.get("filepath"):
-                        await ctx.fail("Could not fetch that post.")
-                        return
-
-                    filepath = result["filepath"]
-                    if os.path.getsize(filepath) > 25_000_000:
-                        await ctx.fail("File too large.")
-                        return
-
-                    with open(filepath, "rb") as f:
-                        file_data = f.read()
-
-                    filename = result.get("filename", "repost.mp4")
-                    # Separate File instances for component ref + upload buffer
-                    upload = discord.File(io.BytesIO(file_data), filename=filename)
-                    component_file = discord.File(io.BytesIO(file_data), filename=filename)
-
-                    username = (ig_data or {}).get("username") or result.get("uploader", "unknown")
-                    caption = (ig_data or {}).get("caption") or result.get("title", "")
-                    media_list = [(ig_data or {}).get("media_url")] if (ig_data or {}).get("media_url") else []
-                    stats = ""
-                    if ig_data:
-                        stats = f"♥ {ig_data.get('like_count', 0)}  💬 {ig_data.get('comment_count', 0)}"
-                    source = (ig_data or {}).get("url") or url
-
-                    comps = build_repost_container(
-                        platform=platform,
-                        username=username,
-                        caption=caption,
-                        media_urls=[u for u in media_list if u],
-                        stats=stats,
-                        source_url=source,
-                        accent=accent,
-                        attachment=component_file,
-                    )
-
-                    await ctx.send(components=comps, file=upload)
-                    return
+                await self._repost(ctx, url)
             except Exception as e:
                 await ctx.fail(f"Repost failed: {str(e)[:150]}")
+
+    async def _repost(self, ctx: Context, url: str) -> None:
+        url = (url or "").strip()
+        if not url:
+            await ctx.warn("Provide a TikTok or Instagram URL.")
+            return
+
+        try:
+            accent = await get_bot_dominant_color(ctx.bot)
+        except Exception:
+            accent = getattr(ctx.bot, "color", None) or color.base or 0x5865F2
+
+        post: SocialPost | None = None
+        if is_tiktok_url(url):
+            client = TikTok()
+            try:
+                post = await client.post(url)
+            finally:
+                await client.close()
+        elif is_instagram_url(url):
+            client = Instagram()
+            try:
+                post = await client.post(url)
+            finally:
+                await client.close()
+        else:
+            await ctx.warn("Only **TikTok** and **Instagram** links are supported.")
+            return
+
+        if post is None:
+            await ctx.fail("Could not fetch that post. It may be private or unavailable.")
+            return
+
+        # Always use remote CDN/media URLs in a MediaGallery (heist style).
+        # Never attach a raw .mp4 File component — that looks broken.
+        media_urls = [u for u in (post.media_urls or []) if u and str(u).startswith("http")]
+        if not media_urls:
+            await ctx.fail("Could not get a playable media URL for that post.")
+            return
+
+        comps = build_social_repost_container(
+            platform=post.platform,
+            username=post.username,
+            display_name=post.display_name or post.username,
+            caption=post.caption,
+            media_urls=media_urls,
+            avatar_url=post.avatar_url,
+            source_url=post.url or url,
+            accent=accent,
+            like_count=post.like_count,
+            comment_count=post.comment_count,
+            save_count=post.save_count,
+            share_count=post.share_count,
+            region=post.region,
+            music_title=post.music_title,
+            music_author=post.music_author,
+            music_url=post.music_url,
+            attachment=None,
+        )
+        await ctx.send(components=comps)
 
     async def _generate_quote_image(
         self,

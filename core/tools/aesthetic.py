@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from io import BytesIO
 from typing import Any, Iterable, Sequence
 
@@ -398,25 +399,100 @@ def panel_layout(**kwargs: Any) -> ui.LayoutView:
     return layout_from_items([panel_container(**kwargs)])
 
 
-def build_repost_container(
+def _compact_count(n: int | float | None) -> str:
+    try:
+        value = int(n or 0)
+    except Exception:
+        return "0"
+    if value < 1000:
+        return str(value)
+    if value < 1_000_000:
+        text = f"{value / 1000:.1f}".rstrip("0").rstrip(".")
+        return f"{text}k"
+    text = f"{value / 1_000_000:.1f}".rstrip("0").rstrip(".")
+    return f"{text}m"
+
+
+def _linkify_caption(caption: str, platform: str) -> str:
+    """Turn #hashtags into markdown links (heist-style)."""
+    text = (caption or "").replace("```", "`\u200b`\u200b`").strip()
+    if not text:
+        return ""
+    if platform == "tiktok":
+        base = "https://tiktok.com/tag/"
+    else:
+        base = "https://www.instagram.com/explore/tags/"
+
+    def _hash(m: re.Match[str]) -> str:
+        tag = m.group(1)
+        return f"[#{tag}](<{base}{tag}>)"
+
+    def _mention(m: re.Match[str]) -> str:
+        user = m.group(1)
+        if platform == "tiktok":
+            return f"[@{user}](<https://www.tiktok.com/@{user}>)"
+        return f"[@{user}](<https://www.instagram.com/{user}/>)"
+
+    text = re.sub(r"#(\w+)", _hash, text)
+    text = re.sub(r"@(\w+)", _mention, text)
+    return text[:1900]
+
+
+def build_social_repost_container(
     *,
     platform: str,
     username: str,
-    caption: str,
+    display_name: str | None = None,
+    caption: str = "",
     media_urls: list[str] | None = None,
-    stats: str = "",
-    source_url: str = "",
     avatar_url: str | None = None,
+    source_url: str = "",
     accent: int | None = None,
+    like_count: int = 0,
+    comment_count: int = 0,
+    save_count: int = 0,
+    share_count: int = 0,
+    region: str | None = None,
+    music_title: str | None = None,
+    music_author: str | None = None,
+    music_url: str | None = None,
     attachment: discord.File | None = None,
 ) -> list[ui.Container]:
-    """Build a clean aesthetic Components v2 container for reposts (IG / TT)."""
-    c = ui.Container(accent_colour=accent or 0xE1306C)
+    """Heist-style V2 repost container (section + gallery + stats + watch button).
 
-    header = f"**{username}**"
-    if source_url:
-        header = f"**[{username}]({source_url})**"
+    Accent should be the bot dominant colour.
+    """
+    from core.managers.values import emojis
 
+    c = ui.Container(accent_colour=accent or 0x5865F2)
+    name = display_name or username or "unknown"
+    user = (username or "unknown").lstrip("@")
+    if platform == "tiktok":
+        profile = f"https://www.tiktok.com/@{user}"
+        watch_label = "Watch on TikTok"
+        watch_emoji = None
+    else:
+        profile = f"https://www.instagram.com/{user}/"
+        watch_label = "View on Instagram"
+        watch_emoji = None
+
+    body_lines = [
+        f"{emojis.human} Posted by **{name}** [(@{user})]({profile})",
+    ]
+    linked = _linkify_caption(caption, platform)
+    if linked:
+        body_lines.append("")
+        body_lines.append(f"> {linked}")
+    if music_title:
+        music_label = music_title
+        if music_author:
+            music_label = f"{music_title} — {music_author}"
+        if music_url:
+            body_lines.append(f"-# {emojis.music} [{music_label}]({music_url})")
+        else:
+            body_lines.append(f"-# {emojis.music} {music_label}")
+
+    header = "\n".join(body_lines)
     if avatar_url:
         try:
             c.add_item(
@@ -430,42 +506,76 @@ def build_repost_container(
     else:
         c.add_item(ui.TextDisplay(header))
 
-    if caption:
-        safe = caption.replace("```", "`\u200b`\u200b`")[:1800]
-        c.add_item(ui.Separator(visible=True))
-        c.add_item(ui.TextDisplay(f"> {safe}"))
-
-    c.add_item(ui.Separator(visible=True))
-
-    if media_urls:
-        gallery_items = []
-        for u in media_urls[:4]:
-            if not u:
-                continue
-            try:
-                gallery_items.append(discord.MediaGalleryItem(str(u)))
-            except Exception:
-                continue
-        if gallery_items:
-            try:
-                c.add_item(ui.MediaGallery(*gallery_items))
-            except Exception:
-                pass
-    elif attachment is not None:
+    # Media gallery with remote CDN URLs only (never File/.mp4 attachment)
+    gallery_items: list[discord.MediaGalleryItem] = []
+    for u in (media_urls or [])[:4]:
+        if not u or not str(u).startswith("http"):
+            continue
         try:
-            c.add_item(ui.File(attachment))
+            gallery_items.append(discord.MediaGalleryItem(str(u)))
+        except Exception:
+            continue
+    if gallery_items:
+        try:
+            c.add_item(ui.MediaGallery(*gallery_items))
         except Exception:
             pass
 
-    if stats:
-        c.add_item(ui.TextDisplay(f"-# {stats}"))
+    c.add_item(ui.Separator(visible=True))
 
-    footer = f"-# {platform}"
-    if source_url:
-        footer += f" · [view]({source_url})"
-    c.add_item(ui.TextDisplay(footer))
+    stats_bits = [
+        f"{emojis.likes} {_compact_count(like_count)}",
+        f"{emojis.comments} {_compact_count(comment_count)}",
+        f"{emojis.saves} {_compact_count(save_count)}",
+    ]
+    if share_count:
+        stats_bits.append(f"{emojis.repost} {_compact_count(share_count)}")
+    if region:
+        stats_bits.append(f"{emojis.region} {region}")
+    c.add_item(ui.TextDisplay("-# " + " • ".join(stats_bits)))
+
+    # Action row — Watch link (heist style)
+    row = ui.ActionRow()
+    row.add_item(
+        ui.Button(
+            style=discord.ButtonStyle.link,
+            label=watch_label,
+            url=source_url or profile,
+        )
+    )
+    c.add_item(row)
     return [c]
 
 
+def build_repost_container(
+    *,
+    platform: str,
+    username: str,
+    caption: str = "",
+    media_urls: list[str] | None = None,
+    stats: str = "",
+    source_url: str = "",
+    avatar_url: str | None = None,
+    accent: int | None = None,
+    attachment: discord.File | None = None,
+    **kwargs: Any,
+) -> list[ui.Container]:
+    """Backward-compatible wrapper → heist-style social repost container."""
+    return build_social_repost_container(
+        platform=platform,
+        username=username,
+        caption=caption,
+        media_urls=media_urls,
+        source_url=source_url,
+        avatar_url=avatar_url,
+        accent=accent,
+        attachment=attachment,
+        **{k: v for k, v in kwargs.items() if k in {
+            "display_name", "like_count", "comment_count", "save_count",
+            "share_count", "region", "music_title", "music_author", "music_url",
+        }},
+    )
+
+
 def build_repost_layout(**kwargs: Any) -> ui.LayoutView:
-    return layout_from_components(build_repost_container(**kwargs))
+    return layout_from_components(build_social_repost_container(**kwargs))

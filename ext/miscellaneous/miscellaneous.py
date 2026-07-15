@@ -62,18 +62,17 @@ class Miscellaneous(MiscellaneousEvents, Package):
         embed = aesthetic_embed(
             title="Invite Vain",
             color=color.base,
-            message="Use the buttons below to invite me or join the support server!",
+            message="Use the buttons to invite me or join the support server!",
             timestamp=False,
         )
         view = discord.ui.View()
         view.add_item(discord.ui.Button(
-            label="Invite Me",
+            label="Invite",
             style=discord.ButtonStyle.link,
             url=f"https://discord.com/oauth2/authorize?client_id={bot_id}&permissions=8&scope=bot%20applications.commands",
-            emoji="\U0001f517",
         ))
         view.add_item(discord.ui.Button(
-            label="Support Server",
+            label="Support",
             style=discord.ButtonStyle.link,
             url=self.bot.support if hasattr(self.bot, 'support') else "https://discord.gg/vainbot",
         ))

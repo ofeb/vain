@@ -46,6 +46,15 @@ class emojis:
     juul: str = "<:embeds_juul:1511705993795604490>"
     no_juul: str = "<:embeds_no_juul:1511705995653419008>"
 
+    # Social repost UI
+    human: str = "<:human:1527022590160404782>"
+    likes: str = "<:likes:1527023309915558052>"
+    comments: str = "<:comments:1527023647917740132>"
+    saves: str = "<:saves:1527023807015944243>"
+    music: str = "<:music:1527022832121413772>"
+    region: str = "<:region:1527024322558951431>"
+    repost: str = "<:repostv2:1520226247807078451>"
+
     class paginator:
         previous: str = "<:paginator_previous:1511706003836633288>"
         next: str = "<:paginator_next:1511706003853279353>"

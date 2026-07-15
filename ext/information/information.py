@@ -86,7 +86,6 @@ class InformationCommands(Package):
                 label="Website",
                 style=discord.ButtonStyle.link,
                 url="https://vain.bot",
-                emoji="\U0001f310",
             ),
         ]
         if bot.user:
@@ -98,7 +97,6 @@ class InformationCommands(Package):
                         f"https://discord.com/oauth2/authorize?client_id={bot.user.id}"
                         f"&scope=bot+applications.commands&permissions=8"
                     ),
-                    emoji="\U0001f517",
                 )
             )
         buttons.append(
@@ -106,7 +104,6 @@ class InformationCommands(Package):
                 label="Support",
                 style=discord.ButtonStyle.link,
                 url="https://discord.gg/vainbot",
-                emoji="\U0001f4ac",
             )
         )
 
