@@ -1981,11 +1981,14 @@ class Database:
         """Get emojis with guild/user override"""
         default_emoji_map = {
             "success": default_emoji("approve", "<:approve_new:1526186163457490974>"),
+            "approve": default_emoji("approve", "<:approve_new:1526186163457490974>"),
             "warn": default_emoji("warn", "<:warning:1526186228561477642>"),
             "deny": default_emoji("deny", "<:deny:1526186193971052634>"),
             "cooldown": default_emoji("cooldown", "<:cooldown:1525919040776835075>"),
             "loading": default_emoji("loading", "<a:embeds_loading:1511705994823077988>"),
             "info": "<:interface_information:1511705999550185646>",
+            "information": "<:interface_information:1511705999550185646>",
+            "shazam": default_emoji("shazam", "<:embeds_shazam:1511705996555194368>"),
         }
 
         result = dict(default_emoji_map)
@@ -2010,6 +2013,8 @@ class Database:
             "cooldown": 0xBBA0D2,
             "settings": 0xD4B8D0,
             "dark": 0x9B7A9E,
+            "information": 0x5865F2,
+            "shazam": 0xC2A8D0,
         }
 
         guild_settings = await self.get_guild_customize(guild_id)

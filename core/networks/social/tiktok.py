@@ -1,172 +1,378 @@
-"""TikTok fetch layer: udownloader first, then core.api.TikTok fallback."""
+"""TikTok public client — metadata + playable media URL, no login.
+
+Uses multiple fast public sources (downloader APIs + yt-dlp extract) so
+reposts stay instant when one provider is rate-limited.
+"""
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
-from typing import Optional
-from urllib.parse import unquote
+from typing import Any, Optional
+from urllib.parse import quote, unquote, urlparse
 
-from core.api import Error as ApiError
-from core.api import TikTok as ApiTikTok
-from core.api import UDownloader
+import aiohttp
 
 from .models import SocialPost
 
 log = logging.getLogger("vain.social.tiktok")
+
+_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+)
 
 _TT_HOSTS = re.compile(
     r"(?:https?://)?(?:(?:www|m|vm|vt)\.)?(?:tiktok\.com|tiktokv\.com)",
     re.I,
 )
 _VIDEO_ID_RE = re.compile(r"/video/(\d+)")
+_PHOTO_ID_RE = re.compile(r"/photo/(\d+)")
 _USER_RE = re.compile(r"tiktok\.com/@([^/?#]+)", re.I)
+_SHORT_HOSTS = ("vm.tiktok.com", "vt.tiktok.com", "www.vm.tiktok.com", "www.vt.tiktok.com")
 
 
 def is_tiktok_url(url: str) -> bool:
-    u = url or ""
-    return bool(_TT_HOSTS.search(u)) or "vm.tiktok" in u or "vt.tiktok" in u
+    return bool(_TT_HOSTS.search(url or ""))
 
 
 class TikTok:
-    """High-level TikTok client used by commands."""
+    """TikTok wrapper: resolve short links, fetch post/user info, get media URL."""
 
-    def __init__(self) -> None:
-        self._downloader = UDownloader()
-        self._api = ApiTikTok()
+    def __init__(self, session: aiohttp.ClientSession | None = None) -> None:
+        self._session = session
+        self._owns_session = session is None
+
+    async def _get_session(self) -> aiohttp.ClientSession:
+        if self._session is None or self._session.closed:
+            self._session = aiohttp.ClientSession(
+                headers={"User-Agent": _UA, "Accept": "application/json, text/plain, */*"},
+                timeout=aiohttp.ClientTimeout(total=12),
+            )
+            self._owns_session = True
+        return self._session
 
     async def close(self) -> None:
-        return None
+        if self._owns_session and self._session and not self._session.closed:
+            await self._session.close()
 
-    async def post(self, url: str) -> Optional[SocialPost]:
+    async def resolve_url(self, url: str) -> str:
+        """Follow short-link redirects to a canonical tiktok.com URL."""
         url = (url or "").strip()
         if not url:
+            return url
+        if not url.startswith("http"):
+            url = "https://" + url
+        try:
+            host = urlparse(url).netloc.lower()
+        except Exception:
+            return url
+        if host not in _SHORT_HOSTS and "vm.tiktok.com" not in host and "vt.tiktok.com" not in host:
+            return url
+        session = await self._get_session()
+        try:
+            async with session.get(url, allow_redirects=True, max_redirects=8) as resp:
+                return str(resp.url)
+        except Exception as exc:
+            log.debug("tiktok resolve failed: %s", exc)
+            return url
+
+    def parse_ids(self, url: str) -> dict[str, str | None]:
+        video_id = None
+        m = _VIDEO_ID_RE.search(url) or _PHOTO_ID_RE.search(url)
+        if m:
+            video_id = m.group(1)
+        username = None
+        um = _USER_RE.search(url)
+        if um:
+            username = unquote(um.group(1))
+        return {"video_id": video_id, "username": username}
+
+    async def post(self, url: str) -> Optional[SocialPost]:
+        """Fetch full post metadata + media URL for a TikTok share link."""
+        resolved = await self.resolve_url(url)
+        ids = self.parse_ids(resolved)
+
+        
+        tasks = [
+            asyncio.create_task(self._from_tikwm(resolved)),
+            asyncio.create_task(self._from_ytdlp(resolved)),
+            asyncio.create_task(self._from_tikmate(resolved)),
+        ]
+        post: SocialPost | None = None
+        try:
+            for fut in asyncio.as_completed(tasks, timeout=14):
+                try:
+                    result = await fut
+                except Exception:
+                    continue
+                if not result:
+                    continue
+                if not post:
+                    post = result
+                else:
+                    post = self._merge(post, result)
+                
+                if post.media_urls and post.username and post.username != "unknown":
+                    break
+        except asyncio.TimeoutError:
+            pass
+        finally:
+            for t in tasks:
+                if not t.done():
+                    t.cancel()
+
+        if post is None and ids.get("video_id"):
+            post = SocialPost(
+                platform="tiktok",
+                url=resolved,
+                username=ids.get("username") or "unknown",
+            )
+        if post is None:
             return None
 
-        # 1) udownloader (yt-dlp extract) — playable URL + basic meta
-        post = await self._from_udownloader(url)
-
-        # 2) core.api rehydration scrape — richer meta + playAddr
-        api_post = await self._from_core_api(url)
-        if api_post:
-            post = self._merge(post, api_post) if post else api_post
-
-        if not post:
-            return None
+        post.url = post.url or resolved
+        if ids.get("username") and post.username == "unknown":
+            post.username = ids["username"] or post.username
         if not post.display_name:
             post.display_name = post.username
         return post
 
-    async def user(self, username: str) -> Optional[dict]:
-        username = (username or "").lstrip("@").strip()
-        try:
-            u = await self._api.get_user(username)
-            return u.model_dump()
-        except Exception as exc:
-            log.debug("tiktok user failed: %s", exc)
-            return None
-
     async def info(self, url: str) -> Optional[dict]:
+        """Legacy dict interface."""
         post = await self.post(url)
-        return post.__dict__ if post else None
+        return post.raw if post and post.raw else (post.__dict__ if post else None)
 
-    async def _from_udownloader(self, url: str) -> Optional[SocialPost]:
+    async def user(self, username: str) -> Optional[dict]:
+        """Best-effort public profile lookup."""
+        username = (username or "").strip().lstrip("@")
+        if not username:
+            return None
+        session = await self._get_session()
+        
         try:
-            result = await self._downloader.extract(url)
+            async with session.get(
+                "https://www.tikwm.com/api/user/info",
+                params={"unique_id": username},
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json(content_type=None)
+                    if isinstance(data, dict) and data.get("code") == 0:
+                        user = (data.get("data") or {}).get("user") or data.get("data") or {}
+                        if user:
+                            return user
         except Exception as exc:
-            log.debug("udownloader failed: %s", exc)
-            return None
-        if not result or not result.play_url:
-            return None
-        username = (result.uploader_id or result.uploader or "unknown").lstrip("@")
-        um = _USER_RE.search(result.webpage_url or url)
-        if um:
-            username = unquote(um.group(1))
-        return SocialPost(
-            platform="tiktok",
-            url=result.webpage_url or url,
-            username=username or "unknown",
-            display_name=result.uploader or username,
-            avatar_url=result.thumbnail,
-            caption=result.description or result.title,
-            media_urls=[result.play_url],
-            is_video=True,
-            like_count=result.like_count,
-            comment_count=result.comment_count,
-            share_count=result.repost_count,
-            play_count=result.view_count,
-            raw=result.raw,
-        )
+            log.debug("tikwm user failed: %s", exc)
 
-    async def _from_core_api(self, url: str) -> Optional[SocialPost]:
+        
         try:
-            video = await self._api.get_video(url)
-        except ApiError as exc:
-            log.debug("core.api tiktok failed: %s", exc)
+            async with session.get(f"https://www.tiktok.com/@{quote(username)}") as resp:
+                if resp.status != 200:
+                    return None
+                html = await resp.text()
+                nick = re.search(r'"nickname":"([^"]+)"', html)
+                av = re.search(r'"avatarLarger":"([^"]+)"', html)
+                return {
+                    "uniqueId": username,
+                    "nickname": nick.group(1) if nick else username,
+                    "avatarLarger": (av.group(1).encode().decode("unicode_escape") if av else ""),
+                }
+        except Exception:
             return None
+
+    async def _from_tikwm(self, url: str) -> Optional[SocialPost]:
+        session = await self._get_session()
+        try:
+            async with session.post(
+                "https://www.tikwm.com/api/",
+                data={"url": url, "hd": "1"},
+                headers={
+                    "User-Agent": _UA,
+                    "Referer": "https://www.tikwm.com/",
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+            ) as resp:
+                if resp.status != 200:
+                    return None
+                payload = await resp.json(content_type=None)
         except Exception as exc:
-            log.debug("core.api tiktok error: %s", exc)
+            log.debug("tikwm failed: %s", exc)
             return None
 
-        author = video.author
-        username = (author.username if author else "") or "unknown"
-        display = (author.nickname if author else "") or username
-        avatar = None
-        if author and author.avatar:
-            avatar = str(author.avatar)
+        if not isinstance(payload, dict):
+            return None
+        
+        if payload.get("code") not in (0, "0"):
+            return None
+        data = payload.get("data") or {}
+        if not isinstance(data, dict) or not data:
+            return None
 
-        stats = video.stats
-        music = video.music
-        music_title = music.title if music else None
-        music_author = music.author if music else None
-        music_id = music.id if music else None
-        music_url = (
-            f"https://www.tiktok.com/music/original-sound-{music_id}"
-            if music_id
-            else None
-        )
-
+        author = data.get("author") or {}
+        music = data.get("music_info") or data.get("music") or {}
         media: list[str] = []
-        if video.url:
-            media.append(str(video.url))
+        for key in ("hdplay", "play", "wmplay", "download"):
+            val = data.get(key)
+            if isinstance(val, str) and val.startswith("http"):
+                media.append(val)
+                break
+        images = data.get("images")
+        if isinstance(images, list):
+            media.extend(u for u in images if isinstance(u, str) and u.startswith("http"))
+
+        if not media and not author:
+            return None
+
+        username = (
+            author.get("unique_id")
+            or author.get("uniqueId")
+            or data.get("author_unique_id")
+            or "unknown"
+        )
+        display = author.get("nickname") or author.get("nickName") or username
+        avatar = (
+            author.get("avatar")
+            or author.get("avatarThumb")
+            or author.get("avatarMedium")
+            or None
+        )
+        music_title = music.get("title") or data.get("music")
+        music_author = music.get("author") or music.get("authorName")
+        mid = music.get("id") or music.get("mid")
+        music_url = f"https://www.tiktok.com/music/original-sound-{mid}" if mid else None
 
         return SocialPost(
             platform="tiktok",
-            url=video.webpage_url or url,
+            url=data.get("play_url") or url,
             username=str(username).lstrip("@"),
             display_name=str(display),
             avatar_url=avatar,
-            caption=video.description or "",
+            caption=str(data.get("title") or data.get("desc") or ""),
+            media_urls=media,
+            is_video=not bool(images),
+            like_count=int(data.get("digg_count") or data.get("diggCount") or 0),
+            comment_count=int(data.get("comment_count") or data.get("commentCount") or 0),
+            share_count=int(data.get("share_count") or data.get("shareCount") or 0),
+            save_count=int(data.get("collect_count") or data.get("collectCount") or 0),
+            play_count=int(data.get("play_count") or data.get("playCount") or 0),
+            music_title=str(music_title) if music_title else None,
+            music_author=str(music_author) if music_author else None,
+            music_url=music_url,
+            region=data.get("region") or data.get("location_created"),
+            raw=data if isinstance(data, dict) else {},
+        )
+
+    async def _from_tikmate(self, url: str) -> Optional[SocialPost]:
+        session = await self._get_session()
+        try:
+            async with session.post(
+                "https://api.tikmate.app/api/lookup",
+                data={"url": url},
+            ) as resp:
+                if resp.status != 200:
+                    return None
+                data = await resp.json(content_type=None)
+        except Exception as exc:
+            log.debug("tikmate failed: %s", exc)
+            return None
+        if not isinstance(data, dict) or data.get("success") is False:
+            return None
+        token = data.get("token")
+        vid = data.get("id")
+        media: list[str] = []
+        if token and vid:
+            media.append(f"https://tikmate.app/download/{token}/{vid}.mp4")
+        return SocialPost(
+            platform="tiktok",
+            url=url,
+            username=str(data.get("author_id") or data.get("author") or "unknown").lstrip("@"),
+            display_name=str(data.get("author_name") or data.get("author_id") or ""),
+            avatar_url=data.get("author_avatar"),
+            caption=str(data.get("desc") or data.get("title") or ""),
             media_urls=media,
             is_video=True,
-            like_count=int(stats.likes) if stats else 0,
-            comment_count=int(stats.comments) if stats else 0,
-            share_count=int(stats.shares) if stats else 0,
-            save_count=int(stats.saves) if stats else 0,
-            play_count=int(stats.plays) if stats else 0,
-            music_title=music_title,
-            music_author=music_author,
-            music_url=music_url,
-            region=video.region,
-            raw={},
+            like_count=int(data.get("like_count") or 0),
+            comment_count=int(data.get("comment_count") or 0),
+            share_count=int(data.get("share_count") or 0),
+            raw=data,
+        )
+
+    async def _from_ytdlp(self, url: str) -> Optional[SocialPost]:
+        def _extract() -> dict[str, Any]:
+            import yt_dlp
+
+            opts = {
+                "quiet": True,
+                "no_warnings": True,
+                "skip_download": True,
+                "noplaylist": True,
+                "socket_timeout": 12,
+            }
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                return ydl.extract_info(url, download=False) or {}
+
+        try:
+            info = await asyncio.wait_for(asyncio.to_thread(_extract), timeout=14)
+        except Exception as exc:
+            log.debug("ytdlp tiktok failed: %s", exc)
+            return None
+        if not info:
+            return None
+
+        media: list[str] = []
+        if info.get("url"):
+            media.append(str(info["url"]))
+        for fmt in info.get("formats") or []:
+            u = fmt.get("url")
+            if u and "http" in u and fmt.get("vcodec") not in (None, "none"):
+                media.append(u)
+                break
+
+        username = (
+            info.get("uploader_id")
+            or info.get("channel_id")
+            or info.get("creator")
+            or info.get("uploader")
+            or "unknown"
+        )
+        if isinstance(username, str):
+            username = username.lstrip("@")
+
+        thumbs = info.get("thumbnails") or []
+        avatar = None
+        if thumbs:
+            avatar = thumbs[-1].get("url")
+        thumb = info.get("thumbnail")
+
+        return SocialPost(
+            platform="tiktok",
+            url=str(info.get("webpage_url") or url),
+            username=str(username),
+            display_name=str(info.get("uploader") or info.get("creator") or username),
+            avatar_url=avatar or thumb,
+            caption=str(info.get("description") or info.get("title") or ""),
+            media_urls=media,
+            is_video=True,
+            like_count=int(info.get("like_count") or 0),
+            comment_count=int(info.get("comment_count") or 0),
+            share_count=int(info.get("repost_count") or 0),
+            play_count=int(info.get("view_count") or 0),
+            music_title=info.get("track") or info.get("alt_title"),
+            music_author=info.get("artist") or info.get("creator"),
+            raw=info,
         )
 
     @staticmethod
     def _merge(base: SocialPost, extra: SocialPost) -> SocialPost:
-        # Prefer CDN play URL from either side
-        if extra.media_urls and (
-            not base.media_urls
-            or any("tiktokcdn" in u or "playAddr" in u or ".mp4" in u for u in extra.media_urls)
-        ):
-            # Keep existing if already good CDN
-            if not any("tiktokcdn" in (u or "") or "mime_type=video" in (u or "") for u in base.media_urls):
-                base.media_urls = extra.media_urls
+        if not base.media_urls and extra.media_urls:
+            base.media_urls = extra.media_urls
         if base.username in ("", "unknown") and extra.username not in ("", "unknown"):
             base.username = extra.username
             base.display_name = extra.display_name or base.display_name
         if not base.avatar_url and extra.avatar_url:
             base.avatar_url = extra.avatar_url
-        if len(extra.caption or "") > len(base.caption or ""):
+        if not base.caption and extra.caption:
             base.caption = extra.caption
         for attr in ("like_count", "comment_count", "share_count", "save_count", "play_count"):
             if not getattr(base, attr) and getattr(extra, attr):
@@ -177,6 +383,4 @@ class TikTok:
             base.music_url = extra.music_url
         if not base.region and extra.region:
             base.region = extra.region
-        if extra.url and ("tiktok.com/@" in extra.url or "/video/" in extra.url):
-            base.url = extra.url
         return base

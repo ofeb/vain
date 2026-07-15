@@ -33,8 +33,8 @@ async def test():
             for pat in ("video_url", "video_versions", "playback_url", "contentUrl", "og:video"):
                 print(pat, pat in html)
 
-        # public web info via doc_id (often fails)
-        # try thrird party
+        
+        
         for name, method, url, kw in [
             (
                 "ddig",

@@ -23,7 +23,7 @@ from core.managers.values import color
 from core.tools.aesthetic import (
     aesthetic_embed,
     body,
-    build_social_repost_container,
+    build_social_repost_embed,
     get_bot_dominant_color,
 )
 from core.networks.social import Instagram, TikTok, is_instagram_url, is_tiktok_url
@@ -298,7 +298,7 @@ class Socials(Package):
 
     @hybrid(
         name="repost",
-        description="Repost Instagram / TikTok with a clean aesthetic container",
+        description="Repost Instagram / TikTok as a clean embed with media",
         example=",repost https://www.instagram.com/reel/xxxx",
         guilds=True,
         dms=True,
@@ -312,19 +312,66 @@ class Socials(Package):
             except Exception as e:
                 await ctx.fail(f"Repost failed: {str(e)[:150]}")
 
+    async def _resolve_embed_color(self, ctx: Context) -> int:
+        """Prefer custom base color, else bot dominant, else fallback."""
+        try:
+            custom = await self.bot.db.get_color(
+                ctx.guild.id if ctx.guild else 0,
+                ctx.author.id if ctx.guild else None,
+            )
+            base = custom.get("base")
+            if isinstance(base, int) and base:
+                return base
+        except Exception:
+            pass
+        try:
+            return await get_bot_dominant_color(ctx.bot)
+        except Exception:
+            return getattr(ctx.bot, "color", None) or color.base or 0x2A2B2F
+
+    @staticmethod
+    def _is_video_url(u: str) -> bool:
+        lu = (u or "").lower()
+        return any(
+            token in lu
+            for token in (
+                ".mp4",
+                "mime_type=video",
+                "/video/",
+                "video_mp4",
+                "playwm",
+                "play?",
+                "aweme",
+            )
+        )
+
+    async def _download_bytes(self, media_url: str) -> bytes | None:
+        try:
+            async with aiohttp.ClientSession(
+                headers={"User-Agent": "Mozilla/5.0"}
+            ) as session:
+                async with session.get(
+                    media_url, timeout=aiohttp.ClientTimeout(total=25)
+                ) as resp:
+                    if resp.status != 200:
+                        return None
+                    data = await resp.read()
+                    if len(data) > 25_000_000:
+                        return None
+                    return data
+        except Exception:
+            return None
+
     async def _repost(self, ctx: Context, url: str) -> None:
         url = (url or "").strip()
         if not url:
             await ctx.warn("Provide a TikTok or Instagram URL.")
             return
 
-        try:
-            accent = await get_bot_dominant_color(ctx.bot)
-        except Exception:
-            accent = getattr(ctx.bot, "color", None) or color.base or 0x5865F2
+        accent = await self._resolve_embed_color(ctx)
 
         post: SocialPost | None = None
-        if is_tiktok_url(url):
+        if is_tiktok_url(url) or "vm.tiktok" in url or "vt.tiktok" in url:
             client = TikTok()
             try:
                 post = await client.post(url)
@@ -344,22 +391,68 @@ class Socials(Package):
             await ctx.fail("Could not fetch that post. It may be private or unavailable.")
             return
 
-        # Always use remote CDN/media URLs in a MediaGallery (heist style).
-        # Never attach a raw .mp4 File component — that looks broken.
-        media_urls = [u for u in (post.media_urls or []) if u and str(u).startswith("http")]
-        if not media_urls:
-            await ctx.fail("Could not get a playable media URL for that post.")
+        media_urls = [u for u in (post.media_urls or []) if u]
+        files: list[discord.File] = []
+        image_url: str | None = None
+
+        video_urls = [u for u in media_urls if self._is_video_url(u)]
+        image_urls = [u for u in media_urls if not self._is_video_url(u)]
+
+        async def _file_from_url(u: str, name: str) -> discord.File | None:
+            data = await self._download_bytes(u)
+            if not data:
+                return None
+            return discord.File(io.BytesIO(data), filename=name)
+
+        if video_urls:
+            f = await _file_from_url(video_urls[0], f"{post.platform}.mp4")
+            if f:
+                files.append(f)
+            elif image_urls:
+                image_url = image_urls[0]
+        elif image_urls:
+            # Carousel: first as embed image; more as attachments when possible
+            image_url = image_urls[0]
+            for i, iu in enumerate(image_urls[1:4], start=2):
+                f = await _file_from_url(iu, f"{post.platform}_{i}.jpg")
+                if f:
+                    files.append(f)
+        else:
+            loop = asyncio.get_running_loop()
+            with tempfile.TemporaryDirectory(prefix="repost-") as tmp:
+                result = await loop.run_in_executor(
+                    None, _ytdlp_download_sync, post.url or url, tmp
+                )
+                if result and result.get("filepath") and os.path.exists(result["filepath"]):
+                    filepath = result["filepath"]
+                    if os.path.getsize(filepath) <= 25_000_000:
+                        with open(filepath, "rb") as fh:
+                            file_data = fh.read()
+                        ext = os.path.splitext(result.get("filename") or "media.mp4")[1] or ".mp4"
+                        files.append(
+                            discord.File(
+                                io.BytesIO(file_data),
+                                filename=f"{post.platform}{ext}",
+                            )
+                        )
+                        if not post.caption and result.get("title"):
+                            post.caption = result["title"]
+                        if post.username in ("", "unknown") and result.get("uploader"):
+                            post.username = result["uploader"]
+                            post.display_name = post.display_name or result["uploader"]
+
+        if not files and not image_url:
+            await ctx.fail("Could not get media for that post.")
             return
 
-        comps = build_social_repost_container(
+        embed = build_social_repost_embed(
             platform=post.platform,
             username=post.username,
             display_name=post.display_name or post.username,
             caption=post.caption,
-            media_urls=media_urls,
             avatar_url=post.avatar_url,
             source_url=post.url or url,
-            accent=accent,
+            color=accent,
             like_count=post.like_count,
             comment_count=post.comment_count,
             save_count=post.save_count,
@@ -367,10 +460,16 @@ class Socials(Package):
             region=post.region,
             music_title=post.music_title,
             music_author=post.music_author,
-            music_url=post.music_url,
-            attachment=None,
+            image_url=image_url,
         )
-        await ctx.send(components=comps)
+
+        # Keep classic embeds (never wrap reposts in Components V2 containers)
+        if len(files) == 1:
+            await ctx.send(embed=embed, file=files[0], raw_embed=True)
+        elif files:
+            await ctx.send(embed=embed, files=files, raw_embed=True)
+        else:
+            await ctx.send(embed=embed, raw_embed=True)
 
     async def _generate_quote_image(
         self,

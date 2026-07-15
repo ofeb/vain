@@ -183,7 +183,7 @@ def embed_to_container(
     accent = _accent_from_embed(embed)
     container = ui.Container(accent_colour=accent)
 
-    # Author / title header
+    
     author_name = embed.author.name if embed.author else None
     author_icon = embed.author.icon_url if embed.author else None
     thumb = embed.thumbnail.url if embed.thumbnail else None
@@ -237,7 +237,7 @@ def embed_to_container(
         if field_chunks:
             container.add_item(ui.TextDisplay("\n\n".join(field_chunks)))
 
-    # Image (http/attachment)
+    
     image_url = embed.image.url if embed.image else None
     if image_url:
         container.add_item(ui.Separator(visible=True))
@@ -254,7 +254,7 @@ def embed_to_container(
         except Exception:
             container.add_item(ui.TextDisplay(f"[image]({image_url})"))
 
-    # Local attachment files without embed image reference
+    
     if attachment_files and not image_url:
         for f in attachment_files[:1]:
             try:
@@ -322,7 +322,7 @@ def embed_to_layout(
     link_buttons = _link_buttons_from_view(view)
     extra_rows: list[ui.ActionRow] = []
     if link_buttons:
-        # Max 5 buttons per action row
+        
         for i in range(0, len(link_buttons), 5):
             row = ui.ActionRow(*link_buttons[i : i + 5])
             extra_rows.append(row)
@@ -438,6 +438,85 @@ def _linkify_caption(caption: str, platform: str) -> str:
     return text[:1900]
 
 
+# Public icon URLs used as embed footer icons
+_TIKTOK_FOOTER_ICON = "https://cdn-icons-png.flaticon.com/512/3046/3046121.png"
+_INSTAGRAM_FOOTER_ICON = "https://cdn-icons-png.flaticon.com/512/2111/2111463.png"
+
+
+def build_social_repost_embed(
+    *,
+    platform: str,
+    username: str,
+    display_name: str | None = None,
+    caption: str = "",
+    avatar_url: str | None = None,
+    source_url: str = "",
+    color: int | None = None,
+    like_count: int = 0,
+    comment_count: int = 0,
+    save_count: int = 0,
+    share_count: int = 0,
+    region: str | None = None,
+    music_title: str | None = None,
+    music_author: str | None = None,
+    image_url: str | None = None,
+) -> discord.Embed:
+    """Minimal classic embed for TikTok / Instagram reposts (no containers)."""
+    from core.managers.values import emojis
+
+    name = display_name or username or "unknown"
+    user = (username or "unknown").lstrip("@")
+    if platform == "tiktok":
+        profile = f"https://www.tiktok.com/@{user}"
+        footer_icon = _TIKTOK_FOOTER_ICON
+        footer_name = "TikTok"
+    else:
+        profile = f"https://www.instagram.com/{user}/"
+        footer_icon = _INSTAGRAM_FOOTER_ICON
+        footer_name = "Instagram"
+
+    desc_parts: list[str] = []
+    linked = _linkify_caption(caption, platform)
+    if linked:
+        desc_parts.append(linked)
+    if music_title:
+        music_label = music_title
+        if music_author:
+            music_label = f"{music_title} — {music_author}"
+        desc_parts.append(f"-# {emojis.music} {music_label}")
+
+    embed = discord.Embed(
+        description="\n\n".join(desc_parts) if desc_parts else None,
+        color=color or 0x2A2B2F,
+        url=source_url or profile,
+    )
+    # Author = post creator (not bot, not viewer)
+    author_name = f"{name} (@{user})"
+    if avatar_url:
+        embed.set_author(name=author_name, icon_url=str(avatar_url), url=profile)
+    else:
+        embed.set_author(name=author_name, url=profile)
+
+    if image_url:
+        embed.set_image(url=str(image_url))
+
+    # Footer: stats + platform icon/name
+    stats = [
+        f"{emojis.likes} {_compact_count(like_count)}",
+        f"{emojis.comments} {_compact_count(comment_count)}",
+        f"{emojis.saves} {_compact_count(save_count)}",
+    ]
+    if share_count:
+        stats.append(f"{emojis.reposts} {_compact_count(share_count)}")
+    if region:
+        stats.append(f"{emojis.region} {region}")
+    footer_text = " • ".join(stats)
+    if footer_name:
+        footer_text = f"{footer_text}  ·  {footer_name}" if footer_text else footer_name
+    embed.set_footer(text=footer_text[:2048], icon_url=footer_icon)
+    return embed
+
+
 def build_social_repost_container(
     *,
     platform: str,
@@ -506,10 +585,10 @@ def build_social_repost_container(
     else:
         c.add_item(ui.TextDisplay(header))
 
-    # Media gallery with remote CDN URLs only (never File/.mp4 attachment)
+    
     gallery_items: list[discord.MediaGalleryItem] = []
     for u in (media_urls or [])[:4]:
-        if not u or not str(u).startswith("http"):
+        if not u:
             continue
         try:
             gallery_items.append(discord.MediaGalleryItem(str(u)))
@@ -518,6 +597,11 @@ def build_social_repost_container(
     if gallery_items:
         try:
             c.add_item(ui.MediaGallery(*gallery_items))
+        except Exception:
+            pass
+    elif attachment is not None:
+        try:
+            c.add_item(ui.File(attachment))
         except Exception:
             pass
 
@@ -534,15 +618,25 @@ def build_social_repost_container(
         stats_bits.append(f"{emojis.region} {region}")
     c.add_item(ui.TextDisplay("-# " + " • ".join(stats_bits)))
 
-    # Action row — Watch link (heist style)
+    
     row = ui.ActionRow()
-    row.add_item(
-        ui.Button(
-            style=discord.ButtonStyle.link,
-            label=watch_label,
-            url=source_url or profile,
+    if source_url:
+        btn_kw: dict[str, Any] = {
+            "style": discord.ButtonStyle.link,
+            "label": watch_label,
+            "url": source_url,
+        }
+        if watch_emoji:
+            btn_kw["emoji"] = watch_emoji
+        row.add_item(ui.Button(**btn_kw))
+    else:
+        row.add_item(
+            ui.Button(
+                style=discord.ButtonStyle.link,
+                label=watch_label,
+                url=profile,
+            )
         )
-    )
     c.add_item(row)
     return [c]
 

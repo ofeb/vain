@@ -4,7 +4,6 @@ import contextlib
 import functools
 import inspect
 import logging
-import types
 from typing import Any, Callable, Iterable
 
 import discord
@@ -104,16 +103,19 @@ def _wrap_callback(
     dms: bool,
     groupchats: bool,
 ) -> Callable[..., Any]:
-    """apply slash context flags and auto defer interactions"""
+    """apply slash context flags and auto defer interactions.
+
+    Preserves the original signature so discord.py never treats ``ctx`` as a
+    user-facing converter parameter (critical for hybrid + jishaku debug).
+    """
     fn = app_commands.allowed_contexts(guilds=guilds, dms=dms, private_channels=groupchats)(fn)
     fn = app_commands.allowed_installs(guilds=True, users=True)(fn)
     if guilds and not dms and not groupchats:
         fn = commands.guild_only()(fn)
 
-    fn.__globals__["_vain_commands"] = commands
-
-    async def _temp(*args: Any, **kwargs: Any):
-        ctx = next((a for a in args if isinstance(a, _vain_commands.Context)), None)
+    @functools.wraps(fn)
+    async def wrapper(*args: Any, **kwargs: Any):
+        ctx = next((a for a in args if isinstance(a, commands.Context)), None)
         if ctx is not None and getattr(ctx, "interaction", None) is not None:
             inter = ctx.interaction
             if not inter.response.is_done():
@@ -123,14 +125,16 @@ def _wrap_callback(
                     pass
         return await fn(*args, **kwargs)
 
-    wrapper = types.FunctionType(
-        _temp.__code__,
-        fn.__globals__,
-        _temp.__name__,
-        _temp.__defaults__,
-        _temp.__closure__,
-    )
-    functools.update_wrapper(wrapper, fn)
+    # Keep original callable signature (incl. injected ctx) for Command.params
+    try:
+        wrapper.__signature__ = inspect.signature(fn)
+    except (TypeError, ValueError):
+        pass
+    # Drop annotations that could re-introduce Context as a Converter on the wrapper
+    try:
+        wrapper.__annotations__ = dict(getattr(fn, "__annotations__", {}) or {})
+    except Exception:
+        pass
     return wrapper
 
 
@@ -224,9 +228,49 @@ def _hybrid_command(name: str | None = None, **attrs: Any):
         _copy_link_meta(cmd, fn)
         cmd.example = example
         cmd.parameters = params
+        _ensure_ctx_not_converter(cmd)
         return cmd
 
     return deco
+
+
+def _ensure_ctx_not_converter(cmd: commands.Command) -> None:
+    """Sanitize annotations so Context is never treated as a user Converter.
+
+    Does not remove the injected ctx param from cmd.params (dpy needs it for
+    invoke ordering) — only clears Converter-like annotations that would make
+    dpy call Context.convert on message tokens.
+    """
+    try:
+        params = getattr(cmd, "params", None)
+        if not isinstance(params, dict):
+            return
+        for key, param in list(params.items()):
+            name = (getattr(param, "name", None) or key or "").lower()
+            ann = getattr(param, "annotation", inspect._empty)
+            ann_name = getattr(ann, "__name__", "") or str(ann)
+            is_ctx_name = name in {"ctx", "context"}
+            is_ctx_type = (
+                ann is not inspect._empty
+                and (
+                    ann_name in {"Context", "Interaction"}
+                    or ann_name.endswith(".Context")
+                    or (inspect.isclass(ann) and issubclass(ann, commands.Context))
+                )
+            )
+            # Keep the param slot; just neutralize Converter annotation on ctx
+            if is_ctx_name or (is_ctx_type and is_ctx_name):
+                try:
+                    # Parameter is a namedtuple-like in some dpy versions; rebuild if possible
+                    if hasattr(param, "_replace"):
+                        params[key] = param._replace(annotation=inspect.Parameter.empty)
+                    elif hasattr(param, "annotation"):
+                        # fallback: can't mutate easily — leave alone
+                        pass
+                except Exception:
+                    pass
+    except Exception:
+        pass
 
 
 def _hybrid_group(name: str | None = None, **attrs: Any):
@@ -238,6 +282,7 @@ def _hybrid_group(name: str | None = None, **attrs: Any):
         grp = _try_register(commands.hybrid_group, prepared, name=name, attrs=attrs)
         grp.example = example
         grp.parameters = params
+        _ensure_ctx_not_converter(grp)
         _orig_command = grp.command
 
         def sub_command(*args: Any, **kw: Any):

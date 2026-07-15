@@ -1,195 +1,133 @@
-"""TikTok client — scrape web rehydration data for metadata + play URL."""
+import aiofiles
 
-from __future__ import annotations
-
-import re
-from io import BytesIO
 from pathlib import Path
-from typing import Any
-from urllib.parse import urlparse
+from io import BytesIO
+from re import compile
+from orjson import loads
+from munch import munchify
 
-import asyncio
-import json
-
+from .http import State
 from .exceptions import Error
-from .http import State, _munchify
-from .models import TikTokStats, TikTokUser, TikTokVideo
-
-TIKTOK_REGEX = re.compile(
-    r"^.*https?://(?:m|www|vm|vt)?\.?tiktok\.com/"
-    r"((?:.*\b(?:(?:v|embed|photo|video|t)/|\?shareId=|&item_id=)(\d+))|\w+)",
-    re.I,
-)
-REHYDRATION_REGEX = re.compile(
-    r'<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>(.*?)</script>',
-    re.S,
+from .models import (
+  TikTokUser,
+  TikTokStats,
+  TikTokVideo
 )
 
-_DEFAULT_HEADERS = {
-    "Referer": "https://www.tiktok.com/",
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    ),
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-}
-
+TIKTOK_REGEX = compile(r"^.*https:\/\/(?:m|www|vm)?\.?tiktok\.com\/((?:.*\b(?:(?:v|embed|photo|video|t)\/|\?shareId=|\&item_id=)(\d+))|\w+)")
+REHYDRATION_REGEX = compile(r'<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>(.*?)</script>')
 
 class TikTok:
-    """Public TikTok web scraper (no official API key required)."""
+  def __init__(self: "TikTok"):
+    self.session = State()
+    self.headers = {
+      "Cookie": "ttwid=1%7C4jtfZIORfW9Nma3caSwVPQKeOIPeikQC-cptB9SFtRE%7C1752327502%7C904a70c"
+        "5b47b777141ce0610b027cdc06a7e8072728680fd3ebac63835e2a14c; tt_chain_token=oD2" 
+        "L/9Ze+RjY0FOHasXjBQ==; msToken=KyyIxtpF2qUUWINhGmEz_s7aNRRJCz9p9G4dtzumDTOW6R" 
+        "ikevqzSIcvv31WVjsKAk5_bWRq_RInwctnMO4uNkbAHPNW0AxbCK2a5qEoYfMvtT-Ms0y8--bN5mqw" 
+        "N8DSwclub7i7s56GqoqxfYFkGg==; odin_tt=33649e9b6a18d8297dbf1158c376a47a61ddc1bf"
+        "9f476a49a4e9d6f32613904c4a1845084307f849afa808328f02ddff3f67c8cca6c262ce5d8088"
+        "bd1c7ad9cdfd7e8cc62c6feb06af87cf87597087b8; "
+        "cookie-consent={%22optional%22:true%2C%22ga%22:true%2C%22af%22:true%2C%22fbp"
+        "%22:true%2C%22lip%22:true%2C%22bing%22:true%2C%22ttads%22:true%2C%22reddit%22"
+        ":true%2C%22hubspot%22:true%2C%22version%22:%22v10%22}; passport_csrf_token="
+        "7c6732ea13325a8530707a417a62722f; passport_csrf_token_default=7c6732ea13325a85"
+        "30707a417a62722f; tt_csrf_token=TIHqbHIW-GMVGwOTyyL294UceCXs-vrmm5vE; s_v_web_"
+        "id=verify_md0akixj_dSCvFkWD_vFBj_4bzi_B1zz_KPTQzHHfoAAt",
+      "Referer": "https://www.tiktok.com/",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    }
+  
+  async def get_user(self: "TikTok", username: str):
+    """
+    Get use information by username.
 
-    def __init__(self, *, cookies: str | None = None) -> None:
-        self.session = State()
-        self.headers = dict(_DEFAULT_HEADERS)
-        if cookies:
-            self.headers["Cookie"] = cookies
+    Parameters
+    ----------
+    username : :class:`str`
+      The username of the user to fetch the info.
 
-    async def resolve_url(self, url: str) -> str:
-        """Follow short links (vm/vt) to the final tiktok.com URL."""
-        url = (url or "").strip()
-        if not url.startswith("http"):
-            url = "https://" + url
-        host = urlparse(url).netloc.lower()
-        if "vm.tiktok" not in host and "vt.tiktok" not in host:
-            return url
-        try:
-            # State returns body; use aiohttp for redirect resolution
-            from aiohttp import ClientSession
+    Returns
+    -------
+    :class:`TikTokUser`
+      A TikTokUser object with the user information.
+    """
 
-            async with ClientSession(headers=self.headers) as cs:
-                async with cs.get(url, allow_redirects=True, max_redirects=10) as resp:
-                    return str(resp.url)
-        except Exception:
-            return url
+    data = await self.session.request(
+      "GET",
+      f"https://www.tiktok.com/@{username}",
+      headers=self.headers,
+    )
+    result = REHYDRATION_REGEX.search(data)
+    raw = loads(result.group(1))["__DEFAULT_SCOPE__"]["webapp.user-detail"]
+    loaded = munchify(raw)
 
-    async def get_user(self, username: str) -> TikTokUser:
-        username = (username or "").lstrip("@").strip()
-        if not username:
-            raise Error("Username is required.")
+    if loaded.statusCode == 10221:
+      raise Error(f"Can't find an user with the username `@{username}`.")
 
-        data = await self.session.request(
-            "GET",
-            f"https://www.tiktok.com/@{username}",
-            headers=self.headers,
-        )
-        raw = self._rehydrate(data)
-        detail = raw["__DEFAULT_SCOPE__"]["webapp.user-detail"]
-        loaded = _munchify(detail)
+    stats = TikTokStats(**loaded.userInfo.stats)
+    loaded.userInfo.user.stats = stats
+    return TikTokUser(**loaded.userInfo.user)
 
-        if getattr(loaded, "statusCode", None) == 10221:
-            raise Error(f"Can't find a user with the username `@{username}`.")
+  async def get_video(self: "TikTok", url: str):
+    """
+    Get video data based on the given url.
 
-        user_info = loaded.userInfo
-        stats = TikTokStats.model_validate(user_info.stats.__dict__ if hasattr(user_info.stats, "__dict__") else user_info.stats)
-        user_data = user_info.user.__dict__ if hasattr(user_info.user, "__dict__") else dict(user_info.user)
-        if isinstance(user_data, dict):
-            user_data["stats"] = stats.model_dump(by_alias=True)
-        return TikTokUser.model_validate(user_data if isinstance(user_data, dict) else user_info.user)
+    Parameters
+    ----------
+    url : :class:`str`
+      The tiktok video url.
 
-    async def get_video(self, url: str) -> TikTokVideo:
-        """Fetch video metadata and set ``url`` to the CDN play address."""
-        if not TIKTOK_REGEX.match(url or ""):
-            # Still try resolving short links that may not match yet
-            url = await self.resolve_url(url)
-            if not TIKTOK_REGEX.match(url or ""):
-                raise Error("This is not a valid TikTok URL.")
+    Returns
+    -------
+    :class:`TikTokVideo`
+      A TikTokVideo object containing the video information.
+    """
+    if not TIKTOK_REGEX.match(url):
+      raise Error("This is not a valid tiktok url.")
 
-        url = await self.resolve_url(url)
-        data = await self.session.request("GET", url, headers=self.headers)
-        raw = self._rehydrate(data)
-        scope = raw["__DEFAULT_SCOPE__"]
-        detail = scope.get("webapp.video-detail") or scope.get("webapp.video-detail".replace("-", "_"))
-        if not detail:
-            # Try alternate key variants
-            for key, value in scope.items():
-                if "video" in key.lower() and isinstance(value, dict):
-                    detail = value
-                    break
-        if not detail:
-            raise Error("Could not parse TikTok video data.")
+    data = await self.session.request(
+      "GET",
+      url,
+      headers=self.headers,
+    )
+    result = REHYDRATION_REGEX.search(data)
+    loaded = munchify(loads(result.group(1))["__DEFAULT_SCOPE__"]["webapp.video-detail"])
 
-        loaded = _munchify(detail)
-        item = loaded.itemInfo.itemStruct
+    r = loaded.itemInfo.itemStruct
+    user = await self.get_user(r.author.uniqueId)
+    r.author = user
+    r.url = r.video.playAddr
+    return TikTokVideo(**r)
+  
+  async def download_video(self: "TikTok", video: TikTokVideo, path: str | Path | None) -> Path | BytesIO:
+    """
+    Download a tiktok video.
 
-        play = None
-        video = getattr(item, "video", None)
-        if video is not None:
-            play = getattr(video, "playAddr", None) or getattr(video, "downloadAddr", None)
+    Parameters
+    ----------
+    video : :class:`TikTokVideo`
+      The TikTokVideo object to download.
+    path : :class:`str` | :class:`Path` | None
+      The path to save the video. If None, it will return a BytesIO object.
 
-        # Convert munch → plain dict for pydantic
-        def _to_dict(obj: Any) -> Any:
-            if obj is None:
-                return None
-            if isinstance(obj, dict):
-                return {k: _to_dict(v) for k, v in obj.items()}
-            if hasattr(obj, "toDict"):
-                return _to_dict(obj.toDict())
-            if hasattr(obj, "__dict__") and not isinstance(obj, (str, bytes, int, float, bool)):
-                try:
-                    return {k: _to_dict(v) for k, v in dict(obj).items()}
-                except Exception:
-                    pass
-            return obj
+    Returns
+    -------
+    :class:`Path` | :class:`BytesIO`
+      The path to the downloaded video or a BytesIO object if path is None.
+    """
+    video_data = await self.session.request(
+      "GET",
+      video.url,
+      headers=self.headers,
+    )
 
-        raw = _to_dict(item) if not isinstance(item, dict) else item
-        if not isinstance(raw, dict):
-            # munch fallback
-            raw = dict(item) if hasattr(item, "items") else {}
-            raw = {k: getattr(item, k, None) for k in (
-                "id", "desc", "createTime", "stats", "author", "music", "video", "locationCreated"
-            )}
-
-        author = raw.get("author") or {}
-        if isinstance(author, dict):
-            author.setdefault("uniqueId", author.get("unique_id") or author.get("uniqueId") or "")
-            author.setdefault("nickname", author.get("nickname") or author.get("uniqueId") or "")
-            author.setdefault("signature", author.get("signature") or "")
-            author.setdefault("avatarLarger", author.get("avatarLarger") or author.get("avatarThumb") or "")
-            author.setdefault("verified", bool(author.get("verified")))
-            author.setdefault("privateAccount", bool(author.get("privateAccount")))
-
-        stats = raw.get("stats") or {}
-        music = raw.get("music") or {}
-        payload = {
-            "id": raw.get("id") or 0,
-            "desc": raw.get("desc") or raw.get("description") or "",
-            "createTime": raw.get("createTime"),
-            "stats": stats if isinstance(stats, dict) else {},
-            "author": author if isinstance(author, dict) else {},
-            "music": music if isinstance(music, dict) else {},
-            "url": play or "",
-            "locationCreated": raw.get("locationCreated") or raw.get("region"),
-            "webpage_url": url,
-        }
-        return TikTokVideo.model_validate(payload)
-
-    async def download_video(
-        self,
-        video: TikTokVideo,
-        path: str | Path | None = None,
-    ) -> Path | BytesIO:
-        """Download video bytes (only when a local file is actually needed)."""
-        if not video.url:
-            raise Error("Video has no playable URL.")
-        video_data = await self.session.request("GET", video.url, headers=self.headers)
-        if not isinstance(video_data, (bytes, bytearray)):
-            raise Error("Unexpected response when downloading video.")
-
-        if path:
-            save_path = Path(path)
-
-            def _write() -> None:
-                save_path.write_bytes(video_data)
-
-            await asyncio.to_thread(_write)
-            return save_path
-        return BytesIO(video_data)
-
-    @staticmethod
-    def _rehydrate(html: str | Any) -> dict[str, Any]:
-        if not isinstance(html, str):
-            raise Error("Expected HTML when scraping TikTok.")
-        match = REHYDRATION_REGEX.search(html)
-        if not match:
-            raise Error("Could not find TikTok rehydration data.")
-        return json.loads(match.group(1))
+    if path:
+      save_path = Path(path)
+        
+      async with aiofiles.open(save_path, "wb") as f:
+        await f.write(video_data)
+          
+      return save_path
+    else:
+      return BytesIO(video_data)

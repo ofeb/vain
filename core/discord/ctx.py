@@ -79,19 +79,15 @@ class Context(commands.Context):
     also tracks flags for parsed command args"""
 
     def __init__(self, *args, **kwargs) -> None:
-        
-        
         super().__init__(*args, **kwargs)
         self.flags: dict[str, Any] = {}
         self._custom_emoji: dict | None = None
         self._custom_color: dict | None = None
 
-    @classmethod
-    async def convert(cls, ctx, argument: str):
-        
-        
-        from discord.ext import commands as _cmds
-        raise _cmds.BadArgument("The `ctx` parameter cannot be supplied manually.")
+    # Intentionally NO convert() method.
+    # Defining convert() makes Context a Converter; discord.py then tries to
+    # parse message tokens into Context (jishaku debug, hybrid param loops)
+    # and raises BadArgument. Context is framework-injected only.
 
     @property
     def color(self) -> int:
@@ -299,10 +295,10 @@ class Context(commands.Context):
         Classic interactive ``View``s (buttons/selects) keep embeds as-is so
         callbacks keep working.
         """
-        # Ignore leftover kwargs used only by our wrapper
+        
         kwargs.pop("flags", None)
         if flags is not None:
-            # LayoutView path sets components_v2 automatically
+            
             pass
 
         base_kw: dict[str, Any] = {
@@ -320,7 +316,7 @@ class Context(commands.Context):
             base_kw["stickers"] = stickers
         if poll is not None:
             base_kw["poll"] = poll
-        # Drop Nones so super().send signature stays happy
+        
         base_kw = {k: v for k, v in base_kw.items() if v is not None}
         base_kw.update(kwargs)
 
@@ -330,11 +326,11 @@ class Context(commands.Context):
         if files:
             file_list.extend(list(files))
 
-        # Explicit components= (Container list / LayoutView)
+        
         if components is not None:
             layout = layout_from_components(components)
             send_kw = dict(base_kw)
-            # Components V2 messages cannot mix classic content/embeds
+            
             send_kw.pop("suppress_embeds", None)
             if len(file_list) == 1:
                 send_kw["file"] = file_list[0]
@@ -342,7 +338,7 @@ class Context(commands.Context):
                 send_kw["files"] = file_list
             return await super().send(view=layout, **send_kw)
 
-        # Already a LayoutView — pass through
+        
         if isinstance(view, discord.ui.LayoutView):
             send_kw = dict(base_kw)
             send_kw.pop("suppress_embeds", None)
@@ -350,10 +346,10 @@ class Context(commands.Context):
                 send_kw["file"] = file_list[0]
             elif file_list:
                 send_kw["files"] = file_list
-            # V2 layout owns the body; drop classic content/embeds
+            
             return await super().send(view=view, **send_kw)
 
-        # Auto-container classic embeds (live replies), except logs / raw / interactive views
+        
         should_container = (
             not raw_embed
             and not log
@@ -376,10 +372,10 @@ class Context(commands.Context):
                     send_kw["file"] = file_list[0]
                 elif file_list:
                     send_kw["files"] = file_list
-                # Components V2 owns the body (content/embeds not mixed)
+                
                 return await super().send(view=layout, **send_kw)
             except Exception:
-                # Fall back to classic embed path if conversion fails
+                
                 pass
 
         send_kw = dict(base_kw)

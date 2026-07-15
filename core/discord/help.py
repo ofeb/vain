@@ -32,7 +32,10 @@ if TYPE_CHECKING:
 
 _BLANK = "‎"
 _HOME = "__home__"
-_SKIP = frozenset({"self", "cls", "ctx", "interaction", "message", "flags", "bot"})
+_SKIP = frozenset({
+    "self", "cls", "ctx", "context", "interaction", "inter",
+    "message", "flags", "bot", "args", "kwargs",
+})
 _PLACEHOLDER_DESCRIPTIONS = frozenset({"no description", "no description given"})
 _USAGE_TOKENS = re.compile(r"\([^)]+\)|\[[^\]]+\]|<[^>]+>")
 
@@ -176,7 +179,7 @@ def _fmt_commands(cmds: Iterable[Command], limit: int = 3900) -> str:
 
 
 def _visible_subs(grp: Group) -> list[Command]:
-    """Leaf (non-group) commands under a group — used for help pagination."""
+    """Walk a group tree and return leaf commands only (no intermediate groups)."""
     out: list[Command] = []
 
     def _walk(g: Group) -> None:
@@ -184,6 +187,7 @@ def _visible_subs(grp: Group) -> list[Command]:
             if c.hidden:
                 continue
             if isinstance(c, Group):
+                # Do not add intermediate groups as pages — expand to leaves
                 if c.commands:
                     _walk(c)
             else:
@@ -193,9 +197,15 @@ def _visible_subs(grp: Group) -> list[Command]:
     return out
 
 
-def _direct_children(grp: Group) -> list[Command]:
-    """Immediate visible children (groups + leaves) for overview pages."""
-    return [c for c in grp.commands if not c.hidden]
+def _leaf_pages(root: Command) -> list[Command]:
+    """Pages for help: leaf commands under a group, or the command itself."""
+    if isinstance(root, Group):
+        leaves = _visible_subs(root)
+        if leaves:
+            return sorted(leaves, key=lambda c: command_display_name(c).lower())
+        # Group with no children — show the group shell once
+        return [root]
+    return [root]
 
 
 _LINKED_SUB_ALIASES = {
@@ -234,22 +244,37 @@ def _find_linked_sub(root: Command, sub: str, bot: Vain) -> Command | None:
     return None
 
 
-def _param_items(cmd: Command) -> list[tuple[str, Any]]:
-    """Return visible user-facing parameters, hiding ctx/interaction/self etc.
+def _is_internal_param(name: str, param: Any = None) -> bool:
+    """True for framework-only params that must never appear in help/syntax."""
+    low = (name or "").lower().strip()
+    if low in _SKIP:
+        return True
+    if low.startswith("_"):
+        return True
+    if param is None:
+        return False
+    ann = getattr(param, "annotation", inspect._empty)
+    if ann is inspect._empty or ann is None:
+        return False
+    # Direct type matches
+    try:
+        if ann in (CommandsContext, discord.Interaction):
+            return True
+        if inspect.isclass(ann) and issubclass(ann, (CommandsContext, discord.Interaction)):
+            return True
+    except TypeError:
+        pass
+    ann_name = (getattr(ann, "__name__", "") or str(ann)).lower()
+    if any(tok in ann_name for tok in ("context", "interaction", "commands.context")):
+        return True
+    return False
 
-    This is critical for hybrid commands (where discord.py may surface a 'ctx'
-    or 'interaction' parameter) and to ensure help never shows internal context params.
-    """
+
+def _param_items(cmd: Command) -> list[tuple[str, Any]]:
+    """Return visible user-facing parameters, hiding ctx/interaction/self etc."""
     out: list[tuple[str, Any]] = []
     for name, param in cmd.clean_params.items():
-        if name in _SKIP:
-            continue
-        ann = getattr(param, "annotation", inspect._empty)
-        
-        if ann in (CommandsContext, discord.Interaction):
-            continue
-        ann_name = getattr(ann, "__name__", "") or str(ann)
-        if ann_name.lower() in {"context", "interaction"}:
+        if _is_internal_param(name, param):
             continue
         out.append((name, param))
     return out
@@ -400,8 +425,7 @@ def _format_usage_token(label: str, *, required: bool) -> str:
     return f"<{cleaned}>" if required else f"[{cleaned}]"
 
 
-def _derived_params(cmd: Command) -> str:
-    """Parameter tokens only (no command name)."""
+def _derived_syntax(cmd: Command) -> str:
     tokens: list[str] = []
     for name, param in _param_items(cmd):
         label = _usage_parameter_label(name, getattr(param, "annotation", inspect._empty))
@@ -410,78 +434,49 @@ def _derived_params(cmd: Command) -> str:
         token = _format_usage_token(label, required=getattr(param, "required", False))
         if token:
             tokens.append(token)
-    return " ".join(tokens)
-
-
-def _derived_syntax(cmd: Command) -> str:
-    params = _derived_params(cmd)
-    name = command_display_name(cmd)
-    return f"{name} {params}".strip() if params else name
-
-
-def _strip_cmd_name_prefix(text: str, cmd: Command) -> str:
-    """Remove any leading command-name / alias prefixes from usage text."""
-    body = _strip_hidden_params_from_text(str(text or "").strip())
-    if not body:
-        return ""
-    lowered = body.lower()
-    for name in sorted(_command_names(cmd), key=len, reverse=True):
-        if lowered == name:
-            return ""
-        if lowered.startswith(f"{name} "):
-            body = body[len(name) :].strip()
-            lowered = body.lower()
-    # Also strip repeated name segments (the old double-prefix bug)
-    name = command_display_name(cmd)
-    while True:
-        parts = body.split()
-        name_parts = name.split()
-        if len(parts) >= len(name_parts) * 2 and parts[: len(name_parts)] == name_parts:
-            # e.g. "context emoji warn context emoji warn [emoji]"
-            if parts[len(name_parts) : len(name_parts) * 2] == name_parts:
-                body = " ".join(parts[len(name_parts) :])
-                continue
-        break
-    return body
+    suffix = " ".join(tokens)
+    result = f"{command_display_name(cmd)} {suffix}".strip()
+    return _strip_hidden_params_from_text(result)
 
 
 def _syntax(cmd: Command, prefix: str) -> str:
     usage, _ = _normalize_usage_and_example(str(cmd.usage or ""), prefix=str(prefix))
-    name = command_display_name(cmd)
-
-    if usage:
-        # usage may be full syntax or params-only / template like "(subcommand) <args>"
-        params = _strip_cmd_name_prefix(usage, cmd)
-    else:
-        params = _derived_params(cmd)
-
-    # Groups with subcommands and only a usage template
-    if isinstance(cmd, Group) and not params:
-        params = "<subcommand>"
-
-    syntax = f"{name} {params}".strip() if params else name
+    syntax = usage or _derived_syntax(cmd)
     syntax = _strip_hidden_params_from_text(syntax)
-
-    # Final safety: collapse accidental double name
-    doubled = f"{name} {name}"
-    if syntax.lower().startswith(doubled.lower()):
-        syntax = name + syntax[len(doubled) :]
-
+    name = command_display_name(cmd)
+    lowered = syntax.lower()
+    nlow = name.lower()
+    
+    while f"{nlow} {nlow}" in lowered or lowered.startswith(f"{nlow} {nlow} "):
+        syntax = re.sub(re.escape(name) + r"\s+" + re.escape(name), name, syntax, count=1, flags=re.I)
+        lowered = syntax.lower()
+    if any(lowered == n or lowered.startswith(f"{n} ") for n in _command_names(cmd)):
+        pass
+    else:
+        
+        syntax = f"{name} {syntax}".strip()
     if prefix and not syntax.startswith(prefix):
         syntax = f"{prefix}{syntax}"
     return syntax.strip()
 
 
 def _strip_hidden_params_from_text(text: str) -> str:
-    """Remove leading/trailing/internal references to ctx etc from generated syntax text."""
+    """Remove any leaked ctx/interaction/self tokens from syntax/example strings."""
     if not text:
         return text
-    hidden = {"ctx", "interaction", "self", "cls"}
+    hidden = {
+        "ctx", "context", "interaction", "inter", "self", "cls",
+        "message", "bot", "args", "kwargs",
+    }
     parts = text.split()
     cleaned = []
     for p in parts:
+        # strip wrappers: <ctx>, [context], (interaction), `ctx`
         low = p.lower().strip("`.,:;()[]<>")
         if low in hidden:
+            continue
+        # also drop tokens like <ctx: Context> style fragments
+        if low.startswith("ctx") and ("context" in low or low == "ctx"):
             continue
         cleaned.append(p)
     return " ".join(cleaned).strip()
@@ -537,32 +532,45 @@ def _autogenerated_example(cmd: Command, syntax: str) -> str:
 
 
 def _example(cmd: Command, prefix: str) -> str | None:
-    """Return a display example only when the command defines one (never auto-invent)."""
-    raw_attr = getattr(cmd, "example", None)
-    if raw_attr is None:
+    """Return a display example, or None when none should be shown.
+
+    Prefer explicit ``example=``, then usage-line examples, then a light
+    autogenerated sample. Never return the bare syntax as an "example".
+    """
+    raw = _strip_prefix(str(getattr(cmd, "example", None) or ""), str(prefix))
+    if raw:
+        raw = _strip_hidden_params_from_text(raw)
+        
+        name = command_display_name(cmd)
+        lowered = raw.lower()
+        nlow = name.lower()
+        while lowered.startswith(f"{nlow} {nlow}"):
+            raw = raw[len(name) :].lstrip()
+            lowered = raw.lower()
+        if not any(lowered == n or lowered.startswith(f"{n} ") for n in _command_names(cmd)):
+            raw = f"{name} {raw}".strip()
+        if prefix and not raw.startswith(prefix):
+            raw = f"{prefix}{raw}"
+        return raw.strip() or None
+
+    _, usage_example = _normalize_usage_and_example(str(cmd.usage or ""), prefix=str(prefix))
+    if usage_example:
+        ue = _strip_hidden_params_from_text(usage_example)
+        if prefix and not ue.startswith(prefix):
+            ue = f"{prefix}{ue}"
+        return ue or None
+
+    
+    auto = _autogenerated_example(cmd, _syntax(cmd, prefix))
+    if not auto:
         return None
-    raw = str(raw_attr).strip()
-    if not raw:
-        return None  # empty example="" → hide the line
-
-    raw = _strip_prefix(raw, str(prefix))
-    raw = _strip_hidden_params_from_text(raw)
-    if not raw:
+    auto = _strip_hidden_params_from_text(auto)
+    if prefix and not auto.startswith(prefix):
+        auto = f"{prefix}{auto}"
+    
+    if auto.strip() == _syntax(cmd, prefix).strip():
         return None
-
-    name = command_display_name(cmd)
-    lowered = raw.lower()
-    if not any(lowered == n or lowered.startswith(f"{n} ") for n in _command_names(cmd)):
-        raw = f"{name} {raw}".strip()
-
-    # Collapse accidental double name
-    doubled = f"{name} {name}"
-    if raw.lower().startswith(doubled.lower()):
-        raw = name + raw[len(doubled) :]
-
-    if prefix and not raw.startswith(prefix):
-        raw = f"{prefix}{raw}"
-    return raw.strip() or None
+    return auto.strip()
 
 
 def _usage_params(cmd: Command, prefix: str) -> list[str]:
@@ -775,23 +783,18 @@ def _detail_text(
 ) -> str:
     """Minimal command/group detail text matching inspiration layout."""
     prefix = _get_prefix(ctx)
-    is_grp = group_title or isinstance(cmd, Group)
+    
+    is_grp = bool(group_title and isinstance(cmd, Group))
     name = command_display_name(cmd)
     desc = _description(cmd) or "No description provided."
-
-    # For groups, list direct children so intermediate groups aren't empty shells
-    if isinstance(cmd, Group):
-        kids = _direct_children(cmd)
-        if kids:
-            child_names = ", ".join(f"`{command_display_name(c)}`" for c in sorted(kids, key=lambda x: command_display_name(x).lower()))
-            desc = f"{desc}\n\n**Subcommands:** {child_names}"
-
     aliases = _aliases(cmd)
     if aliases == "n/a":
         aliases = "None"
     perm = _information(cmd).get("permissions") or "None"
-    syntax = _syntax(cmd, prefix)
+    syntax = _strip_hidden_params_from_text(_syntax(cmd, prefix))
     ex = _example(cmd, prefix)
+    if ex:
+        ex = _strip_hidden_params_from_text(ex)
 
     lines = [
         f"### {'Group' if is_grp else 'Command'}: `{name}`",
@@ -802,7 +805,7 @@ def _detail_text(
         "```yaml",
         f"Syntax: {syntax}",
     ]
-    # Only show Example when the command actually defines one
+    
     if ex and ex.strip() and ex.strip() != syntax.strip():
         lines.append(f"Example: {ex}")
     lines.append("```")
@@ -901,8 +904,6 @@ class HelpMenu(ui.LayoutView):
         self.cats = cats
         self.accent = accent
         self.msg: discord.Message | None = None
-        self._page_kind = "home"
-        self._page_label = ""
 
         self.body = ui.TextDisplay(_home_text(ctx))
         self.container = ui.Container(accent_colour=accent)
@@ -938,28 +939,23 @@ class HelpMenu(ui.LayoutView):
     async def _on_select(self, inter: Interaction) -> None:
         value = self.select.values[0]
         if value == _HOME:
-            self._page_kind = "home"
             self.body.content = _home_text(self.ctx)
         else:
-            self._page_kind = "category"
-            self._page_label = value
             self.body.content = _category_text(self.ctx, value, self.cats.get(value, []))
         await inter.response.edit_message(view=self)
 
     async def on_timeout(self) -> None:
-        # Drop the select menu on timeout — keep the page content only
-        if not self.msg:
+        # Drop the select menu on timeout
+        if self.msg is None:
             return
-        if self._page_kind == "category":
-            content = _category_text(self.ctx, self._page_label, self.cats.get(self._page_label, []))
-        else:
-            content = _home_text(self.ctx)
-        view = ui.LayoutView(timeout=None)
+        body = ui.TextDisplay(self.body.content)
         container = ui.Container(accent_colour=self.accent)
-        container.add_item(ui.TextDisplay(content))
-        view.add_item(container)
+        container.add_item(body)
+        bare = ui.LayoutView(timeout=None)
+        bare.add_item(container)
         with contextlib.suppress(discord.HTTPException):
-            await self.msg.edit(view=view)
+            await self.msg.edit(view=bare)
+        self.stop()
 
     async def start(self) -> discord.Message:
         kw: dict[str, Any] = {"view": self}
@@ -1022,11 +1018,13 @@ class GroupHelpMenu(ui.LayoutView):
 
     def _page_text(self) -> str:
         cmd = self.pages[self.index]
-        
+        # Paginated family help pages are leaf commands → always "Command:"
+        # (Group: only if we somehow still have a shell with no children)
+        is_shell = isinstance(cmd, Group) and not list(getattr(cmd, "commands", []) or [])
         return _detail_text(
             cmd,
             self.ctx,
-            group_title=isinstance(cmd, Group),
+            group_title=is_shell,
             page_info=self._page_info(),
         )
 
@@ -1073,15 +1071,17 @@ class GroupHelpMenu(ui.LayoutView):
         self.stop()
 
     async def on_timeout(self) -> None:
-        # Remove buttons entirely on timeout (keep content)
-        if self.msg:
-            content = self._page_text()
-            view = ui.LayoutView(timeout=None)
-            container = ui.Container(accent_colour=self.accent)
-            container.add_item(ui.TextDisplay(content))
-            view.add_item(container)
-            with contextlib.suppress(discord.HTTPException):
-                await self.msg.edit(view=view)
+        # Drop buttons entirely on timeout (help only — not roleplay/pagination)
+        if self.msg is None:
+            return
+        body = ui.TextDisplay(self._page_text())
+        container = ui.Container(accent_colour=self.accent)
+        container.add_item(body)
+        bare = ui.LayoutView(timeout=None)
+        bare.add_item(container)
+        with contextlib.suppress(discord.HTTPException):
+            await self.msg.edit(view=bare)
+        self.stop()
 
     async def start(self) -> discord.Message:
         kw: dict[str, Any] = {"view": self}
@@ -1232,7 +1232,13 @@ class VainHelp:
             await self._send(ctx, e)
 
     async def send_brief(self, ctx: Context, cmd: Command) -> discord.Message:
-        return await self._send(ctx, _brief_embed(cmd, ctx))
+        """Used by ctx.send_help — always show full group pagination when applicable."""
+        owner = ctx.author.id in ctx.bot.owners
+        if isinstance(cmd, Group):
+            await self._send_group(ctx, cmd, targets=self._family_targets(ctx.bot, cmd, owner=owner))
+            return None  # type: ignore[return-value]
+        await self._send_cmd(ctx, cmd)
+        return None  # type: ignore[return-value]
 
     async def _send_cmd(self, ctx: Context, cmd: Command) -> None:
         accent = await _accent_color(ctx.bot)
@@ -1255,12 +1261,13 @@ class VainHelp:
             if parent is not None:
                 root = parent
 
+        # Groups → leaf subcommands only (never empty intermediate group shells)
         if isinstance(root, Group):
-            return [root] + _visible_subs(root)
+            return _leaf_pages(root)
 
         linked = _linked_family_commands(bot, root.name, owner=owner)
         if linked:
-            return [root] + linked
+            return [root] + [c for c in linked if c is not root]
 
         prefix = f"{root.qualified_name.lower()} "
         seen = {root.qualified_name}
@@ -1271,6 +1278,8 @@ class VainHelp:
                 continue
             if command.hidden or _cmd_hidden(command, owner=owner):
                 continue
+            if isinstance(command, Group):
+                continue
             if command.qualified_name.lower().startswith(prefix):
                 seen.add(command.qualified_name)
                 family.append(command)
@@ -1278,24 +1287,19 @@ class VainHelp:
 
     async def _send_group(self, ctx: Context, grp: Command, *, targets: list[Command] | None = None) -> None:
         owner = ctx.author.id in ctx.bot.owners
-        targets = targets or self._family_targets(ctx.bot, grp, owner=owner)
-
-        # Paginate leaf commands only — skip empty intermediate shell groups
+        pages = targets or self._family_targets(ctx.bot, grp, owner=owner)
+        # Guarantee leaves only
         if isinstance(grp, Group):
-            leaves = _visible_subs(grp)
-            pages: list[Command] = leaves if leaves else [grp]
-        else:
-            children = sorted(
-                [t for t in targets if t is not grp and not isinstance(t, Group)],
-                key=lambda c: command_display_name(c).lower(),
-            )
-            pages = ([grp] + children) if children else [grp]
+            pages = _leaf_pages(grp) if not targets else [
+                c for c in pages if not isinstance(c, Group) or not getattr(c, "commands", None)
+            ]
+            if not pages:
+                pages = _leaf_pages(grp)
 
         if not pages:
             await self._send_cmd(ctx, grp)
             return
 
-        # Single leaf → normal command help
         if len(pages) == 1 and not isinstance(pages[0], Group):
             await self._send_cmd(ctx, pages[0])
             return
@@ -1305,7 +1309,7 @@ class VainHelp:
             menu = GroupHelpMenu(ctx, pages, accent)
             menu.msg = await menu.start()
         except Exception:
-            await self._send(ctx, _detail_embed(grp, ctx, group_title=True))
+            await self._send_cmd(ctx, pages[0])
 
     async def _send_cog(self, ctx: Context, cog: Package) -> None:
         cmds = [c for c in cog.get_commands() if not c.hidden]

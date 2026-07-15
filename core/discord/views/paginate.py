@@ -120,7 +120,7 @@ class PaginateView(discord.ui.LayoutView):
             row.add_item(goto_btn)
             row.add_item(cancel_btn)
             container.add_item(row)
-            # page footer hint
+            
             container.add_item(
                 discord.ui.TextDisplay(
                     f"-# Page {self.index + 1}/{len(self.pages)}"
@@ -148,7 +148,7 @@ class PaginateView(discord.ui.LayoutView):
         if self.message is None:
             return
         with suppress(discord.HTTPException):
-            # Drop interactive controls on timeout
+            
             raw = self.pages[self.index]
             if isinstance(raw, discord.Embed):
                 container = embed_to_container(raw)
@@ -214,7 +214,7 @@ async def send_pages(
         page = pages[0]
         if isinstance(page, discord.Embed):
             if message is not None:
-                # Prefer container edit when possible
+                
                 from core.tools.aesthetic import embed_to_layout
 
                 layout = embed_to_layout(page)

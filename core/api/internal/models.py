@@ -224,54 +224,35 @@ class TikTokBioLinks(BaseModel):
   link: str
 
 class TikTokStats(BaseModel):
-  model_config = {"populate_by_name": True, "extra": "ignore"}
-
-  following: int = Field(default=0, alias="followingCount")
-  followers: int = Field(default=0, alias="followerCount")
-  likes: int = Field(default=0, alias="heartCount")
-  videos: int = Field(default=0, alias="videoCount")
+  following: int = Field(alias="followingCount")
+  followers: int = Field(alias="followerCount")
+  likes: int = Field(alias="heartCount")
+  videos: int = Field(alias="videoCount")
 
 class TikTokUser(BaseModel):
-  model_config = {"populate_by_name": True, "extra": "ignore"}
-
-  id: int | str = 0
-  username: str = Field(default="", alias="uniqueId")
-  nickname: str = ""
-  description: str = Field(default="", alias="signature")
-  avatar: Optional[str] = Field(default=None, alias="avatarLarger")
-  is_verified: bool = Field(default=False, alias="verified")
-  is_private: bool = Field(default=False, alias="privateAccount")
-  stats: Optional[TikTokStats] = None
+  id: int
+  username: str = Field(alias="uniqueId")
+  nickname: str
+  description: str = Field(alias="signature")
+  avatar: HttpUrl = Field(alias="avatarLarger")
+  is_verified: bool = Field(alias="verified")
+  is_private: bool = Field(alias="privateAccount")
+  stats: TikTokStats
 
 class TikTokVideoStats(BaseModel):
-  model_config = {"populate_by_name": True, "extra": "ignore"}
-
-  likes: int = Field(default=0, alias="diggCount")
-  shares: int = Field(default=0, alias="shareCount")
-  comments: int = Field(default=0, alias="commentCount")
-  plays: int = Field(default=0, alias="playCount")
-  saves: int = Field(default=0, alias="collectCount")
-
-class TikTokMusic(BaseModel):
-  model_config = {"populate_by_name": True, "extra": "ignore"}
-
-  id: Optional[str] = None
-  title: str = ""
-  author: str = Field(default="", alias="authorName")
-  play_url: Optional[str] = Field(default=None, alias="playUrl")
+  likes: int = Field(alias="diggCount")
+  shares: int = Field(alias="shareCount")
+  comments: int = Field(alias="commentCount")
+  plays: int = Field(alias="playCount")
+  saves: int = Field(alias="collectCount")
 
 class TikTokVideo(BaseModel):
-  model_config = {"populate_by_name": True, "extra": "ignore"}
-
-  id: int | str = 0
-  description: str = Field(default="", alias="desc")
-  created: Optional[datetime] = Field(default=None, alias="createTime")
-  stats: Optional[TikTokVideoStats] = None
-  author: Optional[TikTokUser] = None
-  music: Optional[TikTokMusic] = None
-  url: str = ""
-  region: Optional[str] = Field(default=None, alias="locationCreated")
-  webpage_url: str = ""
+  id: int
+  description: str = Field(alias="desc")
+  created: datetime = Field(alias="createTime")
+  stats: TikTokVideoStats
+  author: TikTokUser
+  url: str
 
 class BioLinks(BaseModel):
   link_id: int
@@ -280,18 +261,16 @@ class BioLinks(BaseModel):
   is_pinned: Optional[bool] = None
 
 class InstagramUser(BaseModel):
-  model_config = {"populate_by_name": True, "extra": "ignore"}
-
-  pk: int | str = 0
-  username: str = ""
-  full_name: str = ""
-  is_private: bool = False
-  is_verified: bool = False
-  media_count: int = 0
-  followers: int = Field(default=0, alias="follower_count")
-  following: int = Field(default=0, alias="following_count")
-  is_business: bool = False
-  avatar: Optional[str] = Field(default=None, alias="profile_pic_url")
+  pk: int
+  username: str
+  full_name: str
+  is_private: bool
+  is_verified: bool
+  media_count: int
+  followers: int = Field(alias="follower_count")
+  following: int = Field(alias="following_count")
+  is_business: bool
+  avatar: Optional[HttpUrl] = Field(default=None, alias="profile_pic_url")
   biography: Optional[str] = None
   account_type: Optional[int] = None
   external_url: Optional[str] = None
@@ -338,22 +317,19 @@ class InstagramComment(BaseModel):
   user: InstagramCommentUser
 
 class InstagramMedia(BaseModel):
-  model_config = {"populate_by_name": True, "extra": "ignore"}
-
-  pk: int | str = 0
-  id: int | str = 0
-  code: str = ""
-  media_type: int = 1
-  taken_at: Optional[datetime] = None
-  like_count: int = 0
-  comment_count: int = 0
+  pk: int
+  id: int
+  code: str
+  media_type: int
+  taken_at: datetime
+  like_count: int
+  comment_count: int
   play_count: Optional[int] = None
   title: Optional[str] = None
-  caption: Optional[Any] = None
-  user: Optional[InstagramStoryUser] = None
-  image_urls: Optional[List[str]] = None
-  thumbnail_url: Optional[str] = None
-  video_url: Optional[str] = None
+  user: InstagramStoryUser
+  image_urls: Optional[List[HttpUrl]] = None
+  thumbnail_url: Optional[HttpUrl] = None
+  video_url: Optional[HttpUrl] = None
   video_duration: Optional[float] = 0.0
 
 class InstagramFollowerUser(BaseModel):

@@ -1,231 +1,91 @@
-non group help command
-------------------------
-{
-    "activity": null,
-    "activityInstance": null,
-    "application": null,
-    "applicationId": null,
-    "attachments": [],
-    "author": {
-        "id": "1376549720553558106",
-        "username": "guilt",
-        "discriminator": "7103",
-        "avatar": "aaf81a5391761d9091dea9b7496e96ad",
-        "avatarDecorationData": null,
-        "banner": null,
-        "verified": false,
-        "bot": true,
-        "system": false,
-        "mobile": false,
-        "desktop": false,
-        "flags": 65536,
-        "publicFlags": 65536,
-        "purchasedFlags": 0,
-        "premiumUsageFlags": 0,
-        "guildMemberAvatars": {
-            "1464981193299853505": "e97a40081a17e14ab5eb90e7b810b353"
-        },
-        "hasBouncedEmail": false,
-        "globalName": null,
-        "primaryGuild": null,
-        "collectibles": null,
-        "displayNameStyles": null,
-        "premiumState": null,
-        "perks": null,
-        "restrictedSchedule": null,
-        "appTransactionIds": null,
-        "nick": "guilt"
-    },
-    "blocked": false,
-    "boostingPrompt": null,
-    "bot": false,
-    "call": null,
-    "changelogId": null,
-    "channel_id": "1524563458228752394",
-    "codedLinks": [],
-    "components": [
-        {
-            "type": 17,
-            "id": "0",
-            "spoiler": false,
-            "components": [
-                {
-                    "type": 10,
-                    "id": "0,0",
-                    "content": "### Command: `botinfo`\n> Get information about the bot.\n\n**Aliases:** about, bi\n**Permissions:** None\n```yaml\nSyntax: ,botinfo\n```\n-# Module: Information"
-                }
-            ]
-        }
-    ],
-    "content": "",
-    "diffViewDisabled": false,
-    "editedTimestamp": null,
-    "embeds": [],
-    "flags": 32768,
-    "giftCodes": [],
-    "giftingPrompt": null,
-    "id": "1526610584076816475",
-    "ignored": false,
-    "interaction": null,
-    "interactionData": null,
-    "interactionError": null,
-    "interactionMetadata": null,
-    "isSearchHit": false,
-    "isUnsupported": false,
-    "loggingName": null,
-    "mediaMention": null,
-    "mentionChannels": [],
-    "mentioned": false,
-    "mentionEveryone": false,
-    "mentionGames": [],
-    "mentionRoles": [],
-    "mentions": [],
-    "messageReference": null,
-    "messageSnapshots": [],
-    "pinned": false,
-    "premiumGroupInviteId": null,
-    "reactions": [],
-    "referralTrialOfferId": null,
-    "showMeYourNameGroupId": "g-1526610584076816475",
-    "state": "SENT",
-    "stickerItems": [],
-    "stickers": [],
-    "timestamp": "2026-07-14T15:25:26.297Z",
-    "tts": false,
-    "type": 0,
-    "webhookId": null
-}
----------------------
-group help command
-{
-    "activity": null,
-    "activityInstance": null,
-    "application": null,
-    "applicationId": null,
-    "attachments": [],
-    "author": {
-        "id": "1376549720553558106",
-        "username": "guilt",
-        "discriminator": "7103",
-        "avatar": "aaf81a5391761d9091dea9b7496e96ad",
-        "avatarDecorationData": null,
-        "banner": null,
-        "verified": false,
-        "bot": true,
-        "system": false,
-        "mobile": false,
-        "desktop": false,
-        "flags": 65536,
-        "publicFlags": 65536,
-        "purchasedFlags": 0,
-        "premiumUsageFlags": 0,
-        "guildMemberAvatars": {
-            "1464981193299853505": "e97a40081a17e14ab5eb90e7b810b353"
-        },
-        "hasBouncedEmail": false,
-        "globalName": null,
-        "primaryGuild": null,
-        "collectibles": null,
-        "displayNameStyles": null,
-        "premiumState": null,
-        "perks": null,
-        "restrictedSchedule": null,
-        "appTransactionIds": null
-    },
-    "blocked": false,
-    "boostingPrompt": null,
-    "bot": false,
-    "call": null,
-    "changelogId": null,
-    "channel_id": "1524563458228752394",
-    "codedLinks": [],
-    "components": [
-        {
-            "type": 17,
-            "id": "0",
-            "spoiler": false,
-            "components": [
-                {
-                    "type": 10,
-                    "id": "0,0",
-                    "content": "### Group: `role`\n> Add or remove a role from a member.\n\n**Aliases:** r\n**Permissions:** manage roles\n```yaml\nSyntax: ,role <member> <roles...>\nExample: ,role @guilt.bot members, admin\n```\n-# Module: Moderation · Page 1/14"
-                },
-                {
-                    "type": 1,
-                    "id": "0,1",
-                    "components": [
-                        {
-                            "type": 2,
-                            "id": "0,1,0",
-                            "customId": "f30134f7dfa238b13a9380a57ff75f20",
-                            "style": 2,
-                            "emoji": {
-                                "id": "1495524123944685738",
-                                "name": "previous"
-                            }
-                        },
-                        {
-                            "type": 2,
-                            "id": "0,1,1",
-                            "customId": "1e1109b229c756e8f623444eaf0eea89",
-                            "style": 2,
-                            "emoji": {
-                                "id": "1495524038712229939",
-                                "name": "next"
-                            }
-                        },
-                        {
-                            "type": 2,
-                            "id": "0,1,2",
-                            "customId": "4151b99e9a03c3a3a4f4ed9913cbce29",
-                            "style": 4,
-                            "emoji": {
-                                "id": "1495523962447204392",
-                                "name": "cancel"
-                            }
-                        }
-                    ]
-                }
-            ]
-        }
-    ],
-    "content": "",
-    "diffViewDisabled": false,
-    "editedTimestamp": null,
-    "embeds": [],
-    "flags": 32768,
-    "giftCodes": [],
-    "giftingPrompt": null,
-    "id": "1527016061025652836",
-    "ignored": false,
-    "interaction": null,
-    "interactionData": null,
-    "interactionError": null,
-    "interactionMetadata": null,
-    "isSearchHit": false,
-    "isUnsupported": false,
-    "loggingName": null,
-    "mediaMention": null,
-    "mentionChannels": [],
-    "mentioned": false,
-    "mentionEveryone": false,
-    "mentionGames": [],
-    "mentionRoles": [],
-    "mentions": [],
-    "messageReference": null,
-    "messageSnapshots": [],
-    "nonce": "5258065286735385019",
-    "pinned": false,
-    "premiumGroupInviteId": null,
-    "reactions": [],
-    "referralTrialOfferId": null,
-    "showMeYourNameGroupId": "g-1527016061025652836",
-    "state": "SENT",
-    "stickerItems": [],
-    "stickers": [],
-    "timestamp": "2026-07-15T18:16:39.535Z",
-    "tts": false,
-    "type": 0,
-    "webhookId": null
-}
----------------------------------------------------------
+def _build_embed(payload, *, page: int = 1, total: int = 1) -> discord.Embed:
+    description = payload.caption or payload.title or payload.source_url
+    embed = discord.Embed(description=description[:4096] if description else None)
+    if payload.author_name or payload.author_username:
+        name = payload.author_name or payload.author_username
+        if payload.author_username and payload.author_name:
+            name = f"{payload.author_name} (@{payload.author_username})"
+        embed.set_author(name=name, icon_url=payload.author_avatar or None)
+    footer_bits: list[str] = []
+    if payload.likes:
+        footer_bits.append(f"❤️ {payload.likes:,}")
+    if payload.comments:
+        footer_bits.append(f"💬 {payload.comments:,}")
+    if payload.shares:
+        footer_bits.append(f"🔗 {payload.shares:,}")
+    if payload.views:
+        footer_bits.append(f"👀 {payload.views:,}")
+    if total > 1:
+        footer_bits.append(f"Page {page}/{total}")
+    if footer_bits:
+        embed.set_footer(text="  ".join(footer_bits))
+    return embed
+
+
+async def _send_payload(
+    ctx: "Context",
+    payload: RepostPayload,
+    *,
+    allow_url_fetch: bool = False,
+    url_headers: dict[str, str] | None = None,
+) -> bool:
+    posted = False
+    media = _downloaded_media(payload)
+    if not media:
+        if allow_url_fetch and payload.media:
+            session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30))
+            try:
+                item = payload.media[0]
+                file = await _media_file_from_url(
+                    session,
+                    item,
+                    headers=url_headers,
+                )
+                await ctx.send(embed=_build_embed(payload), file=file)
+                return True
+            finally:
+                await session.close()
+
+        await ctx.fail("No media could be resolved for that URL.")
+        return False
+
+    try:
+        if len(media) == 1:
+            file = _media_file_from_data(media[0])
+            await ctx.send(embed=_build_embed(payload), file=file)
+            posted = True
+            return True
+
+        pages: list[MediaPage] = []
+        emojis = PaginatorEmojis(
+            previous=ctx.bot.glyphs.page_previous,
+            next=ctx.bot.glyphs.page_next,
+            navigate=ctx.bot.glyphs.page_navigate,
+            cancel=ctx.bot.glyphs.page_cancel,
+        )
+        for index, item in enumerate(media, start=1):
+            file = _media_file_from_data(item)
+            pages.append(
+                MediaPage(
+                    embed=_build_embed(payload, page=index, total=len(media)),
+                    files=[file],
+                )
+            )
+        paginator = MediaPaginator(
+            pages,
+            author_id=ctx.author.id,
+            bot=ctx.bot,
+            emojis=emojis,
+        )
+        await paginator.start(ctx.channel)
+        posted = True
+        return True
+    except Exception:
+        if posted:
+            log.warning(
+                "Repost for %r was posted but follow-up work failed",
+                payload.source_url or media[0].filename,
+                exc_info=True,
+            )
+            return True
+        raise

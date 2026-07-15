@@ -52,7 +52,7 @@ async def main():
             "GET",
             f"https://www.tiktok.com/node/share/video/@scout2015/6718339392112823553",
         )
-        # ig graph public
+        
         await hit(
             s,
             "ig-gql",
@@ -63,7 +63,7 @@ async def main():
                 "variables": json.dumps({"shortcode": "DXbTOzTjWjW"}),
             },
         )
-        # saveig style
+        
         await hit(
             s,
             "snapinsta",
