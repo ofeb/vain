@@ -7,7 +7,7 @@ import discord
 from discord.ext.commands import Context
 
 from core.managers.values import color, emojis
-from core.tools.aesthetic import reply_embed
+from core.tools.aesthetic import embed_to_container, reply_embed
 
 Page = Union[discord.Embed, str]
 
@@ -59,10 +59,13 @@ class SkipToPageModal(discord.ui.Modal, title="Skip to page"):
             return
 
         self.pager.index = page_number - 1
-        await interaction.response.edit_message(**self.pager._current())
+        self.pager._rebuild()
+        await interaction.response.edit_message(view=self.pager)
 
 
-class PaginateView(discord.ui.View):
+class PaginateView(discord.ui.LayoutView):
+    """Paginated embeds as Components V2 containers with divider layout."""
+
     def __init__(
         self,
         ctx: Context,
@@ -72,23 +75,62 @@ class PaginateView(discord.ui.View):
         start_index: int = 0,
         owner_only: bool = True,
     ) -> None:
-        super().__init__(timeout=timeout)
+        super().__init__(timeout=timeout if timeout is not None else 180)
         self.ctx = ctx
         self.pages = pages
         self.index = min(max(start_index, 0), max(len(self.pages) - 1, 0))
         self.message: discord.Message | None = None
         self.owner_only = owner_only
+        self._rebuild()
 
-    def _current(self) -> dict[str, Any]:
+    def _page_container(self) -> discord.ui.Container:
         raw = self.pages[self.index]
-        payload: dict[str, Any] = {"view": self if needs_pagination(self.pages) else None}
         if isinstance(raw, discord.Embed):
-            payload["embed"] = raw
-            payload["content"] = None
+            container = embed_to_container(raw)
         else:
-            payload["content"] = str(raw)
-            payload["embed"] = None
-        return payload
+            accent = getattr(self.ctx.bot, "color", None) or 0x5865F2
+            container = discord.ui.Container(accent_colour=accent)
+            container.add_item(discord.ui.TextDisplay(str(raw)))
+
+        if needs_pagination(self.pages):
+            container.add_item(discord.ui.Separator(visible=True))
+            row = discord.ui.ActionRow()
+            prev_btn = discord.ui.Button(
+                style=discord.ButtonStyle.secondary,
+                emoji=discord.PartialEmoji.from_str(emojis.paginator.previous),
+            )
+            next_btn = discord.ui.Button(
+                style=discord.ButtonStyle.secondary,
+                emoji=discord.PartialEmoji.from_str(emojis.paginator.next),
+            )
+            goto_btn = discord.ui.Button(
+                style=discord.ButtonStyle.secondary,
+                emoji=discord.PartialEmoji.from_str(emojis.paginator.navigate),
+            )
+            cancel_btn = discord.ui.Button(
+                style=discord.ButtonStyle.danger,
+                emoji=discord.PartialEmoji.from_str(emojis.paginator.cancel),
+            )
+            prev_btn.callback = self._prev
+            next_btn.callback = self._next
+            goto_btn.callback = self._goto
+            cancel_btn.callback = self._cancel
+            row.add_item(prev_btn)
+            row.add_item(next_btn)
+            row.add_item(goto_btn)
+            row.add_item(cancel_btn)
+            container.add_item(row)
+            # page footer hint
+            container.add_item(
+                discord.ui.TextDisplay(
+                    f"-# Page {self.index + 1}/{len(self.pages)}"
+                )
+            )
+        return container
+
+    def _rebuild(self) -> None:
+        self.clear_items()
+        self.add_item(self._page_container())
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if not self.owner_only or interaction.user.id == self.ctx.author.id:
@@ -106,36 +148,32 @@ class PaginateView(discord.ui.View):
         if self.message is None:
             return
         with suppress(discord.HTTPException):
-            await self.message.edit(view=None)
+            # Drop interactive controls on timeout
+            raw = self.pages[self.index]
+            if isinstance(raw, discord.Embed):
+                container = embed_to_container(raw)
+            else:
+                accent = getattr(self.ctx.bot, "color", None) or 0x5865F2
+                container = discord.ui.Container(accent_colour=accent)
+                container.add_item(discord.ui.TextDisplay(str(raw)))
+            view = discord.ui.LayoutView(timeout=None)
+            view.add_item(container)
+            await self.message.edit(view=view)
 
-    @discord.ui.button(
-        style=discord.ButtonStyle.primary,
-        emoji=discord.PartialEmoji.from_str(emojis.paginator.previous),
-    )
-    async def prev_btn(self, interaction: discord.Interaction, _: discord.ui.Button):
+    async def _prev(self, interaction: discord.Interaction) -> None:
         self.index = (self.index - 1) % len(self.pages)
-        await interaction.response.edit_message(**self._current())
+        self._rebuild()
+        await interaction.response.edit_message(view=self)
 
-    @discord.ui.button(
-        style=discord.ButtonStyle.primary,
-        emoji=discord.PartialEmoji.from_str(emojis.paginator.next),
-    )
-    async def next_btn(self, interaction: discord.Interaction, _: discord.ui.Button):
+    async def _next(self, interaction: discord.Interaction) -> None:
         self.index = (self.index + 1) % len(self.pages)
-        await interaction.response.edit_message(**self._current())
+        self._rebuild()
+        await interaction.response.edit_message(view=self)
 
-    @discord.ui.button(
-        style=discord.ButtonStyle.secondary,
-        emoji=discord.PartialEmoji.from_str(emojis.paginator.navigate),
-    )
-    async def goto_btn(self, interaction: discord.Interaction, _: discord.ui.Button):
+    async def _goto(self, interaction: discord.Interaction) -> None:
         await interaction.response.send_modal(SkipToPageModal(self))
 
-    @discord.ui.button(
-        style=discord.ButtonStyle.danger,
-        emoji=discord.PartialEmoji.from_str(emojis.paginator.cancel),
-    )
-    async def cancel_btn(self, interaction: discord.Interaction, _: discord.ui.Button):
+    async def _cancel(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
         if interaction.message is not None:
             with suppress(discord.HTTPException):
@@ -146,17 +184,13 @@ class PaginateView(discord.ui.View):
         if not self.pages:
             self.message = await self.ctx.send("nothing to show")
             return self.message
-        payload = self._current()
-        if not needs_pagination(self.pages):
-            payload.pop("view", None)
-        self.message = await self.ctx.send(**payload)
+        self._rebuild()
+        self.message = await self.ctx.send(view=self)
         return self.message
 
     async def attach(self, message: discord.Message) -> discord.Message:
-        payload = self._current()
-        if not needs_pagination(self.pages):
-            payload["view"] = None
-        self.message = await message.edit(**payload)
+        self._rebuild()
+        self.message = await message.edit(view=self, embed=None, content=None)
         return self.message
 
 
@@ -178,16 +212,17 @@ async def send_pages(
 
     if not needs_pagination(pages):
         page = pages[0]
-        payload: dict[str, Any] = {"view": None}
         if isinstance(page, discord.Embed):
-            payload["embed"] = page
-            payload["content"] = None
-        else:
-            payload["content"] = str(page)
-            payload["embed"] = None
+            if message is not None:
+                # Prefer container edit when possible
+                from core.tools.aesthetic import embed_to_layout
+
+                layout = embed_to_layout(page)
+                return await message.edit(view=layout, embed=None, content=None)
+            return await ctx.send(embed=page)
         if message is not None:
-            return await message.edit(**payload)
-        return await ctx.send(**payload)
+            return await message.edit(content=str(page), embed=None, view=None)
+        return await ctx.send(str(page))
 
     view = PaginateView(
         ctx,

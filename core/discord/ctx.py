@@ -12,7 +12,13 @@ from discord.ext import commands
 
 from core.managers.app_emojis import format_embed_emoji
 from core.managers.values import color, emojis, lastfm_color, lastfm_color
-from core.tools.aesthetic import body
+from core.tools.aesthetic import (
+    body,
+    embed_to_layout,
+    embeds_to_layout,
+    layout_from_components,
+    view_has_interactive_controls,
+)
 
 
 class Cache:
@@ -256,6 +262,138 @@ class Context(commands.Context):
         return await self.normal(message, emoji="🔎", **kw)
 
     deny = fail
+
+    async def send(
+        self,
+        content: Optional[str] = None,
+        *,
+        tts: bool = False,
+        embed: Optional[discord.Embed] = None,
+        embeds: Optional[list[discord.Embed]] = None,
+        file: Optional[discord.File] = None,
+        files: Optional[list[discord.File]] = None,
+        stickers: Any = None,
+        delete_after: Optional[float] = None,
+        nonce: Any = None,
+        allowed_mentions: Optional[discord.AllowedMentions] = None,
+        reference: Any = None,
+        mention_author: Optional[bool] = None,
+        view: Optional[discord.ui.View | discord.ui.LayoutView] = None,
+        suppress_embeds: bool = False,
+        ephemeral: bool = False,
+        silent: bool = False,
+        poll: Any = None,
+        components: Any = None,
+        flags: Any = None,
+        raw_embed: bool = False,
+        log: bool = False,
+        **kwargs: Any,
+    ) -> discord.Message:
+        """Send a message.
+
+        Supports Components V2 via ``components=`` (list of Containers/Items) or
+        ``view=LayoutView``. By default, classic embeds are auto-converted into
+        V2 containers with dividers so live bot replies look consistent.
+
+        Pass ``raw_embed=True`` or ``log=True`` to keep a classic embed (logs).
+        Classic interactive ``View``s (buttons/selects) keep embeds as-is so
+        callbacks keep working.
+        """
+        # Ignore leftover kwargs used only by our wrapper
+        kwargs.pop("flags", None)
+        if flags is not None:
+            # LayoutView path sets components_v2 automatically
+            pass
+
+        base_kw: dict[str, Any] = {
+            "tts": tts,
+            "delete_after": delete_after,
+            "nonce": nonce,
+            "allowed_mentions": allowed_mentions,
+            "reference": reference,
+            "mention_author": mention_author,
+            "suppress_embeds": suppress_embeds,
+            "ephemeral": ephemeral,
+            "silent": silent,
+        }
+        if stickers is not None:
+            base_kw["stickers"] = stickers
+        if poll is not None:
+            base_kw["poll"] = poll
+        # Drop Nones so super().send signature stays happy
+        base_kw = {k: v for k, v in base_kw.items() if v is not None}
+        base_kw.update(kwargs)
+
+        file_list: list[discord.File] = []
+        if file is not None:
+            file_list.append(file)
+        if files:
+            file_list.extend(list(files))
+
+        # Explicit components= (Container list / LayoutView)
+        if components is not None:
+            layout = layout_from_components(components)
+            send_kw = dict(base_kw)
+            # Components V2 messages cannot mix classic content/embeds
+            send_kw.pop("suppress_embeds", None)
+            if len(file_list) == 1:
+                send_kw["file"] = file_list[0]
+            elif file_list:
+                send_kw["files"] = file_list
+            return await super().send(view=layout, **send_kw)
+
+        # Already a LayoutView — pass through
+        if isinstance(view, discord.ui.LayoutView):
+            send_kw = dict(base_kw)
+            send_kw.pop("suppress_embeds", None)
+            if len(file_list) == 1:
+                send_kw["file"] = file_list[0]
+            elif file_list:
+                send_kw["files"] = file_list
+            # V2 layout owns the body; drop classic content/embeds
+            return await super().send(view=view, **send_kw)
+
+        # Auto-container classic embeds (live replies), except logs / raw / interactive views
+        should_container = (
+            not raw_embed
+            and not log
+            and not view_has_interactive_controls(view)
+            and (embed is not None or embeds)
+        )
+        if should_container:
+            try:
+                if embed is not None and not embeds:
+                    layout = embed_to_layout(
+                        embed,
+                        view=view if isinstance(view, discord.ui.View) else None,
+                        attachment_files=file_list or None,
+                    )
+                else:
+                    layout = embeds_to_layout(list(embeds or []))
+                send_kw = dict(base_kw)
+                send_kw.pop("suppress_embeds", None)
+                if len(file_list) == 1:
+                    send_kw["file"] = file_list[0]
+                elif file_list:
+                    send_kw["files"] = file_list
+                # Components V2 owns the body (content/embeds not mixed)
+                return await super().send(view=layout, **send_kw)
+            except Exception:
+                # Fall back to classic embed path if conversion fails
+                pass
+
+        send_kw = dict(base_kw)
+        if embed is not None:
+            send_kw["embed"] = embed
+        if embeds is not None:
+            send_kw["embeds"] = embeds
+        if view is not None:
+            send_kw["view"] = view
+        if len(file_list) == 1:
+            send_kw["file"] = file_list[0]
+        elif file_list:
+            send_kw["files"] = file_list
+        return await super().send(content=content, **send_kw)
 
     async def send_embed(self, code: str, **kw) -> discord.Message:
         """parse embed script and send it"""

@@ -12,7 +12,13 @@ from core.discord.hybrid import describe, hybrid
 from core.discord.package import Package
 from core.discord.views.paginate import send_pages
 from core.managers.values import color
-from core.tools.aesthetic import label_line, panel_embed, reply_embed, get_bot_dominant_color
+from core.tools.aesthetic import (
+    label_line,
+    panel_embed,
+    panel_layout,
+    reply_embed,
+    get_bot_dominant_color,
+)
 
 from .lookup import (
     build_cashapp_embed,
@@ -73,69 +79,46 @@ class InformationCommands(Package):
         ]
 
         bot_name = bot.user.display_name if bot.user else "vain"
+        thumb = bot.user.display_avatar.url if bot.user else None
 
-        try:
-            cont = discord.ui.Container(accent_colour=dom_color)
-            cont.add_item(discord.ui.TextDisplay(f"**{bot_name}**"))
-            cont.add_item(discord.ui.TextDisplay("-# Bot Information"))
-            for line in info_lines:
-                cont.add_item(discord.ui.TextDisplay(f"-# {line}"))
-            cont.add_item(discord.ui.Separator())
-
-            
-            row = discord.ui.ActionRow()
-            row.add_item(discord.ui.Button(
+        buttons = [
+            discord.ui.Button(
                 label="Website",
                 style=discord.ButtonStyle.link,
                 url="https://vain.bot",
                 emoji="\U0001f310",
-            ))
-            if bot.user:
-                row.add_item(discord.ui.Button(
+            ),
+        ]
+        if bot.user:
+            buttons.append(
+                discord.ui.Button(
                     label="Invite",
                     style=discord.ButtonStyle.link,
-                    url=f"https://discord.com/oauth2/authorize?client_id={bot.user.id}&scope=bot+applications.commands&permissions=8",
+                    url=(
+                        f"https://discord.com/oauth2/authorize?client_id={bot.user.id}"
+                        f"&scope=bot+applications.commands&permissions=8"
+                    ),
                     emoji="\U0001f517",
-                ))
-            row.add_item(discord.ui.Button(
+                )
+            )
+        buttons.append(
+            discord.ui.Button(
                 label="Support",
                 style=discord.ButtonStyle.link,
                 url="https://discord.gg/vainbot",
                 emoji="\U0001f4ac",
-            ))
-            cont.add_item(row)
-
-            await ctx.send(components=[cont], flags=discord.MessageFlags.components_v2)
-            return
-        except Exception:
-            pass
-
-        
-        embed = panel_embed(
-            color=dom_color,
-            title=bot_name,
-            lines=info_lines,
-            timestamp=True,
-            thumbnail=bot.user.display_avatar.url if bot.user else None,
+            )
         )
-        if bot.user:
-            embed.set_author(name=bot.user.name, icon_url=bot.user.display_avatar.url)
 
-        view = discord.ui.View()
-        view.add_item(discord.ui.Button(
-            label="Website",
-            style=discord.ButtonStyle.link,
-            url="https://vain.bot",
-            emoji="\U0001f310",
-        ))
-        if bot.user:
-            view.add_item(discord.ui.Button(
-                label="Invite",
-                style=discord.ButtonStyle.link,
-                url=f"https://discord.com/oauth2/authorize?client_id={bot.user.id}&scope=bot+applications.commands&permissions=8",
-                emoji="\U0001f517",
-            ))
-        await ctx.send(embed=embed, view=view)
+        layout = panel_layout(
+            accent=dom_color,
+            title=bot_name,
+            subtitle="Bot Information",
+            lines=info_lines,
+            thumbnail=thumb,
+            buttons=buttons,
+        )
+        await ctx.send(view=layout)
 
     @hybrid(
         name="inviteinfo",

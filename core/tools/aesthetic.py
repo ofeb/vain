@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+from io import BytesIO
+from typing import Any, Iterable, Sequence
 
 import aiohttp
 import discord
 from colorthief import ColorThief
-from io import BytesIO
+from discord import ui
 
 
 def body(*lines: str) -> str:
@@ -105,7 +107,7 @@ async def get_dominant_color(url: str, fallback: int = 0x5865F2) -> int:
         def _extract():
             ct = ColorThief(BytesIO(data))
             r, g, b = ct.get_color(quality=1)
-            
+
             if (r + g + b) < 80:
                 r = min(r + 60, 255)
                 g = min(g + 60, 255)
@@ -116,10 +118,284 @@ async def get_dominant_color(url: str, fallback: int = 0x5865F2) -> int:
     except Exception:
         return fallback
 
+
 async def get_bot_dominant_color(bot) -> int:
     if bot.user and bot.user.display_avatar:
         return await get_dominant_color(str(bot.user.display_avatar.url))
     return 0x5865F2
+
+
+def _accent_from_embed(embed: discord.Embed) -> int | None:
+    colour = embed.colour or embed.color
+    if colour is None:
+        return None
+    try:
+        return int(colour.value)
+    except Exception:
+        return None
+
+
+def _blankish(value: str | None) -> bool:
+    if value is None:
+        return True
+    text = str(value).strip()
+    return not text or text in {"\u200b", "‎", "​"}
+
+
+def view_has_interactive_controls(view: ui.View | ui.LayoutView | None) -> bool:
+    """True when a classic View has buttons/selects that need the View dispatch path."""
+    if view is None or isinstance(view, ui.LayoutView):
+        return False
+    for child in getattr(view, "children", ()) or ():
+        if isinstance(child, ui.Select):
+            return True
+        if isinstance(child, ui.Button) and getattr(child, "url", None) is None:
+            return True
+    return False
+
+
+def _link_buttons_from_view(view: ui.View | None) -> list[ui.Button]:
+    if view is None or isinstance(view, ui.LayoutView):
+        return []
+    out: list[ui.Button] = []
+    for child in getattr(view, "children", ()) or ():
+        if isinstance(child, ui.Button) and getattr(child, "url", None):
+            out.append(
+                ui.Button(
+                    style=child.style or discord.ButtonStyle.link,
+                    label=child.label,
+                    url=child.url,
+                    emoji=child.emoji,
+                    disabled=child.disabled,
+                )
+            )
+    return out
+
+
+def embed_to_container(
+    embed: discord.Embed,
+    *,
+    extra_rows: Sequence[ui.ActionRow] | None = None,
+    attachment_files: Sequence[discord.File] | None = None,
+) -> ui.Container:
+    """Convert a rich embed into a Components V2 container with dividers."""
+    accent = _accent_from_embed(embed)
+    container = ui.Container(accent_colour=accent)
+
+    # Author / title header
+    author_name = embed.author.name if embed.author else None
+    author_icon = embed.author.icon_url if embed.author else None
+    thumb = embed.thumbnail.url if embed.thumbnail else None
+    title = embed.title
+    if title and embed.url:
+        title_md = f"### [{title}]({embed.url})"
+    elif title:
+        title_md = f"### {title}"
+    else:
+        title_md = None
+
+    header_bits: list[str] = []
+    if author_name and not _blankish(author_name):
+        header_bits.append(f"**{author_name}**")
+    if title_md:
+        header_bits.append(title_md)
+
+    media_url = thumb or author_icon
+    if header_bits and media_url:
+        try:
+            container.add_item(
+                ui.Section(
+                    ui.TextDisplay("\n".join(header_bits)),
+                    accessory=ui.Thumbnail(media=str(media_url)),
+                )
+            )
+        except Exception:
+            container.add_item(ui.TextDisplay("\n".join(header_bits)))
+    elif header_bits:
+        container.add_item(ui.TextDisplay("\n".join(header_bits)))
+
+    if header_bits and (embed.description or embed.fields or embed.image or embed.footer):
+        container.add_item(ui.Separator(visible=True))
+
+    if embed.description and not _blankish(embed.description):
+        container.add_item(ui.TextDisplay(str(embed.description)))
+
+    if embed.fields:
+        if embed.description and not _blankish(embed.description):
+            container.add_item(ui.Separator(visible=True))
+        field_chunks: list[str] = []
+        for field in embed.fields:
+            name = "" if _blankish(field.name) else str(field.name)
+            value = "" if _blankish(field.value) else str(field.value)
+            if name and value:
+                field_chunks.append(f"**{name}**\n{value}")
+            elif value:
+                field_chunks.append(value)
+            elif name:
+                field_chunks.append(f"**{name}**")
+        if field_chunks:
+            container.add_item(ui.TextDisplay("\n\n".join(field_chunks)))
+
+    # Image (http/attachment)
+    image_url = embed.image.url if embed.image else None
+    if image_url:
+        container.add_item(ui.Separator(visible=True))
+        try:
+            if str(image_url).startswith("attachment://") and attachment_files:
+                fname = str(image_url).split("attachment://", 1)[-1]
+                match = next((f for f in attachment_files if f.filename == fname), None)
+                if match is not None:
+                    container.add_item(ui.MediaGallery(discord.MediaGalleryItem(match)))
+                else:
+                    container.add_item(ui.MediaGallery(discord.MediaGalleryItem(str(image_url))))
+            else:
+                container.add_item(ui.MediaGallery(discord.MediaGalleryItem(str(image_url))))
+        except Exception:
+            container.add_item(ui.TextDisplay(f"[image]({image_url})"))
+
+    # Local attachment files without embed image reference
+    if attachment_files and not image_url:
+        for f in attachment_files[:1]:
+            try:
+                container.add_item(ui.File(f))
+            except Exception:
+                pass
+
+    if embed.footer and not _blankish(embed.footer.text):
+        container.add_item(ui.Separator(visible=True))
+        footer = str(embed.footer.text)
+        if embed.timestamp:
+            try:
+                footer = f"{footer} · <t:{int(embed.timestamp.timestamp())}:R>"
+            except Exception:
+                pass
+        container.add_item(ui.TextDisplay(f"-# {footer}"))
+    elif embed.timestamp and not (embed.footer and embed.footer.text):
+        try:
+            container.add_item(ui.Separator(visible=True))
+            container.add_item(
+                ui.TextDisplay(f"-# <t:{int(embed.timestamp.timestamp())}:R>")
+            )
+        except Exception:
+            pass
+
+    if extra_rows:
+        container.add_item(ui.Separator(visible=True))
+        for row in extra_rows:
+            container.add_item(row)
+
+    return container
+
+
+def layout_from_items(
+    items: Iterable[ui.Item],
+    *,
+    timeout: float | None = 180,
+) -> ui.LayoutView:
+    layout = ui.LayoutView(timeout=timeout)
+    for item in items:
+        layout.add_item(item)
+    return layout
+
+
+def layout_from_components(
+    components: Sequence[Any] | Any,
+    *,
+    timeout: float | None = 180,
+) -> ui.LayoutView:
+    """Wrap Container / Item list into a LayoutView (for components= send kwarg)."""
+    if isinstance(components, ui.LayoutView):
+        return components
+    if not isinstance(components, (list, tuple)):
+        components = [components]
+    return layout_from_items(components, timeout=timeout)
+
+
+def embed_to_layout(
+    embed: discord.Embed,
+    *,
+    view: ui.View | None = None,
+    attachment_files: Sequence[discord.File] | None = None,
+    timeout: float | None = 180,
+) -> ui.LayoutView:
+    link_buttons = _link_buttons_from_view(view)
+    extra_rows: list[ui.ActionRow] = []
+    if link_buttons:
+        # Max 5 buttons per action row
+        for i in range(0, len(link_buttons), 5):
+            row = ui.ActionRow(*link_buttons[i : i + 5])
+            extra_rows.append(row)
+    container = embed_to_container(
+        embed,
+        extra_rows=extra_rows or None,
+        attachment_files=attachment_files,
+    )
+    return layout_from_items([container], timeout=timeout)
+
+
+def embeds_to_layout(
+    embeds: Sequence[discord.Embed],
+    *,
+    timeout: float | None = 180,
+) -> ui.LayoutView:
+    containers = [embed_to_container(e) for e in embeds]
+    return layout_from_items(containers, timeout=timeout)
+
+
+def panel_container(
+    *,
+    accent: int | None = None,
+    title: str | None = None,
+    subtitle: str | None = None,
+    lines: list[str] | None = None,
+    footer: str | None = None,
+    thumbnail: str | None = None,
+    buttons: Sequence[ui.Button] | None = None,
+) -> ui.Container:
+    """Build a clean panel container with separators (preferred over panel_embed)."""
+    c = ui.Container(accent_colour=accent)
+
+    header = f"**{title}**" if title else None
+    if header and thumbnail:
+        try:
+            body_text = header if not subtitle else f"{header}\n-# {subtitle}"
+            c.add_item(
+                ui.Section(
+                    ui.TextDisplay(body_text),
+                    accessory=ui.Thumbnail(media=str(thumbnail)),
+                )
+            )
+        except Exception:
+            c.add_item(ui.TextDisplay(header))
+            if subtitle:
+                c.add_item(ui.TextDisplay(f"-# {subtitle}"))
+    elif header:
+        c.add_item(ui.TextDisplay(header))
+        if subtitle:
+            c.add_item(ui.TextDisplay(f"-# {subtitle}"))
+    elif subtitle:
+        c.add_item(ui.TextDisplay(f"-# {subtitle}"))
+
+    if lines:
+        if header or subtitle:
+            c.add_item(ui.Separator(visible=True))
+        c.add_item(ui.TextDisplay(body(*lines)))
+
+    if footer:
+        c.add_item(ui.Separator(visible=True))
+        c.add_item(ui.TextDisplay(caption(footer)))
+
+    if buttons:
+        c.add_item(ui.Separator(visible=True))
+        for i in range(0, len(list(buttons)), 5):
+            chunk = list(buttons)[i : i + 5]
+            c.add_item(ui.ActionRow(*chunk))
+
+    return c
+
+
+def panel_layout(**kwargs: Any) -> ui.LayoutView:
+    return layout_from_items([panel_container(**kwargs)])
 
 
 def build_repost_container(
@@ -132,30 +408,64 @@ def build_repost_container(
     source_url: str = "",
     avatar_url: str | None = None,
     accent: int | None = None,
-) -> list:
+    attachment: discord.File | None = None,
+) -> list[ui.Container]:
     """Build a clean aesthetic Components v2 container for reposts (IG / TT)."""
-    c = discord.ui.Container(accent_colour=accent or 0xE1306C)  
-    
+    c = ui.Container(accent_colour=accent or 0xE1306C)
+
     header = f"**{username}**"
     if source_url:
-        header = f"[{username}]({source_url})"
-    c.add_item(discord.ui.TextDisplay(header))
+        header = f"**[{username}]({source_url})**"
+
+    if avatar_url:
+        try:
+            c.add_item(
+                ui.Section(
+                    ui.TextDisplay(header),
+                    accessory=ui.Thumbnail(media=str(avatar_url)),
+                )
+            )
+        except Exception:
+            c.add_item(ui.TextDisplay(header))
+    else:
+        c.add_item(ui.TextDisplay(header))
+
     if caption:
-        
         safe = caption.replace("```", "`\u200b`\u200b`")[:1800]
-        c.add_item(discord.ui.TextDisplay(f"> {safe}"))
-    c.add_item(discord.ui.Separator())
-    
+        c.add_item(ui.Separator(visible=True))
+        c.add_item(ui.TextDisplay(f"> {safe}"))
+
+    c.add_item(ui.Separator(visible=True))
+
     if media_urls:
-        items = []
-        for u in media_urls[:4]:  
-            items.append({"media": {"url": u}})
-        if items:
-            c.add_item(discord.ui.MediaGallery(items=items))
+        gallery_items = []
+        for u in media_urls[:4]:
+            if not u:
+                continue
+            try:
+                gallery_items.append(discord.MediaGalleryItem(str(u)))
+            except Exception:
+                continue
+        if gallery_items:
+            try:
+                c.add_item(ui.MediaGallery(*gallery_items))
+            except Exception:
+                pass
+    elif attachment is not None:
+        try:
+            c.add_item(ui.File(attachment))
+        except Exception:
+            pass
+
     if stats:
-        c.add_item(discord.ui.TextDisplay(f"-# {stats}"))
+        c.add_item(ui.TextDisplay(f"-# {stats}"))
+
     footer = f"-# {platform}"
     if source_url:
-        footer += f" • [view]({source_url})"
-    c.add_item(discord.ui.TextDisplay(footer))
+        footer += f" · [view]({source_url})"
+    c.add_item(ui.TextDisplay(footer))
     return [c]
+
+
+def build_repost_layout(**kwargs: Any) -> ui.LayoutView:
+    return layout_from_components(build_repost_container(**kwargs))

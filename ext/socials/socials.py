@@ -310,9 +310,11 @@ class Socials(Package):
                     with open(filepath, "rb") as f:
                         file_data = f.read()
 
-                    file = discord.File(io.BytesIO(file_data), filename=result.get("filename", "repost.mp4"))
+                    filename = result.get("filename", "repost.mp4")
+                    # Separate File instances for component ref + upload buffer
+                    upload = discord.File(io.BytesIO(file_data), filename=filename)
+                    component_file = discord.File(io.BytesIO(file_data), filename=filename)
 
-                    
                     username = (ig_data or {}).get("username") or result.get("uploader", "unknown")
                     caption = (ig_data or {}).get("caption") or result.get("title", "")
                     media_list = [(ig_data or {}).get("media_url")] if (ig_data or {}).get("media_url") else []
@@ -329,9 +331,10 @@ class Socials(Package):
                         stats=stats,
                         source_url=source,
                         accent=accent,
+                        attachment=component_file,
                     )
 
-                    await ctx.send(components=comps, files=[file], flags=discord.MessageFlags.components_v2)
+                    await ctx.send(components=comps, file=upload)
                     return
             except Exception as e:
                 await ctx.fail(f"Repost failed: {str(e)[:150]}")
