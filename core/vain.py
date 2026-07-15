@@ -15,6 +15,9 @@ from discord import app_commands
 from discord.ext import commands
 from discord.ext.commands import HybridCommand, HybridGroup
 
+# Ensure Command.params sanitization + invoke patch load before any cogs register
+from .patches import cmd as _command_patch  # noqa: F401
+
 from .discord.ctx import Cache, Context
 from .discord.help import VainHelp
 from .discord.hybrid import rewrite_linked_prefix
