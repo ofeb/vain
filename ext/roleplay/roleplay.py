@@ -1,7 +1,6 @@
 ﻿from __future__ import annotations
 
 import contextlib
-import uuid
 from io import BytesIO
 from typing import TYPE_CHECKING, Optional
 
@@ -241,6 +240,7 @@ class RoleplayBackView(discord.ui.View):
             )
             embed.set_image(url="attachment://action.gif")
 
+            # Classic embed + GIF attachment (never Components V2 containers)
             await interaction.followup.send(file=attachment, embed=embed)
         except Exception as exc:
             tb_text = "".join(_tb.format_exception(type(exc), exc, exc.__traceback__))
@@ -309,7 +309,13 @@ class RoleplayCommands(Package):
         if action in BACK_ACTIONS and target != ctx.author:
             view = RoleplayBackView(action, ctx.author.id, target.id)
 
-        msg = await ctx.send(file=attachment, embed=embed, view=view)
+        # Match commit 393b9e0: classic reply embed + gif file (no V2 container wrap)
+        msg = await ctx.send(
+            file=attachment,
+            embed=embed,
+            view=view,
+            raw_embed=True,
+        )
         if view is not None:
             view.message = msg
         return msg

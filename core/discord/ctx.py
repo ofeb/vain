@@ -350,9 +350,23 @@ class Context(commands.Context):
             return await super().send(view=view, **send_kw)
 
         
+        # Never auto-containerize messages that ship a local attachment image
+        # (e.g. roleplay GIFs) — classic embeds render them correctly.
+        has_attachment_embed_image = False
+        try:
+            for e in ([embed] if embed is not None else []) + list(embeds or []):
+                img = getattr(e, "image", None)
+                url = getattr(img, "url", None) if img is not None else None
+                if url and str(url).startswith("attachment://"):
+                    has_attachment_embed_image = True
+                    break
+        except Exception:
+            pass
+
         should_container = (
             not raw_embed
             and not log
+            and not has_attachment_embed_image
             and not view_has_interactive_controls(view)
             and (embed is not None or embeds)
         )
