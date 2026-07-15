@@ -32,8 +32,11 @@ if TYPE_CHECKING:
 
 _BLANK = "‎"
 _HOME = "__home__"
+# Parameter names that must never appear in help syntax/examples.
+# Note: "context" is a real command name — only skip when it is a *param* name
+# (handled by annotation checks below), not when it appears in a command path.
 _SKIP = frozenset({
-    "self", "cls", "ctx", "context", "interaction", "inter",
+    "self", "cls", "ctx", "interaction", "inter",
     "message", "flags", "bot", "args", "kwargs",
 })
 _PLACEHOLDER_DESCRIPTIONS = frozenset({"no description", "no description given"})
@@ -461,22 +464,25 @@ def _syntax(cmd: Command, prefix: str) -> str:
 
 
 def _strip_hidden_params_from_text(text: str) -> str:
-    """Remove any leaked ctx/interaction/self tokens from syntax/example strings."""
+    """Remove leaked framework param tokens from syntax/example strings.
+
+    Only strips true injected-param names (``ctx``, ``interaction``, …).
+    Does **not** strip the word ``context`` alone — that is a real command name
+    (``,context color list``).
+    """
     if not text:
         return text
+    # bare param names only — never "context" (command group name)
     hidden = {
-        "ctx", "context", "interaction", "inter", "self", "cls",
+        "ctx", "interaction", "inter", "self", "cls",
         "message", "bot", "args", "kwargs",
     }
     parts = text.split()
     cleaned = []
     for p in parts:
-        # strip wrappers: <ctx>, [context], (interaction), `ctx`
+        # strip wrappers: <ctx>, [interaction], (self), `ctx`
         low = p.lower().strip("`.,:;()[]<>")
         if low in hidden:
-            continue
-        # also drop tokens like <ctx: Context> style fragments
-        if low.startswith("ctx") and ("context" in low or low == "ctx"):
             continue
         cleaned.append(p)
     return " ".join(cleaned).strip()

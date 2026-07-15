@@ -309,6 +309,7 @@ def _hybrid_group(name: str | None = None, **attrs: Any):
                     cmd = _orig_command(*args, **fallback_kw)(sub_prepared)
                 cmd.example = sub_example
                 cmd.parameters = sub_params
+                _ensure_ctx_not_converter(cmd)
                 return cmd
 
             return sub_deco
@@ -353,7 +354,10 @@ def _slash_kwargs(method: Callable[..., Any], namespace: Any) -> dict[str, Any]:
     if namespace is None:
         return {}
     kwargs: dict[str, Any] = {}
+    skip = {"self", "cls", "ctx", "context", "interaction"}
     for param_name in list(inspect.signature(method).parameters)[2:]:
+        if param_name.lower() in skip:
+            continue
         if hasattr(namespace, param_name):
             kwargs[param_name] = getattr(namespace, param_name)
     return kwargs
