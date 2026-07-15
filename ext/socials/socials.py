@@ -411,7 +411,7 @@ class Socials(Package):
             elif image_urls:
                 image_url = image_urls[0]
         elif image_urls:
-            # Carousel: first as embed image; more as attachments when possible
+            
             image_url = image_urls[0]
             for i, iu in enumerate(image_urls[1:4], start=2):
                 f = await _file_from_url(iu, f"{post.platform}_{i}.jpg")
@@ -463,7 +463,7 @@ class Socials(Package):
             image_url=image_url,
         )
 
-        # Keep classic embeds (never wrap reposts in Components V2 containers)
+        
         if len(files) == 1:
             await ctx.send(embed=embed, file=files[0], raw_embed=True)
         elif files:

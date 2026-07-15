@@ -438,7 +438,7 @@ def _linkify_caption(caption: str, platform: str) -> str:
     return text[:1900]
 
 
-# Public icon URLs used as embed footer icons
+
 _TIKTOK_FOOTER_ICON = "https://cdn-icons-png.flaticon.com/512/3046/3046121.png"
 _INSTAGRAM_FOOTER_ICON = "https://cdn-icons-png.flaticon.com/512/2111/2111463.png"
 
@@ -490,7 +490,7 @@ def build_social_repost_embed(
         color=color or 0x2A2B2F,
         url=source_url or profile,
     )
-    # Author = post creator (not bot, not viewer)
+    
     author_name = f"{name} (@{user})"
     if avatar_url:
         embed.set_author(name=author_name, icon_url=str(avatar_url), url=profile)
@@ -500,7 +500,7 @@ def build_social_repost_embed(
     if image_url:
         embed.set_image(url=str(image_url))
 
-    # Footer: stats + platform icon/name
+    
     stats = [
         f"{emojis.likes} {_compact_count(like_count)}",
         f"{emojis.comments} {_compact_count(comment_count)}",

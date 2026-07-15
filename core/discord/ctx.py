@@ -84,10 +84,10 @@ class Context(commands.Context):
         self._custom_emoji: dict | None = None
         self._custom_color: dict | None = None
 
-    # Intentionally NO convert() method.
-    # Defining convert() makes Context a Converter; discord.py then tries to
-    # parse message tokens into Context (jishaku debug, hybrid param loops)
-    # and raises BadArgument. Context is framework-injected only.
+    
+    
+    
+    
 
     @property
     def color(self) -> int:

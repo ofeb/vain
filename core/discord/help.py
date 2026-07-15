@@ -32,9 +32,9 @@ if TYPE_CHECKING:
 
 _BLANK = "‎"
 _HOME = "__home__"
-# Parameter names that must never appear in help syntax/examples.
-# Note: "context" is a real command name — only skip when it is a *param* name
-# (handled by annotation checks below), not when it appears in a command path.
+
+
+
 _SKIP = frozenset({
     "self", "cls", "ctx", "interaction", "inter",
     "message", "flags", "bot", "args", "kwargs",
@@ -190,7 +190,7 @@ def _visible_subs(grp: Group) -> list[Command]:
             if c.hidden:
                 continue
             if isinstance(c, Group):
-                # Do not add intermediate groups as pages — expand to leaves
+                
                 if c.commands:
                     _walk(c)
             else:
@@ -206,7 +206,7 @@ def _leaf_pages(root: Command) -> list[Command]:
         leaves = _visible_subs(root)
         if leaves:
             return sorted(leaves, key=lambda c: command_display_name(c).lower())
-        # Group with no children — show the group shell once
+        
         return [root]
     return [root]
 
@@ -259,7 +259,7 @@ def _is_internal_param(name: str, param: Any = None) -> bool:
     ann = getattr(param, "annotation", inspect._empty)
     if ann is inspect._empty or ann is None:
         return False
-    # Direct type matches
+    
     try:
         if ann in (CommandsContext, discord.Interaction):
             return True
@@ -472,7 +472,7 @@ def _strip_hidden_params_from_text(text: str) -> str:
     """
     if not text:
         return text
-    # bare param names only — never "context" (command group name)
+    
     hidden = {
         "ctx", "interaction", "inter", "self", "cls",
         "message", "bot", "args", "kwargs",
@@ -480,7 +480,7 @@ def _strip_hidden_params_from_text(text: str) -> str:
     parts = text.split()
     cleaned = []
     for p in parts:
-        # strip wrappers: <ctx>, [interaction], (self), `ctx`
+        
         low = p.lower().strip("`.,:;()[]<>")
         if low in hidden:
             continue
@@ -951,7 +951,7 @@ class HelpMenu(ui.LayoutView):
         await inter.response.edit_message(view=self)
 
     async def on_timeout(self) -> None:
-        # Drop the select menu on timeout
+        
         if self.msg is None:
             return
         body = ui.TextDisplay(self.body.content)
@@ -1024,8 +1024,8 @@ class GroupHelpMenu(ui.LayoutView):
 
     def _page_text(self) -> str:
         cmd = self.pages[self.index]
-        # Paginated family help pages are leaf commands → always "Command:"
-        # (Group: only if we somehow still have a shell with no children)
+        
+        
         is_shell = isinstance(cmd, Group) and not list(getattr(cmd, "commands", []) or [])
         return _detail_text(
             cmd,
@@ -1077,7 +1077,7 @@ class GroupHelpMenu(ui.LayoutView):
         self.stop()
 
     async def on_timeout(self) -> None:
-        # Drop buttons entirely on timeout (help only — not roleplay/pagination)
+        
         if self.msg is None:
             return
         body = ui.TextDisplay(self._page_text())
@@ -1267,7 +1267,7 @@ class VainHelp:
             if parent is not None:
                 root = parent
 
-        # Groups → leaf subcommands only (never empty intermediate group shells)
+        
         if isinstance(root, Group):
             return _leaf_pages(root)
 
@@ -1294,7 +1294,7 @@ class VainHelp:
     async def _send_group(self, ctx: Context, grp: Command, *, targets: list[Command] | None = None) -> None:
         owner = ctx.author.id in ctx.bot.owners
         pages = targets or self._family_targets(ctx.bot, grp, owner=owner)
-        # Guarantee leaves only
+        
         if isinstance(grp, Group):
             pages = _leaf_pages(grp) if not targets else [
                 c for c in pages if not isinstance(c, Group) or not getattr(c, "commands", None)

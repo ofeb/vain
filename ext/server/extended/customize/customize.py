@@ -666,10 +666,10 @@ class CustomizeCommands(Package):
         await self.db.set_guild_customize(ctx.guild.id, "voicemaster_emoji", vm_dict)
         return await ctx.success(f"set **decrease** emoji to {emoji}")
 
-    # ── Context (guild + personal) ──────────────────────────────────────────
-    # Guild:  ,context color|emoji ...
-    # User:   ,context self color|emoji ...
-    # Customize must NOT own these groups.
+    
+    
+    
+    
 
     COLOR_KEYS = (
         "base",
@@ -704,7 +704,7 @@ class CustomizeCommands(Package):
         """Server context settings. Use `context self` for personal."""
         await ctx.send_help(ctx.command)
 
-    # ── personal ────────────────────────────────────────────────────────────
+    
     @context.group(
         name="self",
         aliases=["me", "personal"],
@@ -780,7 +780,7 @@ class CustomizeCommands(Package):
         await self.db.set_guild_customize(ctx.guild.id, "emoji", e)
         return await ctx.success(f"set server **{nice}** emoji to {emoji}")
 
-    # guild color
+    
     @context.group(
         name="color",
         aliases=["colour", "colors", "colours"],
@@ -845,7 +845,7 @@ class CustomizeCommands(Package):
     async def context_server_color_shazam(self, ctx, hex_code: str = None):
         return await self._guild_set_color(ctx, "shazam", hex_code, "shazam")
 
-    # guild emoji
+    
     @context.group(
         name="emoji",
         aliases=["emojis"],
@@ -900,7 +900,7 @@ class CustomizeCommands(Package):
     async def context_server_emoji_shazam(self, ctx, emoji: str = None):
         return await self._guild_set_emoji(ctx, "shazam", emoji, "shazam")
 
-    # personal color
+    
     @context_self.group(
         name="color",
         aliases=["colour", "colors", "colours"],
@@ -955,7 +955,7 @@ class CustomizeCommands(Package):
     async def cself_color_shazam(self, ctx, hex_code: str = None):
         return await self._personal_set_color(ctx, "shazam", hex_code, "shazam")
 
-    # personal emoji
+    
     @context_self.group(
         name="emoji",
         aliases=["emojis"],
