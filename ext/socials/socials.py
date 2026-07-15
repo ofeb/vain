@@ -23,7 +23,7 @@ from core.managers.values import color
 from core.tools.aesthetic import (
     aesthetic_embed,
     body,
-    build_social_repost_embed,
+    build_social_repost_container,
     get_bot_dominant_color,
 )
 from core.networks.social import Instagram, TikTok, is_instagram_url, is_tiktok_url
@@ -39,7 +39,7 @@ def _ytdlp_download_sync(url: str, output_dir: str) -> dict:
     """Run yt-dlp synchronously to download media."""
     import yt_dlp
 
-    opts = {
+    opts: dict = {
         "outtmpl": os.path.join(output_dir, "%(id)s.%(ext)s"),
         "format": "best[ext=mp4]/best",
         "noplaylist": True,
@@ -47,6 +47,24 @@ def _ytdlp_download_sync(url: str, output_dir: str) -> dict:
         "no_warnings": True,
         "merge_output_format": "mp4",
     }
+    # Instagram often needs session cookies for reels
+    try:
+        from core.managers.values import api as api_cfg
+
+        cookie = api_cfg.instagram.cookie_header()
+        if cookie and ("instagram.com" in (url or "") or "instagr.am" in (url or "")):
+            opts["http_headers"] = {
+                "Cookie": cookie,
+                "User-Agent": (
+                    "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) "
+                    "AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 "
+                    "Instagram 192.0.0.37.107"
+                ),
+                "X-IG-App-ID": "936619743392459",
+            }
+    except Exception:
+        pass
+
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=True)
         if not info:
@@ -298,7 +316,7 @@ class Socials(Package):
 
     @hybrid(
         name="repost",
-        description="Repost Instagram / TikTok as a clean embed with media",
+        description="Repost Instagram / TikTok as a clean V2 container",
         example=",repost https://www.instagram.com/reel/xxxx",
         guilds=True,
         dms=True,
@@ -342,6 +360,8 @@ class Socials(Package):
                 "playwm",
                 "play?",
                 "aweme",
+                "/v/t16/",
+                "/v/t50/",
             )
         )
 
@@ -351,7 +371,7 @@ class Socials(Package):
                 headers={"User-Agent": "Mozilla/5.0"}
             ) as session:
                 async with session.get(
-                    media_url, timeout=aiohttp.ClientTimeout(total=25)
+                    media_url, timeout=aiohttp.ClientTimeout(total=30)
                 ) as resp:
                     if resp.status != 200:
                         return None
@@ -361,6 +381,21 @@ class Socials(Package):
                     return data
         except Exception:
             return None
+
+    async def _ytdlp_file(self, source_url: str, platform: str) -> discord.File | None:
+        """Download playable media via yt-dlp (needed for IG reels without public CDN)."""
+        loop = asyncio.get_running_loop()
+        with tempfile.TemporaryDirectory(prefix="repost-") as tmp:
+            result = await loop.run_in_executor(None, _ytdlp_download_sync, source_url, tmp)
+            if not result or not result.get("filepath"):
+                return None
+            filepath = result["filepath"]
+            if not os.path.exists(filepath) or os.path.getsize(filepath) > 25_000_000:
+                return None
+            with open(filepath, "rb") as fh:
+                data = fh.read()
+            ext = os.path.splitext(result.get("filename") or "media.mp4")[1] or ".mp4"
+            return discord.File(io.BytesIO(data), filename=f"{platform}{ext}")
 
     async def _repost(self, ctx: Context, url: str) -> None:
         url = (url or "").strip()
@@ -392,67 +427,61 @@ class Socials(Package):
             return
 
         media_urls = [u for u in (post.media_urls or []) if u]
-        files: list[discord.File] = []
-        image_url: str | None = None
-
         video_urls = [u for u in media_urls if self._is_video_url(u)]
         image_urls = [u for u in media_urls if not self._is_video_url(u)]
 
-        async def _file_from_url(u: str, name: str) -> discord.File | None:
-            data = await self._download_bytes(u)
-            if not data:
-                return None
-            return discord.File(io.BytesIO(data), filename=name)
+        gallery_urls: list[str] = []
+        upload: discord.File | None = None
+        component_file: discord.File | None = None
 
+        # Prefer CDN video in MediaGallery (heist-style). Download when needed.
         if video_urls:
-            f = await _file_from_url(video_urls[0], f"{post.platform}.mp4")
+            # Discord can proxy many CDN mp4s in MediaGallery
+            gallery_urls = video_urls[:1]
+            # Also try to attach downloaded file for reliability
+            data = await self._download_bytes(video_urls[0])
+            if data:
+                upload = discord.File(io.BytesIO(data), filename=f"{post.platform}.mp4")
+                component_file = discord.File(io.BytesIO(data), filename=f"{post.platform}.mp4")
+                gallery_urls = []  # use File component instead of remote URL
+        elif post.is_video or "/reel" in (post.url or url).lower():
+            # Reel/video post but no public CDN URL (common for IG without cookies)
+            f = await self._ytdlp_file(post.url or url, post.platform)
             if f:
-                files.append(f)
-            elif image_urls:
-                image_url = image_urls[0]
-        elif image_urls:
-            
-            image_url = image_urls[0]
-            for i, iu in enumerate(image_urls[1:4], start=2):
-                f = await _file_from_url(iu, f"{post.platform}_{i}.jpg")
-                if f:
-                    files.append(f)
-        else:
-            loop = asyncio.get_running_loop()
-            with tempfile.TemporaryDirectory(prefix="repost-") as tmp:
-                result = await loop.run_in_executor(
-                    None, _ytdlp_download_sync, post.url or url, tmp
+                # Need two File objects for upload + component ref
+                # Re-download once more via ytdlp is wasteful — re-read from f buffer
+                f.fp.seek(0)
+                raw = f.fp.read()
+                upload = discord.File(io.BytesIO(raw), filename=f.filename)
+                component_file = discord.File(io.BytesIO(raw), filename=f.filename)
+            else:
+                await ctx.fail(
+                    "Could not download that video. Instagram often requires cookies "
+                    "for reels — set `api.instagram` session cookies in values."
                 )
-                if result and result.get("filepath") and os.path.exists(result["filepath"]):
-                    filepath = result["filepath"]
-                    if os.path.getsize(filepath) <= 25_000_000:
-                        with open(filepath, "rb") as fh:
-                            file_data = fh.read()
-                        ext = os.path.splitext(result.get("filename") or "media.mp4")[1] or ".mp4"
-                        files.append(
-                            discord.File(
-                                io.BytesIO(file_data),
-                                filename=f"{post.platform}{ext}",
-                            )
-                        )
-                        if not post.caption and result.get("title"):
-                            post.caption = result["title"]
-                        if post.username in ("", "unknown") and result.get("uploader"):
-                            post.username = result["uploader"]
-                            post.display_name = post.display_name or result["uploader"]
+                return
+        elif image_urls:
+            gallery_urls = image_urls[:4]
+        else:
+            f = await self._ytdlp_file(post.url or url, post.platform)
+            if f:
+                f.fp.seek(0)
+                raw = f.fp.read()
+                upload = discord.File(io.BytesIO(raw), filename=f.filename)
+                component_file = discord.File(io.BytesIO(raw), filename=f.filename)
+            else:
+                await ctx.fail("Could not get media for that post.")
+                return
 
-        if not files and not image_url:
-            await ctx.fail("Could not get media for that post.")
-            return
-
-        embed = build_social_repost_embed(
+        comps = build_social_repost_container(
             platform=post.platform,
             username=post.username,
             display_name=post.display_name or post.username,
             caption=post.caption,
+            media_urls=gallery_urls,
             avatar_url=post.avatar_url,
             source_url=post.url or url,
-            color=accent,
+            accent=accent,
             like_count=post.like_count,
             comment_count=post.comment_count,
             save_count=post.save_count,
@@ -460,16 +489,14 @@ class Socials(Package):
             region=post.region,
             music_title=post.music_title,
             music_author=post.music_author,
-            image_url=image_url,
+            music_url=post.music_url,
+            attachment=component_file,
         )
 
-        
-        if len(files) == 1:
-            await ctx.send(embed=embed, file=files[0], raw_embed=True)
-        elif files:
-            await ctx.send(embed=embed, files=files, raw_embed=True)
+        if upload is not None:
+            await ctx.send(components=comps, file=upload)
         else:
-            await ctx.send(embed=embed, raw_embed=True)
+            await ctx.send(components=comps)
 
     async def _generate_quote_image(
         self,

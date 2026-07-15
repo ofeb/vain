@@ -613,7 +613,7 @@ def build_social_repost_container(
         f"{emojis.saves} {_compact_count(save_count)}",
     ]
     if share_count:
-        stats_bits.append(f"{emojis.repost} {_compact_count(share_count)}")
+        stats_bits.append(f"{getattr(emojis, 'reposts', None) or emojis.repost} {_compact_count(share_count)}")
     if region:
         stats_bits.append(f"{emojis.region} {region}")
     c.add_item(ui.TextDisplay("-# " + " • ".join(stats_bits)))
