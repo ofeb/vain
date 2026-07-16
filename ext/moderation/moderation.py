@@ -232,32 +232,16 @@ class ModerationCommands(Package):
 
     async def _ensure_targetable(self, ctx, member: discord.Member) -> bool:
         """Check if a member can be moderated. Returns True if OK, False if blocked (sends warning)."""
+        from core.tools.hierarchy import ensure_member_hierarchy
+        from discord.ext.commands import CommandError as _CmdErr
+
         if ctx.guild is None:
             await ctx.warn("This command can only be used in a server")
             return False
-        if member.id == ctx.author.id:
-            await ctx.warn("You cannot moderate yourself")
-            return False
-        if member.id == ctx.guild.owner_id:
-            await ctx.warn("You cannot moderate the server owner")
-            return False
-
-        author = ctx.author if isinstance(ctx.author, discord.Member) else None
-        bot_member = ctx.guild.me or ctx.guild.get_member(self.bot.user.id if self.bot.user else 0)
-        if author and ctx.guild.owner_id != author.id and member.top_role >= author.top_role:
-            await ctx.warn(
-                f"**{member.display_name}** has a higher or equal role than you — "
-                f"their top role ({member.top_role.mention}) must be below yours ({author.top_role.mention})"
-            )
-            return False
-        if bot_member is None:
-            await ctx.warn("I could not resolve my server member")
-            return False
-        if member.top_role >= bot_member.top_role:
-            await ctx.warn(
-                f"**{member.display_name}** has a higher or equal role than me — "
-                f"their top role ({member.top_role.mention}) must be below my highest role ({bot_member.top_role.mention})"
-            )
+        try:
+            await ensure_member_hierarchy(ctx, member, allow_self=False)
+        except _CmdErr as e:
+            await ctx.warn(str(e))
             return False
         return True
 

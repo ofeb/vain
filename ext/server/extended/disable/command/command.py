@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Optional, Union
 
 from discord import Embed, Member, TextChannel
@@ -14,10 +15,19 @@ from discord.ext.commands import (
 from core.discord.package import Package
 from core.managers.converters import CommandConverter
 from core.managers.permissions import has_permissions
+from core.tools.hierarchy import (
+    ensure_member_hierarchy,
+    is_member_like,
+    target_phrase,
+)
 
 
 def _cmd_label(command) -> str:
     return getattr(command, "qualified_name", str(command))
+
+
+_CHANNEL_MENTION = re.compile(r"^(<#\d+>)\s+(.+)$", re.DOTALL)
+_USER_MENTION = re.compile(r"^(<@!?\d+>)\s+(.+)$", re.DOTALL)
 
 
 class CommandDisableCommands(Package):
@@ -34,13 +44,27 @@ class CommandDisableCommands(Package):
         if not text:
             raise CommandError("provide a command to disable")
 
+        # Prefer full mention forms so nicknames with spaces never break parsing
+        m = _CHANNEL_MENTION.match(text)
+        if m:
+            target = await TextChannelConverter().convert(ctx, m.group(1))
+            command = await CommandConverter().convert(ctx, m.group(2).strip())
+            return target, command
+
+        m = _USER_MENTION.match(text)
+        if m:
+            target = await MemberConverter().convert(ctx, m.group(1))
+            command = await CommandConverter().convert(ctx, m.group(2).strip())
+            return target, command
+
         parts = text.split()
         target: Optional[Union[TextChannel, Member]] = None
         command_text = text
 
         if len(parts) >= 2:
             head, rest = parts[0], " ".join(parts[1:])
-            for converter in (TextChannelConverter(), MemberConverter()):
+            # Members first — channel names rarely look like user tokens
+            for converter in (MemberConverter(), TextChannelConverter()):
                 try:
                     target = await converter.convert(ctx, head)
                     command_text = rest
@@ -74,17 +98,20 @@ class CommandDisableCommands(Package):
         if target is None:
             target = ctx.channel
 
+        if is_member_like(target):
+            await ensure_member_hierarchy(ctx, target)
+
         existing = await self.db.fetchrow(
             """SELECT * FROM disabled_commands WHERE guild_id = $1 AND command = $2""",
             ctx.guild.id,
             name,
         )
 
-        kind = "channel" if isinstance(target, TextChannel) else "member"
+        kind = "member" if is_member_like(target) else "channel"
         if existing:
             if target.id in existing.object_ids:
                 raise CommandError(
-                    f"`{name}` was already **disabled** in {target.mention}"
+                    f"`{name}` was already **disabled** {target_phrase(target)}"
                 )
             ids = list(existing.object_ids)
             kinds = list(existing.object_types)
@@ -110,7 +137,7 @@ class CommandDisableCommands(Package):
                 [kind],
             )
         await ctx.bot.invalidate_command_access_cache(ctx.guild.id, name)
-        return await ctx.success(f"**disabled** `{name}` in {target.mention}")
+        return await ctx.success(f"**disabled** `{name}` {target_phrase(target)}")
 
     @disablecommand.command(
         name="list",
@@ -140,7 +167,9 @@ class CommandDisableCommands(Package):
             for oid in row.object_ids:
                 obj = resolve(oid)
                 if obj:
-                    lines.append(f"**{row.command}** — {obj.mention}")
+                    lines.append(
+                        f"**{row.command}** — disabled {target_phrase(obj)}"
+                    )
         if not lines:
             raise CommandError("no commands have been disabled")
         numbered = [f"`{i}` {ln}" for i, ln in enumerate(lines, start=1)]

@@ -77,6 +77,10 @@ class IgnoreCommands(Package):
     @has_permissions(administrator=True)
     async def ignore_add(self, ctx, *, target: Union[Member, TextChannel]):
         """start ignoring something"""
+        from core.tools.hierarchy import ensure_member_hierarchy, is_member_like
+
+        if is_member_like(target):
+            await ensure_member_hierarchy(ctx, target)
         await self.db.execute(
             """INSERT INTO ignored (guild_id, object_id, object_type) VALUES($1, $2, $3) ON CONFLICT(guild_id, object_id) DO NOTHING""",
             ctx.guild.id,
@@ -94,6 +98,9 @@ class IgnoreCommands(Package):
     @has_permissions(server_owner=True)
     async def allow(self, ctx, member: Member, command: CommandConverter):
         """toggle command access"""
+        from core.tools.hierarchy import ensure_member_hierarchy
+
+        await ensure_member_hierarchy(ctx, member)
         try:
             await self.db.execute(
                 """INSERT INTO command_allowed (guild_id, user_id, command) VALUES($1, $2, $3)""",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Optional, Union
 
 from discord import Embed, Member, TextChannel
@@ -14,10 +15,19 @@ from discord.ext.commands import (
 from core.discord.package import Package
 from core.managers.converters import CommandConverter
 from core.managers.permissions import has_permissions
+from core.tools.hierarchy import (
+    ensure_member_hierarchy,
+    is_member_like,
+    target_phrase,
+)
 
 
 def _cmd_label(command) -> str:
     return getattr(command, "qualified_name", str(command))
+
+
+_CHANNEL_MENTION = re.compile(r"^(<#\d+>)\s+(.+)$", re.DOTALL)
+_USER_MENTION = re.compile(r"^(<@!?\d+>)\s+(.+)$", re.DOTALL)
 
 
 class CommandEnableCommands(Package):
@@ -34,13 +44,25 @@ class CommandEnableCommands(Package):
         if not text:
             raise CommandError("provide a command to enable")
 
+        m = _CHANNEL_MENTION.match(text)
+        if m:
+            target = await TextChannelConverter().convert(ctx, m.group(1))
+            command = await CommandConverter().convert(ctx, m.group(2).strip())
+            return target, command
+
+        m = _USER_MENTION.match(text)
+        if m:
+            target = await MemberConverter().convert(ctx, m.group(1))
+            command = await CommandConverter().convert(ctx, m.group(2).strip())
+            return target, command
+
         parts = text.split()
         target: Optional[Union[TextChannel, Member]] = None
         command_text = text
 
         if len(parts) >= 2:
             head, rest = parts[0], " ".join(parts[1:])
-            for converter in (TextChannelConverter(), MemberConverter()):
+            for converter in (MemberConverter(), TextChannelConverter()):
                 try:
                     target = await converter.convert(ctx, head)
                     command_text = rest
@@ -100,6 +122,9 @@ class CommandEnableCommands(Package):
         if target is None:
             target = ctx.channel
 
+        if is_member_like(target):
+            await ensure_member_hierarchy(ctx, target)
+
         record = await self.db.fetchrow(
             """SELECT * FROM disabled_commands WHERE guild_id = $1 AND command = $2""",
             ctx.guild.id,
@@ -107,7 +132,9 @@ class CommandEnableCommands(Package):
         )
 
         if not record or target.id not in list(record.object_ids or []):
-            raise CommandError(f"`{name}` was already **enabled** in {target.mention}")
+            raise CommandError(
+                f"`{name}` was already **enabled** {target_phrase(target)}"
+            )
 
         obj_ids = list(record.object_ids)
         obj_types = list(record.object_types)
@@ -116,7 +143,7 @@ class CommandEnableCommands(Package):
         if idx < len(obj_types):
             obj_types.pop(idx)
         await self._save_disabled(ctx, name, obj_ids, obj_types)
-        return await ctx.success(f"**enabled** `{name}` in {target.mention}")
+        return await ctx.success(f"**enabled** `{name}` {target_phrase(target)}")
 
     @enablecommand.command(
         name="list",
@@ -148,7 +175,9 @@ class CommandEnableCommands(Package):
             for oid in row.object_ids:
                 obj = resolve(oid)
                 if obj:
-                    lines.append(f"**{row.command}** — disabled for {obj.mention}")
+                    lines.append(
+                        f"**{row.command}** — disabled {target_phrase(obj)}"
+                    )
         if not lines:
             raise CommandError("no commands are currently disabled")
         numbered = [f"`{i}` {ln}" for i, ln in enumerate(lines, start=1)]
