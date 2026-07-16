@@ -24,6 +24,7 @@ from core.tools.aesthetic import (
     aesthetic_embed,
     body,
 )
+from core.networks.media.compress import discord_upload_limit, fit_for_discord
 from core.networks.social import Instagram, TikTok, is_instagram_url, is_tiktok_url
 from core.networks.social.models import SocialPost
 
@@ -264,17 +265,17 @@ class Socials(Package):
                         await ctx.fail("Downloaded file not found.")
                         return
 
-                    file_size = os.path.getsize(filepath)
-                    if file_size > 25_000_000:
-                        await ctx.fail("File exceeds Discord's 25MB upload limit.")
+                    if os.path.getsize(filepath) > 100 * 1024 * 1024:
+                        await ctx.fail("File is too large to process.")
                         return
 
                     with open(filepath, "rb") as f:
                         data = f.read()
 
                     filename = result.get("filename", "tiktok.mp4")
-                    fp = io.BytesIO(data)
-                    file = discord.File(fp, filename=filename)
+                    file = await self._prepare_file(ctx, data, filename=filename)
+                    if file is None:
+                        return
                     await ctx.send(file=file)
 
             except Exception as e:
@@ -346,7 +347,17 @@ class Socials(Package):
             )
         )
 
-    async def _download_bytes(self, media_url: str, *, platform: str = "") -> bytes | None:
+    def _upload_limit(self, ctx: Context) -> int:
+        return discord_upload_limit(getattr(ctx, "guild", None))
+
+    async def _download_bytes(
+        self,
+        media_url: str,
+        *,
+        platform: str = "",
+        max_bytes: int | None = None,
+    ) -> bytes | None:
+        """Download media. Large files are kept so they can be compressed later."""
         headers = {
             "User-Agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -358,21 +369,60 @@ class Socials(Package):
                 else "https://www.tiktok.com/"
             ),
         }
+        # Hard ceiling so we don't OOM on giant sources (~100MB)
+        base_limit = max_bytes if max_bytes is not None else 24 * 1024 * 1024
+        hard_cap = max(base_limit * 4, 100 * 1024 * 1024)
         try:
             async with aiohttp.ClientSession(headers=headers) as session:
                 async with session.get(
-                    media_url, timeout=aiohttp.ClientTimeout(total=45)
+                    media_url, timeout=aiohttp.ClientTimeout(total=60)
                 ) as resp:
                     if resp.status != 200:
                         return None
+                    # Prefer Content-Length early-out only if absurdly huge
+                    cl = resp.headers.get("Content-Length")
+                    if cl and cl.isdigit() and int(cl) > hard_cap:
+                        return None
                     data = await resp.read()
-                    if len(data) > 25_000_000:
+                    if not data or len(data) > hard_cap:
                         return None
                     return data
         except Exception:
             return None
 
-    async def _ytdlp_file(self, source_url: str, platform: str) -> discord.File | None:
+    async def _prepare_file(
+        self,
+        ctx: Context,
+        data: bytes,
+        *,
+        filename: str,
+    ) -> discord.File | None:
+        """Compress if needed and build a Discord file under the guild limit."""
+        if not data:
+            return None
+        limit = self._upload_limit(ctx)
+        fitted, name = await fit_for_discord(
+            data,
+            filename=filename,
+            guild=getattr(ctx, "guild", None),
+            max_bytes=limit,
+        )
+        if len(fitted) > limit:
+            mb = len(fitted) / (1024 * 1024)
+            lim_mb = limit / (1024 * 1024)
+            await ctx.fail(
+                f"Video is still too large after compression "
+                f"({mb:.1f}MB / {lim_mb:.0f}MB limit)."
+            )
+            return None
+        return discord.File(io.BytesIO(fitted), filename=name)
+
+    async def _ytdlp_file(
+        self,
+        ctx: Context,
+        source_url: str,
+        platform: str,
+    ) -> discord.File | None:
         """Download playable media via yt-dlp when CDN URL is unavailable."""
         loop = asyncio.get_running_loop()
         with tempfile.TemporaryDirectory(prefix="repost-") as tmp:
@@ -380,12 +430,15 @@ class Socials(Package):
             if not result or not result.get("filepath"):
                 return None
             filepath = result["filepath"]
-            if not os.path.exists(filepath) or os.path.getsize(filepath) > 25_000_000:
+            if not os.path.exists(filepath):
+                return None
+            # Allow large downloads; compress before upload
+            if os.path.getsize(filepath) > 100 * 1024 * 1024:
                 return None
             with open(filepath, "rb") as fh:
                 data = fh.read()
             ext = os.path.splitext(result.get("filename") or "media.mp4")[1] or ".mp4"
-            return discord.File(io.BytesIO(data), filename=f"{platform}{ext}")
+            return await self._prepare_file(ctx, data, filename=f"{platform}{ext}")
 
     async def _repost(self, ctx: Context, url: str) -> None:
         """Fetch TikTok/Instagram media and send the file only (no embed)."""
@@ -418,23 +471,34 @@ class Socials(Package):
         media_urls = [u for u in (post.media_urls or []) if u]
         video_urls = [u for u in media_urls if self._is_video_url(u)]
         image_urls = [u for u in media_urls if not self._is_video_url(u)]
+        limit = self._upload_limit(ctx)
 
         upload: discord.File | None = None
 
         if video_urls:
-            data = await self._download_bytes(video_urls[0], platform=post.platform)
-            if data:
-                upload = discord.File(io.BytesIO(data), filename=f"{post.platform}.mp4")
-        elif post.is_video or "/reel" in (post.url or url).lower():
-            upload = await self._ytdlp_file(post.url or url, post.platform)
-            if upload is None:
-                await ctx.fail(
-                    "Could not download that video. Instagram often requires cookies "
-                    "for reels — set `api.instagram` session cookies in values."
+            # Prefer shorter/lower candidates later in list if first is huge
+            data: bytes | None = None
+            for media_url in video_urls:
+                data = await self._download_bytes(
+                    media_url, platform=post.platform, max_bytes=limit
                 )
+                if data:
+                    break
+            if data:
+                upload = await self._prepare_file(
+                    ctx, data, filename=f"{post.platform}.mp4"
+                )
+                if upload is None:
+                    return
+        elif post.is_video or "/reel" in (post.url or url).lower():
+            upload = await self._ytdlp_file(ctx, post.url or url, post.platform)
+            if upload is None:
+                await ctx.fail("Could not download that video.")
                 return
         elif image_urls:
-            data = await self._download_bytes(image_urls[0], platform=post.platform)
+            data = await self._download_bytes(
+                image_urls[0], platform=post.platform, max_bytes=limit
+            )
             if data:
                 ext = "jpg"
                 lu = image_urls[0].lower()
@@ -442,16 +506,40 @@ class Socials(Package):
                     ext = "png"
                 elif ".webp" in lu:
                     ext = "webp"
-                upload = discord.File(io.BytesIO(data), filename=f"{post.platform}.{ext}")
+                upload = await self._prepare_file(
+                    ctx, data, filename=f"{post.platform}.{ext}"
+                )
+                if upload is None:
+                    return
         else:
-            upload = await self._ytdlp_file(post.url or url, post.platform)
+            upload = await self._ytdlp_file(ctx, post.url or url, post.platform)
 
         if upload is None:
             await ctx.fail("Could not get media for that post.")
             return
 
         # Plain video/file only — no embed, no components
-        await ctx.send(file=upload)
+        try:
+            await ctx.send(file=upload)
+        except discord.HTTPException as exc:
+            # 413 / 40005 payload too large — compress harder and retry once
+            if getattr(exc, "code", None) == 40005 or exc.status == 413:
+                upload.fp.seek(0)
+                raw = upload.fp.read()
+                tighter = max(8 * 1024 * 1024, limit // 2)
+                fitted, name = await fit_for_discord(
+                    raw,
+                    filename=upload.filename or f"{post.platform}.mp4",
+                    max_bytes=tighter,
+                )
+                if len(fitted) > tighter:
+                    await ctx.fail(
+                        "Video is too large for Discord even after compression."
+                    )
+                    return
+                await ctx.send(file=discord.File(io.BytesIO(fitted), filename=name))
+            else:
+                raise
 
     async def _generate_quote_image(
         self,

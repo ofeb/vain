@@ -23,5 +23,6 @@ ujson
 watchfiles
 xxhash
 yt-dlp
+imageio-ffmpeg
 lava-lyra
 discord-chat-exporter

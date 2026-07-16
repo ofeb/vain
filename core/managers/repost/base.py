@@ -1,14 +1,17 @@
-﻿"""base class for media repost handlers.
+"""base class for media repost handlers.
 provides download and send logic all platforms share.
 subclass this and implement fetch"""
 
 from __future__ import annotations
 
+import io
 from typing import Optional, TYPE_CHECKING
 
 import aiohttp
 import discord
 from discord.ext.commands import Context
+
+from core.networks.media.compress import discord_upload_limit, fit_for_discord
 
 if TYPE_CHECKING:
     from core.vain import Vain
@@ -48,7 +51,7 @@ class BaseRepost:
             ),
         }
         async with aiohttp.ClientSession(headers=headers) as s:
-            async with s.get(media_url) as r:
+            async with s.get(media_url, timeout=aiohttp.ClientTimeout(total=60)) as r:
                 if r.status != 200:
                     await ctx.fail("couldnt download the media")
                     return None
@@ -62,12 +65,38 @@ class BaseRepost:
                 else:
                     ext = "mp4"
                 data_bytes = await r.read()
-                if len(data_bytes) > 25_000_000:
-                    await ctx.fail("file exceeds Discord's 25MB upload limit")
+                if not data_bytes:
+                    await ctx.fail("couldnt download the media")
                     return None
-        file = discord.File(
-            fp=__import__("io").BytesIO(data_bytes),
+                if len(data_bytes) > 100 * 1024 * 1024:
+                    await ctx.fail("file is too large to process")
+                    return None
+
+        limit = discord_upload_limit(getattr(ctx, "guild", None))
+        fitted, name = await fit_for_discord(
+            data_bytes,
             filename=f"{self.platform}.{ext}",
+            guild=getattr(ctx, "guild", None),
+            max_bytes=limit,
         )
-        # plain file — no embed, no components
-        return await ctx.send(file=file)
+        if len(fitted) > limit:
+            await ctx.fail(
+                f"file exceeds Discord's upload limit even after compression "
+                f"({len(fitted) / (1024 * 1024):.1f}MB)."
+            )
+            return None
+
+        file = discord.File(fp=io.BytesIO(fitted), filename=name)
+        try:
+            return await ctx.send(file=file)
+        except discord.HTTPException as exc:
+            if getattr(exc, "code", None) == 40005 or exc.status == 413:
+                tighter = max(8 * 1024 * 1024, limit // 2)
+                fitted2, name2 = await fit_for_discord(
+                    fitted, filename=name, max_bytes=tighter
+                )
+                if len(fitted2) > tighter:
+                    await ctx.fail("file is too large for Discord even after compression")
+                    return None
+                return await ctx.send(file=discord.File(io.BytesIO(fitted2), filename=name2))
+            raise
