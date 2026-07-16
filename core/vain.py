@@ -498,6 +498,43 @@ class Vain(commands.AutoShardedBot):
                 origin._update({"content": rewritten})
         return await super().get_context(origin, cls=cls)
 
+    @staticmethod
+    def _blocked_ids(raw) -> set[int]:
+        """Normalize asyncpg / cache id lists into a set of ints."""
+        if raw is None:
+            return set()
+        # Record / mapping
+        if hasattr(raw, "get") and not isinstance(raw, (list, tuple, set)):
+            raw = raw.get("object_ids", raw)
+        if not raw:
+            return set()
+        out: set[int] = set()
+        for x in raw:
+            try:
+                out.add(int(x))
+            except (TypeError, ValueError):
+                continue
+        return out
+
+    async def _load_disabled_commands(self, guild_id: int, command_name: str):
+        """Fetch disabled object ids for a command as a plain dict (cache-safe)."""
+        row = await self.db.fetchrow(_DISABLED_CMD_SQL, guild_id, command_name)
+        if not row:
+            return None
+        # Support both attribute and mapping access on records
+        try:
+            object_ids = row["object_ids"]
+        except Exception:
+            object_ids = getattr(row, "object_ids", None)
+        try:
+            object_types = row["object_types"]
+        except Exception:
+            object_types = getattr(row, "object_types", None)
+        return {
+            "object_ids": [int(x) for x in (object_ids or [])],
+            "object_types": list(object_types or []),
+        }
+
     async def _global_check(self, ctx: Context) -> bool:
         """runs before every command"""
         owner = await self.is_owner(ctx.author)
@@ -514,6 +551,7 @@ class Vain(commands.AutoShardedBot):
             if bool(blacklisted):
                 raise commands.CheckFailure("youre **blacklisted** from using this bot")
 
+        # Role restrictions — owners may bypass
         if ctx.command is not None and ctx.guild is not None and not is_help and not owner:
             cmd_name = ctx.command.qualified_name.lower()
             rows = await self.remember(
@@ -529,19 +567,18 @@ class Vain(commands.AutoShardedBot):
                     )
                     raise commands.CheckFailure(f"only {mentions} can use `{cmd_name}`")
 
+        # Per-user / per-channel disables — ALWAYS enforced (even for bot owners)
+        if ctx.command is not None and ctx.guild is not None and not is_help:
+            cmd_name = ctx.command.qualified_name.lower()
             disabled = await self.remember(
                 f"disabled:{ctx.guild.id}:{cmd_name}",
                 _ACCESS_TTL,
-                lambda: self.db.fetchrow(
-                    _DISABLED_CMD_SQL, ctx.guild.id, cmd_name
-                ),
+                lambda: self._load_disabled_commands(ctx.guild.id, cmd_name),
             )
             if disabled:
-                raw_ids = getattr(disabled, "object_ids", None) or []
-                try:
-                    blocked = {int(x) for x in raw_ids}
-                except (TypeError, ValueError):
-                    blocked = set()
+                blocked = self._blocked_ids(
+                    disabled.get("object_ids") if isinstance(disabled, dict) else getattr(disabled, "object_ids", None)
+                )
                 if ctx.author.id in blocked:
                     raise commands.CheckFailure(
                         "this command has been **disabled** for you!"

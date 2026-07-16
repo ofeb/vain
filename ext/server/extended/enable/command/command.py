@@ -134,10 +134,22 @@ class CommandEnableCommands(Package):
         )
 
         target_id = int(target.id)
-        obj_ids = [int(x) for x in (record.object_ids or [])] if record else []
-        obj_types = list(record.object_types or []) if record else []
+        if record:
+            try:
+                raw_ids = record["object_ids"]
+            except Exception:
+                raw_ids = getattr(record, "object_ids", None) or []
+            try:
+                raw_types = record["object_types"]
+            except Exception:
+                raw_types = getattr(record, "object_types", None) or []
+            obj_ids = [int(x) for x in (raw_ids or [])]
+            obj_types = list(raw_types or [])
+        else:
+            obj_ids, obj_types = [], []
+
         if not record or target_id not in obj_ids:
-            raise CommandError(
+            return await ctx.fail(
                 f"`{name}` was already **enabled** {target_phrase(target)}"
             )
 
@@ -206,8 +218,14 @@ class CommandEnableCommands(Package):
             ctx.guild.id,
             name,
         )
-        if not record or not record.object_ids:
-            raise CommandError(
+        has_ids = False
+        if record:
+            try:
+                has_ids = bool(record["object_ids"] or getattr(record, "object_ids", None))
+            except Exception:
+                has_ids = bool(getattr(record, "object_ids", None))
+        if not record or not has_ids:
+            return await ctx.fail(
                 f"`{name}` has already been **enabled** to use in this server"
             )
         await self.db.execute(

@@ -112,10 +112,19 @@ class CommandDisableCommands(Package):
         kind = "member" if is_member_like(target) else "channel"
         target_id = int(target.id)
         if existing:
-            ids = [int(x) for x in (existing.object_ids or [])]
-            kinds = list(existing.object_types or [])
+            try:
+                raw_ids = existing["object_ids"]
+            except Exception:
+                raw_ids = getattr(existing, "object_ids", None) or []
+            try:
+                raw_types = existing["object_types"]
+            except Exception:
+                raw_types = getattr(existing, "object_types", None) or []
+            ids = [int(x) for x in (raw_ids or [])]
+            kinds = list(raw_types or [])
             if target_id in ids:
-                raise CommandError(
+                # Soft fail — no raise/traceback (jsk debug friendly)
+                return await ctx.fail(
                     f"`{name}` was already **disabled** {target_phrase(target)}"
                 )
             ids.append(target_id)
@@ -204,7 +213,7 @@ class CommandDisableCommands(Package):
             kinds = list(existing.object_types)
             fresh = [c.id for c in ctx.guild.text_channels if c.id not in ids]
             if not fresh and all(cid in ids for cid in all_ids):
-                raise CommandError(
+                return await ctx.fail(
                     f"`{name}` has already been **disabled** in this server"
                 )
             ids.extend(fresh)
