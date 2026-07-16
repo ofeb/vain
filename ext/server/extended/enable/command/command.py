@@ -23,7 +23,8 @@ from core.tools.hierarchy import (
 
 
 def _cmd_label(command) -> str:
-    return getattr(command, "qualified_name", str(command))
+    # Always store/lookup lowercase so disable checks match reliably
+    return str(getattr(command, "qualified_name", command)).lower()
 
 
 _CHANNEL_MENTION = re.compile(r"^(<#\d+>)\s+(.+)$", re.DOTALL)
@@ -82,7 +83,7 @@ class CommandEnableCommands(Package):
     ) -> None:
         if not object_ids:
             await self.db.execute(
-                """DELETE FROM disabled_commands WHERE guild_id = $1 AND command = $2""",
+                """DELETE FROM disabled_commands WHERE guild_id = $1 AND lower(command) = lower($2)""",
                 ctx.guild.id,
                 command_name,
             )
@@ -90,7 +91,7 @@ class CommandEnableCommands(Package):
             await self.db.execute(
                 """UPDATE disabled_commands
                    SET object_ids = $1, object_types = $2
-                   WHERE guild_id = $3 AND command = $4""",
+                   WHERE guild_id = $3 AND lower(command) = lower($4)""",
                 object_ids,
                 object_types,
                 ctx.guild.id,
@@ -127,19 +128,20 @@ class CommandEnableCommands(Package):
             await ensure_member_hierarchy(ctx, target, bot_hierarchy=False)
 
         record = await self.db.fetchrow(
-            """SELECT * FROM disabled_commands WHERE guild_id = $1 AND command = $2""",
+            """SELECT * FROM disabled_commands WHERE guild_id = $1 AND lower(command) = lower($2)""",
             ctx.guild.id,
             name,
         )
 
-        if not record or target.id not in list(record.object_ids or []):
+        target_id = int(target.id)
+        obj_ids = [int(x) for x in (record.object_ids or [])] if record else []
+        obj_types = list(record.object_types or []) if record else []
+        if not record or target_id not in obj_ids:
             raise CommandError(
                 f"`{name}` was already **enabled** {target_phrase(target)}"
             )
 
-        obj_ids = list(record.object_ids)
-        obj_types = list(record.object_types)
-        idx = obj_ids.index(target.id)
+        idx = obj_ids.index(target_id)
         obj_ids.pop(idx)
         if idx < len(obj_types):
             obj_types.pop(idx)
@@ -200,7 +202,7 @@ class CommandEnableCommands(Package):
         """enable command everywhere (clears all channel/member disables)"""
         name = _cmd_label(command)
         record = await self.db.fetchrow(
-            """SELECT * FROM disabled_commands WHERE guild_id = $1 AND command = $2""",
+            """SELECT * FROM disabled_commands WHERE guild_id = $1 AND lower(command) = lower($2)""",
             ctx.guild.id,
             name,
         )
@@ -209,7 +211,7 @@ class CommandEnableCommands(Package):
                 f"`{name}` has already been **enabled** to use in this server"
             )
         await self.db.execute(
-            """DELETE FROM disabled_commands WHERE guild_id = $1 AND command = $2""",
+            """DELETE FROM disabled_commands WHERE guild_id = $1 AND lower(command) = lower($2)""",
             ctx.guild.id,
             name,
         )

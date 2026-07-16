@@ -129,8 +129,8 @@ _ACCESS_TTL = 60
 _MESSAGE_STATE_TTL = 30
 
 _DISABLED_CMD_SQL = """
-    SELECT object_ids FROM disabled_commands
-    WHERE guild_id = $1 AND command = $2
+    SELECT object_ids, object_types FROM disabled_commands
+    WHERE guild_id = $1 AND lower(command) = lower($2)
 """
 
 _RESTRICTIONS_SQL = """
@@ -532,10 +532,24 @@ class Vain(commands.AutoShardedBot):
             disabled = await self.remember(
                 f"disabled:{ctx.guild.id}:{cmd_name}",
                 _ACCESS_TTL,
-                lambda: self.db.fetchrow(_DISABLED_CMD_SQL, ctx.guild.id, ctx.command.qualified_name),
+                lambda: self.db.fetchrow(
+                    _DISABLED_CMD_SQL, ctx.guild.id, cmd_name
+                ),
             )
-            if disabled and (ctx.author.id in disabled.object_ids or ctx.channel.id in disabled.object_ids):
-                raise commands.CheckFailure(f"`{ctx.command.qualified_name}` is disabled here")
+            if disabled:
+                raw_ids = getattr(disabled, "object_ids", None) or []
+                try:
+                    blocked = {int(x) for x in raw_ids}
+                except (TypeError, ValueError):
+                    blocked = set()
+                if ctx.author.id in blocked:
+                    raise commands.CheckFailure(
+                        "this command has been **disabled** for you!"
+                    )
+                if ctx.channel.id in blocked:
+                    raise commands.CheckFailure(
+                        "this command has been **disabled** in this channel!"
+                    )
 
         if ctx.guild is not None:
             me = ctx.channel.permissions_for(ctx.guild.me)
@@ -691,7 +705,7 @@ class Vain(commands.AutoShardedBot):
             return
         if isinstance(err, commands.MissingRequiredArgument):
             with contextlib.suppress(discord.HTTPException):
-                await ctx.send_help()
+                await ctx.send_help(ctx.command)
             return
         if isinstance(err, Ratelimited):
             with contextlib.suppress(discord.HTTPException):
@@ -706,6 +720,14 @@ class Vain(commands.AutoShardedBot):
                 )
             return
 
+        # Expected user-facing command errors — soft reply, no traceback / error ids
+        if isinstance(err, commands.CommandError):
+            msg = str(err).strip() or "you **can't** do that"
+            with contextlib.suppress(discord.HTTPException, Exception):
+                await ctx.fail(msg)
+            return
+
+        # Unexpected failures — store traceback for jsk error lookup
         self._error_counter += 1
         error_id = str(self._error_counter)
         tb_text = "".join(traceback.format_exception(type(err), err, err.__traceback__))
@@ -714,11 +736,9 @@ class Vain(commands.AutoShardedBot):
             oldest = min(self._error_store.keys(), key=lambda k: int(k))
             del self._error_store[oldest]
 
-        if isinstance(err, commands.CommandError):
-            with contextlib.suppress(discord.HTTPException):
-                await ctx.fail(f"{str(err)} (error #{error_id})")
-            return
-        log.exception(f"unhandled error in {ctx.command}: {err}")
+        log.exception("unhandled error in %s: %s", getattr(ctx.command, "qualified_name", "?"), err)
+        with contextlib.suppress(discord.HTTPException, Exception):
+            await ctx.fail(f"something went wrong (error #{error_id})")
 
     async def on_command_completion(self, ctx: Context) -> None:
         if not ctx.guild or not ctx.command:

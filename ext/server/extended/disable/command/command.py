@@ -23,7 +23,8 @@ from core.tools.hierarchy import (
 
 
 def _cmd_label(command) -> str:
-    return getattr(command, "qualified_name", str(command))
+    # Always store/lookup lowercase so disable checks match reliably
+    return str(getattr(command, "qualified_name", command)).lower()
 
 
 _CHANNEL_MENTION = re.compile(r"^(<#\d+>)\s+(.+)$", re.DOTALL)
@@ -103,25 +104,26 @@ class CommandDisableCommands(Package):
             await ensure_member_hierarchy(ctx, target, bot_hierarchy=False)
 
         existing = await self.db.fetchrow(
-            """SELECT * FROM disabled_commands WHERE guild_id = $1 AND command = $2""",
+            """SELECT * FROM disabled_commands WHERE guild_id = $1 AND lower(command) = lower($2)""",
             ctx.guild.id,
             name,
         )
 
         kind = "member" if is_member_like(target) else "channel"
+        target_id = int(target.id)
         if existing:
-            if target.id in existing.object_ids:
+            ids = [int(x) for x in (existing.object_ids or [])]
+            kinds = list(existing.object_types or [])
+            if target_id in ids:
                 raise CommandError(
                     f"`{name}` was already **disabled** {target_phrase(target)}"
                 )
-            ids = list(existing.object_ids)
-            kinds = list(existing.object_types)
-            ids.append(target.id)
+            ids.append(target_id)
             kinds.append(kind)
             await self.db.execute(
                 """UPDATE disabled_commands
                    SET object_ids = $1, object_types = $2
-                   WHERE guild_id = $3 AND command = $4""",
+                   WHERE guild_id = $3 AND lower(command) = lower($4)""",
                 ids,
                 kinds,
                 ctx.guild.id,
@@ -134,7 +136,7 @@ class CommandDisableCommands(Package):
                    VALUES($1, $2, $3, $4)""",
                 ctx.guild.id,
                 name,
-                [target.id],
+                [target_id],
                 [kind],
             )
         await ctx.bot.invalidate_command_access_cache(ctx.guild.id, name)
@@ -192,7 +194,7 @@ class CommandDisableCommands(Package):
         """block command everywhere"""
         name = _cmd_label(command)
         existing = await self.db.fetchrow(
-            """SELECT * FROM disabled_commands WHERE guild_id = $1 AND command = $2""",
+            """SELECT * FROM disabled_commands WHERE guild_id = $1 AND lower(command) = lower($2)""",
             ctx.guild.id,
             name,
         )
@@ -210,7 +212,7 @@ class CommandDisableCommands(Package):
             await self.db.execute(
                 """UPDATE disabled_commands
                    SET object_ids = $1, object_types = $2
-                   WHERE guild_id = $3 AND command = $4""",
+                   WHERE guild_id = $3 AND lower(command) = lower($4)""",
                 ids,
                 kinds,
                 ctx.guild.id,
