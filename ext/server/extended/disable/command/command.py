@@ -99,7 +99,8 @@ class CommandDisableCommands(Package):
             target = ctx.channel
 
         if is_member_like(target):
-            await ensure_member_hierarchy(ctx, target)
+            # Config-only (DB write) — bot role vs target does not matter
+            await ensure_member_hierarchy(ctx, target, bot_hierarchy=False)
 
         existing = await self.db.fetchrow(
             """SELECT * FROM disabled_commands WHERE guild_id = $1 AND command = $2""",

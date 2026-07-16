@@ -80,7 +80,7 @@ class IgnoreCommands(Package):
         from core.tools.hierarchy import ensure_member_hierarchy, is_member_like
 
         if is_member_like(target):
-            await ensure_member_hierarchy(ctx, target)
+            await ensure_member_hierarchy(ctx, target, bot_hierarchy=False)
         await self.db.execute(
             """INSERT INTO ignored (guild_id, object_id, object_type) VALUES($1, $2, $3) ON CONFLICT(guild_id, object_id) DO NOTHING""",
             ctx.guild.id,
@@ -100,7 +100,7 @@ class IgnoreCommands(Package):
         """toggle command access"""
         from core.tools.hierarchy import ensure_member_hierarchy
 
-        await ensure_member_hierarchy(ctx, member)
+        await ensure_member_hierarchy(ctx, member, bot_hierarchy=False)
         try:
             await self.db.execute(
                 """INSERT INTO command_allowed (guild_id, user_id, command) VALUES($1, $2, $3)""",
