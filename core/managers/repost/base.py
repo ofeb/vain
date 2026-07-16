@@ -27,7 +27,7 @@ class BaseRepost:
         raise NotImplementedError
 
     async def send(self, ctx: Context, url: str) -> Optional[discord.Message]:
-        """download and send media from url to channel"""
+        """download and send media from url to channel (file only, no embed)"""
         data = await self.fetch(url)
         if not data:
             await ctx.fail(f"couldnt get media from {self.platform}")
@@ -36,13 +36,38 @@ class BaseRepost:
         if not media_url:
             await ctx.fail(f"no media found for that {self.platform} url")
             return None
-        async with aiohttp.ClientSession() as s:
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+            ),
+            "Referer": (
+                "https://www.instagram.com/"
+                if self.platform == "instagram"
+                else "https://www.tiktok.com/"
+            ),
+        }
+        async with aiohttp.ClientSession(headers=headers) as s:
             async with s.get(media_url) as r:
                 if r.status != 200:
                     await ctx.fail("couldnt download the media")
                     return None
-                content_type = r.content_type
-                ext = "mp4" if "video" in content_type else "mp3" if "audio" in content_type else "bin"
+                content_type = (r.content_type or "").lower()
+                if data.get("is_video") or "video" in content_type or str(media_url).lower().endswith(".mp4"):
+                    ext = "mp4"
+                elif "audio" in content_type:
+                    ext = "mp3"
+                elif "image" in content_type or "jpeg" in content_type:
+                    ext = "jpg"
+                else:
+                    ext = "mp4"
                 data_bytes = await r.read()
-        file = discord.File(fp=__import__("io").BytesIO(data_bytes), filename=f"media.{ext}")
-        return await ctx.reply(file=file)
+                if len(data_bytes) > 25_000_000:
+                    await ctx.fail("file exceeds Discord's 25MB upload limit")
+                    return None
+        file = discord.File(
+            fp=__import__("io").BytesIO(data_bytes),
+            filename=f"{self.platform}.{ext}",
+        )
+        # plain file — no embed, no components
+        return await ctx.send(file=file)

@@ -1,60 +1,149 @@
-from typing import Union
-from discord.ext.commands import group, CommandError
-from discord import Embed, TextChannel, Member
+from __future__ import annotations
+
+from typing import Optional, Union
+
+from discord import Embed, Member, TextChannel
+from discord.ext.commands import (
+    BadArgument,
+    CommandError,
+    MemberConverter,
+    TextChannelConverter,
+    group,
+)
+
 from core.discord.package import Package
-
-
 from core.managers.converters import CommandConverter
 from core.managers.permissions import has_permissions
+
+
+def _cmd_label(command) -> str:
+    return getattr(command, "qualified_name", str(command))
+
+
 class CommandDisableCommands(Package):
-    """disable commands per channel"""
+    """disable commands per channel, member, or server-wide"""
+
+    async def _resolve_target_and_command(
+        self,
+        ctx,
+        *,
+        payload: str,
+    ) -> tuple[Optional[Union[TextChannel, Member]], object]:
+        """Parse ``[channel|member] <command>``."""
+        text = (payload or "").strip()
+        if not text:
+            raise CommandError("provide a command to disable")
+
+        parts = text.split()
+        target: Optional[Union[TextChannel, Member]] = None
+        command_text = text
+
+        if len(parts) >= 2:
+            head, rest = parts[0], " ".join(parts[1:])
+            for converter in (TextChannelConverter(), MemberConverter()):
+                try:
+                    target = await converter.convert(ctx, head)
+                    command_text = rest
+                    break
+                except (BadArgument, CommandError):
+                    continue
+
+        command = await CommandConverter().convert(ctx, command_text)
+        return target, command
 
     @group(
         name="disablecommand",
         aliases=["dcmd"],
-        description="Disable a command in a channel",
+        description="Disable a command in a channel, for a member, or server-wide",
+        usage="[channel or member] <command>",
+        example=",disablecommand #general snipe",
         invoke_without_command=True,
-        example=",disablecommand @jon ping",
     )
     @has_permissions(manage_channels=True)
-    async def disablecommand(
-        self,
-        ctx,
-        target: Union[TextChannel, Member],
-        *,
-        command: CommandConverter,
-    ):
-        """block a command"""
+    async def disablecommand(self, ctx, *, payload: str = None):
+        """block a command server-wide or in a channel/for a member"""
+        if not payload:
+            return await ctx.send_help(ctx.command)
+
+        target, command = await self._resolve_target_and_command(ctx, payload=payload)
+        name = _cmd_label(command)
+
         existing = await self.db.fetchrow(
             """SELECT * FROM disabled_commands WHERE guild_id = $1 AND command = $2""",
             ctx.guild.id,
-            command.qualified_name,
+            name,
         )
+
+        # Server-wide disable: ,disablecommand snipe  → all text channels
+        if target is None:
+            all_ids = [c.id for c in ctx.guild.text_channels]
+            if not all_ids:
+                raise CommandError("this server has no text channels to disable in")
+            if existing:
+                ids = list(existing.object_ids)
+                kinds = list(existing.object_types)
+                already = all(cid in ids for cid in all_ids)
+                if already:
+                    raise CommandError(
+                        f"`{name}` has already been **disabled** in this server"
+                    )
+                fresh = [cid for cid in all_ids if cid not in ids]
+                ids.extend(fresh)
+                kinds.extend(["channel"] * len(fresh))
+                await self.db.execute(
+                    """UPDATE disabled_commands
+                       SET object_ids = $1, object_types = $2
+                       WHERE guild_id = $3 AND command = $4""",
+                    ids,
+                    kinds,
+                    ctx.guild.id,
+                    name,
+                )
+            else:
+                await self.db.execute(
+                    """INSERT INTO disabled_commands
+                       (guild_id, command, object_ids, object_types)
+                       VALUES($1, $2, $3, $4)""",
+                    ctx.guild.id,
+                    name,
+                    all_ids,
+                    ["channel"] * len(all_ids),
+                )
+            await ctx.bot.invalidate_command_access_cache(ctx.guild.id, name)
+            return await ctx.success(f"**disabled** `{name}` in this server")
+
+        # Channel / member disable
+        kind = "channel" if isinstance(target, TextChannel) else "member"
         if existing:
             if target.id in existing.object_ids:
                 raise CommandError(
-                    f"{target.mention} already **can't** use `{command.qualified_name}`"
+                    f"`{name}` was already **disabled** in {target.mention}"
                 )
             ids = list(existing.object_ids)
             kinds = list(existing.object_types)
             ids.append(target.id)
-            kinds.append("channel" if isinstance(target, TextChannel) else "member")
+            kinds.append(kind)
             await self.db.execute(
-                """UPDATE disabled_commands SET object_ids = $1, object_types = $2 WHERE guild_id = $3 AND command = $4""",
-                ids, kinds, ctx.guild.id, command.qualified_name,
+                """UPDATE disabled_commands
+                   SET object_ids = $1, object_types = $2
+                   WHERE guild_id = $3 AND command = $4""",
+                ids,
+                kinds,
+                ctx.guild.id,
+                name,
             )
         else:
             await self.db.execute(
-                """INSERT INTO disabled_commands (guild_id, command, object_ids, object_types) VALUES($1, $2, $3, $4)""",
+                """INSERT INTO disabled_commands
+                   (guild_id, command, object_ids, object_types)
+                   VALUES($1, $2, $3, $4)""",
                 ctx.guild.id,
-                command.qualified_name,
+                name,
                 [target.id],
-                ["channel" if isinstance(target, TextChannel) else "member"],
+                [kind],
             )
-        await ctx.bot.invalidate_command_access_cache(ctx.guild.id, command.qualified_name)
-        return await ctx.success(
-            f"**disabled** `{command.qualified_name}` for {target.mention}"
-        )
+        await ctx.bot.invalidate_command_access_cache(ctx.guild.id, name)
+        return await ctx.success(f"**disabled** `{name}` in {target.mention}")
 
     @disablecommand.command(
         name="list",
@@ -65,7 +154,8 @@ class CommandDisableCommands(Package):
     async def disablecommand_list(self, ctx):
         """list disabled commands"""
         data = await self.db.fetch(
-            """SELECT object_ids, object_types, command FROM disabled_commands WHERE guild_id = $1""",
+            """SELECT object_ids, object_types, command
+               FROM disabled_commands WHERE guild_id = $1""",
             ctx.guild.id,
         )
         if not data:
@@ -84,6 +174,8 @@ class CommandDisableCommands(Package):
                 obj = resolve(oid)
                 if obj:
                     lines.append(f"**{row.command}** — {obj.mention}")
+        if not lines:
+            raise CommandError("no commands have been disabled")
         numbered = [f"`{i}` {ln}" for i, ln in enumerate(lines, start=1)]
         return await ctx.paginate(
             Embed(color=self.bot.color, title="Disabled Commands").set_author(
@@ -92,33 +184,50 @@ class CommandDisableCommands(Package):
             numbered,
         )
 
-    @disablecommand.command(name="all", description="Disable a command in every channel")
+    @disablecommand.command(
+        name="all",
+        description="Disable a command in every channel",
+        usage="<command>",
+        example=",disablecommand all snipe",
+    )
     @has_permissions(manage_channels=True)
     async def disablecommand_all(self, ctx, *, command: CommandConverter):
         """block command everywhere"""
+        name = _cmd_label(command)
         existing = await self.db.fetchrow(
             """SELECT * FROM disabled_commands WHERE guild_id = $1 AND command = $2""",
             ctx.guild.id,
-            command.qualified_name,
+            name,
         )
+        all_ids = [c.id for c in ctx.guild.text_channels]
         if existing:
             ids = list(existing.object_ids)
             kinds = list(existing.object_types)
             fresh = [c.id for c in ctx.guild.text_channels if c.id not in ids]
+            if not fresh and all(cid in ids for cid in all_ids):
+                raise CommandError(
+                    f"`{name}` has already been **disabled** in this server"
+                )
             ids.extend(fresh)
             kinds.extend(["channel"] * len(fresh))
             await self.db.execute(
-                """UPDATE disabled_commands SET object_ids = $1, object_types = $2 WHERE guild_id = $3 AND command = $4""",
-                ids, kinds, ctx.guild.id, command.qualified_name,
+                """UPDATE disabled_commands
+                   SET object_ids = $1, object_types = $2
+                   WHERE guild_id = $3 AND command = $4""",
+                ids,
+                kinds,
+                ctx.guild.id,
+                name,
             )
         else:
-            all_ids = [c.id for c in ctx.guild.text_channels]
             await self.db.execute(
-                """INSERT INTO disabled_commands (guild_id, command, object_ids, object_types) VALUES($1, $2, $3, $4)""",
+                """INSERT INTO disabled_commands
+                   (guild_id, command, object_ids, object_types)
+                   VALUES($1, $2, $3, $4)""",
                 ctx.guild.id,
-                command.qualified_name,
+                name,
                 all_ids,
                 ["channel"] * len(all_ids),
             )
-        await ctx.bot.invalidate_command_access_cache(ctx.guild.id, command.qualified_name)
-        return await ctx.success(f"**disabled** `{command.qualified_name}` in all channels")
+        await ctx.bot.invalidate_command_access_cache(ctx.guild.id, name)
+        return await ctx.success(f"**disabled** `{name}` in all channels")

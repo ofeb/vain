@@ -143,26 +143,38 @@ class api:
         api_key: str = ""
 
     class instagram:
-        cookies: list[dict] = []
-        username: str = ""
-        password: str = ""
-        graphql: list[str] = [
+        # Cookie-free mode: vainapi resolves reels/posts via public download APIs.
+        # Leave COOKIES empty — sessionid/ds_user_id are not used.
+        COOKIES: list[dict[str, str]] = []
+        USERNAME: str = ""
+        PASSWORD: str = ""
+        GRAPHQL: list[str] = [
             "https://www.instagram.com/graphql/query/?query_id=17888483320059182",
         ]
-        post_query_hash: str = "2c4f4e870eeeee575e7210848365d854"
+        POST_QUERY_HASH: str = "2c4f4e870eeeee575e7210848365d854"
+
+        cookies = COOKIES
+        username = USERNAME
+        password = PASSWORD
+        graphql = GRAPHQL
+        post_query_hash = POST_QUERY_HASH
+
+        @classmethod
+        def cookie_entries(cls) -> list[dict[str, str]]:
+            return list(getattr(cls, "COOKIES", None) or getattr(cls, "cookies", None) or [])
 
         @classmethod
         def cookie_header(cls, *, index: int = 0) -> str:
-            if not cls.cookies:
+            # Intentionally unused by the cookie-free Instagram client.
+            entries = cls.cookie_entries()
+            if not entries:
                 return ""
-            entry = cls.cookies[index % len(cls.cookies)]
-            parts = []
-            ds_user_id = str(entry.get("ds_user_id", "")).strip()
-            sessionid = str(entry.get("sessionid", "")).strip()
-            if ds_user_id:
-                parts.append(f"ds_user_id={ds_user_id}")
-            if sessionid:
-                parts.append(f"sessionid={sessionid}")
+            entry = entries[index % len(entries)]
+            parts: list[str] = []
+            for key in ("ds_user_id", "sessionid", "csrftoken"):
+                val = str(entry.get(key, "")).strip()
+                if val:
+                    parts.append(f"{key}={val}")
             return "; ".join(parts)
 
 

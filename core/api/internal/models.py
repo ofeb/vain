@@ -7,6 +7,7 @@ from typing import (
 )
 from pydantic import (
   BaseModel,
+  ConfigDict,
   HttpUrl,
   Field,
   field_validator
@@ -255,87 +256,105 @@ class TikTokVideo(BaseModel):
   url: str
 
 class BioLinks(BaseModel):
-  link_id: int
-  url: str
+  model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+  link_id: int = 0
+  url: str = ""
   title: Optional[str] = None
   is_pinned: Optional[bool] = None
 
 class InstagramUser(BaseModel):
+  model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
   pk: int
   username: str
-  full_name: str
-  is_private: bool
-  is_verified: bool
-  media_count: int
-  followers: int = Field(alias="follower_count")
-  following: int = Field(alias="following_count")
-  is_business: bool
-  avatar: Optional[HttpUrl] = Field(default=None, alias="profile_pic_url")
+  full_name: str = ""
+  is_private: bool = False
+  is_verified: bool = False
+  media_count: int = 0
+  followers: int = Field(default=0, alias="follower_count")
+  following: int = Field(default=0, alias="following_count")
+  is_business: bool = False
+  avatar: Optional[str] = Field(default=None, alias="profile_pic_url")
   biography: Optional[str] = None
   account_type: Optional[int] = None
   external_url: Optional[str] = None
   bio_links: List[BioLinks] = []
 
 class InstagramStoryUser(BaseModel):
-  pk: int
+  model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+  pk: int = 0
   username: Optional[str] = None
   full_name: Optional[str] = None
-  avatar: Optional[HttpUrl] = Field(default=None, alias="profile_pic_url")
+  avatar: Optional[str] = Field(default=None, alias="profile_pic_url")
   is_private: Optional[bool] = None
 
 class InstagramStory(BaseModel):
-  id: int
-  media_type: int
-  taken_at: datetime
-  user: InstagramStoryUser
-  image_url: Optional[HttpUrl] = None
-  video_url: Optional[HttpUrl] = None
+  model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+  id: int | str
+  media_type: int = 1
+  taken_at: Any = None
+  user: InstagramStoryUser = Field(default_factory=InstagramStoryUser)
+  image_url: Optional[str] = None
+  video_url: Optional[str] = None
   video_duration: Optional[float] = 0.0
-  thumnail_url: Optional[HttpUrl] = None
+  thumnail_url: Optional[str] = None
 
 class InstagramHighlight(BaseModel):
-  id: int
-  title: str
-  created_at: datetime
-  is_pinned_highlight: bool
-  media_count: int
-  cover_media: str
-  user: InstagramStoryUser
+  model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+  id: int | str
+  title: str = ""
+  created_at: Any = None
+  is_pinned_highlight: bool = False
+  media_count: int = 0
+  cover_media: str = ""
+  user: InstagramStoryUser = Field(default_factory=InstagramStoryUser)
 
 class InstagramCommentUser(BaseModel):
-  pk: int
-  username: str
-  full_name: str
-  avatar: HttpUrl = Field(alias="profile_pic_url")
-  is_private: bool
-  is_verified: bool
+  model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+  pk: int = 0
+  username: str = ""
+  full_name: str = ""
+  avatar: Optional[str] = Field(default=None, alias="profile_pic_url")
+  is_private: bool = False
+  is_verified: bool = False
 
 class InstagramComment(BaseModel):
+  model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
   pk: int
-  text: str
-  created_at: datetime
-  user: InstagramCommentUser
+  text: str = ""
+  created_at: Any = None
+  user: InstagramCommentUser = Field(default_factory=InstagramCommentUser)
 
 class InstagramMedia(BaseModel):
-  pk: int
-  id: int
-  code: str
-  media_type: int
-  taken_at: datetime
-  like_count: int
-  comment_count: int
+  model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+  pk: int | str = 0
+  id: int | str = 0
+  code: str = ""
+  media_type: int = 1
+  taken_at: Any = None
+  like_count: int = 0
+  comment_count: int = 0
   play_count: Optional[int] = None
   title: Optional[str] = None
-  user: InstagramStoryUser
-  image_urls: Optional[List[HttpUrl]] = None
-  thumbnail_url: Optional[HttpUrl] = None
-  video_url: Optional[HttpUrl] = None
+  user: InstagramStoryUser = Field(default_factory=InstagramStoryUser)
+  image_urls: Optional[List[str]] = None
+  thumbnail_url: Optional[str] = None
+  video_url: Optional[str] = None
   video_duration: Optional[float] = 0.0
 
 class InstagramFollowerUser(BaseModel):
-  pk: int
-  username: str
-  full_name: str
-  is_private: bool
-  is_verified: bool
-  avatar: Optional[HttpUrl] = Field(default=None, alias="profile_pic_url")
+  model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+  pk: int = 0
+  username: str = ""
+  full_name: str = ""
+  is_private: bool = False
+  is_verified: bool = False
+  avatar: Optional[str] = Field(default=None, alias="profile_pic_url")

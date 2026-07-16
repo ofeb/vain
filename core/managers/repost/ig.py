@@ -1,12 +1,20 @@
-﻿"""instagram reel and post repost handler.
-fetches public instagram media via instaloader style api.
-use IGRepost.send in commands"""
+"""instagram reel and post repost handler.
 
-import re, aiohttp
-from .base import BaseRepost
+Uses vainapi public download APIs (no session cookies).
+Sends the video/image file only — no embed.
+"""
+
+from __future__ import annotations
+
+import re
 from typing import Optional
 
-_URL_RE = re.compile(r"https?://(www\.)?instagram\.com/(p|reel)/[\w-]+")
+from .base import BaseRepost
+
+_URL_RE = re.compile(
+    r"https?://(?:www\.)?instagram\.com/(?:p|reel|tv|reels)/[\w-]+",
+    re.I,
+)
 
 
 class IGRepost(BaseRepost):
@@ -15,16 +23,26 @@ class IGRepost(BaseRepost):
     platform = "instagram"
 
     async def fetch(self, url: str) -> Optional[dict]:
-        """get instagram media url"""
-        if not _URL_RE.match(url):
+        """get instagram media url via vainapi (cookie-free)"""
+        if not _URL_RE.search(url or ""):
             return None
-        shortcode = url.rstrip("/").split("/")[-1]
-        api = f"https://www.instagram.com/p/{shortcode}/?__a=1&__d=dis"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        async with aiohttp.ClientSession(headers=headers) as s:
-            async with s.get(api) as r:
-                if r.status != 200:
-                    return None
-                data = await r.json()
-        media = data.get("graphql", {}).get("shortcode_media", {})
-        return {"url": media.get("video_url") or media.get("display_url")}
+        try:
+            from core.api.internal.instagram import Instagram
+
+            client = Instagram()
+            video = await client.get_video_url(url)
+            if video:
+                return {"url": video, "is_video": True}
+            medias = await client.get_post(url)
+            if not medias:
+                return None
+            media = medias[0]
+            if media.video_url:
+                return {"url": str(media.video_url), "is_video": True}
+            if media.image_urls:
+                return {"url": str(media.image_urls[0]), "is_video": False}
+            if media.thumbnail_url:
+                return {"url": str(media.thumbnail_url), "is_video": False}
+        except Exception:
+            return None
+        return None

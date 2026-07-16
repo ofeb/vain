@@ -1,12 +1,17 @@
-import aiofiles
-
 from pathlib import Path
 from io import BytesIO
 from re import compile
-from orjson import loads
-from munch import munchify
+import json
 
-from .http import State
+try:
+  from orjson import loads as _json_loads
+except ImportError:  # pragma: no cover
+  def _json_loads(raw):  # type: ignore
+    if isinstance(raw, (bytes, bytearray)):
+      raw = raw.decode("utf-8", "replace")
+    return json.loads(raw)
+
+from .http import State, _munchify
 from .exceptions import Error
 from .models import (
   TikTokUser,
@@ -59,8 +64,10 @@ class TikTok:
       headers=self.headers,
     )
     result = REHYDRATION_REGEX.search(data)
-    raw = loads(result.group(1))["__DEFAULT_SCOPE__"]["webapp.user-detail"]
-    loaded = munchify(raw)
+    if not result:
+      raise Error("Could not parse TikTok user page.")
+    raw = _json_loads(result.group(1))["__DEFAULT_SCOPE__"]["webapp.user-detail"]
+    loaded = _munchify(raw)
 
     if loaded.statusCode == 10221:
       raise Error(f"Can't find an user with the username `@{username}`.")
@@ -92,7 +99,9 @@ class TikTok:
       headers=self.headers,
     )
     result = REHYDRATION_REGEX.search(data)
-    loaded = munchify(loads(result.group(1))["__DEFAULT_SCOPE__"]["webapp.video-detail"])
+    if not result:
+      raise Error("Could not parse TikTok video page.")
+    loaded = _munchify(_json_loads(result.group(1))["__DEFAULT_SCOPE__"]["webapp.video-detail"])
 
     r = loaded.itemInfo.itemStruct
     user = await self.get_user(r.author.uniqueId)
@@ -124,10 +133,6 @@ class TikTok:
 
     if path:
       save_path = Path(path)
-        
-      async with aiofiles.open(save_path, "wb") as f:
-        await f.write(video_data)
-          
+      save_path.write_bytes(video_data)
       return save_path
-    else:
-      return BytesIO(video_data)
+    return BytesIO(video_data)

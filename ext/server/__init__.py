@@ -17,10 +17,8 @@ from .extended.boost.boost import BoostCommands
 from .extended.boosterrole.boosterrole import BoosterroleCommands
 from .extended.customize.customize import CustomizeCommands
 from .extended.disable.command.command import CommandDisableCommands
-from .extended.disable.event.event import EventDisableCommands
 from .extended.disable.module.module import ModuleDisableCommands
 from .extended.enable.command.command import CommandEnableCommands
-from .extended.enable.event.event import EventEnableCommands
 from .extended.enable.module.module import ModuleEnableCommands
 from .extended.filter.filter import FilterCommands
 from .extended.goodbye.goodbye import GoodbyeCommands
@@ -62,8 +60,6 @@ class Server(
     PaginationCommands,
     CommandDisableCommands,
     CommandEnableCommands,
-    EventDisableCommands,
-    EventEnableCommands,
     ModuleDisableCommands,
     ModuleEnableCommands,
     IgnoreCommands,

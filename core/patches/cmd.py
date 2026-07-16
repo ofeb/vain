@@ -66,7 +66,14 @@ def drop_injected_context_params(cmd: Command) -> None:
 
 
 def _patched_command_init(self, func, **kwargs) -> None:
+    # Preserve custom help metadata that stock discord.py ignores.
+    example = kwargs.pop("example", None)
+    parameters = kwargs.pop("parameters", None)
     _ORIG_COMMAND_INIT(self, func, **kwargs)
+    if example is not None or not hasattr(self, "example"):
+        self.example = example
+    if parameters is not None or not hasattr(self, "parameters"):
+        self.parameters = parameters if parameters is not None else {}
     drop_injected_context_params(self)
 
 
