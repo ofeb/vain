@@ -190,7 +190,9 @@ def _visible_subs(grp: Group) -> list[Command]:
             if c.hidden:
                 continue
             if isinstance(c, Group):
-                
+                # Nested group with its own main action: include it as a page
+                if getattr(c, "invoke_without_command", False):
+                    out.append(c)
                 if c.commands:
                     _walk(c)
             else:
@@ -200,15 +202,34 @@ def _visible_subs(grp: Group) -> list[Command]:
     return out
 
 
+def _is_invokable_group(cmd: Command) -> bool:
+    """True when a Group can be run as a real command (not only a subcommand hub)."""
+    return isinstance(cmd, Group) and bool(getattr(cmd, "invoke_without_command", False))
+
+
 def _leaf_pages(root: Command) -> list[Command]:
-    """Pages for help: leaf commands under a group, or the command itself."""
-    if isinstance(root, Group):
-        leaves = _visible_subs(root)
-        if leaves:
-            return sorted(leaves, key=lambda c: command_display_name(c).lower())
-        
+    """Help pages for a group: main command first (if invokable), then leaves.
+
+    Example: ``enablecommand`` → [enablecommand, enablecommand all, enablecommand list]
+    so the parent action is documented, not only its subcommands.
+    """
+    if not isinstance(root, Group):
         return [root]
-    return [root]
+
+    pages: list[Command] = []
+    # Parent group that does work when invoked without a subcommand
+    if _is_invokable_group(root):
+        pages.append(root)
+
+    leaves = _visible_subs(root)
+    seen = {id(p) for p in pages}
+    for leaf in sorted(leaves, key=lambda c: command_display_name(c).lower()):
+        if id(leaf) in seen:
+            continue
+        pages.append(leaf)
+        seen.add(id(leaf))
+
+    return pages or [root]
 
 
 _LINKED_SUB_ALIASES = {
@@ -1120,9 +1141,12 @@ class GroupHelpMenu(ui.LayoutView):
 
     def _page_text(self) -> str:
         cmd = self.pages[self.index]
-        
-        
-        is_shell = isinstance(cmd, Group) and not list(getattr(cmd, "commands", []) or [])
+        # Invokable groups (main action + subcommands) are shown as Command pages.
+        # Only pure intermediate shells (no invoke_without_command) use Group title.
+        is_shell = (
+            isinstance(cmd, Group)
+            and not getattr(cmd, "invoke_without_command", False)
+        )
         return _detail_text(
             cmd,
             self.ctx,
@@ -1390,11 +1414,20 @@ class VainHelp:
     async def _send_group(self, ctx: Context, grp: Command, *, targets: list[Command] | None = None) -> None:
         owner = ctx.author.id in ctx.bot.owners
         pages = targets or self._family_targets(ctx.bot, grp, owner=owner)
-        
+
         if isinstance(grp, Group):
-            pages = _leaf_pages(grp) if not targets else [
-                c for c in pages if not isinstance(c, Group) or not getattr(c, "commands", None)
-            ]
+            if not targets:
+                pages = _leaf_pages(grp)
+            else:
+                # Keep leaf commands and invokable main group pages; drop pure hubs
+                kept: list[Command] = []
+                for c in pages:
+                    if isinstance(c, Group) and getattr(c, "commands", None):
+                        if _is_invokable_group(c):
+                            kept.append(c)
+                        continue
+                    kept.append(c)
+                pages = kept or _leaf_pages(grp)
             if not pages:
                 pages = _leaf_pages(grp)
 
@@ -1402,7 +1435,12 @@ class VainHelp:
             await self._send_cmd(ctx, grp)
             return
 
+        # Single non-group page → no pagination chrome
         if len(pages) == 1 and not isinstance(pages[0], Group):
+            await self._send_cmd(ctx, pages[0])
+            return
+        # Single invokable group with no siblings → still show its command detail
+        if len(pages) == 1:
             await self._send_cmd(ctx, pages[0])
             return
 

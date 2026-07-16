@@ -54,19 +54,25 @@ class CommandDisableCommands(Package):
     @group(
         name="disablecommand",
         aliases=["dcmd"],
-        description="Disable a command in a channel, for a member, or server-wide",
+        description=(
+            "Disable a command in a channel (defaults to this channel) or for a member"
+        ),
         usage="[channel or member] <command>",
         example=",disablecommand #general snipe",
         invoke_without_command=True,
     )
     @has_permissions(manage_channels=True)
     async def disablecommand(self, ctx, *, payload: str = None):
-        """block a command server-wide or in a channel/for a member"""
+        """Disable a command in a channel/member. No channel → this channel."""
         if not payload:
             return await ctx.send_help(ctx.command)
 
         target, command = await self._resolve_target_and_command(ctx, payload=payload)
         name = _cmd_label(command)
+
+        # No channel/member given → use the channel this command was run in
+        if target is None:
+            target = ctx.channel
 
         existing = await self.db.fetchrow(
             """SELECT * FROM disabled_commands WHERE guild_id = $1 AND command = $2""",
@@ -74,45 +80,6 @@ class CommandDisableCommands(Package):
             name,
         )
 
-        # Server-wide disable: ,disablecommand snipe  → all text channels
-        if target is None:
-            all_ids = [c.id for c in ctx.guild.text_channels]
-            if not all_ids:
-                raise CommandError("this server has no text channels to disable in")
-            if existing:
-                ids = list(existing.object_ids)
-                kinds = list(existing.object_types)
-                already = all(cid in ids for cid in all_ids)
-                if already:
-                    raise CommandError(
-                        f"`{name}` has already been **disabled** in this server"
-                    )
-                fresh = [cid for cid in all_ids if cid not in ids]
-                ids.extend(fresh)
-                kinds.extend(["channel"] * len(fresh))
-                await self.db.execute(
-                    """UPDATE disabled_commands
-                       SET object_ids = $1, object_types = $2
-                       WHERE guild_id = $3 AND command = $4""",
-                    ids,
-                    kinds,
-                    ctx.guild.id,
-                    name,
-                )
-            else:
-                await self.db.execute(
-                    """INSERT INTO disabled_commands
-                       (guild_id, command, object_ids, object_types)
-                       VALUES($1, $2, $3, $4)""",
-                    ctx.guild.id,
-                    name,
-                    all_ids,
-                    ["channel"] * len(all_ids),
-                )
-            await ctx.bot.invalidate_command_access_cache(ctx.guild.id, name)
-            return await ctx.success(f"**disabled** `{name}` in this server")
-
-        # Channel / member disable
         kind = "channel" if isinstance(target, TextChannel) else "member"
         if existing:
             if target.id in existing.object_ids:

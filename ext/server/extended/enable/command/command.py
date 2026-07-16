@@ -79,19 +79,26 @@ class CommandEnableCommands(Package):
     @group(
         name="enablecommand",
         aliases=["ecmd"],
-        description="Enable a previously disabled command in a channel or server-wide",
+        description=(
+            "Enable a disabled command in a channel (defaults to this channel) "
+            "or for a member"
+        ),
         usage="[channel or member] <command>",
         example=",enablecommand #general snipe",
         invoke_without_command=True,
     )
     @has_permissions(manage_channels=True)
     async def enablecommand(self, ctx, *, payload: str = None):
-        """enable a command server-wide or in a channel/for a member"""
+        """Enable a command in a channel/member. No channel → this channel."""
         if not payload:
             return await ctx.send_help(ctx.command)
 
         target, command = await self._resolve_target_and_command(ctx, payload=payload)
         name = _cmd_label(command)
+
+        # No channel/member given → use the channel this command was run in
+        if target is None:
+            target = ctx.channel
 
         record = await self.db.fetchrow(
             """SELECT * FROM disabled_commands WHERE guild_id = $1 AND command = $2""",
@@ -99,26 +106,8 @@ class CommandEnableCommands(Package):
             name,
         )
 
-        # Server-wide enable: ,enablecommand snipe
-        if target is None:
-            if not record or not record.object_ids:
-                raise CommandError(
-                    f"`{name}` has already been **enabled** to use in this server"
-                )
-            await self.db.execute(
-                """DELETE FROM disabled_commands WHERE guild_id = $1 AND command = $2""",
-                ctx.guild.id,
-                name,
-            )
-            await ctx.bot.invalidate_command_access_cache(ctx.guild.id, name)
-            return await ctx.success(
-                f"**enabled** `{name}` to use in this server"
-            )
-
-        # Channel / member enable: ,enablecommand #general snipe
         if not record or target.id not in list(record.object_ids or []):
-            where = target.mention
-            raise CommandError(f"`{name}` was already **enabled** in {where}")
+            raise CommandError(f"`{name}` was already **enabled** in {target.mention}")
 
         obj_ids = list(record.object_ids)
         obj_types = list(record.object_types)

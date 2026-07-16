@@ -50,55 +50,29 @@ class ModuleDisableCommands(Package):
 
     @group(
         name="disablemodule",
-        description="Disable a module in a channel or server-wide",
+        description="Disable a module in a channel (defaults to this channel)",
         usage="[channel] <module>",
         example=",disablemodule #general server",
         invoke_without_command=True,
     )
     @has_permissions(manage_channels=True)
     async def disablemodule(self, ctx, *, payload: str = None):
-        """block a module in a channel or everywhere"""
+        """Disable a module in a channel. No channel → this channel."""
         if not payload:
             return await ctx.send_help(ctx.command)
 
         module, channel = await self._resolve_module_and_channel(ctx, payload=payload)
         label = module.replace("_", " ")
 
+        # No channel given → use the channel this command was run in
+        if channel is None:
+            channel = ctx.channel
+
         row = await self.db.fetchrow(
             """SELECT * FROM disabled_modules WHERE guild_id = $1 AND module = $2""",
             ctx.guild.id,
             module,
         )
-
-        if channel is None:
-            all_ids = [c.id for c in ctx.guild.text_channels]
-            if not all_ids:
-                raise CommandError("this server has no text channels to disable in")
-            if row:
-                ids = list(row.channel_ids)
-                if all(cid in ids for cid in all_ids):
-                    raise CommandError(
-                        f"`{label}` has already been **disabled** in this server"
-                    )
-                fresh = [cid for cid in all_ids if cid not in ids]
-                ids.extend(fresh)
-                await self.db.execute(
-                    """UPDATE disabled_modules
-                       SET channel_ids = $1
-                       WHERE guild_id = $2 AND module = $3""",
-                    ids,
-                    ctx.guild.id,
-                    module,
-                )
-            else:
-                await self.db.execute(
-                    """INSERT INTO disabled_modules (guild_id, module, channel_ids)
-                       VALUES($1, $2, $3)""",
-                    ctx.guild.id,
-                    module,
-                    all_ids,
-                )
-            return await ctx.success(f"**disabled** `{label}` in this server")
 
         if row:
             ids = list(row.channel_ids)

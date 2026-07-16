@@ -236,28 +236,27 @@ async def test_enablecommand_flows():
     pkg.bot = MagicMock(color=0x5865F2, db=db)
     ctx, ch, snipe = _make_ctx(db)
 
-    # already enabled server-wide
+    # already enabled in current channel (no channel arg → ctx.channel)
     try:
         await CommandEnableCommands.enablecommand(pkg, ctx, payload="snipe")
-        fail("expected already-enabled server error")
+        fail("expected already-enabled channel error")
     except CommandError as e:
-        if "already been **enabled** to use in this server" in str(e):
-            ok("enablecommand snipe → already enabled server-wide")
+        if "already **enabled** in" in str(e):
+            ok("enablecommand snipe → already enabled in current channel")
         else:
             fail(f"wrong msg: {e}")
 
-    # disabled in channel, enable server-wide
+    # disabled in current channel, enable without channel arg
     db.rows[(ctx.guild.id, "snipe")] = {
         "object_ids": [ch.id],
         "object_types": ["channel"],
     }
     await CommandEnableCommands.enablecommand(pkg, ctx, payload="snipe")
     if (ctx.guild.id, "snipe") not in db.rows:
-        ok("enablecommand snipe clears disables server-wide")
+        ok("enablecommand snipe enables in current channel")
     else:
-        fail("server-wide enable did not delete row")
+        fail("current-channel enable did not clear row")
     ctx.success.assert_awaited()
-    assert "this server" in ctx.success.await_args.args[0]
 
     # re-disable in channel then enable in channel via resolver bypass
     # (TextChannelConverter needs a live discord state; test core path directly)
@@ -308,17 +307,17 @@ async def test_disablecommand_flows():
 
     await CommandDisableCommands.disablecommand(pkg, ctx, payload="snipe")
     row = db.rows.get((ctx.guild.id, "snipe"))
-    if row and ch.id in row["object_ids"]:
-        ok("disablecommand snipe disables server-wide (all text channels)")
+    if row and ch.id in row["object_ids"] and len(row["object_ids"]) == 1:
+        ok("disablecommand snipe disables in current channel")
     else:
-        fail(f"server disable failed: {db.rows}")
+        fail(f"current-channel disable failed: {db.rows}")
 
     try:
         await CommandDisableCommands.disablecommand(pkg, ctx, payload="snipe")
-        fail("expected already disabled server")
+        fail("expected already disabled channel")
     except CommandError as e:
-        if "already been **disabled** in this server" in str(e):
-            ok("disablecommand snipe → already disabled server-wide")
+        if "already **disabled** in" in str(e):
+            ok("disablecommand snipe → already disabled in current channel")
         else:
             fail(f"wrong msg: {e}")
 
@@ -356,22 +355,17 @@ async def test_module_flows():
     ctx, ch, _ = _make_ctx(db)
 
     # ModuleConverter accepts unknown module keys (returns normalized)
+    # no channel arg → current channel
     await ModuleDisableCommands.disablemodule(dis, ctx, payload="server")
     if db.module_rows.get((ctx.guild.id, "server")) == [ch.id]:
-        ok("disablemodule server (server-wide via all text channels)")
+        ok("disablemodule server disables in current channel")
     else:
-        # server-wide uses all text channel ids
-        ids = db.module_rows.get((ctx.guild.id, "server"))
-        if ids and ch.id in ids:
-            ok("disablemodule server server-wide")
-        else:
-            fail(f"disablemodule server failed: {db.module_rows}")
+        fail(f"disablemodule server failed: {db.module_rows}")
 
     try:
         await ModuleEnableCommands.enablemodule(en, ctx, payload="server")
-        # should succeed clearing
         if (ctx.guild.id, "server") not in db.module_rows:
-            ok("enablemodule server clears disables")
+            ok("enablemodule server enables in current channel")
         else:
             fail("enablemodule server left rows")
     except CommandError as e:
@@ -381,8 +375,8 @@ async def test_module_flows():
         await ModuleEnableCommands.enablemodule(en, ctx, payload="server")
         fail("expected already enabled")
     except CommandError as e:
-        if "already been **enabled** to use in this server" in str(e):
-            ok("enablemodule server → already enabled")
+        if "already **enabled** in" in str(e):
+            ok("enablemodule server → already enabled in current channel")
         else:
             fail(f"wrong msg: {e}")
 

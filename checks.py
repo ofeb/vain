@@ -844,25 +844,25 @@ async def main():
             f"disable={bool(disable_cmd)} emod={bool(enable_mod)} dmod={bool(disable_mod)}"
         )
     else:
-        # ,enablecommand snipe → already enabled
+        # ,enablecommand snipe → already enabled in current channel
         ctx_ed = _build_mock_context(bot, guild, admin)
         ctx_ed.command = enable_cmd
         try:
             await enable_cmd.callback(enable_cmd.cog, ctx_ed, payload="snipe")
             fail("enablecommand snipe should error when already enabled")
         except _CmdErr as e:
-            if "already been **enabled** to use in this server" in str(e):
-                ok("enablecommand snipe → already enabled server-wide")
+            if "already **enabled** in" in str(e):
+                ok("enablecommand snipe → already enabled in current channel")
             else:
                 fail(f"enablecommand already-enabled wrong msg: {e}")
         _results["commands_invoked"] += 1
         _results["commands_pass"] += 1
 
-        # disable in channel then enable server-wide
+        # disable in current channel then re-enable
         await disable_cmd.callback(disable_cmd.cog, ctx_ed, payload="snipe")
         _results["commands_invoked"] += 1
         if (guild.id, "snipe") in _disabled_cmds:
-            ok("disablecommand snipe server-wide")
+            ok("disablecommand snipe in current channel")
             _results["commands_pass"] += 1
         else:
             fail("disablecommand snipe did not store disable")
@@ -872,17 +872,17 @@ async def main():
             await disable_cmd.callback(disable_cmd.cog, ctx_ed, payload="snipe")
             fail("disablecommand snipe should error when already disabled")
         except _CmdErr as e:
-            if "already been **disabled** in this server" in str(e):
-                ok("disablecommand snipe → already disabled server-wide")
+            if "already **disabled** in" in str(e):
+                ok("disablecommand snipe → already disabled in current channel")
             else:
                 fail(f"disable already wrong msg: {e}")
 
-        # enable server-wide clears
+        # enable in current channel clears that disable
         ctx_ed.success.reset_mock()
         await enable_cmd.callback(enable_cmd.cog, ctx_ed, payload="snipe")
         _results["commands_invoked"] += 1
         if (guild.id, "snipe") not in _disabled_cmds and ctx_ed.success.called:
-            ok("enablecommand snipe clears server disables")
+            ok("enablecommand snipe enables in current channel")
             _results["commands_pass"] += 1
         else:
             fail("enablecommand snipe did not clear")
@@ -936,8 +936,8 @@ async def main():
             await enable_mod.callback(enable_mod.cog, ctx_ed, payload="server")
             fail("enablemodule should already be enabled")
         except _CmdErr as e:
-            if "already been **enabled** to use in this server" in str(e):
-                ok("enablemodule server → already enabled")
+            if "already **enabled** in" in str(e):
+                ok("enablemodule server → already enabled in current channel")
             else:
                 fail(f"enablemodule already wrong msg: {e}")
 

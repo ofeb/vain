@@ -52,19 +52,23 @@ class ModuleEnableCommands(Package):
 
     @group(
         name="enablemodule",
-        description="Enable a module in a channel or server-wide",
+        description="Enable a module in a channel (defaults to this channel)",
         usage="[channel] <module>",
         example=",enablemodule #general server",
         invoke_without_command=True,
     )
     @has_permissions(manage_channels=True)
     async def enablemodule(self, ctx, *, payload: str = None):
-        """enable module in channel or everywhere"""
+        """Enable a module in a channel. No channel → this channel."""
         if not payload:
             return await ctx.send_help(ctx.command)
 
         module, channel = await self._resolve_module_and_channel(ctx, payload=payload)
         label = module.replace("_", " ")
+
+        # No channel given → use the channel this command was run in
+        if channel is None:
+            channel = ctx.channel
 
         stored = await self.db.fetchval(
             """SELECT channel_ids FROM disabled_modules
@@ -72,18 +76,6 @@ class ModuleEnableCommands(Package):
             ctx.guild.id,
             module,
         )
-
-        if channel is None:
-            if not stored:
-                raise CommandError(
-                    f"`{label}` has already been **enabled** to use in this server"
-                )
-            await self.db.execute(
-                """DELETE FROM disabled_modules WHERE guild_id = $1 AND module = $2""",
-                ctx.guild.id,
-                module,
-            )
-            return await ctx.success(f"**enabled** `{label}` to use in this server")
 
         if not stored or channel.id not in list(stored):
             raise CommandError(f"`{label}` was already **enabled** in {channel.mention}")
