@@ -45,7 +45,7 @@ class AFKEvents:
             await message.reply(
                 embed=embed,
                 allowed_mentions=discord.AllowedMentions.none(),
-                delete_after=5,
+                delete_after=15,
             )
 
     @Package.listener("on_message")

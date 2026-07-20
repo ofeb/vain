@@ -80,7 +80,7 @@ class color:
     approve: int = 0xA8D8A8
     warn: int = 0xF5D76E
     deny: int = 0xE07A7A
-    base: int = 0x2A2B2F
+    base: int = 0x37255E
     cooldown: int = 0xBBA0D2
     settings: int = 0xD4B8D0
     dark: int = 0x9B7A9E
