@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import discord
 from discord.ext import commands
 
 from core.discord.ctx import Context
@@ -13,25 +14,22 @@ from core.managers.values import color
 
 from .events import AFKEvents
 from .settings import AFK
-import discord
 
 if TYPE_CHECKING:
     from core.vain import Vain
 
 
-class Away(AFKEvents, Package):
-    """Away-from-keyboard commands."""
-
-
-
 def compose(*parts: str) -> str:
     return "\n".join(part for part in parts if part)
+
 
 def body(*lines: str) -> str:
     return "\n".join(f"> {line}" for line in lines if line)
 
+
 def caption(text: str) -> str:
     return f"-# {text}"
+
 
 def aesthetic_embed(
     *,
@@ -56,6 +54,8 @@ def aesthetic_embed(
     return embed
 
 
+class Away(AFKEvents, Package):
+    """Away-from-keyboard commands."""
 
     def __init__(self, bot: "Vain") -> None:
         Package.__init__(self, bot)
@@ -87,4 +87,4 @@ async def setup(bot: "Vain") -> None:
     await bot.add_cog(Away(bot))
 
 
-__all__ = ["Away", "setup"]
+__all__ = ["Away", "setup", "aesthetic_embed"]

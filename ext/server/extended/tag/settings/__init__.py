@@ -255,6 +255,18 @@ class Settings:
                 return None
 
 
+def tag_label(member: Member) -> str | None:
+    """Return the member's displayed primary-guild tag text, if any."""
+    pg = getattr(member, "primary_guild", None)
+    if pg is None:
+        return None
+    tag = getattr(pg, "tag", None)
+    if tag is None:
+        return None
+    text = str(tag).strip()
+    return text or None
+
+
 def member_repping_tag(
     member: Member, guild: Guild, *, strict: bool = False
 ) -> bool:
@@ -268,5 +280,5 @@ def member_repping_tag(
     enabled = getattr(pg, "identity_enabled", None)
     if strict:
         return enabled is True
-    
+
     return enabled is not False
