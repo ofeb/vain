@@ -1,4 +1,4 @@
-"""Instagram client — wraps vainapi (cookie-free public download APIs)."""
+"""Instagram post client powered by vain.rest."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import re
 from typing import Optional
 from urllib.parse import urlparse
 
+from core.api import VainRest
 from .models import SocialPost
 
 log = logging.getLogger("vain.social.instagram")
@@ -45,17 +46,15 @@ def _looks_like_video(url: str) -> bool:
 
 
 class Instagram:
-    """Instagram post client powered by vainapi (no session cookies)."""
+    """Instagram post client powered by vain.rest."""
 
     def __init__(self, session=None) -> None:
         self._session = session
         self._api = None
 
-    def _client(self):
+    def _client(self) -> VainRest:
         if self._api is None:
-            from core.api.internal.instagram import Instagram as VainApiIG
-
-            self._api = VainApiIG()
+            self._api = VainRest()
         return self._api
 
     async def close(self) -> None:
@@ -73,9 +72,9 @@ class Instagram:
         )
 
         try:
-            resolved = await self._client().resolve_media(clean)
+            resolved = await self._client().instagram_resolve_media(clean)
         except Exception as exc:
-            log.debug("vainapi resolve_media failed: %s", exc)
+            log.debug("vain.rest resolve_media failed: %s", exc)
             return None
 
         video_urls = [u for u in (resolved.get("video_urls") or []) if u]
@@ -103,19 +102,19 @@ class Instagram:
         if not username:
             return None
         try:
-            user = await self._client().get_user(username)
+            user = await self._client().instagram_get_user(username)
             return {
-                "pk": user.pk,
-                "username": user.username,
-                "full_name": user.full_name,
-                "is_private": user.is_private,
-                "is_verified": user.is_verified,
-                "media_count": user.media_count,
-                "follower_count": user.followers,
-                "following_count": user.following,
-                "biography": user.biography,
-                "profile_pic_url": user.avatar,
-                "profile_pic_url_hd": user.avatar,
+                "pk": user["pk"],
+                "username": user["username"],
+                "full_name": user["full_name"],
+                "is_private": user["is_private"],
+                "is_verified": user["is_verified"],
+                "media_count": user["media_count"],
+                "follower_count": user["followers"],
+                "following_count": user["following"],
+                "biography": user["biography"],
+                "profile_pic_url": user["avatar"],
+                "profile_pic_url_hd": user["avatar"],
             }
         except Exception as exc:
             log.debug("ig profile failed: %s", exc)

@@ -1,5 +1,4 @@
-orjson
 aiohttp
-munch
 pydantic
 aiofiles
+orjson

@@ -1,12 +1,3 @@
-"""patches discord.py Command invoke + param handling.
-
-1. Flag parsing support on standard commands.
-2. Drop injected ``ctx`` / Interaction params from ``Command.params`` so they
-   are never converted from message tokens (fixes jishaku debug + nested
-   hybrid wrappers where ``is_inside_class`` fails and ``ctx`` leaks into
-   user params).
-"""
-
 from __future__ import annotations
 
 import inspect
@@ -24,13 +15,9 @@ def _is_context_like(obj: Any) -> bool:
     if obj is None or obj is inspect.Parameter.empty:
         return False
     try:
-        if inspect.isclass(obj) and issubclass(obj, Context):
-            return True
-    except TypeError:
-        pass
-    try:
-        if inspect.isclass(obj) and issubclass(obj, discord.Interaction):
-            return True
+        for cls in (Context, discord.Interaction):
+            if inspect.isclass(obj) and issubclass(obj, cls):
+                return True
     except TypeError:
         pass
     name = getattr(obj, "__name__", "") or str(obj)
@@ -52,7 +39,7 @@ def drop_injected_context_params(cmd: Command) -> None:
 
     drop: list[str] = []
     for name, param in list(params.items()):
-        key = (name or "").lower()
+        key = name.lower()
         if key in _CTX_PARAM_NAMES:
             drop.append(name)
             continue
@@ -70,10 +57,14 @@ def _patched_command_init(self, func, **kwargs) -> None:
     example = kwargs.pop("example", None)
     parameters = kwargs.pop("parameters", None)
     _ORIG_COMMAND_INIT(self, func, **kwargs)
-    if example is not None or not hasattr(self, "example"):
+    if example is not None:
         self.example = example
-    if parameters is not None or not hasattr(self, "parameters"):
-        self.parameters = parameters if parameters is not None else {}
+    elif not hasattr(self, "example"):
+        self.example = None
+    if parameters is not None:
+        self.parameters = parameters
+    elif not hasattr(self, "parameters"):
+        self.parameters = {}
     drop_injected_context_params(self)
 
 
@@ -87,10 +78,7 @@ class PatchedCommand(Command):
     async def invoke(self, ctx, /) -> None:
         # Belt-and-suspenders: re-sanitize before parse (in case params mutated)
         drop_injected_context_params(self)
-        try:
-            await self.prepare(ctx)
-        except Exception as e:
-            raise e
+        await self.prepare(ctx)
 
         if ctx.kwargs and (FlagConv := getattr(ctx.command, "flags", None)):
             kwarg = list(ctx.kwargs.keys())[-1]
@@ -113,7 +101,7 @@ class PatchedCommand(Command):
                             .strip()
                         )
 
-                default = ctx.command.params.get(kwarg).default if kwarg in ctx.command.params else None
+                default = getattr(ctx.command.params.get(kwarg), "default", None)
                 if cleaned:
                     ctx.kwargs[kwarg] = ScriptType(cleaned)
                 elif isinstance(default, str):

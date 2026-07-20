@@ -29,18 +29,13 @@ IG_URL = "https://www.instagram.com/reel/DXbTOzTjWjW/"
 
 
 async def test_vainapi_instagram():
-    print("\n=== vainapi Instagram (cookie-free) ===")
-    from core.api.internal.instagram import Instagram
+    print("\n=== vain.rest Instagram ===")
+    from core.api.vain_rest import VainRest
 
-    ig = Instagram()
-    # ensure no cookies loaded
-    if ig.session_id or ig.ds_user_id:
-        fail(f"cookies still set session={ig.session_id!r} ds={ig.ds_user_id!r}")
-    else:
-        ok("no session cookies loaded")
+    ig = VainRest()
 
     try:
-        resolved = await ig.resolve_media(IG_URL)
+        resolved = await ig.instagram_resolve_media(IG_URL)
     except Exception as e:
         fail(f"resolve_media: {type(e).__name__}: {e}")
         return
@@ -55,7 +50,7 @@ async def test_vainapi_instagram():
 
     media_url = videos[0]
     try:
-        data = await ig.download_media(media_url)
+        data = await ig.instagram_download_media(media_url)
         raw = data.getvalue() if hasattr(data, "getvalue") else bytes(data)
         if len(raw) > 100_000 and raw[4:8] in (b"ftyp",) or raw[:8].find(b"ftyp") >= 0 or raw[4:8] == b"ftyp":
             ok(f"download_media {len(raw)} bytes ftyp ok")
@@ -67,16 +62,16 @@ async def test_vainapi_instagram():
         fail(f"download_media: {type(e).__name__}: {e}")
 
     try:
-        posts = await ig.get_post(IG_URL)
-        if posts and posts[0].video_url:
-            ok(f"get_post video_url set code={posts[0].code}")
+        posts = await ig.instagram_get_post(IG_URL)
+        if posts and posts[0].get("video_url"):
+            ok(f"get_post video_url set code={posts[0].get('code')}")
         else:
             fail(f"get_post missing video: {posts}")
     except Exception as e:
         fail(f"get_post: {type(e).__name__}: {e}")
 
     try:
-        vurl = await ig.get_video_url(IG_URL)
+        vurl = await ig.instagram_get_video_url(IG_URL)
         if vurl and vurl.startswith("http"):
             ok("get_video_url ok")
         else:

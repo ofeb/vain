@@ -1,16 +1,9 @@
 from __future__ import annotations
 
-import ast
-import asyncio
-import contextlib
-import copy
-import datetime
-import logging
-import time
+import ast, asyncio, contextlib, copy, datetime, logging, time, traceback, discord
+
 from pathlib import Path
 from typing import Awaitable, Callable, Iterable, Optional
-
-import discord
 from discord import app_commands
 from discord.ext import commands
 from discord.ext.commands import HybridCommand, HybridGroup
@@ -138,35 +131,11 @@ _RESTRICTIONS_SQL = """
     WHERE guild_id = $1 AND command = $2
 """
 
-
-def _intents() -> discord.Intents:
-    i = discord.Intents.none()
-    i.guilds = True
-    i.members = True
-    i.bans = True
-    i.emojis_and_stickers = True
-    i.integrations = True
-    i.webhooks = True
-    i.invites = True
-    i.voice_states = True
-    i.guild_messages = True
-    i.message_content = True
-    i.guild_reactions = True
-    i.guild_scheduled_events = True
-    i.moderation = True
-    return i
-
-
 class Vain(commands.AutoShardedBot):
-    """the main bot class.
-    manages db redis extensions and all discord events.
-    instantiate then call run with the token"""
-
     def __init__(self) -> None:
         self.color: int = color.base
         self.db = Database()
         self.redis: RedisClient | None = None
-        self._vain_help = VainHelp()
         self.object_cache = Cache(self)
         self.guard = Guard()
         self.snipes = Snipe(self)
@@ -191,18 +160,17 @@ class Vain(commands.AutoShardedBot):
 
         super().__init__(
             command_prefix=self._get_prefix,
-            intents=_intents(),
+            intents=discord.Intents.all(),
             owner_ids=self.owners,
+            help_command=VainHelp(),
             allowed_mentions=discord.AllowedMentions(
                 users=True, roles=False, everyone=False, replied_user=False
             ),
             strip_after_prefix=True,
             case_insensitive=True,
-            help_command=None,
             chunk_guilds_at_startup=False,
             max_messages=1000,
         )
-        self._vain_help.register(self)
 
     async def remember(self, key: str, ttl: int, loader: Callable[[], Awaitable[object]]) -> object:
         """small local ttl cache for hot runtime reads"""
@@ -272,10 +240,8 @@ class Vain(commands.AutoShardedBot):
         return data
 
     async def _get_prefix(self, _: "Vain", msg: discord.Message) -> Iterable[str]:
-        """resolve prefixes for a message"""
-        default = bot.prefix
         if not msg.guild:
-            return commands.when_mentioned_or(default)(self, msg)
+            return commands.when_mentioned_or(bot.prefix)(self, msg)
         data = await self._fetch_prefixes(msg.guild.id, msg.author.id)
         guild_pfxs: list[str] = data["guild"]
         user_pfx: Optional[str] = data["user"]
@@ -284,7 +250,7 @@ class Vain(commands.AutoShardedBot):
                 return commands.when_mentioned_or(pfx)(self, msg)
         if user_pfx and msg.content.startswith(user_pfx):
             return commands.when_mentioned_or(user_pfx)(self, msg)
-        fallback = guild_pfxs[0] if guild_pfxs else default
+        fallback = guild_pfxs[0] if guild_pfxs else bot.prefix
         return commands.when_mentioned_or(fallback)(self, msg)
 
 
@@ -339,11 +305,9 @@ class Vain(commands.AutoShardedBot):
         self.tree.on_error = self._slash_error
         self.tree.interaction_check = self._slash_check
 
-        log.info("loading jishaku")
-        await self._load_jishaku()
-
         log.info("loading extensions")
         extensions_started = time.perf_counter()
+        await self.load_extension("jishaku")
         await self._load_extensions()
         log.info("extensions finished (%.1fs)", time.perf_counter() - extensions_started)
 
@@ -372,13 +336,6 @@ class Vain(commands.AutoShardedBot):
             log.info("schema migration completed successfully")
         except Exception as e:
             log.warning(f"schema migration failed: {e}")
-
-    async def _load_jishaku(self) -> None:
-        try:
-            await self.load_extension("jishaku")
-            log.info("jishaku loaded")
-        except Exception as e:
-            log.warning(f"jishaku failed: {e}")
 
     async def _load_extensions(self) -> None:
         extensions = _discover_extensions("ext")
@@ -500,10 +457,8 @@ class Vain(commands.AutoShardedBot):
 
     @staticmethod
     def _blocked_ids(raw) -> set[int]:
-        """Normalize asyncpg / cache id lists into a set of ints."""
         if raw is None:
             return set()
-        # Record / mapping
         if hasattr(raw, "get") and not isinstance(raw, (list, tuple, set)):
             raw = raw.get("object_ids", raw)
         if not raw:
@@ -517,19 +472,15 @@ class Vain(commands.AutoShardedBot):
         return out
 
     async def _load_disabled_commands(self, guild_id: int, command_name: str):
-        """Fetch disabled object ids for a command as a plain dict (cache-safe)."""
         row = await self.db.fetchrow(_DISABLED_CMD_SQL, guild_id, command_name)
         if not row:
             return None
-        # Support both attribute and mapping access on records
-        try:
-            object_ids = row["object_ids"]
-        except Exception:
-            object_ids = getattr(row, "object_ids", None)
-        try:
-            object_types = row["object_types"]
-        except Exception:
-            object_types = getattr(row, "object_types", None)
+        object_ids = getattr(row, "object_ids", None)
+        if object_ids is None and hasattr(row, "get"):
+            object_ids = row.get("object_ids")
+        object_types = getattr(row, "object_types", None)
+        if object_types is None and hasattr(row, "get"):
+            object_types = row.get("object_types")
         return {
             "object_ids": [int(x) for x in (object_ids or [])],
             "object_types": list(object_types or []),
@@ -621,6 +572,21 @@ class Vain(commands.AutoShardedBot):
         except commands.CommandError as e:
             raise app_commands.CheckFailure(str(e)) from e
 
+    async def _cooldown_reply(self, inter: discord.Interaction, retry_after: float) -> None:
+        ctx = await self.get_context(inter, cls=Context)
+        emoji = await ctx._get_emoji("cooldown")
+        color_value = await ctx._get_color("cooldown")
+        embed = reply_embed(
+            color=color_value,
+            message=(
+                f"{emoji} {inter.user.mention}: Please wait "
+                f"**{retry_after:.2f} seconds** before using any command again"
+            ),
+        )
+        send = inter.followup.send if inter.response.is_done() else inter.response.send_message
+        with contextlib.suppress(discord.HTTPException):
+            await send(embed=embed, ephemeral=True)
+
     async def _slash_error(self, inter: discord.Interaction, err: app_commands.AppCommandError) -> None:
         """handle slash command errors"""
         orig = getattr(err, "original", err)
@@ -629,32 +595,10 @@ class Vain(commands.AutoShardedBot):
         send = inter.followup.send if inter.response.is_done() else inter.response.send_message
         msg = str(err) or "something went wrong"
         if isinstance(orig, Ratelimited):
-            ctx = await self.get_context(inter, cls=Context)
-            emoji = await ctx._get_emoji("cooldown")
-            color_value = await ctx._get_color("cooldown")
-            embed = reply_embed(
-                color=color_value,
-                message=(
-                    f"{emoji} {inter.user.mention}: Please wait "
-                    f"**{orig.retry_after:.2f} seconds** before using any command again"
-                ),
-            )
-            with contextlib.suppress(discord.HTTPException):
-                await send(embed=embed, ephemeral=True)
+            await self._cooldown_reply(inter, orig.retry_after)
             return
         if isinstance(err, app_commands.CommandOnCooldown):
-            ctx = await self.get_context(inter, cls=Context)
-            emoji = await ctx._get_emoji("cooldown")
-            color_value = await ctx._get_color("cooldown")
-            embed = reply_embed(
-                color=color_value,
-                message=(
-                    f"{emoji} {inter.user.mention}: Please wait "
-                    f"**{err.retry_after:.2f} seconds** before using this command again"
-                ),
-            )
-            with contextlib.suppress(discord.HTTPException):
-                await send(embed=embed, ephemeral=True)
+            await self._cooldown_reply(inter, err.retry_after)
             return
         with contextlib.suppress(discord.HTTPException):
             await send(content=msg, ephemeral=True)
