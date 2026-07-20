@@ -3,9 +3,9 @@ from discord.ext import commands
 
 from core.discord.mixin import _Meta
 
-from .command.command import CommandDisableCommands
-from .event.event import EventDisableCommands
-from .module.module import ModuleDisableCommands
+from .command import CommandDisableCommands
+from .event import EventDisableCommands
+from .module import ModuleDisableCommands
 
 
 class Disable(

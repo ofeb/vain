@@ -53,7 +53,7 @@ def drop_injected_context_params(cmd: Command) -> None:
 
 
 def _patched_command_init(self, func, **kwargs) -> None:
-    # Preserve custom help metadata that stock discord.py ignores.
+    
     example = kwargs.pop("example", None)
     parameters = kwargs.pop("parameters", None)
     _ORIG_COMMAND_INIT(self, func, **kwargs)
@@ -68,7 +68,7 @@ def _patched_command_init(self, func, **kwargs) -> None:
     drop_injected_context_params(self)
 
 
-# Apply globally so HybridCommand / Group / BotCommand all inherit the fix
+
 Command.__init__ = _patched_command_init  # type: ignore[method-assign]
 
 
@@ -76,7 +76,7 @@ class PatchedCommand(Command):
     """command with flag kwarg stripping support"""
 
     async def invoke(self, ctx, /) -> None:
-        # Belt-and-suspenders: re-sanitize before parse (in case params mutated)
+        
         drop_injected_context_params(self)
         await self.prepare(ctx)
 

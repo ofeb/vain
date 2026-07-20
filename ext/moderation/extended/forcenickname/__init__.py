@@ -1,11 +1,26 @@
-from discord.ext.commands import Cog
-from .forcenickname import Forcenickname
+from discord.ext.commands import group
+
+from core.discord.package import Package
 
 
-class Forcenickname(Forcenickname, Cog):
-    """forcenickname cog"""
+from core.managers.permissions import has_permissions
+class Forcenickname(Package):
+    """forcenickname management"""
 
+    @group(
+        name="forcenickname",
+        description="Force a members current nickname",
+        invoke_without_command=True,
+    )
+    async def forcenickname(self, ctx, member, *, name_to_set):
+        """force nickname for member"""
+        pass
 
-async def setup(bot):
-    """load forcenickname cog"""
-    await bot.add_cog(Forcenickname(bot))
+    @forcenickname.command(
+        name="list",
+        description="View a list of all forced nicknames",
+    )
+    @has_permissions(manage_guild=True)
+    async def forcenickname_list(self, ctx):
+        """list forced nicknames"""
+        pass

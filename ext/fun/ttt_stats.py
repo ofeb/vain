@@ -1,11 +1,20 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
 import discord
 
 from core.managers.values import color
-from core.tools.aesthetic import body, compose
+
+
+
+def body(*lines: str) -> str:
+    return "\n".join(f"> {line}" for line in lines if line)
+
+def compose(*parts: str) -> str:
+    return "\n".join(part for part in parts if part)
+
+
 
 if TYPE_CHECKING:
     from core.vain import Vain

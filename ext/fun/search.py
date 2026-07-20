@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import re
 from html import unescape
@@ -8,7 +8,16 @@ from urllib.parse import parse_qs, unquote, urlparse
 import aiohttp
 import discord
 
-from core.tools.aesthetic import body, compose
+
+
+
+def body(*lines: str) -> str:
+    return "\n".join(f"> {line}" for line in lines if line)
+
+def compose(*parts: str) -> str:
+    return "\n".join(part for part in parts if part)
+
+
 
 DDG_ICON = "https://vain.bot/img/duckduckgo.png"
 GOOGLE_ICON = "https://vain.bot/img/google.png"

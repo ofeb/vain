@@ -9,7 +9,7 @@ import discord
 from core.managers.values import color
 
 if TYPE_CHECKING:
-    from ext.tickets.tickets import Tickets
+    from ext.tickets import Tickets
 
 
 def _parse_emoji(value: str | None) -> discord.PartialEmoji | str | None:

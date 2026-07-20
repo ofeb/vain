@@ -18,14 +18,14 @@ def is_member_like(obj: object) -> bool:
     """True for guild members / users (people), not channels."""
     if obj is None:
         return False
-    # Places first — channels/threads must never count as members
+    
     if isinstance(obj, (discord.abc.GuildChannel, discord.Thread)):
         return False
     if isinstance(obj, discord.Member):
         return True
     if isinstance(obj, discord.User):
         return True
-    # Duck-type members (tests / proxies): roles + guild_permissions, no channel type
+    
     if hasattr(obj, "roles") and hasattr(obj, "guild_permissions"):
         if hasattr(obj, "type") and not hasattr(obj, "display_name"):
             return False
@@ -73,7 +73,7 @@ def check_member_hierarchy(
         return None
 
     if not isinstance(member, discord.Member):
-        # Resolve bare User → Member when possible; keep duck-typed test doubles
+        
         resolved = guild.get_member(getattr(member, "id", 0))
         if resolved is not None:
             member = resolved
@@ -136,8 +136,8 @@ async def ensure_member_hierarchy(
     if bot is not None and author is not None:
         try:
             if await bot.is_owner(author):
-                # Bot owners skip *author* hierarchy. Bot role still required
-                # only when the bot must actually act on the member in Discord.
+                
+                
                 if bot_hierarchy:
                     guild = ctx.guild
                     if guild is not None:

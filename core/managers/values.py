@@ -143,8 +143,8 @@ class api:
         api_key: str = ""
 
     class instagram:
-        # Cookie-free mode: vainapi resolves reels/posts via public download APIs.
-        # Leave COOKIES empty — sessionid/ds_user_id are not used.
+        
+        
         COOKIES: list[dict[str, str]] = []
         USERNAME: str = ""
         PASSWORD: str = ""
@@ -165,7 +165,7 @@ class api:
 
         @classmethod
         def cookie_header(cls, *, index: int = 0) -> str:
-            # Intentionally unused by the cookie-free Instagram client.
+            
             entries = cls.cookie_entries()
             if not entries:
                 return ""

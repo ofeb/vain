@@ -20,3 +20,5 @@ from .stickymessage import *
 from .suggest import *
 from .webhook import *
 from .welcome import *
+from .vanity import *
+from .tag import *

@@ -1,13 +1,232 @@
 from __future__ import annotations
 
 from contextlib import suppress
-from typing import Any, List, Union
+from typing import Any, Iterable, List, Sequence, Union
 
 import discord
 from discord.ext.commands import Context
 
 from core.managers.values import color, emojis
-from core.tools.aesthetic import embed_to_container, reply_embed
+
+
+
+def _accent_from_embed(embed: discord.Embed) -> int | None:
+    colour = embed.colour or embed.color
+    if colour is None:
+        return None
+    try:
+        return int(colour.value)
+    except Exception:
+        return None
+
+def _blankish(value: str | None) -> bool:
+    if value is None:
+        return True
+    text = str(value).strip()
+    return not text or text in {"\u200b", "‎", "​"}
+
+def embed_to_container(
+    embed: discord.Embed,
+    *,
+    extra_rows: Sequence[ui.ActionRow] | None = None,
+    attachment_files: Sequence[discord.File] | None = None,
+) -> ui.Container:
+    """Convert a rich embed into a Components V2 container with dividers."""
+    accent = _accent_from_embed(embed)
+    container = ui.Container(accent_colour=accent)
+
+    
+    author_name = embed.author.name if embed.author else None
+    author_icon = embed.author.icon_url if embed.author else None
+    thumb = embed.thumbnail.url if embed.thumbnail else None
+    title = embed.title
+    if title and embed.url:
+        title_md = f"### [{title}]({embed.url})"
+    elif title:
+        title_md = f"### {title}"
+    else:
+        title_md = None
+
+    header_bits: list[str] = []
+    if author_name and not _blankish(author_name):
+        header_bits.append(f"**{author_name}**")
+    if title_md:
+        header_bits.append(title_md)
+
+    media_url = thumb or author_icon
+    if header_bits and media_url:
+        try:
+            container.add_item(
+                ui.Section(
+                    ui.TextDisplay("\n".join(header_bits)),
+                    accessory=ui.Thumbnail(media=str(media_url)),
+                )
+            )
+        except Exception:
+            container.add_item(ui.TextDisplay("\n".join(header_bits)))
+    elif header_bits:
+        container.add_item(ui.TextDisplay("\n".join(header_bits)))
+
+    if header_bits and (embed.description or embed.fields or embed.image or embed.footer):
+        container.add_item(ui.Separator(visible=True))
+
+    if embed.description and not _blankish(embed.description):
+        container.add_item(ui.TextDisplay(str(embed.description)))
+
+    if embed.fields:
+        if embed.description and not _blankish(embed.description):
+            container.add_item(ui.Separator(visible=True))
+        field_chunks: list[str] = []
+        for field in embed.fields:
+            name = "" if _blankish(field.name) else str(field.name)
+            value = "" if _blankish(field.value) else str(field.value)
+            if name and value:
+                field_chunks.append(f"**{name}**\n{value}")
+            elif value:
+                field_chunks.append(value)
+            elif name:
+                field_chunks.append(f"**{name}**")
+        if field_chunks:
+            container.add_item(ui.TextDisplay("\n\n".join(field_chunks)))
+
+    
+    image_url = embed.image.url if embed.image else None
+    if image_url:
+        container.add_item(ui.Separator(visible=True))
+        try:
+            if str(image_url).startswith("attachment://") and attachment_files:
+                fname = str(image_url).split("attachment://", 1)[-1]
+                match = next((f for f in attachment_files if f.filename == fname), None)
+                if match is not None:
+                    container.add_item(ui.MediaGallery(discord.MediaGalleryItem(match)))
+                else:
+                    container.add_item(ui.MediaGallery(discord.MediaGalleryItem(str(image_url))))
+            else:
+                container.add_item(ui.MediaGallery(discord.MediaGalleryItem(str(image_url))))
+        except Exception:
+            container.add_item(ui.TextDisplay(f"[image]({image_url})"))
+
+    
+    if attachment_files and not image_url:
+        for f in attachment_files[:1]:
+            try:
+                container.add_item(ui.File(f))
+            except Exception:
+                pass
+
+    if embed.footer and not _blankish(embed.footer.text):
+        container.add_item(ui.Separator(visible=True))
+        footer = str(embed.footer.text)
+        if embed.timestamp:
+            try:
+                footer = f"{footer} · <t:{int(embed.timestamp.timestamp())}:R>"
+            except Exception:
+                pass
+        container.add_item(ui.TextDisplay(f"-# {footer}"))
+    elif embed.timestamp and not (embed.footer and embed.footer.text):
+        try:
+            container.add_item(ui.Separator(visible=True))
+            container.add_item(
+                ui.TextDisplay(f"-# <t:{int(embed.timestamp.timestamp())}:R>")
+            )
+        except Exception:
+            pass
+
+    if extra_rows:
+        container.add_item(ui.Separator(visible=True))
+        for row in extra_rows:
+            container.add_item(row)
+
+    return container
+
+def compose(*parts: str) -> str:
+    return "\n".join(part for part in parts if part)
+
+def body(*lines: str) -> str:
+    return "\n".join(f"> {line}" for line in lines if line)
+
+def caption(text: str) -> str:
+    return f"-# {text}"
+
+def aesthetic_embed(
+    *,
+    color: int,
+    message: str,
+    title: str | None = None,
+    footer: str | None = None,
+    author: str | None = None,
+    timestamp: bool = True,
+) -> discord.Embed:
+    description = compose(
+        body(message),
+        caption(footer) if footer else None,
+    )
+    embed = discord.Embed(color=color, description=description)
+    if title:
+        embed.title = title
+    if author:
+        embed.set_author(name=author)
+    if timestamp:
+        embed.timestamp = discord.utils.utcnow()
+    return embed
+
+def reply_embed(
+    *,
+    color: int,
+    message: str,
+    subtitle: str | None = None,
+) -> discord.Embed:
+    return aesthetic_embed(color=color, message=message, footer=subtitle, timestamp=False)
+
+def _link_buttons_from_view(view: ui.View | None) -> list[ui.Button]:
+    if view is None or isinstance(view, ui.LayoutView):
+        return []
+    out: list[ui.Button] = []
+    for child in getattr(view, "children", ()) or ():
+        if isinstance(child, ui.Button) and getattr(child, "url", None):
+            out.append(
+                ui.Button(
+                    style=child.style or discord.ButtonStyle.link,
+                    label=child.label,
+                    url=child.url,
+                    emoji=child.emoji,
+                    disabled=child.disabled,
+                )
+            )
+    return out
+
+def layout_from_items(
+    items: Iterable[ui.Item],
+    *,
+    timeout: float | None = 180,
+) -> ui.LayoutView:
+    layout = ui.LayoutView(timeout=timeout)
+    for item in items:
+        layout.add_item(item)
+    return layout
+
+def embed_to_layout(
+    embed: discord.Embed,
+    *,
+    view: ui.View | None = None,
+    attachment_files: Sequence[discord.File] | None = None,
+    timeout: float | None = 180,
+) -> ui.LayoutView:
+    link_buttons = _link_buttons_from_view(view)
+    extra_rows: list[ui.ActionRow] = []
+    if link_buttons:
+        
+        for i in range(0, len(link_buttons), 5):
+            row = ui.ActionRow(*link_buttons[i : i + 5])
+            extra_rows.append(row)
+    container = embed_to_container(
+        embed,
+        extra_rows=extra_rows or None,
+        attachment_files=attachment_files,
+    )
+    return layout_from_items([container], timeout=timeout)
+
+
 
 Page = Union[discord.Embed, str]
 
@@ -138,7 +357,7 @@ class PaginateView(discord.ui.LayoutView):
         await interaction.response.send_message(
             embed=_warning_embed(
                 interaction.user,
-                "You're not the **author** of this embed!",
+                f"Only {self.ctx.author.mention} can use these controls!",
             ),
             ephemeral=True,
         )
@@ -215,7 +434,6 @@ async def send_pages(
         if isinstance(page, discord.Embed):
             if message is not None:
                 
-                from core.tools.aesthetic import embed_to_layout
 
                 layout = embed_to_layout(page)
                 return await message.edit(view=layout, embed=None, content=None)

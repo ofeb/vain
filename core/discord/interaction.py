@@ -4,7 +4,7 @@ Import this module once at bot startup to add .success(), .warning(), .fail()
 methods to every discord.Interaction instance.
 
 Usage in button callbacks:
-    await interaction.warning("Only the target can use this!")
+    await interaction.warning(f"Only <@{user_id}> can use this!")
     await interaction.success("Done!")
     await interaction.fail("Invalid input.")
 """
@@ -15,7 +15,13 @@ from typing import Optional
 
 import discord
 
-from core.tools.aesthetic import body
+
+
+
+
+def body(*lines: str) -> str:
+    return "\n".join(f"> {line}" for line in lines if line)
+
 
 
 def _build_embed(

@@ -1,0 +1,540 @@
+from contextlib import suppress
+from logging import getLogger
+from typing import Annotated
+
+from discord import (
+    CustomActivity,
+    Embed,
+    HTTPException,
+    Member,
+    Message,
+    Role,
+    TextChannel,
+    Thread,
+)
+from discord.ext.commands import Cog, check, hybrid_group, has_permissions
+
+from aura.other.context import Context
+from aura.runtime import Aura
+from aura.shared.converters.role import SmartRole, StrictRole
+from aura.runtime.script import Script
+
+from .etc.settings import Settings, get_status
+
+logger = getLogger("aura.cfg.vanity")
+
+
+async def vanity_check(ctx):
+    if not (ctx.guild and ctx.guild.vanity_url_code):
+        await ctx.reply(f"**{ctx.guild.name}** hasn't got a vanity URL set yet.")
+        return False
+    return True
+
+
+class Vanity:
+    """
+    Manage vanity role assignments for your guild.
+    """
+
+    def __init__(self, bot: Aura) -> None:
+        self.bot = bot
+
+    @Cog.listener("on_presence_update")
+    async def vanity_listener(self, before: Member, member: Member) -> None:
+        if member.bot or not (guild := member.guild).vanity_url_code:
+            return
+
+        before_status = get_status(before)
+        status = get_status(member)
+        if status == before_status or not (settings := await Settings.fetch(self.bot, guild)):
+            return
+
+        with suppress(HTTPException):
+            has = [role for role in settings.roles if role in member.roles]
+            miss = [role for role in settings.roles if role not in member.roles]
+
+            if guild.vanity_url_code not in status and has:
+                logger.debug(f"Removing vanity roles from {member} in {guild.name}")
+                await member.remove_roles(
+                    *has,
+                    reason=f"vanity /{guild.vanity_url_code} no longer in status",
+                    atomic=False,
+                )
+            elif guild.vanity_url_code in status and miss:
+                logger.debug(f"Adding vanity roles to {member} in {guild.name}")
+                await member.add_roles(
+                    *miss, reason=f"vanity /{guild.vanity_url_code} now in status", atomic=False
+                )
+                await settings.dispatch(before, member)
+
+    @hybrid_group(aliases=["vr"], invoke_without_command=True, fallback="help")
+    @has_permissions(manage_roles=True)
+    @check(vanity_check)
+    async def vanity(self, ctx: Context) -> Message:
+        """
+        Manage vanity role assignments for your guild.
+        Notifications are **sent** once a user sets their status to include your guild's **vanity URL**.
+        """
+        return await ctx.send_help(ctx.command)
+
+    @vanity.command(name="settings", aliases=["config", "cfg"])
+    @has_permissions(manage_guild=True)
+    async def vanity_settings(self, ctx: Context) -> Message:
+        """
+        View the current vanity role configuration for your guild.
+        """
+        assert ctx.guild is not None
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        if not settings:
+            return await ctx.reply(
+                f"**{ctx.me.display_name.title()}** doesn't dispatch vanity notifications yet. "
+            )
+
+        embed = Embed(title=f"/{ctx.guild.vanity_url_code}").set_thumbnail(
+            url=ctx.guild.icon.url if ctx.guild.icon else None
+        )
+        embed.description = "\n".join(
+            [
+                f"Currently giving out {', '.join(role.mention for role in settings.roles) or 'no roles'}",
+                f"Notifications will be sent in {settings.channel.mention if settings.channel else 'no channel'}",
+            ]
+        )
+        if settings.template:
+            embed.add_field(
+                name="Script template",
+                value=f"```yaml\n{settings.template}\n```",
+            )
+        return await ctx.reply(embed=embed)
+
+    @vanity.command(name="role", aliases=["roles", "r"], fallback="set")
+    @has_permissions(manage_roles=True)
+    async def vanity_role(
+        self,
+        ctx: Context,
+        *,
+        role: Annotated[Role, StrictRole(danger=True)],
+    ) -> Message:
+        """
+        Add or remove a role to be granted to members who advertise your vanity URL.
+        """
+        assert ctx.guild is not None
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        if role in settings.roles:
+            await ctx.prompt(
+                f"{role.mention} is already granted to members.",
+                "Remove it from the vanity roles?",
+            )
+            settings.role_ids.remove(role.id)
+        else:
+            settings.role_ids.append(role.id)
+
+        await settings.upsert()
+        return await ctx.success(
+            f"{'Now' if role in settings.roles else 'No longer'} granting {role.mention} to members"
+        )
+
+    @vanity.group(name="channel", invoke_without_command=True, fallback="set")
+    @has_permissions(manage_channels=True)
+    async def vanity_channel(self, ctx: Context, *, channel: TextChannel | Thread) -> Message:
+        """
+        Set the channel where vanity notifications will be sent.
+        """
+        assert ctx.guild is not None
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        if settings.channel_id == channel.id:
+            return await ctx.error(f"{channel.mention} is already set as the notification channel")
+
+        await settings.upsert(channel_id=channel.id)
+        return await ctx.success(f"Vanity notifications will now be sent to {channel.mention}")
+
+    @vanity_channel.command(name="remove", aliases=["delete", "del", "rm"])
+    @has_permissions(manage_channels=True)
+    async def vanity_channel_remove(self, ctx: Context) -> Message:
+        """
+        Remove the vanity notification channel.
+        """
+        assert ctx.guild is not None
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        if not settings.channel:
+            return await ctx.error("No notification channel has been set")
+
+        await settings.upsert(channel_id=None)
+        return await ctx.success("No longer sending vanity notifications")
+
+    @vanity.group(
+        name="message",
+        aliases=["template", "msg", "script"],
+        invoke_without_command=True,
+        fallback="set",
+    )
+    @has_permissions(manage_messages=True)
+    async def vanity_message(self, ctx: Context, *, script: Script) -> Message:
+        """
+        Set a custom message template for vanity notifications.
+        See [vain.bot/embed](https://vain.bot/embed) for help on creating message scripts.
+        """
+        assert ctx.guild is not None
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        await settings.upsert(template=script.template)
+        return await ctx.success(f"Now using {script.format} message for vanity notifications")
+
+    @vanity_message.command(name="remove", aliases=["delete", "del", "rm"])
+    @has_permissions(manage_messages=True)
+    async def vanity_message_remove(self, ctx: Context) -> Message:
+        """
+        Reset the vanity notification message to the default template.
+        """
+        assert ctx.guild is not None
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        if not settings.template:
+            return await ctx.error("No custom message has been set")
+
+        await settings.upsert(template=None)
+        return await ctx.success("The custom message has been reset")
+
+    @vanity.command(name="reset", aliases=["clear"])
+    @has_permissions(manage_roles=True)
+    async def vanity_reset(self, ctx: Context) -> Message:
+        """
+        Reset all vanity role settings for your guild.
+        """
+        await ctx.prompt(
+            "Are you sure you want to reset the vanity settings?",
+            "This action cannot be undone and will remove all settings",
+        )
+
+        assert ctx.guild is not None
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        await settings.upsert(role_ids=[], channel_id=None, template=None)
+        return await ctx.success("No longer awarding members for advertising")
+
+        --------------------
+        settings.py
+
+        from __future__ import annotations
+
+from typing import TypedDict, cast
+from logging import getLogger
+from cashews import cache
+from discord.utils import find
+from discord import (
+    CustomActivity,
+    Guild,
+    abc,
+    HTTPException,
+    Member,
+    Message,
+    Role,
+    Status,
+    TextChannel,
+    Thread,
+)
+
+from aura.runtime import Aura
+from aura.runtime.script import Script
+
+logger = getLogger("aura.cfg.vanity.settings")
+
+
+def get_status(member: Member) -> str:
+    activity = find(lambda a: isinstance(a, CustomActivity), member.activities)
+    if activity and activity.name:
+        return activity.name.lower()
+    return ""
+
+
+class Record(TypedDict):
+    """
+    A record representing the vanity settings for a guild.
+    """
+
+    guild: int
+    channel_id: int | None
+    role_ids: list[int]
+    template: str | None
+
+
+class Settings:
+    """
+    Represents the vanity role settings for a guild.
+    """
+
+    bot: Aura
+    guild: Guild
+    record: Record
+
+    def __init__(self, bot: Aura, guild: Guild, record: Record) -> None:
+        self.bot = bot
+        self.guild = guild
+        self.record = dict(record)  # type: ignore
+
+    def __bool__(self) -> bool:
+        """
+        Check if there are any roles configured for vanity assignment.
+        """
+        return bool(self.roles)
+
+    @property
+    def channel_id(self) -> int | None:
+        """
+        Get the ID of the channel where vanity notifications will be sent.
+        """
+        return self.record.get("channel_id")
+
+    @property
+    def role_ids(self) -> list[int]:
+        """
+        Get the list of role IDs that are granted to members who advertise the vanity URL.
+        """
+        return self.record.get("role_ids", [])
+
+    @property
+    def template(self) -> str | None:
+        """
+        Get the custom message template for vanity notifications.
+        """
+        return self.record.get("template")
+
+    @property
+    def _default_template(self) -> str:
+        """
+        Get the default message template for vanity notifications.
+        """
+        return f"thank you {{user.mention}} for repping /{self.guild.vanity_url_code}"
+
+    @property
+    def roles(self) -> list[Role]:
+        """
+        Get the list of Role objects that are granted to members who advertise the vanity URL.
+        """
+        return [
+            role
+            for role_id in self.role_ids
+            if (role := self.guild.get_role(role_id)) and role.is_assignable()
+        ]
+
+    @property
+    def channel(self) -> TextChannel | Thread | abc.GuildChannel | None:
+        return cast(
+            TextChannel | Thread | abc.GuildChannel | None,  # ..? in case
+            # i'd remove thread tho
+            self.guild.get_channel_or_thread(self.channel_id or 0),
+        )
+
+    @staticmethod
+    def _default_config() -> Record:
+        """
+        Get the default configuration for vanity settings.
+        """
+        return {
+            "guild": 0,
+            "channel_id": None,
+            "role_ids": [],
+            "template": None,
+        }
+
+    async def dispatch(
+        self,
+        before: Member,
+        member: Member,
+    ) -> Message | None:
+        """
+        Dispatch a vanity notification when a member sets their status to advertise the vanity URL.
+        """
+        if not self.channel or before.status == Status.offline or before.status != member.status:
+            return None
+
+        key = f"notifs.vanity:{self.guild.id}-{member.id}"
+        if await self.bot.redis.ratelimited(key, limit=1, timespan=3 * 3600):
+            ttl = await self.bot.redis.ttl(key)
+            logger.debug(
+                f"Vanity notification rate limit hit for {member} in {self.guild.name} | ex {ttl}s"
+            )
+            return None
+
+        template = self.template or self._default_template
+        script = Script(
+            template,
+            [
+                self.guild,
+                self.channel,
+                member,
+                self.roles[0] if self.roles else None,
+                ("vanity", self.guild.vanity_url_code),
+            ],
+        )
+
+        try:
+            return await script.send(self.channel)
+        except HTTPException:
+            await self.upsert(channel_id=None)
+            return None
+
+    @classmethod
+    async def fetch(cls, bot: Aura, guild: Guild) -> Settings:
+        record = await cls._fetch_record(bot, guild)
+        return cls(bot, guild, record)
+
+    @classmethod
+    @cache(ttl="30m", key="notifs.vanity.settings:{guild.id}")
+    async def _fetch_record(cls, bot: Aura, guild: Guild) -> dict:
+        query = "SELECT * FROM vanity WHERE guild = $1"
+        record = (
+            cast(Record | None, await bot.database.fetchrow(query, guild.id))
+            or cls._default_config()
+        )
+        return dict(record)
+
+    async def upsert(self, revalidate: bool = True, **kwargs) -> Settings:
+        """
+        Update or insert the vanity settings into the database.
+        """
+        values = {
+            "guild": self.guild.id,
+            "channel_id": kwargs.get("channel_id", self.channel_id),
+            "role_ids": kwargs.get("role_ids", self.role_ids),
+            "template": kwargs.get("template", self.template),
+        }
+        query = """
+        INSERT INTO vanity (guild, channel_id, role_ids, template)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (guild) DO UPDATE SET
+            channel_id = EXCLUDED.channel_id,
+            role_ids = EXCLUDED.role_ids,
+            template = EXCLUDED.template
+        RETURNING *
+        """
+        record = await self.bot.database.fetchrow(query, *values.values())
+        self.record = cast(Record, dict(record))
+        if revalidate:
+            logger.debug(f"Revalidating cache for vanity settings in {self.guild.name}")
+            await cache.delete(f"notifs.vanity.settings:{self.guild.id}")
+        return self
+
+
+
+
+
+
+
+
+        afk idea
+            @command(name="afk")
+    async def afk(self, ctx: Context, *, status: str = "AFK") -> Message:
+        await self._afk.set(ctx.author.id, status)
+        return await ctx.success(f"You're now **afk** - {status}")
+
+        from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime
+
+from aura.shared.clients.redis import Redis
+
+
+@dataclass
+class AFKData:
+    status: str
+    timestamp: datetime
+
+
+class AFK:
+    def __init__(self, redis: Redis) -> None:
+        self.redis = redis
+
+    def _key(self, user_id: int) -> str:
+        return f"afk:{user_id}"
+
+    async def set(self, user_id: int, status: str = "AFK") -> None:
+        await self.redis.hset(  # pyright: ignore[reportGeneralTypeIssues]
+            self._key(user_id),
+            mapping={
+                "status": status,
+                "timestamp": str(int(datetime.now().timestamp())),
+            },
+        )
+
+    async def get(self, user_id: int) -> AFKData | None:
+        data = await self.redis.hgetall(
+            self._key(user_id)
+        )  # pyright: ignore[reportGeneralTypeIssues]
+        if not data:
+            return None
+
+        return AFKData(
+            status=data.get("status", "AFK"),
+            timestamp=datetime.fromtimestamp(int(data["timestamp"])),
+        )
+
+    async def remove(self, user_id: int) -> bool:
+        return bool(await self.redis.delete(self._key(user_id)))
+
+    async def exists(self, user_id: int) -> bool:
+        return bool(await self.redis.exists(self._key(user_id)))
+
+        from __future__ import annotations
+
+from datetime import datetime
+
+from discord import AllowedMentions, Embed, Message
+from discord.ext.commands import Cog
+from discord.utils import format_dt
+
+from aura.extensions.util.afk.etc import AFK
+from aura.runtime import Aura
+from aura.shared.config import Colors
+
+
+class AFKEvents:
+    def __init__(self, bot: Aura) -> None:
+        self.bot = bot
+        self._afk = AFK(bot.redis)
+
+    @Cog.listener("on_message")
+    async def afk_dispatch(self, message: Message) -> None:
+        if message.author.bot or not message.guild:
+            return
+
+        if not await self._afk.exists(message.author.id):
+            return
+
+        data = await self._afk.get(message.author.id)
+        if not data:
+            return
+
+        if await self._afk.remove(message.author.id):
+            await message.reply(
+                embed=Embed(
+                    description=f"{message.author.mention}: Welcome back, you were away for {format_dt(data.timestamp, 'R')}.",
+                    color=Colors.approved,
+                ),
+                allowed_mentions=AllowedMentions.none(),
+                delete_after=5,
+            )
+
+    @Cog.listener("on_message")
+    async def afk_check(self, message: Message) -> None:
+        if message.author.bot or not message.guild or not message.mentions:
+            return
+
+        if await self.bot.redis.ratelimited(f"afk:ratelimited:{message.channel.id}", 1, 5):
+            return
+
+        for user in message.mentions:
+            if user.bot:
+                continue
+
+            if not await self._afk.exists(user.id):
+                continue
+
+            data = await self._afk.get(user.id)
+            if not data:
+                continue
+
+            await message.reply(
+                embed=Embed(
+                    description=f"{user.mention} is AFK: {data.status} - {format_dt(data.timestamp, 'R')}",
+                    color=Colors.approved,
+                ),
+                allowed_mentions=AllowedMentions.none(),
+            )

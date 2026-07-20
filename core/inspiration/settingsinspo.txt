@@ -1,0 +1,202 @@
+        --------------------
+        settings.py
+
+        from __future__ import annotations
+
+from typing import TypedDict, cast
+from logging import getLogger
+from cashews import cache
+from discord.utils import find
+from discord import (
+    CustomActivity,
+    Guild,
+    abc,
+    HTTPException,
+    Member,
+    Message,
+    Role,
+    Status,
+    TextChannel,
+    Thread,
+)
+
+from aura.runtime import Aura
+from aura.runtime.script import Script
+
+logger = getLogger("aura.cfg.vanity.settings")
+
+
+def get_status(member: Member) -> str:
+    activity = find(lambda a: isinstance(a, CustomActivity), member.activities)
+    if activity and activity.name:
+        return activity.name.lower()
+    return ""
+
+
+class Record(TypedDict):
+    """
+    A record representing the vanity settings for a guild.
+    """
+
+    guild: int
+    channel_id: int | None
+    role_ids: list[int]
+    template: str | None
+
+
+class Settings:
+    """
+    Represents the vanity role settings for a guild.
+    """
+
+    bot: Aura
+    guild: Guild
+    record: Record
+
+    def __init__(self, bot: Aura, guild: Guild, record: Record) -> None:
+        self.bot = bot
+        self.guild = guild
+        self.record = dict(record)  # type: ignore
+
+    def __bool__(self) -> bool:
+        """
+        Check if there are any roles configured for vanity assignment.
+        """
+        return bool(self.roles)
+
+    @property
+    def channel_id(self) -> int | None:
+        """
+        Get the ID of the channel where vanity notifications will be sent.
+        """
+        return self.record.get("channel_id")
+
+    @property
+    def role_ids(self) -> list[int]:
+        """
+        Get the list of role IDs that are granted to members who advertise the vanity URL.
+        """
+        return self.record.get("role_ids", [])
+
+    @property
+    def template(self) -> str | None:
+        """
+        Get the custom message template for vanity notifications.
+        """
+        return self.record.get("template")
+
+    @property
+    def _default_template(self) -> str:
+        """
+        Get the default message template for vanity notifications.
+        """
+        return f"thank you {{user.mention}} for repping /{self.guild.vanity_url_code}"
+
+    @property
+    def roles(self) -> list[Role]:
+        """
+        Get the list of Role objects that are granted to members who advertise the vanity URL.
+        """
+        return [
+            role
+            for role_id in self.role_ids
+            if (role := self.guild.get_role(role_id)) and role.is_assignable()
+        ]
+
+    @property
+    def channel(self) -> TextChannel | Thread | abc.GuildChannel | None:
+        return cast(
+            TextChannel | Thread | abc.GuildChannel | None,  # ..? in case
+            # i'd remove thread tho
+            self.guild.get_channel_or_thread(self.channel_id or 0),
+        )
+
+    @staticmethod
+    def _default_config() -> Record:
+        """
+        Get the default configuration for vanity settings.
+        """
+        return {
+            "guild": 0,
+            "channel_id": None,
+            "role_ids": [],
+            "template": None,
+        }
+
+    async def dispatch(
+        self,
+        before: Member,
+        member: Member,
+    ) -> Message | None:
+        """
+        Dispatch a vanity notification when a member sets their status to advertise the vanity URL.
+        """
+        if not self.channel or before.status == Status.offline or before.status != member.status:
+            return None
+
+        key = f"notifs.vanity:{self.guild.id}-{member.id}"
+        if await self.bot.redis.ratelimited(key, limit=1, timespan=3 * 3600):
+            ttl = await self.bot.redis.ttl(key)
+            logger.debug(
+                f"Vanity notification rate limit hit for {member} in {self.guild.name} | ex {ttl}s"
+            )
+            return None
+
+        template = self.template or self._default_template
+        script = Script(
+            template,
+            [
+                self.guild,
+                self.channel,
+                member,
+                self.roles[0] if self.roles else None,
+                ("vanity", self.guild.vanity_url_code),
+            ],
+        )
+
+        try:
+            return await script.send(self.channel)
+        except HTTPException:
+            await self.upsert(channel_id=None)
+            return None
+
+    @classmethod
+    async def fetch(cls, bot: Aura, guild: Guild) -> Settings:
+        record = await cls._fetch_record(bot, guild)
+        return cls(bot, guild, record)
+
+    @classmethod
+    @cache(ttl="30m", key="notifs.vanity.settings:{guild.id}")
+    async def _fetch_record(cls, bot: Aura, guild: Guild) -> dict:
+        query = "SELECT * FROM vanity WHERE guild = $1"
+        record = (
+            cast(Record | None, await bot.database.fetchrow(query, guild.id))
+            or cls._default_config()
+        )
+        return dict(record)
+
+    async def upsert(self, revalidate: bool = True, **kwargs) -> Settings:
+        """
+        Update or insert the vanity settings into the database.
+        """
+        values = {
+            "guild": self.guild.id,
+            "channel_id": kwargs.get("channel_id", self.channel_id),
+            "role_ids": kwargs.get("role_ids", self.role_ids),
+            "template": kwargs.get("template", self.template),
+        }
+        query = """
+        INSERT INTO vanity (guild, channel_id, role_ids, template)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (guild) DO UPDATE SET
+            channel_id = EXCLUDED.channel_id,
+            role_ids = EXCLUDED.role_ids,
+            template = EXCLUDED.template
+        RETURNING *
+        """
+        record = await self.bot.database.fetchrow(query, *values.values())
+        self.record = cast(Record, dict(record))
+        if revalidate:
+            logger.debug(f"Revalidating cache for vanity settings in {self.guild.name}")
+            await cache.delete(f"notifs.vanity.settings:{self.guild.id}")
+        return self

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import asyncio
 import contextlib
@@ -8,8 +8,50 @@ from typing import TYPE_CHECKING, Optional
 import discord
 
 from core.managers.values import color
-from core.tools.aesthetic import body, compose, reply_embed
 from .connect4_board import render_connect4_board
+
+
+
+def body(*lines: str) -> str:
+    return "\n".join(f"> {line}" for line in lines if line)
+
+def compose(*parts: str) -> str:
+    return "\n".join(part for part in parts if part)
+
+def caption(text: str) -> str:
+    return f"-# {text}"
+
+def aesthetic_embed(
+    *,
+    color: int,
+    message: str,
+    title: str | None = None,
+    footer: str | None = None,
+    author: str | None = None,
+    timestamp: bool = True,
+) -> discord.Embed:
+    description = compose(
+        body(message),
+        caption(footer) if footer else None,
+    )
+    embed = discord.Embed(color=color, description=description)
+    if title:
+        embed.title = title
+    if author:
+        embed.set_author(name=author)
+    if timestamp:
+        embed.timestamp = discord.utils.utcnow()
+    return embed
+
+def reply_embed(
+    *,
+    color: int,
+    message: str,
+    subtitle: str | None = None,
+) -> discord.Embed:
+    return aesthetic_embed(color=color, message=message, footer=subtitle, timestamp=False)
+
+
 
 if TYPE_CHECKING:
     from core.vain import Vain
@@ -180,7 +222,11 @@ class RPSView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id not in (self.player1.id, self.player2.id):
-            await _warn_interaction(self.ctx, interaction, "You are not in this game.")
+            await _warn_interaction(
+                self.ctx,
+                interaction,
+                f"Only {self.player1.mention} and {self.player2.mention} can play this game.",
+            )
             return False
         if interaction.user.id in self.choices:
             await _warn_interaction(self.ctx, interaction, "You already picked.")
@@ -433,12 +479,21 @@ class TicTacToeView(discord.ui.View):
             return False
         if self.vs_me:
             if self.turn == "X" and interaction.user.id != self.player_x.id:
-                await _warn_interaction(self.ctx, interaction, "It's not your turn.")
+                await _warn_interaction(
+                    self.ctx,
+                    interaction,
+                    f"It's {self.player_x.mention}'s turn!",
+                )
                 return False
         else:
             current = self._current_player()
             if current is None or interaction.user.id != current.id:
-                await _warn_interaction(self.ctx, interaction, "It's not your turn.")
+                who = current.mention if current else "the other player"
+                await _warn_interaction(
+                    self.ctx,
+                    interaction,
+                    f"It's {who}'s turn!",
+                )
                 return False
         return True
 
@@ -689,17 +744,30 @@ class Connect4View(discord.ui.View):
             return False
         if self.vs_me:
             if interaction.user.id != self.player1.id:
-                await _warn_interaction(self.ctx, interaction, "You are not in this game.")
+                await _warn_interaction(
+                    self.ctx,
+                    interaction,
+                    f"Only {self.player1.mention} can play this game.",
+                )
                 return False
             if self.turn != 1:
                 await _warn_interaction(self.ctx, interaction, f"Wait for **{BOT_NAME}**.")
                 return False
             return True
         if interaction.user.id not in (self.player1.id, self.player2.id):
-            await _warn_interaction(self.ctx, interaction, "You are not in this game.")
+            await _warn_interaction(
+                self.ctx,
+                interaction,
+                f"Only {self.player1.mention} and {self.player2.mention} can play this game.",
+            )
             return False
         if interaction.user.id != self._current_player().id:
-            await _warn_interaction(self.ctx, interaction, "It's not your turn.")
+            current = self._current_player()
+            await _warn_interaction(
+                self.ctx,
+                interaction,
+                f"It's {current.mention}'s turn!",
+            )
             return False
         return True
 

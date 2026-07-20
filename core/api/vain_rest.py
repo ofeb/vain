@@ -61,7 +61,7 @@ class VainRest:
                     raise RuntimeError(f"vain.rest {resp.status}: {text[:200]}")
                 return text
 
-    # ── Instagram ──────────────────────────────────────────────────────
+    
 
     async def instagram_media(
         self,
@@ -113,7 +113,7 @@ class VainRest:
             return []
         return [InstagramFollower(**item) for item in data]
 
-    # ── TikTok ─────────────────────────────────────────────────────────
+    
 
     async def tiktok_profile(self, username: str) -> TikTokProfile:
         data = await self._request("GET", f"/tiktok/profile/{username}")
@@ -127,7 +127,7 @@ class VainRest:
             raise RuntimeError(f"No TikTok video found for {username}/{post_id}")
         return TikTokPost(**data)
 
-    # ── Twitter ────────────────────────────────────────────────────────
+    
 
     async def twitter_profile(self, username: str) -> TwitterUser:
         data = await self._request("GET", f"/twitter/profile/{username}")
@@ -147,7 +147,7 @@ class VainRest:
             return []
         return [TwitterTweet(**item) for item in data]
 
-    # ── GitHub ─────────────────────────────────────────────────────────
+    
 
     async def github_user(self, username: str) -> GitHubUser:
         data = await self._request("GET", f"/github/user/{username}")
@@ -181,7 +181,7 @@ class VainRest:
             return []
         return [GitHubCommit(**item) for item in data]
 
-    # ── Reddit ─────────────────────────────────────────────────────────
+    
 
     async def reddit_subreddit(self, name: str) -> SubReddit:
         data = await self._request("GET", f"/reddit/subreddit/{name}")
@@ -231,7 +231,7 @@ class VainRest:
             return []
         return [RedditComment(**item) for item in data]
 
-    # ── Brave ──────────────────────────────────────────────────────────
+    
 
     async def brave_search(
         self, query: str, safe: bool = True, limit: int = 10
@@ -263,7 +263,7 @@ class VainRest:
             images=data.get("images", []),
         )
 
-    # ── Adapters (backward-compat with old vainapi clients) ────────────
+    
 
     async def instagram_resolve_media(self, url: str) -> Dict[str, Any]:
         code = _shortcode_from_url(url)

@@ -35,6 +35,23 @@ class TikTokRepost(BaseRepost):
                 await client.close()
             if not post or not post.media_urls:
                 return None
-            return {"url": post.media_urls[0], "is_video": True}
+            return {
+                "url": post.media_urls[0],
+                "is_video": bool(post.is_video),
+                "media_urls": list(post.media_urls),
+                "username": post.username,
+                "display_name": post.display_name,
+                "caption": post.caption,
+                "avatar_url": post.avatar_url,
+                "like_count": post.like_count,
+                "comment_count": post.comment_count,
+                "save_count": post.save_count,
+                "share_count": post.share_count,
+                "music_title": post.music_title,
+                "music_author": post.music_author,
+                "music_url": post.music_url,
+                "region": post.region,
+                "source_url": post.url,
+            }
         except Exception:
             return None

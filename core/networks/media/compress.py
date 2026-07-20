@@ -14,7 +14,7 @@ import tempfile
 from functools import lru_cache
 from typing import Optional
 
-# Discord non-Nitro default is 25 MiB; leave headroom for multipart overhead.
+
 DEFAULT_MAX_BYTES = 24 * 1024 * 1024
 
 
@@ -27,7 +27,7 @@ def discord_upload_limit(guild=None) -> int:
         limit = int(limit) if limit else DEFAULT_MAX_BYTES
     except (TypeError, ValueError):
         limit = DEFAULT_MAX_BYTES
-    # Keep a small safety margin under the hard cap
+    
     return max(1_000_000, min(limit - 256 * 1024, limit))
 
 
@@ -72,7 +72,7 @@ async def compress(
 
 async def _compress_video(data: bytes, *, ext: str, max_bytes: int) -> bytes:
     """Multi-pass ffmpeg compress targeting max_bytes."""
-    # Estimate duration-agnostic CRF ladder; try progressively harder settings
+    
     attempts: list[list[str]] = [
         ["-c:v", "libx264", "-preset", "veryfast", "-crf", "28", "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart"],
         ["-c:v", "libx264", "-preset", "veryfast", "-crf", "32", "-vf", "scale='min(1280,iw)':-2", "-c:a", "aac", "-b:a", "64k", "-movflags", "+faststart"],
@@ -93,7 +93,7 @@ async def _compress_video(data: bytes, *, ext: str, max_bytes: int) -> bytes:
         if len(out) <= max_bytes:
             return out
 
-    # Last resort: cap duration isn't an option; return best effort if smaller
+    
     return best if len(best) < len(data) else data
 
 
@@ -115,7 +115,7 @@ async def _compress_image(data: bytes, *, ext: str, max_bytes: int) -> bytes:
                 best = out
             if len(out) <= max_bytes:
                 return out
-            # shrink dimensions
+            
             w, h = img.size
             img = img.resize((max(1, int(w * 0.85)), max(1, int(h * 0.85))), Image.LANCZOS)
             quality -= 10
@@ -181,12 +181,12 @@ async def fit_for_discord(
     ext = (os.path.splitext(filename)[1] or ".mp4").lstrip(".").lower() or "mp4"
     compressed = await compress(data, ext=ext, max_bytes=limit)
     if len(compressed) <= limit:
-        # normalize extension after video re-encode
+        
         if ext not in {"jpg", "jpeg", "png", "webp", "gif"}:
             filename = f"{os.path.splitext(filename)[0]}.mp4"
         return compressed, filename
 
-    # Still too big — return best compressed so caller can fail with size info
+    
     if ext not in {"jpg", "jpeg", "png", "webp", "gif"}:
         filename = f"{os.path.splitext(filename)[0]}.mp4"
     return compressed, filename

@@ -1,11 +1,191 @@
-from discord.ext.commands import Cog
-from .badge import BadgeCommands
+from discord.ext.commands import group, CommandError, ColourConverter as ColorConverter
+from discord import Embed, Role
+from core.discord.package import Package
+import humanize
+from discord.utils import utcnow
 
 
-class Badge(BadgeCommands, Cog):
-    """badge cog"""
+from core.managers.permissions import has_permissions
+class BadgeCommands(Package):
+    """colorme custom color role commands"""
 
+    @group(
+        name="colorme",
+        description="give yourself a custom color role",
+        invoke_without_command=True,
+        aliases=["cr"],
+        example=",colorme purple",
+    )
+    async def colorme(self, ctx, *, color: ColorConverter):
+        """set your color"""
+        cfg = await self.db.fetchrow(
+            """SELECT * FROM config WHERE guild_id = $1""", ctx.guild.id
+        )
+        if not cfg or not cfg.colorme:
+            raise CommandError("colorme isnt enabled here")
+        all_roles = (
+            await self.db.fetchval(
+                """SELECT roles FROM color_roles WHERE guild_id = $1""", ctx.guild.id
+            ) or []
+        )
+        pairs = [i.split("-", 1) for i in all_roles]
+        pair_ids = [int(p[1]) for p in pairs]
+        member_role_ids = [r.id for r in ctx.author.roles]
+        member_roles = list(ctx.author.roles)
 
-async def setup(bot):
-    """load badge cog"""
-    await bot.add_cog(Badge(bot))
+        if any(rid in pair_ids for rid in member_role_ids):
+            current_rid = next(rid for rid in pair_ids if rid in member_role_ids)
+            current_role = ctx.guild.get_role(current_rid)
+            if current_role:
+                if len(current_role.members) == 1:
+                    entry = next(p for p in pairs if p[1] == str(current_rid))
+                    pairs.remove(entry)
+                    await current_role.delete(reason="colorme cleanup")
+                if current_role in member_roles:
+                    member_roles.remove(current_role)
+
+        match = next((p for p in pairs if p[0] == str(color.value)), None)
+        if match:
+            new_role = ctx.guild.get_role(int(match[1]))
+            if not new_role:
+                pairs.remove(match)
+                new_role = await ctx.guild.create_role(
+                    name=str(color.value), color=color, reason="colorme"
+                )
+                if cfg.colorme_base and (base := ctx.guild.get_role(cfg.colorme_base)):
+                    await new_role.edit(position=base.position, reason="colorme base")
+                pairs.append([str(color.value), str(new_role.id)])
+        else:
+            new_role = await ctx.guild.create_role(
+                name=str(color.value), color=color, reason="colorme"
+            )
+            if cfg.colorme_base and (base := ctx.guild.get_role(cfg.colorme_base)):
+                await new_role.edit(position=base.position, reason="colorme base")
+            pairs.append([str(color.value), str(new_role.id)])
+
+        member_roles.append(new_role)
+        await ctx.author.edit(roles=member_roles, reason="colorme")
+        await self.db.execute(
+            """UPDATE color_roles SET roles = $1 WHERE guild_id = $2""",
+            [f"{p[0]}-{p[1]}" for p in pairs],
+            ctx.guild.id,
+        )
+        return await ctx.success(f"color set to `{color.value}`")
+
+    @colorme.command(
+        name="enable",
+        aliases=["on"],
+        description="allow users to use colorme",
+    )
+    @has_permissions(manage_guild=True)
+    async def colorme_enable(self, ctx):
+        """turn on colorme"""
+        await self.db.execute(
+            """INSERT INTO config (guild_id, colorme) VALUES($1, $2) ON CONFLICT(guild_id) DO UPDATE SET colorme = excluded.colorme""",
+            ctx.guild.id, True,
+        )
+        return await ctx.success("colorme enabled")
+
+    @colorme.command(
+        name="disable",
+        aliases=["off"],
+        description="prevent users from using colorme",
+    )
+    @has_permissions(manage_guild=True)
+    async def colorme_disable(self, ctx):
+        """turn off colorme"""
+        await self.db.execute(
+            """INSERT INTO config (guild_id, colorme) VALUES($1, $2) ON CONFLICT(guild_id) DO UPDATE SET colorme = excluded.colorme""",
+            ctx.guild.id, False,
+        )
+        stored = (
+            await self.db.fetchval(
+                """SELECT roles FROM color_roles WHERE guild_id = $1""", ctx.guild.id
+            ) or []
+        )
+        for val in stored:
+            rid = int(val.split("-", 1)[1])
+            role = ctx.guild.get_role(rid)
+            if role:
+                await role.delete(reason="colorme disabled cleanup")
+        await self.db.execute(
+            """DELETE FROM color_roles WHERE guild_id = $1""", ctx.guild.id
+        )
+        return await ctx.success("colorme disabled and color roles cleaned up")
+
+    @colorme.command(name="cleanup", description="remove unused color roles")
+    @has_permissions(manage_guild=True)
+    async def colorme_cleanup(self, ctx):
+        """clean stale color roles"""
+        stored = await self.db.fetchval(
+            """SELECT roles FROM color_roles WHERE guild_id = $1""", ctx.guild.id
+        )
+        if not stored:
+            raise CommandError("no color roles exist")
+        to_save = []
+        to_delete = []
+        for val in stored:
+            rid = int(val.split("-", 1)[1])
+            role = ctx.guild.get_role(rid)
+            if not role:
+                to_delete.append(rid)
+                continue
+            if len(role.members) > 0:
+                to_save.append(val)
+            else:
+                to_delete.append(role)
+
+        msg = await ctx.normal(
+            f"cleaning **{len(to_delete)}** unused color roles..."
+        )
+        for item in to_delete:
+            if isinstance(item, int):
+                continue
+            await item.delete(reason="colorme cleanup")
+        await self.db.execute(
+            """UPDATE color_roles SET roles = $1 WHERE guild_id = $2""",
+            to_save, ctx.guild.id,
+        )
+        elapsed = humanize.precisedelta(utcnow() - msg.created_at, format="%0.0f")
+        return await msg.edit(
+            embed=Embed(
+                color=self.bot.color,
+                description=f"> {ctx.author.mention}: done in **{elapsed}**",
+            )
+        )
+
+    @colorme.command(
+        name="baserole",
+        aliases=["base", "br"],
+        description="set base role for color roles to sit below",
+    )
+    @has_permissions(manage_guild=True)
+    async def colorme_baserole(self, ctx, *, role: Role):
+        """set color role base"""
+        stored = (
+            await self.db.fetchval(
+                """SELECT roles FROM color_roles WHERE guild_id = $1""", ctx.guild.id
+            ) or []
+        )
+        await self.db.execute(
+            """INSERT INTO config (guild_id, colorme_base) VALUES($1, $2) ON CONFLICT(guild_id) DO UPDATE SET colorme_base = excluded.colorme_base""",
+            ctx.guild.id, role.id,
+        )
+        if not stored:
+            return await ctx.success(f"base role set to {role.mention}")
+        msg = await ctx.normal(
+            f"repositioning **{len(stored)}** color roles..."
+        )
+        for val in stored:
+            rid = int(val.split("-", 1)[1])
+            cr = ctx.guild.get_role(rid)
+            if not cr:
+                continue
+            await cr.edit(position=role.position, reason="colorme base update")
+        elapsed = humanize.precisedelta(utcnow() - msg.created_at, format="%0.0f")
+        return await msg.edit(
+            embed=Embed(
+                color=self.bot.color,
+                description=f"> {ctx.author.mention}: done in **{elapsed}**",
+            )
+        )

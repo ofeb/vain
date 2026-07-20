@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 import re
@@ -11,7 +11,52 @@ import aiohttp
 import discord
 from PIL import Image
 
-from core.tools.aesthetic import label_line, panel_embed
+
+
+
+def label_line(label: str, value: str) -> str:
+    return f"**{label}**: {value}"
+
+def compose(*parts: str) -> str:
+    return "\n".join(part for part in parts if part)
+
+def body(*lines: str) -> str:
+    return "\n".join(f"> {line}" for line in lines if line)
+
+def caption(text: str) -> str:
+    return f"-# {text}"
+
+def panel_embed(
+    *,
+    color: int | None = None,
+    title: str | None = None,
+    author: str | None = None,
+    author_icon: str | None = None,
+    lines: list[str] | None = None,
+    footer: str | None = None,
+    timestamp: bool = True,
+    thumbnail: str | None = None,
+    url: str | None = None,
+) -> discord.Embed:
+    description = compose(
+        body(*(lines or [])),
+        caption(footer) if footer else None,
+    )
+    embed = discord.Embed(color=color, description=description or None, url=url)
+    if title:
+        embed.title = title
+    if author:
+        if author_icon:
+            embed.set_author(name=author, icon_url=author_icon)
+        else:
+            embed.set_author(name=author)
+    if thumbnail:
+        embed.set_thumbnail(url=thumbnail)
+    if timestamp:
+        embed.timestamp = discord.utils.utcnow()
+    return embed
+
+
 
 WEATHER_COLOR = 0xD4B8D0
 DEFINE_COLOR = 0xBBA0D2

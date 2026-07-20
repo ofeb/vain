@@ -1324,3 +1324,43 @@ CREATE TABLE IF NOT EXISTS devlog_config (
     bot_id BIGINT PRIMARY KEY,
     channel_id BIGINT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS vanity (
+    guild_id BIGINT PRIMARY KEY,
+    channel_id BIGINT,
+    role_ids BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    template TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS guild_tag (
+    guild_id BIGINT PRIMARY KEY,
+    channel_id BIGINT,
+    role_ids BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    template TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS fun_config (
+    guild_id BIGINT PRIMARY KEY,
+    reaction_rewards BOOLEAN NOT NULL DEFAULT FALSE,
+    welcome_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    welcome_channel BIGINT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS reposter (
+    guild_id BIGINT NOT NULL,
+    source_id BIGINT NOT NULL,
+    dest_id BIGINT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, source_id)
+);
+
+CREATE TABLE IF NOT EXISTS aliases (
+    guild_id BIGINT NOT NULL,
+    alias TEXT NOT NULL,
+    command_name TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, alias)
+);

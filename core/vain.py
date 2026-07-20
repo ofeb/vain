@@ -8,7 +8,7 @@ from discord import app_commands
 from discord.ext import commands
 from discord.ext.commands import HybridCommand, HybridGroup
 
-# Ensure Command.params sanitization + invoke patch load before any cogs register
+
 from .patches import cmd as _command_patch  # noqa: F401
 
 from .discord.ctx import Cache, Context
@@ -23,13 +23,37 @@ from .tools.errors import Ratelimited
 from .tools.ratelimit import global_ratelimit
 from .tools.snipe import Snipe
 from .managers.values import token, bot, color, database, redis, emojis, music_enabled
-from .tools.aesthetic import reply_embed
 from .managers.filetypes import CACHE_REDIS_FILE, ensure_storage_files
 
 from .discord.interaction import patch_interaction
 patch_interaction()
 
 log = logging.getLogger("vain")
+
+
+def _compose(*parts: str) -> str:
+    return "\n".join(part for part in parts if part)
+
+
+def _body(*lines: str) -> str:
+    return "\n".join(f"> {line}" for line in lines if line)
+
+
+def _caption(text: str) -> str:
+    return f"-# {text}"
+
+
+def reply_embed(
+    *,
+    color: int,
+    message: str,
+    subtitle: str | None = None,
+) -> discord.Embed:
+    description = _compose(
+        _body(message),
+        _caption(subtitle) if subtitle else None,
+    )
+    return discord.Embed(color=color, description=description)
 
 
 _SKIP_DIRS = frozenset({"models", "__pycache__"})
@@ -81,6 +105,12 @@ def _discover_extensions(ext_dir: str = "ext") -> tuple[str, ...]:
                     continue
                 if _has_setup_entry(py_file):
                     found.append(".".join(py_file.relative_to(Path(".")).with_suffix("").parts))
+            
+            for sub in sorted(child.iterdir()):
+                if not sub.is_dir() or sub.name.startswith("_") or sub.name in _SKIP_DIRS:
+                    continue
+                if (sub / "__init__.py").exists() and _has_setup_entry(sub):
+                    found.append(".".join(sub.relative_to(Path(".")).parts))
             continue
         if child.suffix == ".py" and child.stem != "__init__":
             if _has_setup_entry(child):
@@ -504,7 +534,7 @@ class Vain(commands.AutoShardedBot):
             if bool(blacklisted):
                 raise commands.CheckFailure("youre **blacklisted** from using this bot")
 
-        # Role restrictions — owners may bypass
+        
         if ctx.command is not None and ctx.guild is not None and not is_help and not owner:
             cmd_name = ctx.command.qualified_name.lower()
             rows = await self.remember(
@@ -520,7 +550,7 @@ class Vain(commands.AutoShardedBot):
                     )
                     raise commands.CheckFailure(f"only {mentions} can use `{cmd_name}`")
 
-        # Per-user / per-channel disables — ALWAYS enforced (even for bot owners)
+        
         if ctx.command is not None and ctx.guild is not None and not is_help:
             cmd_name = ctx.command.qualified_name.lower()
             disabled = await self.remember(
@@ -703,14 +733,14 @@ class Vain(commands.AutoShardedBot):
                 )
             return
 
-        # Expected user-facing command errors — soft reply, no traceback / error ids
+        
         if isinstance(err, commands.CommandError):
             msg = str(err).strip() or "you **can't** do that"
             with contextlib.suppress(discord.HTTPException, Exception):
                 await ctx.fail(msg)
             return
 
-        # Unexpected failures — store traceback for jsk error lookup
+        
         self._error_counter += 1
         error_id = str(self._error_counter)
         tb_text = "".join(traceback.format_exception(type(err), err, err.__traceback__))

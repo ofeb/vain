@@ -23,7 +23,10 @@ class ConfirmView(discord.ui.View):
 
     async def interaction_check(self, inter: discord.Interaction) -> bool:
         if inter.user.id != self.member.id:
-            await inter.response.send_message("this aint yours", ephemeral=True)
+            await inter.response.send_message(
+                f"Only {self.member.mention} can use this.",
+                ephemeral=True,
+            )
             return False
         return True
 

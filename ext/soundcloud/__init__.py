@@ -1,3 +1,195 @@
-from .soundcloud import setup
+from __future__ import annotations
 
-__all__ = ["setup"]
+from typing import TYPE_CHECKING
+
+
+
+def compose(*parts: str) -> str:
+    return "\n".join(part for part in parts if part)
+
+def body(*lines: str) -> str:
+    return "\n".join(f"> {line}" for line in lines if line)
+
+def caption(text: str) -> str:
+    return f"-# {text}"
+
+def aesthetic_embed(
+    *,
+    color: int,
+    message: str,
+    title: str | None = None,
+    footer: str | None = None,
+    author: str | None = None,
+    timestamp: bool = True,
+) -> discord.Embed:
+    description = compose(
+        body(message),
+        caption(footer) if footer else None,
+    )
+    embed = discord.Embed(color=color, description=description)
+    if title:
+        embed.title = title
+    if author:
+        embed.set_author(name=author)
+    if timestamp:
+        embed.timestamp = discord.utils.utcnow()
+    return embed
+
+def panel_embed(
+    *,
+    color: int | None = None,
+    title: str | None = None,
+    author: str | None = None,
+    author_icon: str | None = None,
+    lines: list[str] | None = None,
+    footer: str | None = None,
+    timestamp: bool = True,
+    thumbnail: str | None = None,
+    url: str | None = None,
+) -> discord.Embed:
+    description = compose(
+        body(*(lines or [])),
+        caption(footer) if footer else None,
+    )
+    embed = discord.Embed(color=color, description=description or None, url=url)
+    if title:
+        embed.title = title
+    if author:
+        if author_icon:
+            embed.set_author(name=author, icon_url=author_icon)
+        else:
+            embed.set_author(name=author)
+    if thumbnail:
+        embed.set_thumbnail(url=thumbnail)
+    if timestamp:
+        embed.timestamp = discord.utils.utcnow()
+    return embed
+
+
+
+if TYPE_CHECKING:
+    from core.vain import Vain
+
+
+from typing import Optional
+
+import aiohttp
+import discord
+from discord.ext import commands
+
+from core.discord.package import Package
+
+from core.discord.ctx import Context
+from core.discord.hybrid import describe, group, hybrid
+from core.managers.values import color
+
+SC_API_URL = "https://api-v2.soundcloud.com"
+DEFAULT_CLIENT_ID = "a3e059563d7fd3372b49b37f00a00bcf"
+
+
+class Soundcloud(Package):
+    """SoundCloud track lookup and playback."""
+
+
+    async def _resolve(self, url: str) -> Optional[dict]:
+        headers = {"User-Agent": "Mozilla/5.0"}
+        params = {"url": url, "client_id": DEFAULT_CLIENT_ID}
+        async with aiohttp.ClientSession() as session:
+            try:
+                async with session.get(f"{SC_API_URL}/resolve", headers=headers, params=params, timeout=10) as resp:
+                    if resp.status != 200:
+                        return None
+                    return await resp.json()
+            except Exception:
+                return None
+
+    async def _search(self, query: str, limit: int = 5) -> list[dict]:
+        headers = {"User-Agent": "Mozilla/5.0"}
+        params = {
+            "q": query,
+            "client_id": DEFAULT_CLIENT_ID,
+            "limit": limit,
+            "type": "track",
+        }
+        async with aiohttp.ClientSession() as session:
+            try:
+                async with session.get(f"{SC_API_URL}/search/tracks", headers=headers, params=params, timeout=10) as resp:
+                    if resp.status != 200:
+                        return []
+                    data = await resp.json()
+                    return data.get("collection", [])
+            except Exception:
+                return []
+
+    def _format_duration(self, ms: int) -> str:
+        seconds = ms // 1000
+        minutes, sec = divmod(seconds, 60)
+        hours, minutes = divmod(minutes, 60)
+        if hours:
+            return f"{hours}:{minutes:02d}:{sec:02d}"
+        return f"{minutes}:{sec:02d}"
+
+    @group(
+        name="soundcloud",
+        description="Search and play SoundCloud tracks",
+        invoke_without_command=True,
+        aliases=["sc"],
+    )
+    async def soundcloud(self, ctx: Context, *, query: str) -> None:
+        results = await self._search(query)
+        if not results:
+            await ctx.fail(f"No results found for `{query}`.")
+            return
+
+        entries = []
+        for i, track in enumerate(results[:5], 1):
+            duration = self._format_duration(track.get("duration", 0))
+            entries.append(f"`{i}.` **{track['title']}** — {track['user']['username']} ({duration})")
+
+        embed = panel_embed(
+            title=f"SoundCloud Search — {query}",
+            color=color.base,
+            lines=entries,
+            footer="Powered by SoundCloud API",
+            timestamp=False,
+        )
+        await ctx.send(embed=embed)
+
+    @soundcloud.command(
+        name="search",
+        description="Search for a track on SoundCloud",
+    )
+    @describe(query="Search query")
+    async def soundcloud_search(self, ctx: Context, *, query: str) -> None:
+        await self.soundcloud.callback(ctx, query=query)
+
+    @soundcloud.command(
+        name="info",
+        description="Get information about a SoundCloud track",
+    )
+    @describe(url="SoundCloud track URL")
+    async def soundcloud_info(self, ctx: Context, url: str) -> None:
+        data = await self._resolve(url)
+        if not data:
+            await ctx.fail("Could not retrieve track info.")
+            return
+
+        embed = panel_embed(
+            title=data.get("title", "Unknown Track"),
+            color=color.base,
+            lines=[data.get("description", "")[:200] or "No description"],
+            author=data["user"]["username"],
+            url=data["user"].get("permalink_url"),
+            timestamp=False,
+        )
+        embed.add_field(name="Duration", value=self._format_duration(data.get("duration", 0)), inline=True)
+        embed.add_field(name="Plays", value=f"{data.get('playback_count', 0):,}", inline=True)
+        embed.add_field(name="Likes", value=f"{data.get('favoritings_count', 0):,}", inline=True)
+        embed.add_field(name="Comments", value=data.get("comment_count", 0), inline=True)
+        if data.get("artwork_url"):
+            embed.set_thumbnail(url=data["artwork_url"].replace("large", "t500x500"))
+        await ctx.send(embed=embed)
+
+
+async def setup(bot: Vain):
+    await bot.add_cog(Soundcloud(bot))

@@ -79,7 +79,8 @@ class Instagram:
 
         video_urls = [u for u in (resolved.get("video_urls") or []) if u]
         image_urls = [u for u in (resolved.get("image_urls") or []) if u]
-        media_urls = video_urls or image_urls
+        
+        media_urls = list(dict.fromkeys([*video_urls, *image_urls]))
         is_video = bool(video_urls) or is_reel
 
         author = resolved.get("author_name") or "unknown"
@@ -93,8 +94,12 @@ class Instagram:
             avatar_url=None,
             caption=caption,
             media_urls=media_urls,
-            is_video=is_video,
-            raw={"source": resolved.get("source"), "code": code},
+            is_video=is_video and len(image_urls) <= 1,
+            raw={
+                "source": resolved.get("source"),
+                "code": code,
+                "carousel_count": len(image_urls),
+            },
         )
 
     async def profile(self, username: str) -> Optional[dict]:

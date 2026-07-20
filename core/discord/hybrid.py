@@ -127,7 +127,7 @@ def _wrap_callback(
                     pass
         return await fn(*args, **kwargs)
 
-    # Ensure dpy follows __wrapped__ (never a raw inspect.Signature)
+    
     if hasattr(wrapper, "__signature__"):
         try:
             delattr(wrapper, "__signature__")
@@ -147,7 +147,7 @@ def _try_register(factory, prepared, *, name, attrs):
             log.warning("hybrid /%s registered prefix-only (no app_command)", cmd.name)
         return cmd
     except (TypeError, ValueError, AttributeError) as e:
-        # AttributeError covers 'Parameter' object has no attribute 'converter'
+        
         log.warning("hybrid /%s slash failed (%s), prefix-only", name, e)
         attrs = {**attrs, "with_app_command": False}
         return factory(name=name, **attrs)(prepared)
