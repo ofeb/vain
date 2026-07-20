@@ -1,4 +1,4 @@
-"""Instagram post client powered by vain.rest."""
+"""Instagram post client — vain.rest primary (docs: https://vain.rest/docs)."""
 
 from __future__ import annotations
 
@@ -37,16 +37,8 @@ def shortcode_from_url(url: str) -> str | None:
     return None
 
 
-def _looks_like_video(url: str) -> bool:
-    lu = (url or "").lower()
-    return any(
-        t in lu
-        for t in (".mp4", "video", "play_video", "/v/t2/", "/v/t16/", "/v/t50/")
-    )
-
-
 class Instagram:
-    """Instagram post client powered by vain.rest."""
+    """Instagram post client powered by vain.rest (``/instagram/media`` etc.)."""
 
     def __init__(self, session=None) -> None:
         self._session = session
@@ -61,6 +53,7 @@ class Instagram:
         self._api = None
 
     async def post(self, url: str) -> Optional[SocialPost]:
+        """Primary: GET /instagram/media?url=… (vain.rest)."""
         code = shortcode_from_url(url)
         if not code:
             return None
@@ -79,24 +72,36 @@ class Instagram:
 
         video_urls = [u for u in (resolved.get("video_urls") or []) if u]
         image_urls = [u for u in (resolved.get("image_urls") or []) if u]
-        
+
         media_urls = list(dict.fromkeys([*video_urls, *image_urls]))
         is_video = bool(video_urls) or is_reel
 
-        author = resolved.get("author_name") or "unknown"
+        author = str(resolved.get("author_name") or "unknown").lstrip("@")
         caption = str(resolved.get("title") or "")[:2000]
+        avatar_url: str | None = None
+        display = author
+
+        
+        if author and author != "unknown":
+            try:
+                user = await self._client().instagram_get_user(author)
+                if user:
+                    display = str(user.get("full_name") or author)
+                    avatar_url = user.get("avatar") or None
+            except Exception as exc:
+                log.debug("ig profile enrich failed: %s", exc)
 
         return SocialPost(
             platform="instagram",
             url=clean,
-            username=str(author).lstrip("@"),
-            display_name=str(author),
-            avatar_url=None,
+            username=author,
+            display_name=display,
+            avatar_url=str(avatar_url) if avatar_url else None,
             caption=caption,
             media_urls=media_urls,
-            is_video=is_video and len(image_urls) <= 1,
+            is_video=is_video and (bool(video_urls) or len(image_urls) <= 1),
             raw={
-                "source": resolved.get("source"),
+                "source": resolved.get("source") or "vain.rest",
                 "code": code,
                 "carousel_count": len(image_urls),
             },

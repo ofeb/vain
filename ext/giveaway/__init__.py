@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta
 from random import sample
 from typing import TYPE_CHECKING
@@ -11,8 +12,20 @@ from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe, group
 from core.managers.values import color
 from core.managers.permissions import has_permissions
-from core.tools.moderation_args import parse_duration_seconds, format_duration_token
+from core.tools.moderation_args import (
+    is_duration_token,
+    parse_duration_seconds,
+    format_duration_token,
+)
 
+
+_INVISIBLE_RE = re.compile(r"[\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff]")
+_CHANNEL_MENTION_RE = re.compile(r"^<#(\d{15,20})>$")
+_CHANNEL_ID_RE = re.compile(r"^\d{15,20}$")
+
+
+def _clean_token(token: str) -> str:
+    return _INVISIBLE_RE.sub("", (token or "")).strip()
 
 
 def compose(*parts: str) -> str:
@@ -64,24 +77,150 @@ def shorten(text: str, length: int):
     return text[:length] + "..." if len(text) > length else text
 
 
+def _parse_duration_value(argument: str) -> int | None:
+    """Parse a duration token into seconds, or None if invalid/unparseable."""
+    raw = _clean_token(argument).lower()
+    if not raw:
+        return None
+    if raw.isdigit():
+        seconds = int(raw)
+    else:
+        seconds = parse_duration_seconds(raw)
+    if seconds is None or seconds <= 0:
+        return None
+    return seconds
+
+
 class DurationSeconds(commands.Converter):
     """Accept raw seconds or human tokens like ``1h``, ``30m``, ``2d``."""
 
     async def convert(self, ctx: Context, argument: str) -> int:
-        raw = (argument or "").strip().lower()
-        if not raw:
-            raise commands.BadArgument("Provide a duration like **1h**, **30m**, or **3600**.")
-        if raw.isdigit():
-            seconds = int(raw)
-        else:
-            seconds = parse_duration_seconds(raw)
-        if seconds is None or seconds <= 0:
+        cleaned = _clean_token(argument)
+        seconds = _parse_duration_value(cleaned)
+        if seconds is None:
+            shown = cleaned or (argument or "").strip() or "empty"
+            if len(shown) > 40:
+                shown = shown[:37] + "..."
             raise commands.BadArgument(
-                f"Could not parse duration **{argument}**. Use e.g. `30s`, `10m`, `1h`, `2d`."
+                f"Could not parse duration **{shown}**. Use e.g. `30s`, `10m`, `1h`, `2d`."
             )
         if seconds > 365 * 86400:
             raise commands.BadArgument("Duration cannot exceed **1 year**.")
         return seconds
+
+
+async def _resolve_channel(ctx: Context, token: str) -> discord.abc.Messageable | None:
+    """Try to resolve a channel token; return None if it is not a channel."""
+    raw = _clean_token(token)
+    if not raw or ctx.guild is None:
+        return None
+
+    mention = _CHANNEL_MENTION_RE.match(raw)
+    channel_id: int | None = int(mention.group(1)) if mention else None
+    if channel_id is None and _CHANNEL_ID_RE.match(raw):
+        channel_id = int(raw)
+
+    def _usable(ch) -> bool:
+        if ch is None:
+            return False
+        
+        if isinstance(ch, (discord.TextChannel, discord.Thread)):
+            return True
+        return bool(callable(getattr(ch, "send", None)) and getattr(ch, "id", None))
+
+    if channel_id is not None:
+        channel = ctx.guild.get_channel(channel_id)
+        return channel if _usable(channel) else None
+
+    
+    name = raw[1:] if raw.startswith("#") else raw
+    if not name or name.startswith("."):
+        
+        return None
+
+    lowered = name.lower()
+    for ch in ctx.guild.text_channels:
+        if ch.name.lower() == lowered and _usable(ch):
+            return ch
+    for ch in list(getattr(ctx.guild, "threads", []) or []):
+        if getattr(ch, "name", "").lower() == lowered and _usable(ch):
+            return ch
+    return None
+
+
+async def _parse_start_args(
+    ctx: Context, raw: str
+) -> tuple[discord.abc.Messageable, int, int, str]:
+    """Parse ``[channel] <duration> [winners] <prize>``.
+
+    Examples:
+    - ``2m 1 Nitro Classic``
+    - ``#giveaways 1h 2 Nitro``
+    - ``1h Nitro`` (defaults to 1 winner)
+    """
+    tokens = [_clean_token(t) for t in (raw or "").split()]
+    tokens = [t for t in tokens if t]
+    if not tokens:
+        raise commands.BadArgument(
+            "Usage: `,giveaway start [channel] <duration> [winners] <prize>` "
+            "e.g. `,giveaway start 2m 1 Nitro`"
+        )
+
+    channel: discord.abc.Messageable = ctx.channel
+    i = 0
+
+    
+    maybe_channel = await _resolve_channel(ctx, tokens[0])
+    if maybe_channel is not None:
+        channel = maybe_channel
+        i = 1
+    elif is_duration_token(tokens[0]) or (
+        tokens[0].isdigit() and len(tokens) >= 2
+    ):
+        i = 0
+    else:
+        
+        
+        dur_at = next(
+            (idx for idx in range(len(tokens)) if is_duration_token(tokens[idx])),
+            None,
+        )
+        if dur_at is None:
+            raise commands.BadArgument(
+                f"**{tokens[0]}** is not a channel or duration. "
+                "Usage: `,giveaway start [channel] <duration> [winners] <prize>` "
+                "e.g. `,giveaway start #chat 2m 1 Nitro`"
+            )
+        i = dur_at
+
+    if i >= len(tokens):
+        raise commands.BadArgument(
+            "Missing duration. Use e.g. `30s`, `10m`, `1h`, `2d`."
+        )
+
+    seconds = _parse_duration_value(tokens[i])
+    if seconds is None:
+        raise commands.BadArgument(
+            f"Could not parse duration **{tokens[i]}**. Use e.g. `30s`, `10m`, `1h`, `2d`."
+        )
+    if seconds > 365 * 86400:
+        raise commands.BadArgument("Duration cannot exceed **1 year**.")
+    i += 1
+
+    winners = 1
+    if i < len(tokens) and tokens[i].isdigit():
+        winners = int(tokens[i])
+        i += 1
+
+    prize = " ".join(tokens[i:]).strip()
+    if not prize:
+        raise commands.BadArgument(
+            "A prize is required. Example: `,giveaway start 2m 1 Nitro Classic`"
+        )
+    if winners < 1:
+        raise commands.BadArgument("Winner count must be at least **1**")
+
+    return channel, seconds, winners, prize
 
 
 class Giveaway(commands.Cog):
@@ -380,36 +519,38 @@ class Giveaway(commands.Cog):
         name="start",
         description="Start a new giveaway",
         guild_only=True,
+        usage="[channel] <duration> [winners] <prize>",
+        example=",giveaway start 2m 1 Nitro Classic",
     )
     @describe(
-        duration="How long (e.g. 1h, 30m, 2d, or seconds)",
-        winners="Number of winners",
-        prize="Prize name",
-        channel="Channel to start giveaway in",
+        arguments="[channel] <duration> [winners] <prize> — e.g. 2m 1 Nitro or #chat 1h 2 Nitro",
     )
     @has_permissions(manage_channels=True)
-    async def start(
-        self,
-        ctx: Context,
-        duration: DurationSeconds,
-        winners: int = 1,
-        *,
-        prize: str,
-        channel: discord.TextChannel = None,
-    ) -> None:
-        """Start a new giveaway. Example: `,giveaway start 1h 1 Nitro Classic`"""
-        if not prize or not str(prize).strip():
-            await ctx.warn("A prize is required")
+    async def start(self, ctx: Context, *, arguments: str = None) -> None:
+        """Start a new giveaway.
+
+        Syntax: `,giveaway start [channel] <duration> [winners] <prize>`
+
+        Examples:
+        - `,giveaway start 1h 1 Nitro Classic`
+        - `,giveaway start 2m 1 nitro`
+        - `,giveaway start #giveaways 1h 2 Nitro`
+        """
+        if not arguments or not str(arguments).strip():
+            await ctx.warn(
+                "Usage: `,giveaway start [channel] <duration> [winners] <prize>` "
+                "e.g. `,giveaway start 2m 1 Nitro`"
+            )
             return
 
-        if winners < 1:
-            await ctx.warn("Winner count must be at least **1**")
+        try:
+            channel, seconds, winners, prize = await _parse_start_args(ctx, arguments)
+        except commands.BadArgument as exc:
+            await ctx.warn(str(exc))
             return
-        
-        channel = channel or ctx.channel
-        seconds = int(duration)
+
         end_time = datetime.now() + timedelta(seconds=seconds)
-        
+
         embed = panel_embed(
             title=prize,
             color=color.base,
@@ -417,10 +558,10 @@ class Giveaway(commands.Cog):
             timestamp=False,
         )
         embed.timestamp = datetime.now()
-        
+
         message = await channel.send(embed=embed)
         await message.add_reaction("🎉")
-        
+
         await self.bot.db.execute(
             "INSERT INTO giveaways (guild_id, channel_id, message_id, prize, expiration, winner_count, hosts, created_at) VALUES($1, $2, $3, $4, $5, $6, $7, $8)",
             ctx.guild.id,
@@ -432,7 +573,7 @@ class Giveaway(commands.Cog):
             [ctx.author.id],
             datetime.now(),
         )
-        
+
         await ctx.success(f"Giveaway started in {channel.mention}")
 
 

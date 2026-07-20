@@ -72,10 +72,10 @@ _HOME = "__home__"
 
 
 
-# Framework-only injection names. Never include real user args like
-# ``message``, ``bot``, ``flags``, or ``script`` — those are valid
-# subcommand names and/or parameter labels (e.g. ``,tag script``,
-# ``,invoke ban message``).
+
+
+
+
 _SKIP = frozenset({
     "self", "cls", "ctx", "context", "interaction", "inter",
     "args", "kwargs",
@@ -537,7 +537,7 @@ def _derived_param_tokens(cmd: Command) -> list[str]:
         label = _usage_parameter_label(name, getattr(param, "annotation", inspect._empty))
         if not label:
             label = name.replace("_", " ")
-        # Avoid ",tag script [script]" when the arg mirrors the subcommand name.
+        
         path_tail = command_display_name(cmd).lower().rsplit(" ", 1)[-1]
         if label.lower() == path_tail and not _annotation_labels(
             getattr(param, "annotation", inspect._empty)
@@ -565,7 +565,7 @@ def _looks_like_param_only(syntax: str) -> bool:
     text = (syntax or "").strip()
     if not text:
         return True
-    # e.g. "[template]", "<user> [reason]", "(message or embed code)"
+    
     return bool(re.match(r"^[\(\[<]", text))
 
 
@@ -582,7 +582,7 @@ def _syntax(cmd: Command, prefix: str) -> str:
     name = command_display_name(cmd)
 
     if usage and _looks_like_param_only(usage):
-        # usage="[template]" → "tag script [template]"
+        
         syntax = f"{name} {usage}".strip()
     elif usage:
         syntax = _collapse_duplicate_name(usage, cmd)
@@ -628,7 +628,7 @@ def _strip_hidden_params_from_text(text: str) -> str:
             and stripped[0] in "<(["
             and stripped[-1] in ">)]"
         )
-        # Only drop wrapped tokens that are pure framework params
+        
         if is_wrapped and low in _FRAMEWORK_PARAM_NAMES:
             continue
         cleaned.append(p)

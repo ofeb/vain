@@ -1,7 +1,7 @@
-"""TikTok public client — metadata + playable media URL, no login.
+"""TikTok client — vain.rest primary, public scrapers as fallback.
 
-Uses multiple fast public sources (downloader APIs + yt-dlp extract) so
-reposts stay instant when one provider is rate-limited.
+Primary: ``GET /tiktok/video/{username}/{post_id}`` and ``/tiktok/profile/{username}``
+Docs: https://vain.rest/docs
 """
 
 from __future__ import annotations
@@ -90,9 +90,22 @@ class TikTok:
         return {"video_id": video_id, "username": username}
 
     async def post(self, url: str) -> Optional[SocialPost]:
-        """Fetch full post metadata + media URL for a TikTok share link."""
+        """Fetch full post metadata + media URL for a TikTok share link.
+
+        Order: **vain.rest** → tikwm / yt-dlp / tikmate (parallel fallbacks).
+        """
         resolved = await self.resolve_url(url)
         ids = self.parse_ids(resolved)
+
+        
+        primary = await self._from_vain_rest(resolved, ids)
+        if primary and primary.media_urls:
+            if ids.get("username") and primary.username == "unknown":
+                primary.username = ids["username"] or primary.username
+            if not primary.display_name:
+                primary.display_name = primary.username
+            primary.url = primary.url or resolved
+            return primary
 
         
         tasks = [
@@ -100,7 +113,7 @@ class TikTok:
             asyncio.create_task(self._from_ytdlp(resolved)),
             asyncio.create_task(self._from_tikmate(resolved)),
         ]
-        post: SocialPost | None = None
+        post: SocialPost | None = primary
         try:
             for fut in asyncio.as_completed(tasks, timeout=14):
                 try:
@@ -113,7 +126,7 @@ class TikTok:
                     post = result
                 else:
                     post = self._merge(post, result)
-                
+
                 if post.media_urls and post.username and post.username != "unknown":
                     break
         except asyncio.TimeoutError:
@@ -139,18 +152,117 @@ class TikTok:
             post.display_name = post.username
         return post
 
+    async def _from_vain_rest(
+        self,
+        resolved: str,
+        ids: dict[str, str | None],
+    ) -> Optional[SocialPost]:
+        """Primary path: GET /tiktok/video/{username}/{post_id}."""
+        username = ids.get("username")
+        post_id = ids.get("video_id")
+        if not username or not post_id:
+            return None
+        try:
+            from core.api import VainRest
+
+            client = VainRest()
+            video = await client.tiktok_video(username, post_id)
+        except Exception as exc:
+            log.debug("vain.rest tiktok video failed: %s", exc)
+            return None
+
+        author = video.author if isinstance(video.author, dict) else {}
+        author_user = (
+            str(author.get("username") or author.get("unique_id") or username).lstrip("@")
+        )
+        author_nick = (
+            author.get("nickname")
+            or author.get("nickName")
+            or author.get("display_name")
+            or author_user
+        )
+        avatar = (
+            author.get("avatar_url")
+            or author.get("avatar")
+            or author.get("avatarLarger")
+            or author.get("avatarThumb")
+        )
+        
+        if (not avatar or author_nick == author_user) and author_user:
+            try:
+                from core.api import VainRest
+
+                profile = await VainRest().tiktok_profile(author_user)
+                if profile:
+                    author_nick = profile.nickname or author_nick
+                    if profile.avatar_url:
+                        avatar = str(profile.avatar_url)
+            except Exception as exc:
+                log.debug("vain.rest tiktok profile enrich failed: %s", exc)
+
+        media: list[str] = []
+        if video.video_url:
+            media.append(str(video.video_url))
+        
+        if not media and video.thumbnail_url:
+            media.append(str(video.thumbnail_url))
+
+        source = f"https://www.tiktok.com/@{author_user}/video/{post_id}"
+        return SocialPost(
+            platform="tiktok",
+            url=source or resolved,
+            username=author_user,
+            display_name=str(author_nick),
+            avatar_url=str(avatar) if avatar else None,
+            caption=str(video.description or ""),
+            media_urls=media,
+            is_video=bool(video.video_url),
+            like_count=int(video.likes_count or 0),
+            comment_count=int(video.comments_count or 0),
+            share_count=int(video.shares_count or 0),
+            play_count=int(video.play_count or 0),
+            raw={
+                "source": "vain.rest",
+                "id": video.id,
+                "thumbnail_url": video.thumbnail_url,
+                "create_time": video.create_time,
+                "author": author,
+            },
+        )
+
     async def info(self, url: str) -> Optional[dict]:
         """Legacy dict interface."""
         post = await self.post(url)
         return post.raw if post and post.raw else (post.__dict__ if post else None)
 
     async def user(self, username: str) -> Optional[dict]:
-        """Best-effort public profile lookup."""
+        """Best-effort public profile lookup — vain.rest first."""
         username = (username or "").strip().lstrip("@")
         if not username:
             return None
+
+        try:
+            from core.api import VainRest
+
+            profile = await VainRest().tiktok_profile(username)
+            return {
+                "uniqueId": profile.username,
+                "nickname": profile.nickname or profile.username,
+                "avatarLarger": str(profile.avatar_url) if profile.avatar_url else "",
+                "avatar": str(profile.avatar_url) if profile.avatar_url else "",
+                "signature": profile.bio,
+                "followerCount": profile.followers_count,
+                "followingCount": profile.following_count,
+                "heartCount": profile.likes_count,
+                "videoCount": profile.videos_count,
+                "verified": profile.is_verified,
+                "id": profile.id,
+                "source": "vain.rest",
+            }
+        except Exception as exc:
+            log.debug("vain.rest tiktok profile failed: %s", exc)
+
         session = await self._get_session()
-        
         try:
             async with session.get(
                 "https://www.tikwm.com/api/user/info",
@@ -165,7 +277,6 @@ class TikTok:
         except Exception as exc:
             log.debug("tikwm user failed: %s", exc)
 
-        
         try:
             async with session.get(f"https://www.tiktok.com/@{quote(username)}") as resp:
                 if resp.status != 200:

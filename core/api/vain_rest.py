@@ -1,7 +1,14 @@
-"""vain.rest API client."""
+"""vain.rest API client.
+
+Docs: https://vain.rest/docs  (OpenAPI: https://vain.rest/docs/openapi.json)
+
+Primary source for TikTok / Instagram / Twitter / Reddit / GitHub / Brave.
+Auth: ``X-API-Key`` header (from env ``VAIN_REST_API_KEY`` or ``api.vain_rest``).
+"""
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any, Dict, List, Optional
 
@@ -34,12 +41,26 @@ from .models import (
     TwitterUserBiolinks,
 )
 
+log = logging.getLogger("vain.api.vain_rest")
+
 _BASE = "https://vain.rest"
+
+
+def _default_api_key() -> str:
+    env = (os.environ.get("VAIN_REST_API_KEY") or "").strip()
+    if env:
+        return env
+    try:
+        from core.managers.values import api as api_cfg
+
+        return str(getattr(api_cfg, "vain_rest", "") or "").strip()
+    except Exception:
+        return ""
 
 
 class VainRest:
     def __init__(self, api_key: Optional[str] = None) -> None:
-        self.api_key = api_key or os.environ.get("VAIN_REST_API_KEY", "")
+        self.api_key = (api_key if api_key is not None else _default_api_key()).strip()
 
     async def _request(
         self,
@@ -47,19 +68,39 @@ class VainRest:
         path: str,
         params: Optional[dict[str, Any]] = None,
     ) -> Any:
-        headers: dict[str, str] = {}
+        headers: dict[str, str] = {"Accept": "application/json"}
         if self.api_key:
             headers["X-API-Key"] = self.api_key
 
+        
+        clean_params: dict[str, Any] | None = None
+        if params:
+            clean_params = {
+                k: v for k, v in params.items() if v is not None and v != ""
+            }
+            if not clean_params:
+                clean_params = None
+
         url = f"{_BASE}{path}"
-        async with aiohttp.ClientSession() as session:
-            async with session.request(method, url, params=params, headers=headers) as resp:
-                if resp.content_type and "json" in resp.content_type:
-                    return await resp.json()
-                text = await resp.text()
+        timeout = aiohttp.ClientTimeout(total=20)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.request(
+                method, url, params=clean_params, headers=headers
+            ) as resp:
+                ctype = (resp.content_type or "").lower()
+                if "json" in ctype:
+                    data = await resp.json(content_type=None)
+                else:
+                    text = await resp.text()
+                    if resp.status >= 400:
+                        raise RuntimeError(f"vain.rest {resp.status}: {text[:200]}")
+                    return text
                 if resp.status >= 400:
-                    raise RuntimeError(f"vain.rest {resp.status}: {text[:200]}")
-                return text
+                    detail = data
+                    if isinstance(data, dict):
+                        detail = data.get("detail") or data.get("error") or data
+                    raise RuntimeError(f"vain.rest {resp.status}: {str(detail)[:200]}")
+                return data
 
     
 
@@ -116,12 +157,18 @@ class VainRest:
     
 
     async def tiktok_profile(self, username: str) -> TikTokProfile:
+        username = (username or "").strip().lstrip("@")
         data = await self._request("GET", f"/tiktok/profile/{username}")
         if not data:
             raise RuntimeError(f"No TikTok profile found for @{username}")
         return TikTokProfile(**data)
 
     async def tiktok_video(self, username: str, post_id: str) -> TikTokPost:
+        """GET /tiktok/video/{username}/{post_id} — docs: vain.rest/docs"""
+        username = (username or "").strip().lstrip("@")
+        post_id = (post_id or "").strip()
+        if not username or not post_id:
+            raise RuntimeError("TikTok video requires username and post_id")
         data = await self._request("GET", f"/tiktok/video/{username}/{post_id}")
         if not data:
             raise RuntimeError(f"No TikTok video found for {username}/{post_id}")

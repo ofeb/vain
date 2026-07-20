@@ -106,6 +106,11 @@ class redis:
 class api:
     google_perspective: str = ""
     openweathermap: str = "caa6d1f353a1f24663e101a62cbdc148"
+    
+    
+    vain_rest: str = (
+        "sk-15fa10dc8354be314cf148002cfd1cc83443f6c26d6af77b1fb65aaf63276da6"
+    )
     fnbr: str = ""
     cloudconvert: str = ""
     clever: str = ""

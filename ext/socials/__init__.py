@@ -113,6 +113,7 @@ def build_social_repost_container(
     music_author: str | None = None,
     music_url: str | None = None,
     attachment: discord.File | None = None,
+    attachment_filename: str | None = None,
     page_index: int = 0,
     page_total: int = 1,
 ) -> list[ui.Container]:
@@ -120,6 +121,10 @@ def build_social_repost_container(
 
     Uses aesthetic helpers (``**bold**``, ``-#`` captions, ``>`` body quotes),
     platform emojis, and a single media slot so carousels / photo posts can page.
+
+    Uploaded videos **must** be referenced with a File component
+    (``attachment://filename``). Components V2 drops bare attachments that
+    are not referenced by a component — that was why videos never showed.
     """
     from core.managers.values import emojis
 
@@ -137,7 +142,6 @@ def build_social_repost_container(
         platform_label = "Instagram"
         watch_label = "Open on Instagram"
 
-    
     title_line = f"**{name}**"
     handle_line = f"-# {emojis.human} [@{user}]({profile}) · **{platform_label}**"
     header_md = f"{title_line}\n{handle_line}"
@@ -154,15 +158,12 @@ def build_social_repost_container(
     else:
         c.add_item(ui.TextDisplay(header_md))
 
-    
     linked = _linkify_caption(caption, plat if plat in {"tiktok", "instagram"} else "instagram")
     if linked:
         c.add_item(ui.Separator(visible=True))
-        
         quoted = "\n".join(f"> {line}" if line else ">" for line in linked.splitlines())
         c.add_item(ui.TextDisplay(quoted[:1900]))
 
-    
     if music_title:
         music_label = music_title
         if music_author:
@@ -173,27 +174,33 @@ def build_social_repost_container(
         else:
             c.add_item(ui.TextDisplay(f"-# {emojis.music} {music_label}"))
 
-    
     urls = [u for u in (media_urls or []) if u]
     if page_total < 1:
         page_total = 1
     page_index = max(0, min(page_index, max(page_total - 1, 0)))
     current = urls[page_index] if urls and page_index < len(urls) else (urls[0] if urls else None)
 
-    if current:
+    
+    
+    file_name = attachment_filename or (attachment.filename if attachment is not None else None)
+    if file_name:
+        c.add_item(ui.Separator(visible=True))
+        try:
+            
+            media_ref = attachment if attachment is not None else f"attachment://{file_name}"
+            c.add_item(ui.File(media_ref))
+        except Exception:
+            try:
+                c.add_item(ui.File(f"attachment://{file_name}"))
+            except Exception:
+                pass
+    elif current:
         c.add_item(ui.Separator(visible=True))
         try:
             c.add_item(ui.MediaGallery(discord.MediaGalleryItem(str(current))))
         except Exception:
             c.add_item(ui.TextDisplay(f"[media]({current})"))
-    elif attachment is not None:
-        c.add_item(ui.Separator(visible=True))
-        try:
-            c.add_item(ui.File(attachment))
-        except Exception:
-            pass
 
-    
     stats_bits = [
         f"{emojis.likes} **{_compact_count(like_count)}**",
         f"{emojis.comments} **{_compact_count(comment_count)}**",
@@ -211,7 +218,6 @@ def build_social_repost_container(
         footer_bits.append(f"slide **{page_index + 1}**/**{page_total}**")
     c.add_item(ui.TextDisplay("-# " + "  ·  ".join(footer_bits)))
 
-    
     link = source_url or profile
     row = ui.ActionRow(
         ui.Button(style=discord.ButtonStyle.link, label=watch_label, url=link)
@@ -231,7 +237,11 @@ def layout_from_items(
     return layout
 
 class SocialRepostView(ui.LayoutView):
-    """Paginated multi-image social repost (TikTok photos / IG carousels)."""
+    """Paginated multi-image social repost (TikTok photos / IG carousels).
+
+    For videos, pass ``attachment_filename`` matching the ``discord.File``
+    uploaded with the message so the V2 File component can show it.
+    """
 
     def __init__(
         self,
@@ -252,6 +262,7 @@ class SocialRepostView(ui.LayoutView):
         music_title: str | None = None,
         music_author: str | None = None,
         music_url: str | None = None,
+        attachment_filename: str | None = None,
         owner_id: int | None = None,
         timeout: float | None = 180,
     ) -> None:
@@ -271,6 +282,7 @@ class SocialRepostView(ui.LayoutView):
         self.music_title = music_title
         self.music_author = music_author
         self.music_url = music_url
+        self.attachment_filename = attachment_filename
         self.media_urls = [u for u in media_urls if u]
         self.index = 0
         self.owner_id = owner_id
@@ -295,6 +307,7 @@ class SocialRepostView(ui.LayoutView):
             "music_title": self.music_title,
             "music_author": self.music_author,
             "music_url": self.music_url,
+            "attachment_filename": self.attachment_filename,
             "page_index": self.index,
             "page_total": max(len(self.media_urls), 1),
         }
@@ -364,21 +377,37 @@ class SocialRepostView(ui.LayoutView):
         except Exception:
             pass
 
-async def get_dominant_color(url: str, fallback: int = 0x5865F2) -> int:
+async def get_dominant_color(
+    url: str,
+    fallback: int = 0x5865F2,
+    *,
+    referer: str | None = None,
+) -> int:
     """Fetch image and return dominant color using colorthief."""
     if not url:
         return fallback
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+        ),
+        "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+    }
+    if referer:
+        headers["Referer"] = referer
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=8) as resp:
+        async with aiohttp.ClientSession(headers=headers) as session:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=8)) as resp:
                 if resp.status != 200:
                     return fallback
                 data = await resp.read()
+        if not data or len(data) < 64:
+            return fallback
 
-        def _extract():
+        def _extract() -> int:
             ct = ColorThief(BytesIO(data))
             r, g, b = ct.get_color(quality=1)
-
+            
             if (r + g + b) < 80:
                 r = min(r + 60, 255)
                 g = min(g + 60, 255)
@@ -389,10 +418,33 @@ async def get_dominant_color(url: str, fallback: int = 0x5865F2) -> int:
     except Exception:
         return fallback
 
+
 async def get_bot_dominant_color(bot) -> int:
     if bot.user and bot.user.display_avatar:
         return await get_dominant_color(str(bot.user.display_avatar.url))
     return 0x5865F2
+
+
+async def get_repost_accent_color(
+    bot,
+    *,
+    avatar_url: str | None,
+    platform: str | None = None,
+) -> int:
+    """Accent from the creator avatar; fall back to the bot's dominant colour."""
+    bot_color = await get_bot_dominant_color(bot)
+    if not avatar_url:
+        return bot_color
+    plat = (platform or "").lower()
+    referer = (
+        "https://www.tiktok.com/"
+        if plat == "tiktok"
+        else "https://www.instagram.com/"
+        if plat == "instagram"
+        else None
+    )
+    
+    return await get_dominant_color(str(avatar_url), fallback=bot_color, referer=referer)
 
 
 
@@ -704,20 +756,63 @@ class Socials(Package):
     @staticmethod
     def _is_video_url(u: str) -> bool:
         lu = (u or "").lower()
-        return any(
+        
+        image_hint = any(
+            token in lu
+            for token in (
+                ".jpg",
+                ".jpeg",
+                ".png",
+                ".webp",
+                ".gif",
+                "mime_type=image",
+                "/image/",
+                "avatar",
+                "thumbnail",
+                "~tplv-",
+            )
+        )
+        video_hint = any(
             token in lu
             for token in (
                 ".mp4",
+                ".webm",
+                ".mov",
                 "mime_type=video",
                 "/video/",
                 "video_mp4",
                 "playwm",
                 "play?",
+                "/play",
                 "aweme",
                 "/v/t16/",
                 "/v/t50/",
+                "tikwm.com/video",
+                "tikmate",
+                "musical.ly",
             )
         )
+        if image_hint and not video_hint:
+            return False
+        return video_hint
+
+    @staticmethod
+    def _looks_like_video_bytes(data: bytes | None) -> bool:
+        """True when *data* is large enough and not an HTML/JSON error body."""
+        if not data or len(data) < 2048:
+            return False
+        head = data.lstrip()[:64]
+        if head.startswith((b"<", b"{", b"[")) or head.upper().startswith(b"<!DOCTYPE"):
+            return False
+        
+        if b"ftyp" in data[:64]:
+            return True
+        if data[:4] == b"\x1aE\xdf\xa3":
+            return True
+        if data[:4] == b"RIFF" and data[8:12] != b"WEBP":
+            return True
+        
+        return b"\x00" in data[:16]
 
     def _upload_limit(self, ctx: Context) -> int:
         return discord_upload_limit(getattr(ctx, "guild", None))
@@ -848,23 +943,39 @@ class Socials(Package):
         media_urls = [u for u in (post.media_urls or []) if u]
         video_urls = [u for u in media_urls if self._is_video_url(u)]
         image_urls = [u for u in media_urls if not self._is_video_url(u)]
+        
+        wants_video = bool(
+            video_urls
+            or post.is_video
+            or "/reel" in (post.url or url).lower()
+            or "/video/" in (post.url or url).lower()
+        )
         limit = self._upload_limit(ctx)
-        accent = await get_bot_dominant_color(self.bot)
+        accent = await get_repost_accent_color(
+            self.bot,
+            avatar_url=post.avatar_url,
+            platform=post.platform,
+        )
 
         upload: discord.File | None = None
         display_media = image_urls[:]
+        
+        video_filename = f"{(post.platform or 'video').lower()}.mp4"
 
-        if video_urls or post.is_video or "/reel" in (post.url or url).lower():
+        if wants_video:
             data: bytes | None = None
-            for media_url in video_urls:
-                data = await self._download_bytes(
+            
+            candidates = list(dict.fromkeys([*video_urls, *media_urls]))
+            for media_url in candidates:
+                blob = await self._download_bytes(
                     media_url, platform=post.platform, max_bytes=limit
                 )
-                if data:
+                if self._looks_like_video_bytes(blob):
+                    data = blob
                     break
             if data:
                 upload = await self._prepare_file(
-                    ctx, data, filename=f"{post.platform}.mp4"
+                    ctx, data, filename=video_filename
                 )
                 if upload is None:
                     return
@@ -875,6 +986,7 @@ class Socials(Package):
                     return
             
             display_media = []
+            video_filename = upload.filename or video_filename
         elif image_urls:
             display_media = image_urls
         else:
@@ -882,13 +994,16 @@ class Socials(Package):
             if upload is None and not display_media:
                 await ctx.fail("Could not get media for that post.")
                 return
+            if upload is not None:
+                video_filename = upload.filename or video_filename
+                display_media = []
 
         view = SocialRepostView(
             platform=post.platform,
             username=post.username,
             display_name=post.display_name or post.username,
             caption=post.caption or "",
-            media_urls=display_media or ([post.url] if not upload else []),
+            media_urls=display_media,
             avatar_url=post.avatar_url,
             source_url=post.url or url,
             accent=accent,
@@ -900,11 +1015,18 @@ class Socials(Package):
             music_title=post.music_title,
             music_author=post.music_author,
             music_url=post.music_url,
+            attachment_filename=(upload.filename if upload is not None else None),
             owner_id=ctx.author.id,
         )
 
         send_kw: dict = {"view": view}
         if upload is not None:
+            
+            
+            try:
+                upload.fp.seek(0)
+            except Exception:
+                pass
             send_kw["file"] = upload
 
         try:
@@ -914,12 +1036,15 @@ class Socials(Package):
             if upload is not None and (
                 getattr(exc, "code", None) == 40005 or exc.status == 413
             ):
-                upload.fp.seek(0)
+                try:
+                    upload.fp.seek(0)
+                except Exception:
+                    pass
                 raw = upload.fp.read()
                 tighter = max(8 * 1024 * 1024, limit // 2)
                 fitted, name = await fit_for_discord(
                     raw,
-                    filename=upload.filename or f"{post.platform}.mp4",
+                    filename=upload.filename or video_filename,
                     max_bytes=tighter,
                 )
                 if len(fitted) > tighter:
@@ -927,6 +1052,9 @@ class Socials(Package):
                         "Video is too large for Discord even after compression."
                     )
                     return
+                
+                view.attachment_filename = name
+                view._rebuild()
                 msg = await ctx.send(
                     file=discord.File(io.BytesIO(fitted), filename=name),
                     view=view,
