@@ -10,8 +10,10 @@ from discord.ext.commands import group, CommandError
 from humanize import naturaldelta
 
 from core.discord.package import Package
+from core.discord.views.confirm import ConfirmView
 from core.managers.permissions import has_permissions
 from core.managers.converters import EmbedConverter
+from core.managers.values import color
 
 if TYPE_CHECKING:
     from core.vain import Vain
@@ -27,13 +29,39 @@ class Nuke(Package):
     )
     @has_permissions(administrator=True)
     async def nuke(self, ctx):
+        """Nuke (clone + delete) the current channel after confirmation."""
+        view = ConfirmView(ctx, timeout=30.0)
+        embed = Embed(
+            color=color.base,
+            description=(
+                f"> This will **nuke** {ctx.channel.mention}.\n"
+                f"> Are you sure you want to do this?\n"
+                f"-# the channel will be cloned then deleted · only {ctx.author.mention} can confirm"
+            ),
+        )
+        if not await view.prompt(embed=embed):
+            return await ctx.warn("Nuke **cancelled**")
+
         channel_info = [ctx.channel.category, ctx.channel.position]
-        channel_id = ctx.channel.id
-        await ctx.channel.clone(reason=f"Nuked by {str(ctx.author)}")
-        await ctx.channel.delete(reason=f"Nuked by {str(ctx.author)}")
-        new_channel = channel_info[0].text_channels[-1]
+        old_channel = ctx.channel
+        await old_channel.clone(reason=f"Nuked by {str(ctx.author)}")
+        await old_channel.delete(reason=f"Nuked by {str(ctx.author)}")
+        
+        new_channel = None
+        if channel_info[0] is not None:
+            new_channel = channel_info[0].text_channels[-1]
+        else:
+            
+            matches = [
+                c
+                for c in ctx.guild.text_channels
+                if c.name == old_channel.name
+            ]
+            new_channel = max(matches, key=lambda c: c.id) if matches else None
+        if new_channel is None:
+            return
         await new_channel.edit(position=channel_info[1])
-        asyncio.ensure_future(self.update_channels(ctx.channel, new_channel))
+        asyncio.ensure_future(self.update_channels(old_channel, new_channel))
         await new_channel.send(content="first")
 
     async def update_channels(self, old: TextChannel, new: TextChannel) -> None:

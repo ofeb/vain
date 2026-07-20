@@ -1,0 +1,1 @@
+"""pingonjoin settings."""

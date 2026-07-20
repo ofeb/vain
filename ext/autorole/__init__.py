@@ -133,6 +133,19 @@ class Autorole(commands.Cog):
     @has_permissions(manage_guild=True, manage_roles=True)
     async def autorole_reset(self, ctx: Context) -> None:
         """Clears every autorole for guild."""
+        from core.discord.views.confirm import ConfirmView
+
+        view = ConfirmView(ctx)
+        emb = discord.Embed(
+            color=color.base,
+            description=(
+                "> This will **clear every autorole** for this server.\n"
+                "> Are you sure you want to do this?\n"
+                f"-# only {ctx.author.mention} can confirm"
+            ),
+        )
+        if not await view.prompt(embed=emb):
+            return await ctx.warn("Reset **cancelled**")
         settings = await AutoroleSettings.fetch(self.bot, ctx.guild)
         await settings.delete_all()
         await ctx.success("Successfully cleared auto roles")
@@ -197,6 +210,19 @@ class Autorole(commands.Cog):
     @has_permissions(manage_guild=True, manage_roles=True)
     async def buttonrole_reset(self, ctx: Context) -> None:
         """Clears every button role from guild."""
+        from core.discord.views.confirm import ConfirmView
+
+        view = ConfirmView(ctx)
+        emb = discord.Embed(
+            color=color.base,
+            description=(
+                "> This will **clear every button role** for this server.\n"
+                "> Are you sure you want to do this?\n"
+                f"-# only {ctx.author.mention} can confirm"
+            ),
+        )
+        if not await view.prompt(embed=emb):
+            return await ctx.warn("Reset **cancelled**")
         for row in await self.bot.db.fetch(
             "SELECT message_id, channel_id FROM button_roles WHERE guild_id = $1",
             ctx.guild.id,
@@ -373,6 +399,19 @@ class Autorole(commands.Cog):
     @has_permissions(manage_guild=True, manage_roles=True)
     async def reactionrole_reset(self, ctx: Context) -> None:
         """Clears every reaction role from guild."""
+        from core.discord.views.confirm import ConfirmView
+
+        view = ConfirmView(ctx)
+        emb = discord.Embed(
+            color=color.base,
+            description=(
+                "> This will **clear every reaction role** for this server.\n"
+                "> Are you sure you want to do this?\n"
+                f"-# only {ctx.author.mention} can confirm"
+            ),
+        )
+        if not await view.prompt(embed=emb):
+            return await ctx.warn("Reset **cancelled**")
         await self.bot.db.execute(
             "DELETE FROM reaction_role WHERE guild_id = $1",
             ctx.guild.id,

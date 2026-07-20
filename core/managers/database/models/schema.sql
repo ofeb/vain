@@ -497,6 +497,20 @@ CREATE TABLE IF NOT EXISTS giveaways (
     PRIMARY KEY (message_id)
 );
 
+CREATE TABLE IF NOT EXISTS giveaway_settings (
+    guild_id BIGINT PRIMARY KEY,
+    dm_on_win BOOLEAN NOT NULL DEFAULT TRUE,
+    dm_script TEXT
+);
+
+CREATE TABLE IF NOT EXISTS pingonjoin (
+    guild_id BIGINT PRIMARY KEY,
+    channel_ids BIGINT[] NOT NULL DEFAULT '{}',
+    message TEXT,
+    delete_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    delete_after INT NOT NULL DEFAULT 10
+);
+
 CREATE TABLE IF NOT EXISTS counters (
     guild_id BIGINT,
     channel_id BIGINT,

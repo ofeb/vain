@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
 import discord
@@ -17,7 +17,8 @@ from core.tools.moderation_args import (
     parse_duration_seconds,
 )
 
-from .events import GiveawayEvents, build_giveaway_embed
+from .events import GiveawayEvents
+from .views import build_giveaway_panel
 
 
 _INVISIBLE_RE = re.compile(r"[\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff]")
@@ -310,21 +311,32 @@ class Giveaway(commands.Cog):
             return fallback.mention
         return "unknown"
 
-    def _active_embed(
+    def _panel(
         self,
         *,
+        message_id: int,
         prize: str,
         end_time: datetime,
         winners: int,
         host: str,
-        requirements: list[str] | None = None,
-    ) -> discord.Embed:
-        return build_giveaway_embed(
+        entries: int = 0,
+        guild: discord.Guild | None = None,
+        ended: bool = False,
+        winner_mentions: str | None = None,
+        no_entries: bool = False,
+    ):
+        icon = str(guild.icon.url) if guild and guild.icon else None
+        return build_giveaway_panel(
+            message_id=message_id,
             prize=prize,
             end_time=end_time,
             winners=winners,
-            host=host,
-            requirements=requirements,
+            host_mention=host,
+            entries=entries,
+            guild_icon=icon,
+            ended=ended,
+            winner_mentions=winner_mentions,
+            no_entries=no_entries,
         )
 
     @group(
@@ -332,7 +344,7 @@ class Giveaway(commands.Cog):
         description="Start a giveaway quickly and easily",
         guild_only=True,
     )
-    @has_permissions(manage_channels=True)
+    @has_permissions(manage_guild=True)
     async def giveaway(self, ctx: Context) -> None:
         """Giveaway management group."""
         if ctx.invoked_subcommand is None:
@@ -349,7 +361,7 @@ class Giveaway(commands.Cog):
         target="Message id, jump link, or leave blank to use a reply",
         winners="How many winners to pick (default 1)",
     )
-    @has_permissions(manage_channels=True)
+    @has_permissions(manage_guild=True)
     async def reroll(
         self,
         ctx: Context,
@@ -420,7 +432,7 @@ class Giveaway(commands.Cog):
         example=",giveaway end",
     )
     @describe(target="Message id, jump link, or leave blank to use a reply")
-    @has_permissions(manage_channels=True)
+    @has_permissions(manage_guild=True)
     async def end(self, ctx: Context, *, target: str = None) -> None:
         """End an active giveaway early (reply or message id/link)."""
         message = await self._resolve_giveaway_message(ctx, target)
@@ -453,7 +465,7 @@ class Giveaway(commands.Cog):
         description="Edit options and limits for a specific giveaway",
         guild_only=True,
     )
-    @has_permissions(manage_channels=True)
+    @has_permissions(manage_guild=True)
     async def giveaway_edit(self, ctx: Context) -> None:
         """Giveaway edit management group."""
         if ctx.invoked_subcommand is None:
@@ -465,7 +477,7 @@ class Giveaway(commands.Cog):
         guild_only=True,
     )
     @describe(message="Giveaway message to edit", level="Maximum level required")
-    @has_permissions(manage_channels=True)
+    @has_permissions(manage_guild=True)
     async def giveaway_edit_maxlevel(
         self,
         ctx: Context,
@@ -497,14 +509,13 @@ class Giveaway(commands.Cog):
         if not giveaway:
             await ctx.warn("That is not a giveaway")
             return
-        embed = self._active_embed(
-            prize=giveaway["prize"],
-            end_time=giveaway["expiration"],
-            winners=int(giveaway["winner_count"] or 1),
-            host=self._host_mention(giveaway),
-            requirements=self.get_requirements(giveaway),
-        )
-        await message.edit(embed=embed)
+        events = self._events()
+        if events:
+            await events.rebuild_panel_message(
+                message,
+                dict(giveaway),
+                ended=bool(giveaway.get("win_message_id")),
+            )
         await ctx.message.add_reaction("👍")
 
     @giveaway_edit.command(
@@ -513,7 +524,7 @@ class Giveaway(commands.Cog):
         guild_only=True,
     )
     @describe(message="Giveaway message to edit", prize="New prize name")
-    @has_permissions(manage_channels=True)
+    @has_permissions(manage_guild=True)
     async def giveaway_edit_prize(
         self,
         ctx: Context,
@@ -547,17 +558,13 @@ class Giveaway(commands.Cog):
         )
         giveaway = dict(giveaway)
         giveaway["prize"] = prize
-        if giveaway.get("win_message_id"):
-            embed = build_giveaway_embed(prize=prize, ended=True, winner_mentions=None)
-        else:
-            embed = self._active_embed(
-                prize=prize,
-                end_time=giveaway["expiration"],
-                winners=int(giveaway["winner_count"] or 1),
-                host=self._host_mention(giveaway),
-                requirements=self.get_requirements(giveaway),
+        events = self._events()
+        if events:
+            await events.rebuild_panel_message(
+                message,
+                giveaway,
+                ended=bool(giveaway.get("win_message_id")),
             )
-        await message.edit(embed=embed)
         await ctx.message.add_reaction("👍")
 
     @giveaway_edit.command(
@@ -566,7 +573,7 @@ class Giveaway(commands.Cog):
         guild_only=True,
     )
     @describe(message="Giveaway message to edit", duration="Duration like 1h, 30m, or seconds")
-    @has_permissions(manage_channels=True)
+    @has_permissions(manage_guild=True)
     async def giveaway_edit_duration(
         self,
         ctx: Context,
@@ -585,7 +592,8 @@ class Giveaway(commands.Cog):
             await ctx.warn("A duration is required (e.g. `1h`, `30m`, `2d`)")
             return
 
-        end_time = datetime.now(timezone.utc) + timedelta(seconds=int(duration))
+        
+        end_time = datetime.utcnow() + timedelta(seconds=int(duration))
         try:
             await self.bot.db.execute(
                 "UPDATE giveaways SET expiration = $1 WHERE message_id = $2",
@@ -603,17 +611,17 @@ class Giveaway(commands.Cog):
         if not giveaway:
             await ctx.warn("That is not a giveaway")
             return
-        embed = self._active_embed(
-            prize=giveaway["prize"],
-            end_time=end_time,
-            winners=int(giveaway["winner_count"] or 1),
-            host=self._host_mention(giveaway),
-            requirements=self.get_requirements(giveaway),
-        )
-        await message.edit(embed=embed)
+        giveaway = dict(giveaway)
+        giveaway["expiration"] = end_time
         events = self._events()
-        if events and not giveaway.get("win_message_id"):
-            events.schedule_end(message.id, end_time)
+        if events:
+            await events.rebuild_panel_message(
+                message,
+                giveaway,
+                ended=bool(giveaway.get("win_message_id")),
+            )
+            if not giveaway.get("win_message_id"):
+                events.schedule_end(message.id, end_time)
         await ctx.success(
             f"Expiration set to {discord.utils.format_dt(end_time, style='R')}"
         )
@@ -628,7 +636,7 @@ class Giveaway(commands.Cog):
     @describe(
         arguments="[channel] <duration> [winners] <prize> — e.g. 30s 1 Nitro or #chat 1h 2 Nitro",
     )
-    @has_permissions(manage_channels=True)
+    @has_permissions(manage_guild=True)
     async def start(self, ctx: Context, *, arguments: str = None) -> None:
         """Start a new giveaway.
 
@@ -652,20 +660,35 @@ class Giveaway(commands.Cog):
             await ctx.warn(str(exc))
             return
 
-        end_time = datetime.now(timezone.utc) + timedelta(seconds=seconds)
-        embed = self._active_embed(
+        
+        end_time = datetime.utcnow() + timedelta(seconds=seconds)
+
+        
+        panel = self._panel(
+            message_id=0,
             prize=prize,
             end_time=end_time,
             winners=winners,
             host=ctx.author.mention,
+            entries=0,
+            guild=ctx.guild,
         )
+        message = await channel.send(view=panel)
 
         
-        message = await channel.send(embed=embed)
+        panel = self._panel(
+            message_id=message.id,
+            prize=prize,
+            end_time=end_time,
+            winners=winners,
+            host=ctx.author.mention,
+            entries=0,
+            guild=ctx.guild,
+        )
 
-        async def _react() -> None:
+        async def _edit() -> None:
             try:
-                await message.add_reaction("🎉")
+                await message.edit(view=panel)
             except Exception:
                 pass
 
@@ -681,7 +704,8 @@ class Giveaway(commands.Cog):
                     expiration = EXCLUDED.expiration,
                     winner_count = EXCLUDED.winner_count,
                     hosts = EXCLUDED.hosts,
-                    entries = EXCLUDED.entries
+                    entries = EXCLUDED.entries,
+                    win_message_id = NULL
                 """,
                 ctx.guild.id,
                 channel.id,
@@ -691,20 +715,99 @@ class Giveaway(commands.Cog):
                 winners,
                 [ctx.author.id],
                 [],
-                datetime.now(timezone.utc),
+                datetime.utcnow(),
             )
 
-        await asyncio.gather(_react(), _insert())
+        await asyncio.gather(_edit(), _insert())
 
         events = self._events()
         if events:
             events.schedule_end(message.id, end_time)
 
-        
         try:
             await ctx.message.add_reaction("👍")
         except Exception:
             await ctx.success(f"Giveaway started in {channel.mention}")
+
+    @giveaway.group(
+        name="dmonwin",
+        aliases=["dmonswin"],
+        invoke_without_command=True,
+        description="Toggle or configure DMs when someone wins a giveaway",
+        guild_only=True,
+    )
+    @has_permissions(manage_guild=True)
+    async def dmonwin(self, ctx: Context, state: str = None) -> None:
+        """`,giveaway dmonwin on|off` or subcommands."""
+        events = self._events()
+        if events is None:
+            await ctx.warn("Giveaway events are not loaded")
+            return
+        if state is None:
+            settings = await events.get_settings(ctx.guild.id)
+            on = settings.get("dm_on_win", True)
+            await ctx.success(
+                f"DM on win is **{'on' if on else 'off'}**"
+                + (" · custom script set" if settings.get("dm_script") else "")
+            )
+            return
+        low = state.lower().strip()
+        if low in {"on", "enable", "true", "yes", "1"}:
+            await events.set_dm_on_win(ctx.guild.id, True)
+            await ctx.success("Winners will be **DM'd** when they win")
+            return
+        if low in {"off", "disable", "false", "no", "0"}:
+            await events.set_dm_on_win(ctx.guild.id, False)
+            await ctx.success("Winners will **not** be DM'd (channel announce only)")
+            return
+        await ctx.warn("Use `on` or `off`, or `,giveaway dmonwin script ...`")
+
+    @dmonwin.command(name="on", description="Enable DMing winners")
+    @has_permissions(manage_guild=True)
+    async def dmonwin_on(self, ctx: Context) -> None:
+        events = self._events()
+        if not events:
+            return
+        await events.set_dm_on_win(ctx.guild.id, True)
+        await ctx.success("Winners will be **DM'd** when they win")
+
+    @dmonwin.command(name="off", description="Disable DMing winners")
+    @has_permissions(manage_guild=True)
+    async def dmonwin_off(self, ctx: Context) -> None:
+        events = self._events()
+        if not events:
+            return
+        await events.set_dm_on_win(ctx.guild.id, False)
+        await ctx.success("Winners will **not** be DM'd")
+
+    @dmonwin.command(
+        name="script",
+        aliases=["message", "msg", "template"],
+        description="Set a custom DM script for winners",
+        usage="[script|clear]",
+        example=",giveaway dmonwin script {embed}$v{title: You won!}$v{description: **{prize}** in {guild.name}}",
+    )
+    @has_permissions(manage_guild=True)
+    async def dmonwin_script(self, ctx: Context, *, script: str = None) -> None:
+        """Customize the winner DM (embed script syntax). Use `clear` to reset."""
+        events = self._events()
+        if not events:
+            await ctx.warn("Giveaway events are not loaded")
+            return
+        if not script or not script.strip():
+            settings = await events.get_settings(ctx.guild.id)
+            current = settings.get("dm_script")
+            if current:
+                await ctx.send(f"```\n{current[:1900]}\n```")
+            else:
+                await ctx.success("Using the **default** winner DM script")
+            return
+        if script.strip().lower() in {"clear", "reset", "default", "none", "remove"}:
+            await events.set_dm_script(ctx.guild.id, None)
+            await ctx.success("Winner DM script **reset** to default")
+            return
+        await events.set_dm_script(ctx.guild.id, script.strip())
+        await ctx.success("Updated **winner DM** script")
 
 
 async def setup(bot: commands.Bot):

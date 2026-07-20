@@ -1391,9 +1391,21 @@ class ModerationCommands(Package):
     @has_permissions(manage_guild=True)
     async def clearinvites(self, ctx, params: str | None = None):
         """clear all invites"""
+        from core.discord.views.confirm import ConfirmView
+
         invites = await ctx.guild.invites()
         if not invites:
             return await ctx.warn("This server has **no invites**")
+        view = ConfirmView(ctx)
+        emb = reply_embed(
+            color=0x2A2B2F,
+            message=(
+                f"This will **delete all invites** in this server (**{len(invites)}**).\n"
+                f"Are you sure you want to do this?"
+            ),
+        )
+        if not await view.prompt(embed=emb):
+            return await ctx.warn("Clearinvites **cancelled**")
         deleted = 0
         for invite in invites:
             with contextlib.suppress(discord.HTTPException, discord.Forbidden):

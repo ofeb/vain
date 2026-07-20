@@ -154,6 +154,21 @@ class InviteTracker(Package):
     )
     @has_permissions(manage_guild=True)
     async def invites_resetall(self, ctx: Context):
+        from core.discord.views.confirm import ConfirmView
+        from core.managers.values import color as color_values
+        import discord as _discord
+
+        view = ConfirmView(ctx)
+        emb = _discord.Embed(
+            color=color_values.base,
+            description=(
+                "> This will **wipe all invite stats** for this server.\n"
+                "> Are you sure you want to do this?\n"
+                f"-# only {ctx.author.mention} can confirm"
+            ),
+        )
+        if not await view.prompt(embed=emb):
+            return await ctx.warn("Reset **cancelled**")
         await self.db.execute(
             "DELETE FROM invite_counts WHERE guild_id = $1", ctx.guild.id
         )

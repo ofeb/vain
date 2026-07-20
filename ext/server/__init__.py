@@ -538,6 +538,7 @@ from .extended.embedcode import Embedcode
 from .extended.embed import EmbedCommands
 from .extended.vanity import VanityCommands
 from .extended.tag import TagCommands
+from .extended.pingonjoin import PingOnJoinCommands
 from .events import ServerEvents
 
 
@@ -577,6 +578,7 @@ class Server(
     EmbedCommands,
     VanityCommands,
     TagCommands,
+    PingOnJoinCommands,
     ServerEvents,
     Package,
     metaclass=_Meta,
