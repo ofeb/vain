@@ -175,10 +175,13 @@ class Settings:
 
         pg = getattr(member, "primary_guild", None)
         tag = getattr(pg, "tag", None) if pg else None
-        template = (self.template or self._default_template).replace(
-            "{tag}", str(tag or "tag")
-        )
+        template = self.template or self._default_template
         script = Script(template, user=member)
+        reward_role = (
+            self.assignable_roles[0]
+            if self.assignable_roles
+            else (self.roles[0] if self.roles else None)
+        )
         try:
             return await script.send(
                 channel,
@@ -186,9 +189,9 @@ class Settings:
                 member=member,
                 guild=self.guild,
                 channel=channel,
-                role=self.assignable_roles[0]
-                if self.assignable_roles
-                else (self.roles[0] if self.roles else None),
+                role=reward_role,
+                tag=str(tag or "tag"),
+                tag_role=reward_role,
                 allowed_mentions=_discord.AllowedMentions(users=True),
             )
         except HTTPException as exc:

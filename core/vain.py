@@ -28,7 +28,7 @@ from .managers.filetypes import CACHE_REDIS_FILE, ensure_storage_files
 from .discord.interaction import patch_interaction
 patch_interaction()
 
-# Bare channel names (`txt`, `#txt`, mangled pastes) work on every TextChannel arg
+
 from .tools.convert.channel import patch_discord_channel_converters
 patch_discord_channel_converters()
 

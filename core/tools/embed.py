@@ -696,6 +696,14 @@ class Script:
                         getattr(guild, "premium_subscription_count", 0)
                     ),
                     "{guild.boost_tier}": str(getattr(guild, "premium_tier", 0)),
+                    "{guild.vanity}": str(
+                        getattr(guild, "vanity_url_code", None) or ""
+                    ),
+                    "{guild.vanity_url}": (
+                        f"https://discord.gg/{guild.vanity_url_code}"
+                        if getattr(guild, "vanity_url_code", None)
+                        else ""
+                    ),
                 }
             )
 
@@ -795,6 +803,109 @@ class Script:
         if roles:
             replacements["{roles}"] = " ".join(str(item) for item in roles)
 
+        
+        prize = kwargs.get("prize")
+        if prize is not None:
+            replacements["{prize}"] = str(prize)
+            replacements["{giveaway.prize}"] = str(prize)
+
+        winners = kwargs.get("winners")
+        if winners is not None:
+            if isinstance(winners, (list, tuple, set)):
+                win_str = ", ".join(
+                    getattr(w, "mention", str(w)) for w in winners
+                )
+            else:
+                win_str = str(winners)
+            replacements["{winners}"] = win_str
+            replacements["{giveaway.winners}"] = win_str
+
+        for gw_key, aliases in (
+            ("winner_count", ("{winner_count}", "{giveaway.winner_count}")),
+            ("host", ("{host}", "{giveaway.host}")),
+            ("ends_at", ("{ends_at}", "{giveaway.ends_at}")),
+            ("jump_url", ("{jump_url}", "{giveaway.url}", "{giveaway.jump_url}")),
+            ("entries", ("{entries}", "{giveaway.entries}")),
+        ):
+            val = kwargs.get(gw_key)
+            if val is not None:
+                for alias in aliases:
+                    replacements[alias] = str(val)
+
+        
+        vanity = kwargs.get("vanity") or kwargs.get("vanity_code")
+        if vanity is None and guild is not None:
+            vanity = getattr(guild, "vanity_url_code", None)
+        if vanity is not None and str(vanity):
+            code = str(vanity).lstrip("/")
+            replacements["{vanity}"] = code
+            replacements["{vanity.name}"] = code
+            replacements["{vanity.code}"] = code
+            replacements["{guild.vanity}"] = code
+            replacements["{vanity.url}"] = f"https://discord.gg/{code}"
+
+        vanity_role = kwargs.get("vanity_role") or (
+            role if kwargs.get("vanity") is not None or kwargs.get("vanity_code") is not None else None
+        )
+        
+        if vanity_role is None and vanity is not None and role is not None:
+            vanity_role = role
+        if vanity_role is not None:
+            replacements["{vanity.role}"] = str(
+                getattr(vanity_role, "mention", vanity_role)
+            )
+            replacements["{vanity.role.mention}"] = str(
+                getattr(vanity_role, "mention", vanity_role)
+            )
+            replacements["{vanity.role.name}"] = str(
+                getattr(vanity_role, "name", vanity_role)
+            )
+            replacements["{vanity.role.id}"] = str(
+                getattr(vanity_role, "id", "")
+            )
+
+        
+        tag = kwargs.get("tag")
+        if tag is None and user is not None:
+            pg = getattr(user, "primary_guild", None)
+            if pg is not None:
+                tag = getattr(pg, "tag", None)
+        if tag is not None and str(tag):
+            replacements["{tag}"] = str(tag)
+            replacements["{tag.name}"] = str(tag)
+
+        tag_role = kwargs.get("tag_role")
+        if tag_role is None and kwargs.get("tag") is not None and role is not None:
+            tag_role = role
+        if tag_role is not None:
+            replacements["{tag.role}"] = str(getattr(tag_role, "mention", tag_role))
+            replacements["{tag.role.mention}"] = str(
+                getattr(tag_role, "mention", tag_role)
+            )
+            replacements["{tag.role.name}"] = str(
+                getattr(tag_role, "name", tag_role)
+            )
+            replacements["{tag.role.id}"] = str(getattr(tag_role, "id", ""))
+
+        
+        _reserved = {
+            "user", "member", "moderator", "inviter", "invitee", "guild",
+            "channel", "role", "roles", "target", "reason", "duration",
+            "action", "case_id", "invites", "invite_word", "code", "url",
+            "invite", "lastfm", "prize", "winners", "winner_count", "host",
+            "ends_at", "jump_url", "entries", "vanity", "vanity_code",
+            "vanity_role", "tag", "tag_role", "allowed_mentions", "view",
+            "file", "files", "embed", "embeds", "content", "delete_after",
+            "silent", "ephemeral", "mention_author", "reference",
+        }
+        for key, value in kwargs.items():
+            if key in _reserved or value is None:
+                continue
+            if not isinstance(value, (str, int, float, bool)):
+                continue
+            token = key if str(key).startswith("{") else f"{{{key}}}"
+            replacements.setdefault(token, str(value))
+
         return replacements
 
     def render(self, **kwargs) -> str:
@@ -805,8 +916,10 @@ class Script:
             .replace("{member.", "{user.")
             .replace("{member}", "{user}")
         )
-        for key, value in self._replacements(**kwargs).items():
-            content = content.replace(key, value)
+        
+        replacements = self._replacements(**kwargs)
+        for key in sorted(replacements.keys(), key=len, reverse=True):
+            content = content.replace(key, replacements[key])
         return content
 
     async def data(self, sendable: bool = False, **kwargs) -> dict[str, Any]:

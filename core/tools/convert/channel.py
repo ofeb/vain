@@ -24,7 +24,7 @@ from discord.ext.commands import CommandError, Context, Converter
 
 try:
     from fast_string_match import closest_match
-except ImportError:  # pragma: no cover
+except ImportError:  
 
     def closest_match(query: str, candidates: Sequence[str]):  # type: ignore
         q = (query or "").lower()
@@ -42,7 +42,7 @@ except ImportError:  # pragma: no cover
 _INVISIBLE_RE = re.compile(r"[\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff\u00ad]")
 _MENTION_RE = re.compile(r"<#(\d{15,22})>")
 _ID_RE = re.compile(r"^\d{15,22}$")
-# Mangled paste leftovers: leading/trailing # . and wrap chars
+
 _EDGE_JUNK_RE = re.compile(r"^[\s#.<\>\"'`]+|[\s#.<\>\"'`]+$")
 
 ChannelT = Union[
@@ -62,22 +62,22 @@ def clean_channel_token(token: str) -> str:
     """Strip invisible paste junk, wrapping, and leading # / dots."""
     raw = _INVISIBLE_RE.sub("", (token or "")).strip()
     raw = raw.strip("`\"'")
-    # Keep mention form intact for ID extract; strip pure decoration later
+    
     return raw
 
 
 def _normalize_name(token: str) -> str:
     """Turn a free-form token into a lowercase channel name candidate."""
     name = clean_channel_token(token)
-    # Drop mention wrapper if still present as text
+    
     name = _MENTION_RE.sub("", name)
     name = name.strip("<>")
-    # Repeatedly strip edge junk (# . spaces quotes)
+    
     prev = None
     while prev != name:
         prev = name
         name = _EDGE_JUNK_RE.sub("", name)
-    # Extra: leading dots only (".txt" / "....txt")
+    
     while name.startswith("."):
         name = name[1:]
     return name.strip().lower()
@@ -128,7 +128,7 @@ async def resolve_channel(
             return None
         return ch
 
-    # 1) Mention <#id> anywhere in token (handles mangled wraps)
+    
     m = _MENTION_RE.search(raw)
     if m:
         cid = int(m.group(1))
@@ -142,7 +142,7 @@ async def resolve_channel(
         if got is not None:
             return got
 
-    # 2) Raw snowflake
+    
     bare_id = clean_channel_token(token).strip("<>#")
     bare_id = _INVISIBLE_RE.sub("", bare_id).strip()
     if _ID_RE.match(bare_id):
@@ -157,7 +157,7 @@ async def resolve_channel(
         if got is not None:
             return got
 
-    # 3) Name matching
+    
     name = _normalize_name(raw)
     if not name:
         return None
@@ -172,23 +172,23 @@ async def resolve_channel(
 
     by_name = _name_candidates(channels)
 
-    # exact (case-insensitive)
+    
     if name in by_name:
         return _ok(by_name[name])
 
-    # prefix (txt → txt, txt-logs); prefer shortest name
+    
     prefix_hits = [c for n, c in by_name.items() if n.startswith(name)]
     if prefix_hits:
         prefix_hits.sort(key=lambda c: len(getattr(c, "name", "") or ""))
         return _ok(prefix_hits[0])
 
-    # contains
+    
     contains_hits = [c for n, c in by_name.items() if name in n]
     if contains_hits:
         contains_hits.sort(key=lambda c: len(getattr(c, "name", "") or ""))
         return _ok(contains_hits[0])
 
-    # fuzzy
+    
     match = closest_match(name, list(by_name.keys()))
     if match and match in by_name:
         return _ok(by_name[match])
@@ -223,7 +223,7 @@ def _make_soft_text_converter():
 
     class SoftTextChannelConverter(Base):  # type: ignore
         async def convert(self, ctx: Context, argument: str) -> discord.TextChannel:
-            # Prefer soft resolve first so mangled pastes / bare names work
+            
             ch = await resolve_channel(ctx, argument, text_only=True, allow_threads=False)
             if isinstance(ch, discord.TextChannel):
                 return ch
@@ -351,7 +351,7 @@ def patch_discord_channel_converters() -> None:
     SoftForum = _make_soft_forum_converter()
     SoftStage = _make_soft_stage_converter()
 
-    # Module-level class attributes
+    
     conv.TextChannelConverter = SoftText  # type: ignore
     conv.GuildChannelConverter = SoftGuild  # type: ignore
     conv.VoiceChannelConverter = SoftVoice  # type: ignore
@@ -360,7 +360,7 @@ def patch_discord_channel_converters() -> None:
     conv.ForumChannelConverter = SoftForum  # type: ignore
     conv.StageChannelConverter = SoftStage  # type: ignore
 
-    # Re-exports on discord.ext.commands
+    
     cmds.TextChannelConverter = SoftText  # type: ignore
     cmds.GuildChannelConverter = SoftGuild  # type: ignore
     cmds.VoiceChannelConverter = SoftVoice  # type: ignore
@@ -375,7 +375,7 @@ def patch_discord_channel_converters() -> None:
     except Exception:
         pass
 
-    # Annotation → converter map used by run_converters
+    
     mapping = conv.CONVERTER_MAPPING
     mapping[discord.TextChannel] = SoftText
     mapping[discord.abc.GuildChannel] = SoftGuild

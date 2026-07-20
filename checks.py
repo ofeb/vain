@@ -5,7 +5,7 @@ import tokenize
 from pathlib import Path
 
 _KEEP = re.compile(
-    r'#\s*(noqa|type:\s*(ignore|check|error|warning|var|arg|retval|func|'
+    r'#\s*(noqa|type|pragma:\s*(ignore|check|error|warning|var|arg|retval|func|'
     r'typed_dict|alias|overload|typed_dict_key|asserts|comment|reveal_type|'
     r'always|override))',
     re.IGNORECASE,

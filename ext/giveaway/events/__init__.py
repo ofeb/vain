@@ -38,7 +38,7 @@ def _as_naive(dt: datetime | None) -> datetime | None:
     if dt is None:
         return None
     if dt.tzinfo is not None:
-        # Convert aware → local naive for comparison with TIMESTAMP (no tz)
+        
         return dt.astimezone().replace(tzinfo=None)
     return dt
 
@@ -156,7 +156,7 @@ class GiveawayEvents(Cog):
             try:
                 if delay_seconds > 0:
                     await asyncio.sleep(delay_seconds)
-                # Double-check expiration in Python (same clock we used to schedule)
+                
                 row = await self.bot.db.fetchrow(
                     "SELECT * FROM giveaways WHERE message_id = $1 AND win_message_id IS NULL",
                     message_id,
@@ -165,7 +165,7 @@ class GiveawayEvents(Cog):
                     return
                 exp = _as_naive(row.get("expiration"))
                 if exp is not None and exp > _now() + timedelta(seconds=1):
-                    # Not actually due yet (reschedule remainder)
+                    
                     remaining = (exp - _now()).total_seconds()
                     if remaining > 0:
                         self.schedule_end(message_id, delay_seconds=remaining)
@@ -378,7 +378,7 @@ class GiveawayEvents(Cog):
                     message_id,
                 )
 
-            # Acknowledge with styled approve/warn before panel edit (avoids timeout)
+            
             if left:
                 await interaction.warning("you **left** the giveaway")
             else:
@@ -458,7 +458,7 @@ class GiveawayEvents(Cog):
         )
         am = discord.AllowedMentions(users=True)
 
-        # 1) Components V2 reply
+        
         try:
             return await message.reply(
                 content=mentions,
@@ -469,7 +469,7 @@ class GiveawayEvents(Cog):
         except Exception:
             pass
 
-        # 2) C2 channel send with reference
+        
         try:
             return await channel.send(
                 content=mentions,
@@ -480,14 +480,12 @@ class GiveawayEvents(Cog):
         except Exception:
             pass
 
-        # 3) Plain embed reply (always visible)
+        
         verb = "rerolled and won" if reroll else "won"
         emb = discord.Embed(
             color=color.base,
             description=(
                 f"**{mentions}** {verb} **{prize}**\n"
-                f"-# congratulations · enjoy your prize\n"
-                f"-# Hosted by {host_mention}"
             ),
         )
         try:
@@ -533,7 +531,8 @@ class GiveawayEvents(Cog):
                     user=member,
                     member=member,
                     guild=guild,
-                    prize=prize,
+                    prize=str(prize),
+                    jump_url=jump_url,
                 )
                 if view and msg:
                     with suppress(Exception):

@@ -20,7 +20,7 @@ import asyncio
 import aiohttp
 from colorthief import ColorThief
 
-# Discord TextDisplay hard limit is 4000 chars
+
 _TB_DISPLAY_LIMIT = 3900
 
 
@@ -151,10 +151,10 @@ class Owner(Package):
 
     
 
-    # ------------------------------------------------------------------
-    # Standalone owner commands (no parent owner/dev group).
-    # Aliases avoid top-level collisions (e.g. music disconnect ``leave``).
-    # ------------------------------------------------------------------
+    
+    
+    
+    
 
     @command(
         name="reload",
@@ -283,7 +283,7 @@ class Owner(Package):
     )
     @describe(guild_id="ID of the server to leave")
     async def leaveserver(self, ctx: Context, guild_id: str) -> None:
-        # Not named leave — collides with music disconnect alias
+        
         guild = self.bot.get_guild(int(guild_id))
         if not guild:
             await ctx.fail(f"Server `{guild_id}` not found.")

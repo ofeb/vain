@@ -190,6 +190,12 @@ class Settings:
 
         template = self.template or self._default_template
         script = Script(template, user=member)
+        vanity_code = self.guild.vanity_url_code or "vanity"
+        reward_role = (
+            self.assignable_roles[0]
+            if self.assignable_roles
+            else (self.roles[0] if self.roles else None)
+        )
         try:
             msg = await script.send(
                 channel,
@@ -197,9 +203,9 @@ class Settings:
                 member=member,
                 guild=self.guild,
                 channel=channel,
-                role=self.assignable_roles[0]
-                if self.assignable_roles
-                else (self.roles[0] if self.roles else None),
+                role=reward_role,
+                vanity=vanity_code,
+                vanity_role=reward_role,
                 allowed_mentions=discord.AllowedMentions(users=True),
             )
             logger.info(

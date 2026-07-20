@@ -629,7 +629,7 @@ class Giveaway(commands.Cog):
             await ctx.warn(str(exc))
             return
 
-        # Use local naive datetime to match PostgreSQL TIMESTAMP + NOW()
+        
         end_time = datetime.now() + timedelta(seconds=seconds)
 
         panel = self._panel(
@@ -689,7 +689,7 @@ class Giveaway(commands.Cog):
 
         events = self._events()
         if events:
-            # Schedule by explicit delay — never trust DB clock skew for the timer
+            
             events.schedule_end(message.id, delay_seconds=float(seconds))
 
         try:
