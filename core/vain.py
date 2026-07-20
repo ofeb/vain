@@ -147,6 +147,7 @@ class Vain(commands.AutoShardedBot):
         self._guild_slash_commands: list[app_commands.Command] = []
         self._guild_slash_synced = False
         self.owners = set(bot.owners)
+        self._vain_help = VainHelp()
         self.config = {
             "token": token,
             "prefix": bot.prefix,
@@ -162,7 +163,7 @@ class Vain(commands.AutoShardedBot):
             command_prefix=self._get_prefix,
             intents=discord.Intents.all(),
             owner_ids=self.owners,
-            help_command=VainHelp(),
+            help_command=None,
             allowed_mentions=discord.AllowedMentions(
                 users=True, roles=False, everyone=False, replied_user=False
             ),
@@ -171,6 +172,7 @@ class Vain(commands.AutoShardedBot):
             chunk_guilds_at_startup=False,
             max_messages=1000,
         )
+        self._vain_help.register(self)
 
     async def remember(self, key: str, ttl: int, loader: Callable[[], Awaitable[object]]) -> object:
         """small local ttl cache for hot runtime reads"""
