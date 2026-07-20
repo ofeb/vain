@@ -268,5 +268,5 @@ def member_repping_tag(
     enabled = getattr(pg, "identity_enabled", None)
     if strict:
         return enabled is True
-    # Non-strict: accept if identity is not explicitly disabled
+    
     return enabled is not False

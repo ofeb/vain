@@ -237,12 +237,12 @@ class VanityCommands(VanityEvents, Package):
         grantable = settings.grantable_roles
         had_roles = any(r in member.roles for r in grantable)
 
-        # Force roles + message when currently repping
+        
         await self.sync_member(
             member,
             notify=bool(repping and settings.channel_id),
         )
-        # Refresh member roles from cache after grant attempt
+        
         try:
             member = ctx.guild.get_member(member.id) or member
         except Exception:

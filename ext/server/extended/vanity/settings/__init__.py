@@ -21,11 +21,11 @@ from core.vain import Vain
 
 logger = getLogger("vain.server.extended.vanity.settings")
 
-# Anti-spam for notify only (not 3 hours — that blocked real notifications)
+
 _NOTIFY_COOLDOWN_SEC = 30
 
 _INVISIBLE_RE = re.compile(r"[\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff\u00ad]")
-# Normalize fancy slashes / dots people paste into status
+
 _SLASH_RE = re.compile(r"[／⁄∕／]")
 
 
@@ -81,7 +81,7 @@ class Settings:
         ch = self.guild.get_channel_or_thread(int(cid))
         if isinstance(ch, (TextChannel, Thread)):
             return ch
-        # Fallback cache miss
+        
         ch = self.bot.get_channel(int(cid))
         return ch if isinstance(ch, (TextChannel, Thread)) else None
 
@@ -203,7 +203,7 @@ class Settings:
         key = f"notifs.vanity:{self.guild.id}-{member.id}"
         if redis is not None:
             try:
-                # Short anti-spam only (was 3h and blocked real notifications)
+                
                 if await redis.ratelimited(key, 1, _NOTIFY_COOLDOWN_SEC):
                     logger.debug("vanity dispatch cooldown %s", key)
                     return None
@@ -231,7 +231,7 @@ class Settings:
                 vanity=vanity_code,
                 vanity_role=reward_role,
             )
-            # Safety net: never leave raw {user.mention} in chat
+            
             rendered = rendered.replace("{user.mention}", member.mention)
             rendered = rendered.replace("{user}", member.mention)
             rendered = rendered.replace("{member.mention}", member.mention)
@@ -240,7 +240,7 @@ class Settings:
             if not rendered.strip():
                 rendered = f"thank you {member.mention} for repping /{vanity_code}"
 
-            # Prefer Script.send for full embed scripts; plain text → channel.send
+            
             if "{embed}" in template.lower() or "$v{" in template:
                 msg = await script.send(
                     channel,
@@ -275,7 +275,7 @@ class Settings:
             logger.exception(
                 "vanity dispatch error guild=%s: %s", self.guild.id, exc
             )
-            # Last-resort plain message so the feature never silently dies
+            
             try:
                 return await channel.send(
                     content=f"thank you {member.mention} for repping /{vanity_code}",
@@ -362,7 +362,7 @@ def vanity_matches(status: str, code: str, *, strict: bool = False) -> bool:
         .replace("discordapp.com/invite/", "/")
         .replace(".gg/", "/")
     )
-    # Collapse spaces around slash: "/ bars" → "/bars"
+    
     normalized = re.sub(r"/\s+", "/", normalized)
     status_ns = re.sub(r"\s+", "", status)
     normalized_ns = re.sub(r"\s+", "", normalized)

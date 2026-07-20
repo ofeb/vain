@@ -203,7 +203,7 @@ def _format_unix(value) -> str:
 
 def _user_replacements(prefix: str, user) -> dict[str, str]:
     uid = getattr(user, "id", None)
-    # Always use snowflake mention so scripts never leave literal {user.mention}
+    
     mention = f"<@{uid}>" if uid is not None else str(getattr(user, "mention", user))
     replacements = {
         f"{{{prefix}}}": mention,
