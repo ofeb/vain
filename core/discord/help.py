@@ -383,10 +383,44 @@ def _description(cmd: Command) -> str:
     return f"Run the {cmd.qualified_name} command"
 
 
+def _command_name_variants(cmd: Command) -> list[str]:
+    """Primary name + aliases for a single command node (not full path)."""
+    opts = [str(cmd.name or "").lower()]
+    opts.extend(str(a).lower() for a in (cmd.aliases or []) if a)
+    # de-dupe, drop empties
+    return list(dict.fromkeys(o for o in opts if o))
+
+
 def _command_names(cmd: Command) -> tuple[str, ...]:
-    names = [command_display_name(cmd).lower(), cmd.qualified_name.lower()]
-    names.extend(alias.lower() for alias in cmd.aliases if alias)
-    return tuple(dict.fromkeys(names))
+    """All invocable path strings for *cmd*, including parent-alias combos.
+
+    So examples like ``,poj delete 10s`` match the command
+    ``pingonjoin delete`` and are not rewritten to
+    ``,pingonjoin delete poj delete 10s``.
+    """
+    from itertools import product
+
+    names: list[str] = [
+        command_display_name(cmd).lower(),
+        cmd.qualified_name.lower(),
+    ]
+    # Bare leaf aliases (e.g. "deletedelay") — kept for compatibility
+    names.extend(str(a).lower() for a in (cmd.aliases or []) if a)
+
+    # Walk parents root → leaf and expand every alias combination
+    chain: list[Command] = []
+    node: Command | None = cmd
+    while node is not None:
+        chain.append(node)
+        node = getattr(node, "parent", None)
+    chain.reverse()
+
+    segment_opts = [_command_name_variants(c) for c in chain]
+    if segment_opts and all(segment_opts):
+        for combo in product(*segment_opts):
+            names.append(" ".join(combo))
+
+    return tuple(dict.fromkeys(n for n in names if n))
 
 
 def _strip_prefix(value: str, prefix: str) -> str:
@@ -682,15 +716,25 @@ def _strip_command_name(text: str, cmd: Command, prefix: str = "") -> str:
 
 
 def _collapse_duplicate_name(text: str, cmd: Command) -> str:
-    """Collapse 'cmd cmd rest' -> 'cmd rest'."""
-    name = command_display_name(cmd)
+    """Collapse 'cmd cmd rest' / alias-path doubles -> single path + rest."""
     raw = str(text or "").strip()
-    lowered = raw.lower()
-    nlow = name.lower()
-    while lowered.startswith(f"{nlow} {nlow}"):
-        raw = raw[len(name) :].lstrip()
+    # Longest names first so "pingonjoin delete" beats "pingonjoin"
+    for name in sorted(_command_names(cmd), key=len, reverse=True):
+        nlow = name.lower()
         lowered = raw.lower()
+        # "name name rest" or "name name"
+        while lowered == f"{nlow} {nlow}" or lowered.startswith(f"{nlow} {nlow} "):
+            raw = raw[len(name) :].lstrip()
+            lowered = raw.lower()
     return raw
+
+
+def _example_starts_with_command(raw: str, cmd: Command) -> bool:
+    lowered = raw.lower().strip()
+    for name in sorted(_command_names(cmd), key=len, reverse=True):
+        if lowered == name or lowered.startswith(f"{name} "):
+            return True
+    return False
 
 
 def _finalize_example(cmd: Command, raw: str, prefix: str) -> str | None:
@@ -702,11 +746,13 @@ def _finalize_example(cmd: Command, raw: str, prefix: str) -> str | None:
     raw = _collapse_duplicate_name(raw, cmd)
     name = command_display_name(cmd)
     lowered = raw.lower()
-    if not any(lowered == n or lowered.startswith(f"{n} ") for n in _command_names(cmd)):
+    if not _example_starts_with_command(raw, cmd):
+        # Only prepend primary path when the example is args-only
+        # (e.g. "10s" or "#channel hello"), not alias invocations.
         raw = f"{name} {raw}".strip()
         raw = _collapse_duplicate_name(raw, cmd)
         lowered = raw.lower()
-    
+
     if any(lowered == n for n in _command_names(cmd)):
         return None
     if prefix and not raw.startswith(prefix):

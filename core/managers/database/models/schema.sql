@@ -938,7 +938,7 @@ CREATE TABLE IF NOT EXISTS auto_responders (
     guild_id BIGINT NOT NULL,
     trigger TEXT NOT NULL,
     response TEXT,
-    strict BOOLEAN NOT NULL DEFAULT TRUE,
+    strict BOOLEAN NOT NULL DEFAULT FALSE,
     reply BOOLEAN NOT NULL DEFAULT FALSE,
     self_destruct INT,
     delete_trigger BOOLEAN NOT NULL DEFAULT FALSE,
@@ -1344,6 +1344,7 @@ CREATE TABLE IF NOT EXISTS vanity (
     channel_id BIGINT,
     role_ids BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
     template TEXT,
+    strict BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -1352,6 +1353,7 @@ CREATE TABLE IF NOT EXISTS guild_tag (
     channel_id BIGINT,
     role_ids BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
     template TEXT,
+    strict BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

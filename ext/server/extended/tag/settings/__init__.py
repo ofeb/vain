@@ -1,28 +1,24 @@
 from __future__ import annotations
 
 from logging import getLogger
-from typing import Any, TypedDict, cast
+from typing import Any, TypedDict
 
-from discord import Guild
-from discord import HTTPException, Member, Message, Role, TextChannel, Thread
+from discord import Guild, HTTPException, Member, Message, Role, TextChannel, Thread
 
 from core.vain import Vain
 
-logger = getLogger('vain.server.extended.tag.settings')
+logger = getLogger("vain.server.extended.tag.settings")
 
 
 class Record(TypedDict, total=False):
-    """DB row for `guild_tag`."""
-
     guild_id: int
     channel_id: Any | None
     role_ids: list[Any]
     template: Any | None
+    strict: bool
 
 
 class Settings:
-    """Guild settings for `guild_tag`."""
-
     bot: Vain
     guild: Guild
     record: dict[str, Any]
@@ -33,23 +29,34 @@ class Settings:
         self.record = dict(record)
 
     def __bool__(self) -> bool:
-        return bool(self.roles)
+        return bool(self.role_ids or self.channel_id)
 
     @property
     def channel_id(self) -> Any | None:
-        return self.record.get('channel_id')
+        return self.record.get("channel_id")
 
     @property
-    def role_ids(self) -> list[Any]:
-        return list(self.record.get('role_ids') or [])
+    def role_ids(self) -> list[int]:
+        out: list[int] = []
+        for rid in self.record.get("role_ids") or []:
+            try:
+                out.append(int(rid))
+            except (TypeError, ValueError):
+                continue
+        return out
 
     @property
-    def template(self) -> Any | None:
-        return self.record.get('template')
+    def template(self) -> str | None:
+        val = self.record.get("template")
+        return str(val) if val else None
+
+    @property
+    def strict(self) -> bool:
+        return bool(self.record.get("strict", False))
 
     @property
     def channel(self) -> TextChannel | Thread | None:
-        cid = self.record.get('channel_id')
+        cid = self.record.get("channel_id")
         if not cid:
             return None
         ch = self.guild.get_channel_or_thread(int(cid))
@@ -60,9 +67,13 @@ class Settings:
         out: list[Role] = []
         for rid in self.role_ids:
             role = self.guild.get_role(int(rid))
-            if role is not None and role.is_assignable():
+            if role is not None:
                 out.append(role)
         return out
+
+    @property
+    def assignable_roles(self) -> list[Role]:
+        return [r for r in self.roles if r.is_assignable()]
 
     @property
     def _default_template(self) -> str:
@@ -72,13 +83,15 @@ class Settings:
     def _default_config() -> dict[str, Any]:
         return {
             "guild_id": 0,
-            'channel_id': None,
-            'role_ids': [],
-            'template': None,
+            "channel_id": None,
+            "role_ids": [],
+            "template": None,
+            "strict": False,
         }
 
     @classmethod
     async def fetch(cls, bot: Vain, guild: Guild) -> Settings:
+        await cls._ensure_schema(bot)
         row = await bot.db.fetchrow(
             "SELECT * FROM guild_tag WHERE guild_id = $1",
             guild.id,
@@ -89,37 +102,41 @@ class Settings:
             return cls(bot, guild, data)
         return cls(bot, guild, dict(row))
 
-    @classmethod
-    async def exists(cls, bot: Vain, guild: Guild) -> bool:
-        return bool(
-            await bot.db.fetchval(
-                "SELECT EXISTS(SELECT 1 FROM guild_tag WHERE guild_id = $1)",
-                guild.id,
+    @staticmethod
+    async def _ensure_schema(bot: Vain) -> None:
+        try:
+            await bot.db.execute(
+                "ALTER TABLE guild_tag ADD COLUMN IF NOT EXISTS strict BOOLEAN NOT NULL DEFAULT FALSE"
             )
-        )
+        except Exception:
+            pass
 
     async def upsert(self, revalidate: bool = True, **kwargs: Any) -> Settings:
+        await self._ensure_schema(self.bot)
         values = {
             "guild_id": self.guild.id,
-            'channel_id': kwargs.get('channel_id', self.channel_id),
-            'role_ids': kwargs.get('role_ids', self.role_ids),
-            'template': kwargs.get('template', self.template),
+            "channel_id": kwargs.get("channel_id", self.channel_id),
+            "role_ids": kwargs.get("role_ids", self.role_ids),
+            "template": kwargs.get("template", self.template),
+            "strict": kwargs.get("strict", self.strict),
         }
         query = """
-        INSERT INTO guild_tag (guild_id, channel_id, role_ids, template)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO guild_tag (guild_id, channel_id, role_ids, template, strict)
+        VALUES ($1, $2, $3, $4, $5)
         ON CONFLICT (guild_id) DO UPDATE SET
             channel_id = EXCLUDED.channel_id,
             role_ids = EXCLUDED.role_ids,
-            template = EXCLUDED.template
+            template = EXCLUDED.template,
+            strict = EXCLUDED.strict
         RETURNING *
         """
         record = await self.bot.db.fetchrow(
             query,
-            values['guild_id'],
-            values['channel_id'],
-            values['role_ids'],
-            values['template'],
+            values["guild_id"],
+            values["channel_id"],
+            values["role_ids"],
+            values["template"],
+            bool(values["strict"]),
         )
         if record is not None:
             self.record = dict(record)
@@ -154,9 +171,12 @@ class Settings:
             except Exception:
                 pass
         from core.tools.embed import Script
+
         pg = getattr(member, "primary_guild", None)
         tag = getattr(pg, "tag", None) if pg else None
-        template = (self.template or self._default_template).replace("{tag}", str(tag or "tag"))
+        template = (self.template or self._default_template).replace(
+            "{tag}", str(tag or "tag")
+        )
         script = Script(template, user=member)
         try:
             return await script.send(
@@ -164,19 +184,34 @@ class Settings:
                 user=member,
                 guild=self.guild,
                 channel=channel,
-                role=self.roles[0] if self.roles else None,
+                role=self.assignable_roles[0]
+                if self.assignable_roles
+                else (self.roles[0] if self.roles else None),
             )
-        except HTTPException:
-            await self.upsert(channel_id=None)
+        except HTTPException as exc:
+            logger.warning("tag dispatch failed guild=%s: %s", self.guild.id, exc)
+            return None
+        except Exception as exc:
+            logger.exception("tag dispatch error guild=%s: %s", self.guild.id, exc)
             return None
 
 
-def member_repping_tag(member: Member, guild: Guild) -> bool:
+def member_repping_tag(
+    member: Member, guild: Guild, *, strict: bool = False
+) -> bool:
+    """Whether *member* is displaying this guild as their primary guild tag."""
     pg = getattr(member, "primary_guild", None)
-    if pg is None or getattr(pg, "identity_enabled", None) is False:
+    if pg is None:
         return False
     gid = getattr(pg, "id", None)
-    return gid is not None and int(gid) == int(guild.id)
+    if gid is None or int(gid) != int(guild.id):
+        return False
+    enabled = getattr(pg, "identity_enabled", None)
+    if strict:
+        # Must have explicitly reaffirmed identity display
+        return enabled is True
+    # Loose: True or None (public guild pending reaffirm) both count
+    return enabled is not False
 
 
 def tag_label(member: Member) -> str | None:

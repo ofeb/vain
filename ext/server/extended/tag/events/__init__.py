@@ -19,19 +19,21 @@ class TagEvents:
         if after.bot or after.guild is None:
             return
 
-        before_on = member_repping_tag(before, after.guild)
-        after_on = member_repping_tag(after, after.guild)
+        settings = await Settings.fetch(self.bot, after.guild)
+        if not settings.role_ids and not settings.channel_id:
+            return
+
+        strict = settings.strict
+        before_on = member_repping_tag(before, after.guild, strict=strict)
+        after_on = member_repping_tag(after, after.guild, strict=strict)
         if before_on == after_on:
             return
 
-        settings = await Settings.fetch(self.bot, after.guild)
-        if not settings:
-            return
+        assignable = settings.assignable_roles
+        has = [role for role in assignable if role in after.roles]
+        miss = [role for role in assignable if role not in after.roles]
 
         with contextlib.suppress(HTTPException, discord.Forbidden):
-            has = [role for role in settings.roles if role in after.roles]
-            miss = [role for role in settings.roles if role not in after.roles]
-
             if not after_on and has:
                 log.debug("removing tag roles from %s in %s", after, after.guild.name)
                 await after.remove_roles(
@@ -39,11 +41,12 @@ class TagEvents:
                     reason="guild tag no longer displayed",
                     atomic=False,
                 )
-            elif after_on and miss:
-                log.debug("adding tag roles to %s in %s", after, after.guild.name)
-                await after.add_roles(
-                    *miss,
-                    reason="guild tag displayed",
-                    atomic=False,
-                )
+            elif after_on:
+                if miss:
+                    log.debug("adding tag roles to %s in %s", after, after.guild.name)
+                    await after.add_roles(
+                        *miss,
+                        reason="guild tag displayed",
+                        atomic=False,
+                    )
                 await settings.dispatch(before, after)

@@ -66,15 +66,25 @@ class VanityCommands(VanityEvents, Package):
         if ctx.guild.icon:
             embed.set_thumbnail(url=ctx.guild.icon.url)
         roles = ", ".join(r.mention for r in settings.roles) or "no roles"
+        unassignable = [
+            r.mention for r in settings.roles if r not in settings.assignable_roles
+        ]
         channel = settings.channel.mention if settings.channel else "no channel"
-        embed.description = "\n".join(
-            [
-                f"Currently giving out {roles}",
-                f"Notifications will be sent in {channel}",
-            ]
+        lines = [
+            f"Currently giving out {roles}",
+            f"Notifications will be sent in {channel}",
+            f"Match mode: **{'strict' if settings.strict else 'not strict'}**",
+        ]
+        if unassignable:
+            lines.append(
+                f"-# cannot assign (hierarchy): {', '.join(unassignable)}"
+            )
+        embed.description = "\n".join(lines)
+        template = settings.template or settings._default_template
+        embed.add_field(
+            name="Script" + (" (default)" if not settings.template else ""),
+            value=f"```yaml\n{template}\n```",
         )
-        if settings.template:
-            embed.add_field(name="Script template", value=f"```yaml\n{settings.template}\n```")
         await ctx.reply(embed=embed)
 
     @vanity.command(name="role", aliases=["roles", "r"])
@@ -170,6 +180,32 @@ class VanityCommands(VanityEvents, Package):
         await settings.upsert(template=None)
         await ctx.success("Custom vanity message reset to default")
 
+    @vanity.command(
+        name="strict",
+        usage="<on|off>",
+        example=",vr strict off",
+        description="Toggle strict vanity matching (default: off)",
+    )
+    @has_permissions(manage_guild=True)
+    async def vanity_strict(self, ctx: commands.Context, state: str = None) -> None:
+        """Strict: require /vanity or discord.gg/vanity style match. Off = code anywhere in status."""
+        assert ctx.guild is not None
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        if not state:
+            mode = "strict" if settings.strict else "not strict"
+            await ctx.success(f"Vanity matching is **{mode}**")
+            return
+        low = state.lower().strip()
+        if low in {"on", "enable", "true", "yes", "1", "strict"}:
+            await settings.upsert(strict=True)
+            await ctx.success("Vanity matching is now **strict**")
+            return
+        if low in {"off", "disable", "false", "no", "0", "loose"}:
+            await settings.upsert(strict=False)
+            await ctx.success("Vanity matching is now **not strict** (default)")
+            return
+        await ctx.warn("Use `on` or `off`")
+
     @vanity.command(name="reset", aliases=["clear"])
     @has_permissions(manage_roles=True)
     async def vanity_reset(self, ctx: commands.Context) -> None:
@@ -182,9 +218,10 @@ class VanityCommands(VanityEvents, Package):
         if not ok:
             return
         settings = await Settings.fetch(self.bot, ctx.guild)
-        await settings.upsert(role_ids=[], channel_id=None, template=None)
+        await settings.upsert(
+            role_ids=[], channel_id=None, template=None, strict=False
+        )
         await ctx.success("No longer awarding members for advertising vanity")
-
 
 
 Vanity = VanityCommands

@@ -47,16 +47,26 @@ class TagCommands(TagEvents, Package):
         if ctx.guild.icon:
             embed.set_thumbnail(url=ctx.guild.icon.url)
         roles = ", ".join(r.mention for r in settings.roles) or "no roles"
+        unassignable = [
+            r.mention for r in settings.roles if r not in settings.assignable_roles
+        ]
         channel = settings.channel.mention if settings.channel else "no channel"
-        embed.description = "\n".join(
-            [
-                f"Roles: {roles}",
-                f"Notifications: {channel}",
-                "-# Awards members whose **primary guild** tag is this server.",
-            ]
+        lines = [
+            f"Roles: {roles}",
+            f"Notifications: {channel}",
+            f"Match mode: **{'strict' if settings.strict else 'not strict'}**",
+            "-# Awards members whose **primary guild** tag is this server.",
+        ]
+        if unassignable:
+            lines.append(
+                f"-# cannot assign (hierarchy): {', '.join(unassignable)}"
+            )
+        embed.description = "\n".join(lines)
+        template = settings.template or settings._default_template
+        embed.add_field(
+            name="Script" + (" (default)" if not settings.template else ""),
+            value=f"```yaml\n{template}\n```",
         )
-        if settings.template:
-            embed.add_field(name="Template", value=f"```yaml\n{settings.template}\n```")
         await ctx.reply(embed=embed)
 
     @tag.command(name="role", aliases=["roles", "r"])
@@ -144,7 +154,8 @@ class TagCommands(TagEvents, Package):
         """Check whether a member is repping this server's tag."""
         assert ctx.guild is not None
         member = member or ctx.author
-        on = member_repping_tag(member, ctx.guild)
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        on = member_repping_tag(member, ctx.guild, strict=settings.strict)
         tag = tag_label(member)
         if on:
             await ctx.success(
@@ -156,6 +167,32 @@ class TagCommands(TagEvents, Package):
                 f"{member.mention} is **not** displaying this server's tag as their primary guild."
             )
 
+    @tag.command(
+        name="strict",
+        usage="<on|off>",
+        example=",tag strict off",
+        description="Toggle strict tag matching (default: off)",
+    )
+    @has_permissions(manage_guild=True)
+    async def tag_strict(self, ctx: commands.Context, state: str = None) -> None:
+        """Strict: require identity_enabled. Off: also accept unreaffirmed public identity."""
+        assert ctx.guild is not None
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        if not state:
+            mode = "strict" if settings.strict else "not strict"
+            await ctx.success(f"Tag matching is **{mode}**")
+            return
+        low = state.lower().strip()
+        if low in {"on", "enable", "true", "yes", "1", "strict"}:
+            await settings.upsert(strict=True)
+            await ctx.success("Tag matching is now **strict**")
+            return
+        if low in {"off", "disable", "false", "no", "0", "loose"}:
+            await settings.upsert(strict=False)
+            await ctx.success("Tag matching is now **not strict** (default)")
+            return
+        await ctx.warn("Use `on` or `off`")
+
     @tag.command(name="reset", aliases=["clear"])
     @has_permissions(manage_roles=True)
     async def tag_reset(self, ctx: commands.Context) -> None:
@@ -164,7 +201,9 @@ class TagCommands(TagEvents, Package):
         if not await view.prompt("Reset **all** server tag settings?"):
             return
         settings = await Settings.fetch(self.bot, ctx.guild)
-        await settings.upsert(role_ids=[], channel_id=None, template=None)
+        await settings.upsert(
+            role_ids=[], channel_id=None, template=None, strict=False
+        )
         await ctx.success("Cleared server tag rewards")
 
 

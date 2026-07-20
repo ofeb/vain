@@ -33,9 +33,17 @@ def _split_trigger_response(raw: str) -> tuple[str, str] | None:
 
 
 def _parse_response_flags(raw: str) -> tuple[str, dict[str, object], str | None]:
-    """Parse trailing autoresponder flags from the response body."""
+    """Parse trailing autoresponder flags from the response body.
+
+    Supported flags:
+    - ``--strict`` / ``--not_strict`` (default: **not strict**)
+    - ``--self_destruct <6-60>`` / ``--self-destruct``
+    - ``--delete`` (delete the trigger message)
+    - ``--reply`` (reply to the trigger)
+    - ``--ignore_command_check``
+    """
     flags = {
-        "not_strict": False,
+        "strict": None,  # None = use default (False / not strict)
         "self_destruct": None,
         "delete": False,
         "reply": False,
@@ -44,9 +52,9 @@ def _parse_response_flags(raw: str) -> tuple[str, dict[str, object], str | None]
     remaining = raw
     error: str | None = None
     flag_re = re.compile(
-        r"(?:\s+--(?P<flag>not_strict|not-strict|delete|reply|ignore_command_check|"
-        r"ignore-command-check|self_destruct|self-destruct)(?:=(?P<eqval>\S+)|"
-        r"\s+(?P<val>(?!\-\-)\S+))?)\s*$",
+        r"(?:\s+--(?P<flag>strict|not_strict|not-strict|delete|reply|"
+        r"ignore_command_check|ignore-command-check|self_destruct|self-destruct)"
+        r"(?:=(?P<eqval>\S+)|\s+(?P<val>(?!\-\-)\S+))?)\s*$",
         re.IGNORECASE,
     )
 
@@ -57,8 +65,10 @@ def _parse_response_flags(raw: str) -> tuple[str, dict[str, object], str | None]
 
         flag = match.group("flag").lower()
         value = match.group("eqval") or match.group("val")
-        if flag in {"not_strict", "not-strict"}:
-            flags["not_strict"] = True
+        if flag == "strict":
+            flags["strict"] = True
+        elif flag in {"not_strict", "not-strict"}:
+            flags["strict"] = False
         elif flag == "delete":
             flags["delete"] = True
         elif flag == "reply":
@@ -335,7 +345,8 @@ class AutoresponderCommands(Package):
             if timer > 60:
                 raise CommandError("self-destruct timer must stay under `60` seconds")
 
-        strict = not bool(flags["not_strict"])
+        # Default: not strict (substring match)
+        strict = bool(flags["strict"]) if flags["strict"] is not None else False
         should_delete = bool(flags["delete"])
         should_reply = bool(flags["reply"])
         ignore_command_check = bool(flags["ignore_command_check"])
@@ -398,12 +409,25 @@ class AutoresponderCommands(Package):
     @group(
         name="autoresponder",
         aliases=["arp", "autoresponders", "ars", "ar"],
-        description="auto-reply to messages matching a trigger",
+        description=(
+            "Auto-reply to messages matching a trigger. "
+            "Flags: `--strict`, `--not_strict` (default), `--self_destruct <6-60>`, "
+            "`--reply`, `--delete`, `--ignore_command_check`"
+        ),
         invoke_without_command=True,
     )
     @has_permissions(manage_channels=True)
     async def autoresponder(self, ctx):
-        """Autoresponder help."""
+        """Autoresponder help.
+
+        **Flags** (append to response on add/update):
+        - `--strict` — exact message match
+        - `--not_strict` — trigger may appear anywhere (**default**)
+        - `--self_destruct 10` — delete reply after 6–60 seconds
+        - `--reply` — reply to the trigger message
+        - `--delete` — delete the trigger message
+        - `--ignore_command_check` — still fire if message is a bot command
+        """
         return await ctx.send_help(ctx.command)
 
     @autoresponder.command(
@@ -443,8 +467,14 @@ class AutoresponderCommands(Package):
 
     @autoresponder.command(
         name="update",
-        description="Update a reply for a trigger word",
-        example=",autoresponder update welc, welcome to the server! --reply",
+        description=(
+            "Update a reply. Flags: --strict --not_strict --self_destruct <secs> "
+            "--reply --delete --ignore_command_check"
+        ),
+        example=(
+            ",autoresponder update welc, welcome to the server! "
+            "--reply --self_destruct 10"
+        ),
     )
     @has_permissions(manage_channels=True)
     async def autoresponder_update(self, ctx, *, args: str):
@@ -509,13 +539,63 @@ class AutoresponderCommands(Package):
     @autoresponder.command(
         name="add",
         aliases=["create"],
-        description="Create a reply for a trigger word",
-        example=",autoresponder add welc, welcome to the server! --self_destruct 10 --reply",
+        description=(
+            "Create a reply for a trigger. Flags: --strict --not_strict "
+            "--self_destruct <secs> --reply --delete --ignore_command_check"
+        ),
+        example=(
+            ",autoresponder add welc, welcome to the server! "
+            "--self_destruct 10 --reply --not_strict"
+        ),
     )
     @has_permissions(manage_channels=True)
     async def autoresponder_add(self, ctx, *, args: str):
-        """Add an autoresponder."""
+        """Add an autoresponder (not strict by default)."""
         return await self._upsert_autoresponder(ctx, args)
+
+    @autoresponder.command(
+        name="strict",
+        usage="<trigger> <on|off>",
+        example=",autoresponder strict welc on",
+        description="Toggle strict matching for a trigger (default: off)",
+    )
+    @has_permissions(manage_channels=True)
+    async def autoresponder_strict(self, ctx, trigger: str, state: str = None):
+        """`,autoresponder strict <name> on|off` — exact match vs substring."""
+        if not state:
+            row = await self.db.fetchrow(
+                "SELECT strict FROM auto_responders WHERE guild_id = $1 AND trigger = $2",
+                ctx.guild.id,
+                trigger,
+            )
+            if not row:
+                raise CommandError(f"no autoresponder for **{trigger}**")
+            mode = "strict" if row["strict"] else "not strict"
+            return await ctx.success(f"**{trigger}** is **{mode}**")
+
+        low = state.lower().strip()
+        if low in {"on", "enable", "true", "yes", "1", "strict"}:
+            strict = True
+        elif low in {"off", "disable", "false", "no", "0", "loose", "not_strict"}:
+            strict = False
+        else:
+            return await ctx.warn("Use `on` or `off`")
+
+        updated = await self.db.fetchval(
+            """
+            UPDATE auto_responders SET strict = $3
+            WHERE guild_id = $1 AND trigger = $2
+            RETURNING trigger
+            """,
+            ctx.guild.id,
+            trigger,
+            strict,
+        )
+        if not updated:
+            raise CommandError(f"no autoresponder for **{trigger}**")
+        return await ctx.success(
+            f"**{trigger}** is now **{'strict' if strict else 'not strict'}**"
+        )
 
     @autoresponder.group(
         name="exclusive",
