@@ -189,7 +189,6 @@ class Settings:
                 member=member,
                 guild=self.guild,
                 channel=channel,
-                role=reward_role,
                 tag=str(tag or "tag"),
                 tag_role=reward_role,
                 allowed_mentions=_discord.AllowedMentions(users=True),

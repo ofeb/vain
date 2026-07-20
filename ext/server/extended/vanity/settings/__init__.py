@@ -203,7 +203,6 @@ class Settings:
                 member=member,
                 guild=self.guild,
                 channel=channel,
-                role=reward_role,
                 vanity=vanity_code,
                 vanity_role=reward_role,
                 allowed_mentions=discord.AllowedMentions(users=True),

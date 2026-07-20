@@ -844,12 +844,8 @@ class Script:
             replacements["{guild.vanity}"] = code
             replacements["{vanity.url}"] = f"https://discord.gg/{code}"
 
-        vanity_role = kwargs.get("vanity_role") or (
-            role if kwargs.get("vanity") is not None or kwargs.get("vanity_code") is not None else None
-        )
-        
-        if vanity_role is None and vanity is not None and role is not None:
-            vanity_role = role
+        # Use {vanity.role} only — no bare {role} for vanity reward
+        vanity_role = kwargs.get("vanity_role")
         if vanity_role is not None:
             replacements["{vanity.role}"] = str(
                 getattr(vanity_role, "mention", vanity_role)
@@ -864,7 +860,7 @@ class Script:
                 getattr(vanity_role, "id", "")
             )
 
-        
+        # ---- Tag (primary guild / clan tag) ----
         tag = kwargs.get("tag")
         if tag is None and user is not None:
             pg = getattr(user, "primary_guild", None)
@@ -874,9 +870,8 @@ class Script:
             replacements["{tag}"] = str(tag)
             replacements["{tag.name}"] = str(tag)
 
+        # Use {tag.role} only — no bare {role} for tag reward
         tag_role = kwargs.get("tag_role")
-        if tag_role is None and kwargs.get("tag") is not None and role is not None:
-            tag_role = role
         if tag_role is not None:
             replacements["{tag.role}"] = str(getattr(tag_role, "mention", tag_role))
             replacements["{tag.role.mention}"] = str(

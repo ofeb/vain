@@ -282,7 +282,6 @@ class ServerCommands(Package):
                     "{vanity.role.name}": "Vanity reward role name",
                     "{vanity.role.id}": "Vanity reward role ID",
                     "{user.mention}": "Member who started repping",
-                    "{role}": "Reward role (alias)",
                 },
             },
             "tag": {
@@ -295,7 +294,6 @@ class ServerCommands(Package):
                     "{tag.role.name}": "Tag reward role name",
                     "{tag.role.id}": "Tag reward role ID",
                     "{user.mention}": "Member who started repping the tag",
-                    "{role}": "Reward role (alias)",
                 },
             },
         }
