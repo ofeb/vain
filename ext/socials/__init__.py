@@ -117,19 +117,15 @@ def build_social_repost_container(
     page_index: int = 0,
     page_total: int = 1,
 ) -> list[ui.Container]:
-    """Original Components V2 social repost panel.
+    """Components V2 social repost panel.
 
-    Uses aesthetic helpers (``**bold**``, ``-#`` captions, ``>`` body quotes),
-    platform emojis, and a single media slot so carousels / photo posts can page.
-
-    Uploaded videos **must** be referenced with a File component
-    (``attachment://filename``). Components V2 drops bare attachments that
-    are not referenced by a component — that was why videos never showed.
+    Uploaded videos/images use **MediaGallery** (type 12) with
+    ``attachment://filename`` so Discord shows an inline player (not File type 13).
     """
     from core.managers.values import emojis
 
     accent = accent or 0x2A2B2F
-    c = ui.Container(accent_colour=accent)
+    c = ui.Container(accent_colour=int(accent))
     name = display_name or username or "unknown"
     user = (username or "unknown").lstrip("@")
     plat = (platform or "").lower()
@@ -183,23 +179,34 @@ def build_social_repost_container(
     
     
     file_name = attachment_filename or (attachment.filename if attachment is not None else None)
+    media_item: discord.MediaGalleryItem | None = None
     if file_name:
-        c.add_item(ui.Separator(visible=True))
         try:
-            
-            media_ref = attachment if attachment is not None else f"attachment://{file_name}"
-            c.add_item(ui.File(media_ref))
+            if attachment is not None:
+                media_item = discord.MediaGalleryItem(attachment)
+            else:
+                media_item = discord.MediaGalleryItem(f"attachment://{file_name}")
         except Exception:
             try:
-                c.add_item(ui.File(f"attachment://{file_name}"))
+                media_item = discord.MediaGalleryItem(f"attachment://{file_name}")
             except Exception:
-                pass
+                media_item = None
     elif current:
+        try:
+            media_item = discord.MediaGalleryItem(str(current))
+        except Exception:
+            media_item = None
+
+    if media_item is not None:
         c.add_item(ui.Separator(visible=True))
         try:
-            c.add_item(ui.MediaGallery(discord.MediaGalleryItem(str(current))))
+            c.add_item(ui.MediaGallery(media_item))
         except Exception:
-            c.add_item(ui.TextDisplay(f"[media]({current})"))
+            if current:
+                c.add_item(ui.TextDisplay(f"[media]({current})"))
+    elif current:
+        c.add_item(ui.Separator(visible=True))
+        c.add_item(ui.TextDisplay(f"[media]({current})"))
 
     stats_bits = [
         f"{emojis.likes} **{_compact_count(like_count)}**",
@@ -240,7 +247,7 @@ class SocialRepostView(ui.LayoutView):
     """Paginated multi-image social repost (TikTok photos / IG carousels).
 
     For videos, pass ``attachment_filename`` matching the ``discord.File``
-    uploaded with the message so the V2 File component can show it.
+    uploaded with the message so MediaGallery can play ``attachment://name``.
     """
 
     def __init__(
@@ -377,13 +384,69 @@ class SocialRepostView(ui.LayoutView):
         except Exception:
             pass
 
+
+def _rgb_to_int(r: int, g: int, b: int) -> int:
+    return (int(r) << 16) + (int(g) << 8) + int(b)
+
+
+def _color_vibrance(rgb: tuple[int, int, int]) -> float:
+    """Higher = more saturated / vivid (prefer over muddy greys)."""
+    r, g, b = (x / 255.0 for x in rgb)
+    mx, mn = max(r, g, b), min(r, g, b)
+    if mx <= 0:
+        return 0.0
+    sat = (mx - mn) / mx
+    return sat * mx
+
+
+def _pick_accent_from_palette(
+    dominant: tuple[int, int, int],
+    palette: list[tuple[int, int, int]] | None = None,
+) -> tuple[int, int, int]:
+    """Pick the most vivid swatch so accents match creator art, not greys."""
+    candidates = [dominant]
+    if palette:
+        candidates.extend(palette)
+    usable = [
+        c
+        for c in candidates
+        if 30 < sum(c) < 720 and _color_vibrance(c) >= 0.08
+    ]
+    if not usable:
+        usable = list(candidates)
+    best = max(usable, key=_color_vibrance)
+    r, g, b = best
+    if r + g + b < 90:
+        r, g, b = min(r + 70, 255), min(g + 70, 255), min(b + 70, 255)
+    return (r, g, b)
+
+
+def _colorthief_from_bytes(data: bytes) -> int | None:
+    if not data or len(data) < 64:
+        return None
+    head = data.lstrip()[:20]
+    if head.startswith((b"<", b"{", b"[")) or head.upper().startswith(b"<!DOCTYPE"):
+        return None
+    try:
+        ct = ColorThief(io.BytesIO(data))
+        dominant = ct.get_color(quality=1)
+        try:
+            palette = ct.get_palette(color_count=6, quality=1) or []
+        except Exception:
+            palette = []
+        r, g, b = _pick_accent_from_palette(dominant, list(palette))
+        return _rgb_to_int(r, g, b)
+    except Exception:
+        return None
+
+
 async def get_dominant_color(
     url: str,
     fallback: int = 0x5865F2,
     *,
     referer: str | None = None,
 ) -> int:
-    """Fetch image and return dominant color using colorthief."""
+    """Fetch image and return a vivid dominant colour via colorthief."""
     if not url:
         return fallback
     headers = {
@@ -396,25 +459,14 @@ async def get_dominant_color(
     if referer:
         headers["Referer"] = referer
     try:
-        async with aiohttp.ClientSession(headers=headers) as session:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=8)) as resp:
+        timeout = aiohttp.ClientTimeout(total=12)
+        async with aiohttp.ClientSession(headers=headers, timeout=timeout) as session:
+            async with session.get(str(url), allow_redirects=True) as resp:
                 if resp.status != 200:
                     return fallback
                 data = await resp.read()
-        if not data or len(data) < 64:
-            return fallback
-
-        def _extract() -> int:
-            ct = ColorThief(BytesIO(data))
-            r, g, b = ct.get_color(quality=1)
-            
-            if (r + g + b) < 80:
-                r = min(r + 60, 255)
-                g = min(g + 60, 255)
-                b = min(b + 60, 255)
-            return (r << 16) + (g << 8) + b
-
-        return await asyncio.to_thread(_extract)
+        color = await asyncio.to_thread(_colorthief_from_bytes, data)
+        return color if color is not None else fallback
     except Exception:
         return fallback
 
@@ -428,13 +480,12 @@ async def get_bot_dominant_color(bot) -> int:
 async def get_repost_accent_color(
     bot,
     *,
-    avatar_url: str | None,
+    avatar_url: str | None = None,
+    thumbnail_url: str | None = None,
     platform: str | None = None,
 ) -> int:
-    """Accent from the creator avatar; fall back to the bot's dominant colour."""
+    """Accent from creator avatar (then video thumb); fall back to bot colour."""
     bot_color = await get_bot_dominant_color(bot)
-    if not avatar_url:
-        return bot_color
     plat = (platform or "").lower()
     referer = (
         "https://www.tiktok.com/"
@@ -443,8 +494,18 @@ async def get_repost_accent_color(
         if plat == "instagram"
         else None
     )
-    
-    return await get_dominant_color(str(avatar_url), fallback=bot_color, referer=referer)
+
+    for candidate in (avatar_url, thumbnail_url):
+        if not candidate:
+            continue
+        color = await get_dominant_color(
+            str(candidate),
+            fallback=0,
+            referer=referer,
+        )
+        if color:
+            return color
+    return bot_color
 
 
 
@@ -951,16 +1012,24 @@ class Socials(Package):
             or "/video/" in (post.url or url).lower()
         )
         limit = self._upload_limit(ctx)
+        thumb = None
+        if isinstance(post.raw, dict):
+            thumb = post.raw.get("thumbnail_url") or post.raw.get("cover")
         accent = await get_repost_accent_color(
             self.bot,
             avatar_url=post.avatar_url,
+            thumbnail_url=str(thumb) if thumb else None,
             platform=post.platform,
         )
 
         upload: discord.File | None = None
         display_media = image_urls[:]
         
-        video_filename = f"{(post.platform or 'video').lower()}.mp4"
+        post_id = post.raw.get("id") if isinstance(post.raw, dict) else None
+        if post_id and str(post_id).isdigit():
+            video_filename = f"{post_id}.mp4"
+        else:
+            video_filename = f"{(post.platform or 'video').lower()}.mp4"
 
         if wants_video:
             data: bytes | None = None
