@@ -298,7 +298,6 @@ class Snipe(commands.Cog):
             description=(
                 f"> This will **clear all snipes** for {ctx.channel.mention}.\n"
                 f"> Are you sure you want to do this?\n"
-                f"-# only {ctx.author.mention} can confirm"
             ),
         )
         if not await view.prompt(embed=emb):

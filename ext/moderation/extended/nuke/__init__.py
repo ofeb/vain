@@ -36,7 +36,7 @@ class Nuke(Package):
             description=(
                 f"> This will **nuke** {ctx.channel.mention}.\n"
                 f"> Are you sure you want to do this?\n"
-                f"-# the channel will be cloned then deleted · only {ctx.author.mention} can confirm"
+                f"> -# the channel will be cloned then deleted"
             ),
         )
         if not await view.prompt(embed=embed):

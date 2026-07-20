@@ -4,7 +4,9 @@ import re
 from logging import getLogger
 from typing import Any, TypedDict
 
+import discord
 from discord import (
+    ActivityType,
     CustomActivity,
     Guild,
     HTTPException,
@@ -74,7 +76,6 @@ class Settings:
 
     @property
     def roles(self) -> list[Role]:
-        """All configured roles that still exist (for display)."""
         out: list[Role] = []
         for rid in self.role_ids:
             role = self.guild.get_role(int(rid))
@@ -170,16 +171,18 @@ class Settings:
         data["guild_id"] = self.guild.id
         self.record = data
 
-    async def dispatch(self, before: Member, member: Member) -> Message | None:
+    async def dispatch(self, member: Member) -> Message | None:
         """Send notification when a member starts repping vanity."""
         channel = self.channel
         if not channel:
+            logger.debug("vanity dispatch skipped: no channel guild=%s", self.guild.id)
             return None
         redis = getattr(self.bot, "redis", None)
         key = f"notifs.vanity:{self.guild.id}-{member.id}"
         if redis is not None:
             try:
                 if await redis.ratelimited(key, 1, 3 * 3600):
+                    logger.debug("vanity dispatch ratelimited %s", key)
                     return None
             except Exception:
                 pass
@@ -188,17 +191,26 @@ class Settings:
         template = self.template or self._default_template
         script = Script(template, user=member)
         try:
-            return await script.send(
+            msg = await script.send(
                 channel,
                 user=member,
+                member=member,
                 guild=self.guild,
                 channel=channel,
-                role=self.assignable_roles[0] if self.assignable_roles else (
-                    self.roles[0] if self.roles else None
-                ),
+                role=self.assignable_roles[0]
+                if self.assignable_roles
+                else (self.roles[0] if self.roles else None),
+                allowed_mentions=discord.AllowedMentions(users=True),
             )
+            logger.info(
+                "vanity notify guild=%s member=%s channel=%s",
+                self.guild.id,
+                member.id,
+                channel.id,
+            )
+            return msg
         except HTTPException as exc:
-            logger.warning("vanity dispatch failed guild=%s: %s", self.guild.id, exc)
+            logger.warning("vanity dispatch HTTP failed guild=%s: %s", self.guild.id, exc)
             return None
         except Exception as exc:
             logger.exception("vanity dispatch error guild=%s: %s", self.guild.id, exc)
@@ -206,21 +218,58 @@ class Settings:
 
 
 def get_status(member: Member) -> str:
-    """Collect custom status / activity text for vanity matching."""
+    """Collect custom status / activity text for vanity matching.
+
+    Discord stores custom status as type Custom with name often ``Custom Status``
+    and the real text in ``state``. We also fall back to ``str(activity)``.
+    """
     parts: list[str] = []
-    for activity in member.activities or ():
-        if isinstance(activity, CustomActivity):
-            if activity.name:
-                parts.append(str(activity.name))
-            state = getattr(activity, "state", None)
-            if state:
-                parts.append(str(state))
-        else:
-            for attr in ("name", "state", "details"):
+    activities = list(member.activities or ())
+    
+    primary = getattr(member, "activity", None)
+    if primary is not None and primary not in activities:
+        activities.append(primary)
+
+    for activity in activities:
+        atype = getattr(activity, "type", None)
+        is_custom = (
+            isinstance(activity, CustomActivity)
+            or atype is ActivityType.custom
+            or getattr(atype, "name", None) == "custom"
+            or int(getattr(atype, "value", -1)) == 4
+        )
+        if is_custom:
+            for attr in ("state", "name"):
                 val = getattr(activity, attr, None)
-                if val:
-                    parts.append(str(val))
-    return " ".join(parts).lower()
+                if not val:
+                    continue
+                text = str(val).strip()
+                if not text or text.lower() == "custom status":
+                    continue
+                parts.append(text)
+            
+            try:
+                as_str = str(activity).strip()
+                if as_str and as_str.lower() != "custom status":
+                    parts.append(as_str)
+            except Exception:
+                pass
+            continue
+
+        for attr in ("name", "state", "details"):
+            val = getattr(activity, attr, None)
+            if val:
+                parts.append(str(val))
+
+    
+    seen: set[str] = set()
+    clean: list[str] = []
+    for p in parts:
+        low = p.lower()
+        if low not in seen:
+            seen.add(low)
+            clean.append(p)
+    return " ".join(clean).lower()
 
 
 def vanity_matches(status: str, code: str, *, strict: bool = False) -> bool:
@@ -228,20 +277,39 @@ def vanity_matches(status: str, code: str, *, strict: bool = False) -> bool:
     if not code:
         return False
     status = (status or "").lower()
-    code = code.lower().lstrip("/")
-    if not status:
+    code = code.lower().lstrip("/").strip()
+    if not status or not code:
         return False
+
+    
+    normalized = (
+        status.replace("https://", "")
+        .replace("http://", "")
+        .replace("www.", "")
+        .replace("discord.gg/", "/")
+        .replace("discord.com/invite/", "/")
+        .replace(".gg/", "/")
+    )
+
     if not strict:
-        # Loose: vanity code appears anywhere
-        return code in status
-    # Strict: require /code, discord.gg/code, or .gg/code style tokens
+        
+        return code in status or code in normalized or f"/{code}" in status
+
     patterns = (
-        rf"(?:^|[\s/])/{re.escape(code)}(?:\b|$)",
+        rf"(?:^|[\s])/{re.escape(code)}(?:\b|$)",
+        rf"(?:^|[\s/]){re.escape(code)}(?:\b|$)",
         rf"discord\.gg/{re.escape(code)}\b",
         rf"\.gg/{re.escape(code)}\b",
-        rf"\b{re.escape(code)}\b",
+        rf"discord\.com/invite/{re.escape(code)}\b",
     )
-    return any(re.search(p, status) for p in patterns)
+    return any(re.search(p, status) or re.search(p, normalized) for p in patterns)
+
+
+def member_repping_vanity(member: Member, guild: Guild, *, strict: bool = False) -> bool:
+    code = (guild.vanity_url_code or "").lower()
+    if not code:
+        return False
+    return vanity_matches(get_status(member), code, strict=strict)
 
 
 async def fetch(bot: Vain, guild: Guild) -> Settings:
@@ -262,6 +330,7 @@ __all__ = [
     "Record",
     "get_status",
     "vanity_matches",
+    "member_repping_vanity",
     "fetch",
     "upsert",
     "insert",

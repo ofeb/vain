@@ -4,10 +4,11 @@ import io
 import logging
 import textwrap
 import traceback
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Optional
+from io import BytesIO
+from typing import TYPE_CHECKING
 
 import discord
+from discord import ui
 from discord.ext import commands
 from discord.ext.commands import CommandError
 
@@ -18,6 +19,9 @@ from core.managers.values import color
 import asyncio
 import aiohttp
 from colorthief import ColorThief
+
+# Discord TextDisplay hard limit is 4000 chars
+_TB_DISPLAY_LIMIT = 3900
 
 
 
@@ -147,22 +151,18 @@ class Owner(Package):
 
     
 
-    @group(
-        name="owner",
-        description="Bot owner commands",
-        invoke_without_command=True,
-        aliases=["dev"],
-    )
-    async def owner(self, ctx: Context) -> None:
-        await ctx.send_help(ctx.command)
+    # ------------------------------------------------------------------
+    # Standalone owner commands (no parent owner/dev group).
+    # Aliases avoid top-level collisions (e.g. music disconnect ``leave``).
+    # ------------------------------------------------------------------
 
-    @owner.command(
+    @command(
         name="reload",
         description="Reload all or a specific extension",
         aliases=["rl"],
     )
     @describe(extension="Extension name to reload, or 'all'")
-    async def owner_reload(self, ctx: Context, *, extension: str = "all") -> None:
+    async def reload(self, ctx: Context, *, extension: str = "all") -> None:
         if extension == "all":
             success = []
             failed = []
@@ -189,38 +189,38 @@ class Owner(Package):
             except Exception as e:
                 await ctx.fail(f"Failed to reload `{extension}`: {e}")
 
-    @owner.command(
+    @command(
         name="load",
         description="Load a new extension",
-        aliases=["add"],
+        aliases=["extload"],
     )
     @describe(extension="Extension name to load")
-    async def owner_load(self, ctx: Context, *, extension: str) -> None:
+    async def load(self, ctx: Context, *, extension: str) -> None:
         try:
             await self.bot.load_extension(f"ext.{extension}")
             await ctx.success(f"Loaded `{extension}`")
         except Exception as e:
             await ctx.fail(f"Failed to load `{extension}`: {e}")
 
-    @owner.command(
+    @command(
         name="unload",
         description="Unload a loaded extension",
-        aliases=["remove"],
+        aliases=["extunload"],
     )
     @describe(extension="Extension name to unload")
-    async def owner_unload(self, ctx: Context, *, extension: str) -> None:
+    async def unload(self, ctx: Context, *, extension: str) -> None:
         try:
             await self.bot.unload_extension(f"ext.{extension}")
             await ctx.success(f"Unloaded `{extension}`")
         except Exception as e:
             await ctx.fail(f"Failed to unload `{extension}`: {e}")
 
-    @owner.command(
+    @command(
         name="sync",
         description="Sync slash commands to a specific guild or globally",
     )
     @describe(guild_id="Guild ID to sync to (leave empty for global)")
-    async def owner_sync(self, ctx: Context, guild_id: str = None) -> None:
+    async def sync(self, ctx: Context, guild_id: str = None) -> None:
         if guild_id:
             guild = discord.Object(id=int(guild_id))
             synced = await self.bot.tree.sync(guild=guild)
@@ -231,16 +231,16 @@ class Owner(Package):
             synced = await self.bot.tree.sync()
             await ctx.success(f"Synced **{len(synced)}** commands globally")
 
-    @owner.command(
+    @command(
         name="guilds",
         description="List all guilds the bot is in",
     )
-    async def owner_guilds(self, ctx: Context) -> None:
+    async def guilds(self, ctx: Context) -> None:
         entries = []
         for i, guild in enumerate(
             sorted(
                 self.bot.guilds,
-                key=lambda g: g.member_count,
+                key=lambda g: g.member_count or 0,
                 reverse=True,
             ),
             1,
@@ -251,13 +251,17 @@ class Owner(Package):
                     owner = await guild.fetch_member(guild.owner_id)
                 except Exception:
                     owner = None
-            owner_name = f"{owner} (`{getattr(owner, 'id', guild.owner_id)}`)" if owner else f"Unknown (`{guild.owner_id}`)"
+            owner_name = (
+                f"{owner} (`{getattr(owner, 'id', guild.owner_id)}`)"
+                if owner
+                else f"Unknown (`{guild.owner_id}`)"
+            )
             entries.append(
                 f"`{i}.` **{guild.name}** (`{guild.id}`) — "
                 f"{guild.member_count} members — Owner: {owner_name}"
             )
 
-        pages = [entries[i : i + 15] for i in range(0, len(entries), 15)]
+        pages = [entries[i : i + 15] for i in range(0, len(entries), 15)] or [[]]
         page = 0
         try:
             dom = await get_bot_dominant_color(self.bot)
@@ -272,12 +276,14 @@ class Owner(Package):
         )
         await ctx.send(embed=embed)
 
-    @owner.command(
-        name="leave",
+    @command(
+        name="leaveserver",
         description="Leave a server by ID",
+        aliases=["gleave", "guildleave"],
     )
     @describe(guild_id="ID of the server to leave")
-    async def owner_leave(self, ctx: Context, guild_id: str) -> None:
+    async def leaveserver(self, ctx: Context, guild_id: str) -> None:
+        # Not named leave — collides with music disconnect alias
         guild = self.bot.get_guild(int(guild_id))
         if not guild:
             await ctx.fail(f"Server `{guild_id}` not found.")
@@ -285,12 +291,12 @@ class Owner(Package):
         await guild.leave()
         await ctx.success(f"Left **{guild.name}** (`{guild.id}`)")
 
-    @owner.command(
+    @command(
         name="dm",
         description="Send a DM to a user",
     )
     @describe(user_id="User ID to message", message="Message content")
-    async def owner_dm(self, ctx: Context, user_id: str, *, message: str) -> None:
+    async def dm(self, ctx: Context, user_id: str, *, message: str) -> None:
         user = self.bot.get_user(int(user_id))
         if not user:
             try:
@@ -304,13 +310,13 @@ class Owner(Package):
         except Exception as e:
             await ctx.fail(f"Failed to DM {user}: {e}")
 
-    @owner.command(
+    @command(
         name="eval",
         description="Evaluate Python code",
-        aliases=["exec", ">"],
+        aliases=["exec", "pyeval"],
     )
     @describe(code="Python code to evaluate")
-    async def owner_eval(self, ctx: Context, *, code: str) -> None:
+    async def eval_cmd(self, ctx: Context, *, code: str) -> None:
         code = textwrap.dedent(code).strip("```python ").strip("``` ")
         env = {
             "bot": self.bot,
@@ -324,28 +330,26 @@ class Owner(Package):
                 if isinstance(result, discord.Embed):
                     await ctx.send(embed=result)
                 else:
-                    await ctx.send(f"```py\n{result}```")
+                    await ctx.send(f"```python\n{result}\n```")
         except Exception as e:
             tb = "".join(traceback.format_exception(type(e), e, e.__traceback__))
-            await ctx.send(f"```py\n{tb[:1900]}```")
+            await self._send_traceback_layout(ctx, key="eval", tb_text=tb)
 
-    @owner.command(
+    @command(
         name="shutdown",
         description="Shut down the bot",
         aliases=["die", "kill"],
     )
-    async def owner_shutdown(self, ctx: Context) -> None:
+    async def shutdown(self, ctx: Context) -> None:
         await ctx.success("Shutting down...")
         await self.bot.close()
 
-    
-
-    @owner.command(
+    @command(
         name="debug",
         description="Run a command and capture logs into a file",
     )
     @describe(command="Command to run (e.g. punch @user, help)")
-    async def owner_debug(self, ctx: Context, *, command: str = "") -> None:
+    async def debug(self, ctx: Context, *, command: str = "") -> None:
         if not command:
             await ctx.fail("Provide a command to debug")
             return
@@ -374,7 +378,7 @@ class Owner(Package):
         error_text = ""
         status = "success"
         try:
-            target_cmd = self.bot.get_command(command)
+            target_cmd = self.bot.get_command(command.split()[0] if command else "")
             if target_cmd is None:
                 await ctx.fail(f"Command `{command}` not found")
                 return
@@ -425,18 +429,58 @@ class Owner(Package):
             await ctx.success(f"Command `{command}` ran — see attached log")
         await ctx.send(file=file)
 
-    
+    async def _send_traceback_layout(
+        self,
+        ctx: Context,
+        *,
+        key: str,
+        tb_text: str,
+    ) -> discord.Message:
+        """Show traceback in a C2 container as a python code block.
 
-    @owner.command(
+        If the error is too large for TextDisplay, attach a discord.File on
+        the message (not inside the container).
+        """
+        container = ui.Container(accent_colour=color.deny)
+        container.add_item(ui.TextDisplay(f"### Traceback #{key}"))
+        container.add_item(ui.Separator(visible=True))
+
+        fenced = f"```python\n{tb_text}\n```"
+        attach: discord.File | None = None
+
+        if len(fenced) <= _TB_DISPLAY_LIMIT:
+            container.add_item(ui.TextDisplay(fenced))
+        else:
+            preview_budget = max(200, _TB_DISPLAY_LIMIT - 120)
+            preview = tb_text[:preview_budget]
+            if len(tb_text) > len(preview):
+                preview = preview.rstrip() + "\n..."
+            notice = (
+                "Error is too large to show fully — see attached file.\n"
+                f"```python\n{preview}\n```"
+            )
+            if len(notice) > _TB_DISPLAY_LIMIT:
+                notice = "Error is too large to show — see attached file."
+            container.add_item(ui.TextDisplay(notice))
+            attach = discord.File(
+                io.BytesIO(tb_text.encode("utf-8")),
+                filename=f"traceback-{key}.txt",
+            )
+
+        layout = ui.LayoutView(timeout=None)
+        layout.add_item(container)
+        if attach is not None:
+            return await ctx.send(view=layout, file=attach)
+        return await ctx.send(view=layout)
+
+    @command(
         name="traceback",
         description="View stored traceback by error ID or last error",
         aliases=["tb"],
     )
     @describe(error_id="Error ID to look up (leave empty for last error)")
-    async def owner_traceback(
-        self, ctx: Context, error_id: str = ""
-    ) -> None:
-        store = self.bot._error_store
+    async def traceback_cmd(self, ctx: Context, error_id: str = "") -> None:
+        store = getattr(self.bot, "_error_store", None) or {}
         if not store:
             await ctx.fail("No stored errors yet")
             return
@@ -451,19 +495,8 @@ class Owner(Package):
             await ctx.fail(f"No error stored with ID `{key}`")
             return
 
-        file = discord.File(
-            io.BytesIO(tb_text.encode("utf-8")),
-            filename=f"traceback-{key}.txt",
-        )
-        embed = panel_embed(
-            title=f"Traceback #{key}",
-            color=color.deny,
-            lines=[f"```\n{tb_text[:1800]}\n```" if len(tb_text) < 1900 else "See attached file"],
-            timestamp=False,
-        )
-        await ctx.send(embed=embed, file=file)
+        await self._send_traceback_layout(ctx, key=str(key), tb_text=tb_text)
 
-    
 
     @group(
         name="botedit",

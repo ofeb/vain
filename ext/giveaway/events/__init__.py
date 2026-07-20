@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections import defaultdict
 from contextlib import suppress
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from random import sample
 from typing import Any
 
@@ -29,15 +29,17 @@ DEFAULT_DM_SCRIPT = (
 )
 
 
-def _naive_utcnow() -> datetime:
-    return datetime.utcnow()
+def _now() -> datetime:
+    """Local naive now — matches PostgreSQL ``NOW()`` for TIMESTAMP columns."""
+    return datetime.now()
 
 
 def _as_naive(dt: datetime | None) -> datetime | None:
     if dt is None:
         return None
     if dt.tzinfo is not None:
-        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+        # Convert aware → local naive for comparison with TIMESTAMP (no tz)
+        return dt.astimezone().replace(tzinfo=None)
     return dt
 
 
@@ -127,27 +129,56 @@ class GiveawayEvents(Cog):
             script,
         )
 
-    def schedule_end(self, message_id: int, end_time: datetime) -> None:
+    def schedule_end(
+        self,
+        message_id: int,
+        end_time: datetime | None = None,
+        *,
+        delay_seconds: float | None = None,
+    ) -> None:
+        """End giveaway after *delay_seconds*, or when *end_time* is reached.
+
+        Prefer *delay_seconds* (from start command) so we never depend on DB clock skew.
+        """
         old = self._end_tasks.pop(message_id, None)
         if old and not old.done():
             old.cancel()
 
+        if delay_seconds is None:
+            target = _as_naive(end_time) if end_time is not None else None
+            if target is not None:
+                delay_seconds = (target - _now()).total_seconds()
+            else:
+                delay_seconds = 0.0
+        delay_seconds = max(0.0, float(delay_seconds))
+
         async def _wait() -> None:
             try:
-                target = _as_naive(end_time) or _naive_utcnow()
-                delay = (target - _naive_utcnow()).total_seconds()
-                if delay > 0:
-                    await asyncio.sleep(delay)
+                if delay_seconds > 0:
+                    await asyncio.sleep(delay_seconds)
+                # Double-check expiration in Python (same clock we used to schedule)
                 row = await self.bot.db.fetchrow(
                     "SELECT * FROM giveaways WHERE message_id = $1 AND win_message_id IS NULL",
                     message_id,
                 )
-                if row:
-                    await self.end_giveaway(dict(row))
+                if not row:
+                    return
+                exp = _as_naive(row.get("expiration"))
+                if exp is not None and exp > _now() + timedelta(seconds=1):
+                    # Not actually due yet (reschedule remainder)
+                    remaining = (exp - _now()).total_seconds()
+                    if remaining > 0:
+                        self.schedule_end(message_id, delay_seconds=remaining)
+                        return
+                await self.end_giveaway(dict(row))
             except asyncio.CancelledError:
                 return
             except Exception:
-                pass
+                import logging
+
+                logging.getLogger("vain.giveaway").exception(
+                    "giveaway end task failed message_id=%s", message_id
+                )
             finally:
                 self._end_tasks.pop(message_id, None)
 
@@ -159,24 +190,44 @@ class GiveawayEvents(Cog):
             rows = await self.bot.db.fetch(
                 """
                 SELECT message_id, expiration FROM giveaways
-                WHERE win_message_id IS NULL AND expiration > NOW()
+                WHERE win_message_id IS NULL
                 """
             )
+            now = _now()
             for row in rows or []:
-                self.schedule_end(int(row["message_id"]), row["expiration"])
+                exp = _as_naive(row.get("expiration"))
+                if exp is None:
+                    continue
+                delay = (exp - now).total_seconds()
+                if delay <= 0:
+                    await self.end_giveaway(
+                        dict(
+                            await self.bot.db.fetchrow(
+                                "SELECT * FROM giveaways WHERE message_id = $1",
+                                int(row["message_id"]),
+                            )
+                            or row
+                        )
+                    )
+                else:
+                    self.schedule_end(int(row["message_id"]), delay_seconds=delay)
 
-    @tasks.loop(seconds=5.0)
+    @tasks.loop(seconds=3.0)
     async def poll_expired_giveaways(self) -> None:
+        """Backup ender — compare expiration in Python to avoid TZ mismatch with NOW()."""
         with suppress(Exception):
             rows = await self.bot.db.fetch(
                 """
                 SELECT * FROM giveaways
-                WHERE win_message_id IS NULL AND expiration <= NOW()
-                LIMIT 25
+                WHERE win_message_id IS NULL
+                LIMIT 50
                 """
             )
+            now = _now()
             for row in rows or []:
-                await self.end_giveaway(dict(row))
+                exp = _as_naive(row.get("expiration"))
+                if exp is not None and exp <= now:
+                    await self.end_giveaway(dict(row))
 
     @poll_expired_giveaways.before_loop
     async def before_poll(self) -> None:
@@ -277,16 +328,12 @@ class GiveawayEvents(Cog):
             message_id,
         )
         if not row:
-            await interaction.response.send_message(
-                "-# this giveaway has **ended** or is invalid", ephemeral=True
-            )
+            await interaction.fail("this giveaway has **ended** or is invalid")
             return
 
         exp = _as_naive(row.get("expiration"))
-        if exp and _naive_utcnow() > exp:
-            await interaction.response.send_message(
-                "-# this giveaway has **ended**", ephemeral=True
-            )
+        if exp and _now() > exp:
+            await interaction.fail("this giveaway has **ended**")
             return
 
         member = interaction.guild.get_member(interaction.user.id) or interaction.user
@@ -300,9 +347,8 @@ class GiveawayEvents(Cog):
         }
         if isinstance(member, discord.Member):
             if not await self.check_requirements(member, requirements):
-                await interaction.response.send_message(
-                    "-# you don't meet the **requirements** for this giveaway",
-                    ephemeral=True,
+                await interaction.fail(
+                    "you don't meet the **requirements** for this giveaway"
                 )
                 return
 
@@ -312,20 +358,18 @@ class GiveawayEvents(Cog):
                 message_id,
             )
             if not fresh:
-                await interaction.response.send_message(
-                    "-# this giveaway has **ended**", ephemeral=True
-                )
+                await interaction.fail("this giveaway has **ended**")
                 return
             entries = list(fresh.get("entries") or [])
             uid = interaction.user.id
-            if uid in entries:
+            left = uid in entries
+            if left:
                 entries.remove(uid)
                 await self.bot.db.execute(
                     "UPDATE giveaways SET entries = $1 WHERE message_id = $2",
                     entries,
                     message_id,
                 )
-                msg = "-# you **left** the giveaway"
             else:
                 entries.append(uid)
                 await self.bot.db.execute(
@@ -333,21 +377,20 @@ class GiveawayEvents(Cog):
                     entries,
                     message_id,
                 )
-                msg = "-# you **entered** the giveaway"
+
+            # Acknowledge with styled approve/warn before panel edit (avoids timeout)
+            if left:
+                await interaction.warning("you **left** the giveaway")
+            else:
+                await interaction.success("you **entered** the giveaway")
 
             record = dict(fresh)
             record["entries"] = entries
-            
             try:
                 if interaction.message:
                     await self.rebuild_panel_message(interaction.message, record)
             except Exception:
                 pass
-
-            if interaction.response.is_done():
-                await interaction.followup.send(msg, ephemeral=True)
-            else:
-                await interaction.response.send_message(msg, ephemeral=True)
 
     async def _handle_view_entries(
         self, interaction: discord.Interaction, message_id: int
@@ -394,6 +437,76 @@ class GiveawayEvents(Cog):
         giveaway: dict,
     ) -> None:
         await self.end_giveaway(giveaway)
+
+    async def _send_winner_announce(
+        self,
+        message: discord.Message,
+        channel: discord.abc.Messageable,
+        *,
+        prize: str,
+        mentions: str,
+        host_mention: str,
+        reroll: bool = False,
+    ) -> discord.Message | None:
+        """Reply with C2 win panel; hard-fallback to a classic embed."""
+        announce = build_win_announce_panel(
+            prize=prize,
+            winner_mentions=mentions,
+            host_mention=host_mention,
+            reroll=reroll,
+            accent=color.base,
+        )
+        am = discord.AllowedMentions(users=True)
+
+        # 1) Components V2 reply
+        try:
+            return await message.reply(
+                content=mentions,
+                view=announce,
+                allowed_mentions=am,
+                mention_author=False,
+            )
+        except Exception:
+            pass
+
+        # 2) C2 channel send with reference
+        try:
+            return await channel.send(
+                content=mentions,
+                view=announce,
+                reference=message,
+                allowed_mentions=am,
+            )
+        except Exception:
+            pass
+
+        # 3) Plain embed reply (always visible)
+        verb = "rerolled and won" if reroll else "won"
+        emb = discord.Embed(
+            color=color.base,
+            description=(
+                f"**{mentions}** {verb} **{prize}**\n"
+                f"-# congratulations · enjoy your prize\n"
+                f"-# Hosted by {host_mention}"
+            ),
+        )
+        try:
+            return await message.reply(
+                content=mentions,
+                embed=emb,
+                allowed_mentions=am,
+                mention_author=False,
+            )
+        except Exception:
+            pass
+        try:
+            return await channel.send(
+                content=mentions,
+                embed=emb,
+                allowed_mentions=am,
+            )
+        except Exception:
+            return None
 
     async def _dm_winner(
         self,
@@ -509,7 +622,6 @@ class GiveawayEvents(Cog):
             winners = sample(members, min(winners_count, len(members)))
             mentions = ", ".join(w.mention for w in winners)
 
-            
             try:
                 await self.rebuild_panel_message(
                     message,
@@ -520,31 +632,18 @@ class GiveawayEvents(Cog):
             except Exception:
                 pass
 
-            
-            announce = build_win_announce_panel(
+            win_msg = await self._send_winner_announce(
+                message,
+                channel,
                 prize=prize,
-                winner_mentions=mentions,
+                mentions=mentions,
                 host_mention=host_mention,
                 reroll=reroll,
-                accent=color.base,
             )
-            try:
-                win_msg = await message.reply(
-                    content=mentions,
-                    view=announce,
-                    allowed_mentions=discord.AllowedMentions(users=True),
-                    mention_author=False,
-                )
-            except Exception:
-                win_msg = await channel.send(
-                    content=mentions,
-                    view=announce,
-                    allowed_mentions=discord.AllowedMentions(users=True),
-                )
 
             await self.bot.db.execute(
                 "UPDATE giveaways SET win_message_id = $1, entries = $2 WHERE message_id = $3",
-                win_msg.id,
+                win_msg.id if win_msg else message.id,
                 entries,
                 message_id,
             )

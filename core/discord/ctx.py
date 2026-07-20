@@ -131,13 +131,9 @@ def embed_to_container(
         except Exception:
             container.add_item(ui.TextDisplay(f"[image]({image_url})"))
 
-    
-    if attachment_files and not image_url:
-        for f in attachment_files[:1]:
-            try:
-                container.add_item(ui.File(f))
-            except Exception:
-                pass
+    # Do NOT put message attachments inside the container by default.
+    # Callers that want an in-container file component should add ui.File
+    # themselves. Message-level discord.File stays attached via send().
 
     if embed.footer and not _blankish(embed.footer.text):
         container.add_item(ui.Separator(visible=True))

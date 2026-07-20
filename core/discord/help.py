@@ -387,7 +387,7 @@ def _command_name_variants(cmd: Command) -> list[str]:
     """Primary name + aliases for a single command node (not full path)."""
     opts = [str(cmd.name or "").lower()]
     opts.extend(str(a).lower() for a in (cmd.aliases or []) if a)
-    # de-dupe, drop empties
+    
     return list(dict.fromkeys(o for o in opts if o))
 
 
@@ -404,10 +404,10 @@ def _command_names(cmd: Command) -> tuple[str, ...]:
         command_display_name(cmd).lower(),
         cmd.qualified_name.lower(),
     ]
-    # Bare leaf aliases (e.g. "deletedelay") — kept for compatibility
+    
     names.extend(str(a).lower() for a in (cmd.aliases or []) if a)
 
-    # Walk parents root → leaf and expand every alias combination
+    
     chain: list[Command] = []
     node: Command | None = cmd
     while node is not None:
@@ -718,11 +718,11 @@ def _strip_command_name(text: str, cmd: Command, prefix: str = "") -> str:
 def _collapse_duplicate_name(text: str, cmd: Command) -> str:
     """Collapse 'cmd cmd rest' / alias-path doubles -> single path + rest."""
     raw = str(text or "").strip()
-    # Longest names first so "pingonjoin delete" beats "pingonjoin"
+    
     for name in sorted(_command_names(cmd), key=len, reverse=True):
         nlow = name.lower()
         lowered = raw.lower()
-        # "name name rest" or "name name"
+        
         while lowered == f"{nlow} {nlow}" or lowered.startswith(f"{nlow} {nlow} "):
             raw = raw[len(name) :].lstrip()
             lowered = raw.lower()
@@ -747,8 +747,8 @@ def _finalize_example(cmd: Command, raw: str, prefix: str) -> str | None:
     name = command_display_name(cmd)
     lowered = raw.lower()
     if not _example_starts_with_command(raw, cmd):
-        # Only prepend primary path when the example is args-only
-        # (e.g. "10s" or "#channel hello"), not alias invocations.
+        
+        
         raw = f"{name} {raw}".strip()
         raw = _collapse_duplicate_name(raw, cmd)
         lowered = raw.lower()

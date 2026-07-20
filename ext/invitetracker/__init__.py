@@ -164,7 +164,6 @@ class InviteTracker(Package):
             description=(
                 "> This will **wipe all invite stats** for this server.\n"
                 "> Are you sure you want to do this?\n"
-                f"-# only {ctx.author.mention} can confirm"
             ),
         )
         if not await view.prompt(embed=emb):

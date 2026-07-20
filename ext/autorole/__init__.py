@@ -141,7 +141,6 @@ class Autorole(commands.Cog):
             description=(
                 "> This will **clear every autorole** for this server.\n"
                 "> Are you sure you want to do this?\n"
-                f"-# only {ctx.author.mention} can confirm"
             ),
         )
         if not await view.prompt(embed=emb):
@@ -218,7 +217,6 @@ class Autorole(commands.Cog):
             description=(
                 "> This will **clear every button role** for this server.\n"
                 "> Are you sure you want to do this?\n"
-                f"-# only {ctx.author.mention} can confirm"
             ),
         )
         if not await view.prompt(embed=emb):
@@ -407,7 +405,6 @@ class Autorole(commands.Cog):
             description=(
                 "> This will **clear every reaction role** for this server.\n"
                 "> Are you sure you want to do this?\n"
-                f"-# only {ctx.author.mention} can confirm"
             ),
         )
         if not await view.prompt(embed=emb):

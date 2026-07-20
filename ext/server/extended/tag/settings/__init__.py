@@ -158,7 +158,7 @@ class Settings:
         data["guild_id"] = self.guild.id
         self.record = data
 
-    async def dispatch(self, before: Member, member: Member) -> Message | None:
+    async def dispatch(self, member: Member) -> Message | None:
         channel = self.channel
         if not channel:
             return None
@@ -171,6 +171,7 @@ class Settings:
             except Exception:
                 pass
         from core.tools.embed import Script
+        import discord as _discord
 
         pg = getattr(member, "primary_guild", None)
         tag = getattr(pg, "tag", None) if pg else None
@@ -182,11 +183,13 @@ class Settings:
             return await script.send(
                 channel,
                 user=member,
+                member=member,
                 guild=self.guild,
                 channel=channel,
                 role=self.assignable_roles[0]
                 if self.assignable_roles
                 else (self.roles[0] if self.roles else None),
+                allowed_mentions=_discord.AllowedMentions(users=True),
             )
         except HTTPException as exc:
             logger.warning("tag dispatch failed guild=%s: %s", self.guild.id, exc)
@@ -208,9 +211,9 @@ def member_repping_tag(
         return False
     enabled = getattr(pg, "identity_enabled", None)
     if strict:
-        # Must have explicitly reaffirmed identity display
+        
         return enabled is True
-    # Loose: True or None (public guild pending reaffirm) both count
+    
     return enabled is not False
 
 

@@ -22,13 +22,10 @@ from .views import build_giveaway_panel
 
 
 _INVISIBLE_RE = re.compile(r"[\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff]")
-_CHANNEL_MENTION_RE = re.compile(r"^<#(\d{15,20})>$")
-_CHANNEL_ID_RE = re.compile(r"^\d{15,20}$")
 
 
 def _clean_token(token: str) -> str:
     return _INVISIBLE_RE.sub("", (token or "")).strip()
-
 
 def compose(*parts: str) -> str:
     return "\n".join(part for part in parts if part)
@@ -112,41 +109,12 @@ class DurationSeconds(commands.Converter):
 
 
 async def _resolve_channel(ctx: Context, token: str) -> discord.abc.Messageable | None:
-    """Try to resolve a channel token; return None if it is not a channel."""
-    raw = _clean_token(token)
-    if not raw or ctx.guild is None:
-        return None
+    """Resolve channel by mention, id, or name (``txt``, ``#txt``, mangled paste)."""
+    from core.tools.convert.channel import resolve_channel
 
-    mention = _CHANNEL_MENTION_RE.match(raw)
-    channel_id: int | None = int(mention.group(1)) if mention else None
-    if channel_id is None and _CHANNEL_ID_RE.match(raw):
-        channel_id = int(raw)
-
-    def _usable(ch) -> bool:
-        if ch is None:
-            return False
-        
-        if isinstance(ch, (discord.TextChannel, discord.Thread)):
-            return True
-        return bool(callable(getattr(ch, "send", None)) and getattr(ch, "id", None))
-
-    if channel_id is not None:
-        channel = ctx.guild.get_channel(channel_id)
-        return channel if _usable(channel) else None
-
-    
-    name = raw[1:] if raw.startswith("#") else raw
-    if not name or name.startswith("."):
-        
-        return None
-
-    lowered = name.lower()
-    for ch in ctx.guild.text_channels:
-        if ch.name.lower() == lowered and _usable(ch):
-            return ch
-    for ch in list(getattr(ctx.guild, "threads", []) or []):
-        if getattr(ch, "name", "").lower() == lowered and _usable(ch):
-            return ch
+    ch = await resolve_channel(ctx, token, text_only=True, allow_threads=True)
+    if ch is not None:
+        return ch  # type: ignore[return-value]
     return None
 
 
@@ -593,7 +561,8 @@ class Giveaway(commands.Cog):
             return
 
         
-        end_time = datetime.utcnow() + timedelta(seconds=int(duration))
+        secs = int(duration)
+        end_time = datetime.now() + timedelta(seconds=secs)
         try:
             await self.bot.db.execute(
                 "UPDATE giveaways SET expiration = $1 WHERE message_id = $2",
@@ -621,7 +590,7 @@ class Giveaway(commands.Cog):
                 ended=bool(giveaway.get("win_message_id")),
             )
             if not giveaway.get("win_message_id"):
-                events.schedule_end(message.id, end_time)
+                events.schedule_end(message.id, delay_seconds=float(secs))
         await ctx.success(
             f"Expiration set to {discord.utils.format_dt(end_time, style='R')}"
         )
@@ -660,10 +629,9 @@ class Giveaway(commands.Cog):
             await ctx.warn(str(exc))
             return
 
-        
-        end_time = datetime.utcnow() + timedelta(seconds=seconds)
+        # Use local naive datetime to match PostgreSQL TIMESTAMP + NOW()
+        end_time = datetime.now() + timedelta(seconds=seconds)
 
-        
         panel = self._panel(
             message_id=0,
             prize=prize,
@@ -675,7 +643,6 @@ class Giveaway(commands.Cog):
         )
         message = await channel.send(view=panel)
 
-        
         panel = self._panel(
             message_id=message.id,
             prize=prize,
@@ -715,14 +682,15 @@ class Giveaway(commands.Cog):
                 winners,
                 [ctx.author.id],
                 [],
-                datetime.utcnow(),
+                datetime.now(),
             )
 
         await asyncio.gather(_edit(), _insert())
 
         events = self._events()
         if events:
-            events.schedule_end(message.id, end_time)
+            # Schedule by explicit delay — never trust DB clock skew for the timer
+            events.schedule_end(message.id, delay_seconds=float(seconds))
 
         try:
             await ctx.message.add_reaction("👍")

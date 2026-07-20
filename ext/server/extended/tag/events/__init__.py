@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import contextlib
 import logging
 
 import discord
@@ -29,24 +28,98 @@ class TagEvents:
         if before_on == after_on:
             return
 
-        assignable = settings.assignable_roles
-        has = [role for role in assignable if role in after.roles]
-        miss = [role for role in assignable if role not in after.roles]
+        log.debug(
+            "tag update guild=%s member=%s on=%s→%s",
+            after.guild.id,
+            after.id,
+            before_on,
+            after_on,
+        )
+        await self._apply_tag_state(after, settings, repping=after_on, notify=after_on)
 
-        with contextlib.suppress(HTTPException, discord.Forbidden):
-            if not after_on and has:
-                log.debug("removing tag roles from %s in %s", after, after.guild.name)
-                await after.remove_roles(
-                    *has,
-                    reason="guild tag no longer displayed",
-                    atomic=False,
-                )
-            elif after_on:
-                if miss:
-                    log.debug("adding tag roles to %s in %s", after, after.guild.name)
-                    await after.add_roles(
-                        *miss,
-                        reason="guild tag displayed",
+    async def _apply_tag_state(
+        self,
+        member: Member,
+        settings: Settings,
+        *,
+        repping: bool,
+        notify: bool,
+    ) -> None:
+        assignable = settings.assignable_roles
+        has = [role for role in assignable if role in member.roles]
+        miss = [role for role in assignable if role not in member.roles]
+
+        if not repping:
+            if has:
+                try:
+                    await member.remove_roles(
+                        *has,
+                        reason="guild tag no longer displayed",
                         atomic=False,
                     )
-                await settings.dispatch(before, after)
+                except (HTTPException, discord.Forbidden) as exc:
+                    log.warning(
+                        "tag remove_roles failed member=%s: %s", member.id, exc
+                    )
+            return
+
+        if miss:
+            try:
+                await member.add_roles(
+                    *miss,
+                    reason="guild tag displayed",
+                    atomic=False,
+                )
+            except (HTTPException, discord.Forbidden) as exc:
+                log.warning(
+                    "tag add_roles failed member=%s: %s "
+                    "(bot role must be above tag roles)",
+                    member.id,
+                    exc,
+                )
+        elif not assignable and settings.role_ids:
+            log.warning(
+                "tag roles configured but none assignable guild=%s role_ids=%s",
+                member.guild.id,
+                settings.role_ids,
+            )
+
+        if notify:
+            await settings.dispatch(member)
+
+    async def sync_member(
+        self, member: Member, *, notify: bool = False
+    ) -> bool | None:
+        guild = member.guild
+        if guild is None or member.bot:
+            return None
+        settings = await Settings.fetch(self.bot, guild)
+        if not settings.role_ids and not settings.channel_id:
+            return None
+        repping = member_repping_tag(member, guild, strict=settings.strict)
+        await self._apply_tag_state(
+            member, settings, repping=repping, notify=bool(notify and repping)
+        )
+        return repping
+
+    async def sync_guild(self, guild: discord.Guild, *, notify: bool = False) -> int:
+        settings = await Settings.fetch(self.bot, guild)
+        if not settings.role_ids and not settings.channel_id:
+            return 0
+        count = 0
+        for member in list(guild.members):
+            if member.bot:
+                continue
+            repping = member_repping_tag(member, guild, strict=settings.strict)
+            if repping:
+                count += 1
+            assignable = settings.assignable_roles
+            has = any(r in member.roles for r in assignable)
+            will_grant = repping and assignable and not has
+            await self._apply_tag_state(
+                member,
+                settings,
+                repping=repping,
+                notify=bool(notify and will_grant),
+            )
+        return count

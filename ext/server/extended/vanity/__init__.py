@@ -16,7 +16,7 @@ from core.tools.convert.role import RoleConvert
 from core.tools.embed import Script
 
 from .events import VanityEvents
-from .settings import Settings
+from .settings import Settings, get_status, member_repping_vanity
 
 if TYPE_CHECKING:
     from core.vain import Vain
@@ -90,28 +90,33 @@ class VanityCommands(VanityEvents, Package):
     @vanity.command(name="role", aliases=["roles", "r"])
     @has_permissions(manage_roles=True)
     async def vanity_role(self, ctx: commands.Context, *, role: RoleConvert) -> None:
-        """Add or remove a role granted to members who advertise the vanity URL."""
+        """Set the vanity reward role."""
         assert ctx.guild is not None
         if not await vanity_check(ctx):
             return
-        role = role  # type: ignore[assignment]
         settings = await Settings.fetch(self.bot, ctx.guild)
-        ids = list(settings.role_ids)
-        if role.id in ids:
-            view = ConfirmView(ctx)
-            ok = await view.prompt(
-                f"{role.mention} is already a vanity role. Remove it?"
+        old_ids = list(settings.role_ids)
+        
+        await settings.upsert(role_ids=[role.id])
+        if old_ids and old_ids != [role.id]:
+            old_mentions = ", ".join(
+                (ctx.guild.get_role(i).mention if ctx.guild.get_role(i) else f"`{i}`")
+                for i in old_ids
             )
-            if not ok:
-                return
-            ids = [i for i in ids if i != role.id]
-            await settings.upsert(role_ids=ids)
-            await ctx.success(f"No longer granting {role.mention} for vanity")
-            return
-
-        ids.append(role.id)
-        await settings.upsert(role_ids=ids)
-        await ctx.success(f"Now granting {role.mention} to members repping the vanity")
+            msg = f"Vanity role set to {role.mention} (replaced {old_mentions})"
+        else:
+            msg = f"Vanity role set to {role.mention}"
+        if not role.is_assignable():
+            await ctx.warn(
+                f"{msg}\n-# I **cannot assign** it — move my role **above** "
+                f"{role.mention} in Server Settings → Roles."
+            )
+        else:
+            await ctx.success(msg)
+        try:
+            await self.sync_guild(ctx.guild, notify=False)
+        except Exception:
+            pass
 
     @vanity.group(name="channel", invoke_without_command=True)
     @has_permissions(manage_channels=True)
@@ -134,6 +139,10 @@ class VanityCommands(VanityEvents, Package):
             return
         await settings.upsert(channel_id=channel.id)
         await ctx.success(f"Vanity notifications will be sent to {channel.mention}")
+        try:
+            await self.sync_guild(ctx.guild, notify=False)
+        except Exception:
+            pass
 
     @vanity_channel.command(name="remove", aliases=["delete", "del", "rm"])
     @has_permissions(manage_channels=True)
@@ -205,6 +214,70 @@ class VanityCommands(VanityEvents, Package):
             await ctx.success("Vanity matching is now **not strict** (default)")
             return
         await ctx.warn("Use `on` or `off`")
+
+    @vanity.command(
+        name="check",
+        aliases=["me", "status", "test"],
+        description="Check if a member is repping vanity and force-sync their roles",
+        example=",vr check @user",
+    )
+    async def vanity_check(
+        self, ctx: commands.Context, member: discord.Member = None
+    ) -> None:
+        """Debug vanity detection and apply roles/message if they're repping now."""
+        assert ctx.guild is not None
+        if not await vanity_check(ctx):
+            return
+        member = member or ctx.author
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        raw = get_status(member)
+        repping = member_repping_vanity(member, ctx.guild, strict=settings.strict)
+        code = ctx.guild.vanity_url_code or "?"
+
+        had_roles = any(r in member.roles for r in settings.assignable_roles)
+        
+        await self.sync_member(
+            member,
+            notify=bool(repping and settings.channel_id),
+        )
+        has_roles = any(r in member.roles for r in settings.assignable_roles)
+
+        lines = [
+            f"**Vanity:** `/{code}`",
+            f"**Status text seen:** `{raw or '∅ empty'}`",
+            f"**Match ({'strict' if settings.strict else 'loose'}):** "
+            f"{'yes' if repping else 'no'}",
+            f"**Roles assignable:** "
+            f"{', '.join(r.mention for r in settings.assignable_roles) or 'none'}",
+            f"**Member has reward role:** {'yes' if has_roles else 'no'}"
+            + ("" if had_roles == has_roles else " *(updated)*"),
+            f"**Notify channel:** "
+            f"{settings.channel.mention if settings.channel else 'not set'}",
+        ]
+        if repping:
+            await ctx.success("\n".join(lines))
+        else:
+            await ctx.warn(
+                "\n".join(lines)
+                + "\n-# Tip: set custom status to `/"
+                + code
+                + "` then wait a few seconds, or re-run this command."
+            )
+
+    @vanity.command(
+        name="sync",
+        description="Scan online members and apply vanity roles",
+    )
+    @has_permissions(manage_roles=True)
+    async def vanity_sync(self, ctx: commands.Context) -> None:
+        assert ctx.guild is not None
+        if not await vanity_check(ctx):
+            return
+        count = await self.sync_guild(ctx.guild, notify=False)
+        await ctx.success(
+            f"Synced vanity · **{count}** member(s) currently matching "
+            f"`/{ctx.guild.vanity_url_code}`"
+        )
 
     @vanity.command(name="reset", aliases=["clear"])
     @has_permissions(manage_roles=True)

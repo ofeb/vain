@@ -72,21 +72,30 @@ class TagCommands(TagEvents, Package):
     @tag.command(name="role", aliases=["roles", "r"])
     @has_permissions(manage_roles=True)
     async def tag_role(self, ctx: commands.Context, *, role: RoleConvert) -> None:
-        """Toggle a role for members displaying this server's tag."""
+        """Set the tag reward role."""
         assert ctx.guild is not None
         settings = await Settings.fetch(self.bot, ctx.guild)
-        ids = list(settings.role_ids)
-        if role.id in ids:
-            view = ConfirmView(ctx)
-            if not await view.prompt(f"Remove {role.mention} from tag roles?"):
-                return
-            ids = [i for i in ids if i != role.id]
-            await settings.upsert(role_ids=ids)
-            await ctx.success(f"No longer granting {role.mention} for the server tag")
-            return
-        ids.append(role.id)
-        await settings.upsert(role_ids=ids)
-        await ctx.success(f"Now granting {role.mention} to members repping the server tag")
+        old_ids = list(settings.role_ids)
+        await settings.upsert(role_ids=[role.id])
+        if old_ids and old_ids != [role.id]:
+            old_mentions = ", ".join(
+                (ctx.guild.get_role(i).mention if ctx.guild.get_role(i) else f"`{i}`")
+                for i in old_ids
+            )
+            msg = f"Tag role set to {role.mention} (replaced {old_mentions})"
+        else:
+            msg = f"Tag role set to {role.mention}"
+        if not role.is_assignable():
+            await ctx.warn(
+                f"{msg}\n-# I **cannot assign** it — move my role **above** "
+                f"{role.mention} in Server Settings → Roles."
+            )
+        else:
+            await ctx.success(msg)
+        try:
+            await self.sync_guild(ctx.guild, notify=False)
+        except Exception:
+            pass
 
     @tag.group(name="channel", invoke_without_command=True)
     @has_permissions(manage_channels=True)
@@ -149,23 +158,40 @@ class TagCommands(TagEvents, Package):
         await settings.upsert(template=None)
         await ctx.success("Tag message reset to default")
 
-    @tag.command(name="check", aliases=["me", "status"])
+    @tag.command(name="check", aliases=["me", "status", "test"])
     async def tag_check(self, ctx: commands.Context, member: discord.Member = None) -> None:
-        """Check whether a member is repping this server's tag."""
+        """Check whether a member is repping this server's tag and force-sync."""
         assert ctx.guild is not None
         member = member or ctx.author
         settings = await Settings.fetch(self.bot, ctx.guild)
         on = member_repping_tag(member, ctx.guild, strict=settings.strict)
         tag = tag_label(member)
+        await self.sync_member(member, notify=bool(on and settings.channel_id))
+        has_roles = any(r in member.roles for r in settings.assignable_roles)
+        lines = [
+            f"**Tag match:** {'yes' if on else 'no'}"
+            + (f" · **{tag}**" if tag else ""),
+            f"**Mode:** {'strict' if settings.strict else 'not strict'}",
+            f"**Roles assignable:** "
+            f"{', '.join(r.mention for r in settings.assignable_roles) or 'none'}",
+            f"**Has reward role:** {'yes' if has_roles else 'no'}",
+            f"**Notify channel:** "
+            f"{settings.channel.mention if settings.channel else 'not set'}",
+        ]
         if on:
-            await ctx.success(
-                f"{member.mention} is repping this server"
-                + (f" with tag **{tag}**" if tag else "")
-            )
+            await ctx.success("\n".join(lines))
         else:
             await ctx.warn(
-                f"{member.mention} is **not** displaying this server's tag as their primary guild."
+                "\n".join(lines)
+                + "\n-# Enable this server's **tag** on your profile (primary guild)."
             )
+
+    @tag.command(name="sync", description="Scan members and apply tag roles")
+    @has_permissions(manage_roles=True)
+    async def tag_sync(self, ctx: commands.Context) -> None:
+        assert ctx.guild is not None
+        count = await self.sync_guild(ctx.guild, notify=False)
+        await ctx.success(f"Synced tag rewards · **{count}** member(s) matching")
 
     @tag.command(
         name="strict",

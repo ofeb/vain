@@ -43,7 +43,7 @@ def _parse_response_flags(raw: str) -> tuple[str, dict[str, object], str | None]
     - ``--ignore_command_check``
     """
     flags = {
-        "strict": None,  # None = use default (False / not strict)
+        "strict": None,  
         "self_destruct": None,
         "delete": False,
         "reply": False,
@@ -134,7 +134,7 @@ class AutoresponderCommands(Package):
                 {
                     "trigger": trigger,
                     "response": "",
-                    "strict": True,
+                    "strict": False,
                     "reply": False,
                     "self_destruct": None,
                     "delete_trigger": False,
@@ -146,7 +146,11 @@ class AutoresponderCommands(Package):
                 },
             )
 
-        return [records[key] for key in sorted(records)]
+        
+        return sorted(
+            records.values(),
+            key=lambda r: (-len(str(r.get("trigger") or "")), str(r.get("trigger") or "").lower()),
+        )
 
     async def _exclusive_allowed(self, ctx, trigger: str) -> bool:
         rows = await self.db.list_autoresponder_exclusives(ctx.guild.id, trigger)
@@ -345,7 +349,7 @@ class AutoresponderCommands(Package):
             if timer > 60:
                 raise CommandError("self-destruct timer must stay under `60` seconds")
 
-        # Default: not strict (substring match)
+        
         strict = bool(flags["strict"]) if flags["strict"] is not None else False
         should_delete = bool(flags["delete"])
         should_reply = bool(flags["reply"])
@@ -553,48 +557,84 @@ class AutoresponderCommands(Package):
         """Add an autoresponder (not strict by default)."""
         return await self._upsert_autoresponder(ctx, args)
 
+    async def _find_trigger(self, guild_id: int, trigger: str) -> str | None:
+        """Case-insensitive trigger lookup; returns the stored trigger name."""
+        row = await self.db.fetchrow(
+            """
+            SELECT trigger FROM auto_responders
+            WHERE guild_id = $1 AND LOWER(trigger) = LOWER($2)
+            LIMIT 1
+            """,
+            guild_id,
+            trigger,
+        )
+        return row["trigger"] if row else None
+
     @autoresponder.command(
         name="strict",
-        usage="<trigger> <on|off>",
-        example=",autoresponder strict welc on",
-        description="Toggle strict matching for a trigger (default: off)",
+        usage="<trigger|all> <on|off>",
+        example=",autoresponder strict website off",
+        description="Toggle strict matching (default: off). Use 'all' for every trigger.",
     )
     @has_permissions(manage_channels=True)
     async def autoresponder_strict(self, ctx, trigger: str, state: str = None):
-        """`,autoresponder strict <name> on|off` — exact match vs substring."""
+        """`,autoresponder strict <name|all> on|off` — exact match vs substring.
+
+        Also accepts: `,autoresponder strict all off`
+        """
         if not state:
+            if trigger.lower() == "all":
+                rows = await self.db.fetch(
+                    "SELECT trigger, strict FROM auto_responders WHERE guild_id = $1",
+                    ctx.guild.id,
+                )
+                if not rows:
+                    raise CommandError("no autoresponders found")
+                strict_n = sum(1 for r in rows if r["strict"])
+                return await ctx.success(
+                    f"**{strict_n}** strict · **{len(rows) - strict_n}** not strict "
+                    f"(of {len(rows)})"
+                )
+            stored = await self._find_trigger(ctx.guild.id, trigger)
+            if not stored:
+                raise CommandError(f"no autoresponder for **{trigger}**")
             row = await self.db.fetchrow(
                 "SELECT strict FROM auto_responders WHERE guild_id = $1 AND trigger = $2",
                 ctx.guild.id,
-                trigger,
+                stored,
             )
-            if not row:
-                raise CommandError(f"no autoresponder for **{trigger}**")
-            mode = "strict" if row["strict"] else "not strict"
-            return await ctx.success(f"**{trigger}** is **{mode}**")
+            mode = "strict" if row and row["strict"] else "not strict"
+            return await ctx.success(f"**{stored}** is **{mode}**")
 
         low = state.lower().strip()
         if low in {"on", "enable", "true", "yes", "1", "strict"}:
             strict = True
-        elif low in {"off", "disable", "false", "no", "0", "loose", "not_strict"}:
+        elif low in {"off", "disable", "false", "no", "0", "loose", "not_strict", "not-strict"}:
             strict = False
         else:
             return await ctx.warn("Use `on` or `off`")
 
-        updated = await self.db.fetchval(
-            """
-            UPDATE auto_responders SET strict = $3
-            WHERE guild_id = $1 AND trigger = $2
-            RETURNING trigger
-            """,
+        if trigger.lower() in {"all", "*", "every"}:
+            await self.db.execute(
+                "UPDATE auto_responders SET strict = $2 WHERE guild_id = $1",
+                ctx.guild.id,
+                strict,
+            )
+            return await ctx.success(
+                f"All autoresponders are now **{'strict' if strict else 'not strict'}**"
+            )
+
+        stored = await self._find_trigger(ctx.guild.id, trigger)
+        if not stored:
+            raise CommandError(f"no autoresponder for **{trigger}**")
+        await self.db.execute(
+            "UPDATE auto_responders SET strict = $3 WHERE guild_id = $1 AND trigger = $2",
             ctx.guild.id,
-            trigger,
+            stored,
             strict,
         )
-        if not updated:
-            raise CommandError(f"no autoresponder for **{trigger}**")
         return await ctx.success(
-            f"**{trigger}** is now **{'strict' if strict else 'not strict'}**"
+            f"**{stored}** is now **{'strict' if strict else 'not strict'}**"
         )
 
     @autoresponder.group(
@@ -738,14 +778,19 @@ class AutoresponderCommands(Package):
             if not records:
                 return
 
-            content = ctx.message.content.lower()
+            content = ctx.message.content.lower().strip()
             for record in records:
-                trigger = record["trigger"].lower()
-                if record["strict"]:
+                trigger = str(record["trigger"] or "").lower().strip()
+                if not trigger:
+                    continue
+                
+                is_strict = bool(record.get("strict"))
+                if is_strict:
                     if content != trigger:
                         continue
-                elif trigger not in content:
-                    continue
+                else:
+                    if trigger not in content:
+                        continue
 
                 handled = await self._send_response(ctx, record)
                 if handled:
