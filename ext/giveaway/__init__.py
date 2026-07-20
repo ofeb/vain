@@ -309,6 +309,7 @@ class Giveaway(commands.Cog):
 
     @group(
         name="giveaway",
+        aliases=["gw"],
         description="Start a giveaway quickly and easily",
         guild_only=True,
     )

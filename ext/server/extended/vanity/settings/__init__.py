@@ -21,6 +21,13 @@ from core.vain import Vain
 
 logger = getLogger("vain.server.extended.vanity.settings")
 
+# Anti-spam for notify only (not 3 hours — that blocked real notifications)
+_NOTIFY_COOLDOWN_SEC = 30
+
+_INVISIBLE_RE = re.compile(r"[\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff\u00ad]")
+# Normalize fancy slashes / dots people paste into status
+_SLASH_RE = re.compile(r"[／⁄∕／]")
+
 
 class Record(TypedDict, total=False):
     guild_id: int
@@ -72,6 +79,10 @@ class Settings:
         if not cid:
             return None
         ch = self.guild.get_channel_or_thread(int(cid))
+        if isinstance(ch, (TextChannel, Thread)):
+            return ch
+        # Fallback cache miss
+        ch = self.bot.get_channel(int(cid))
         return ch if isinstance(ch, (TextChannel, Thread)) else None
 
     @property
@@ -86,6 +97,12 @@ class Settings:
     @property
     def assignable_roles(self) -> list[Role]:
         return [r for r in self.roles if r.is_assignable()]
+
+    @property
+    def grantable_roles(self) -> list[Role]:
+        """Roles we should attempt to grant (prefer assignable, fall back to all)."""
+        assignable = self.assignable_roles
+        return assignable if assignable else list(self.roles)
 
     @property
     def _default_template(self) -> str:
@@ -175,51 +192,97 @@ class Settings:
         """Send notification when a member starts repping vanity."""
         channel = self.channel
         if not channel:
-            logger.debug("vanity dispatch skipped: no channel guild=%s", self.guild.id)
+            logger.warning(
+                "vanity dispatch skipped: no channel guild=%s channel_id=%s",
+                self.guild.id,
+                self.channel_id,
+            )
             return None
+
         redis = getattr(self.bot, "redis", None)
         key = f"notifs.vanity:{self.guild.id}-{member.id}"
         if redis is not None:
             try:
-                if await redis.ratelimited(key, 1, 3 * 3600):
-                    logger.debug("vanity dispatch ratelimited %s", key)
+                # Short anti-spam only (was 3h and blocked real notifications)
+                if await redis.ratelimited(key, 1, _NOTIFY_COOLDOWN_SEC):
+                    logger.debug("vanity dispatch cooldown %s", key)
                     return None
             except Exception:
                 pass
+
         from core.tools.embed import Script
 
         template = self.template or self._default_template
-        script = Script(template, user=member)
-        vanity_code = self.guild.vanity_url_code or "vanity"
+        vanity_code = (self.guild.vanity_url_code or "vanity").lstrip("/")
         reward_role = (
             self.assignable_roles[0]
             if self.assignable_roles
             else (self.roles[0] if self.roles else None)
         )
+        allowed = discord.AllowedMentions(users=True, roles=False, everyone=False)
+
         try:
-            msg = await script.send(
-                channel,
+            script = Script(template, user=member)
+            rendered = script.render(
                 user=member,
                 member=member,
                 guild=self.guild,
                 channel=channel,
                 vanity=vanity_code,
                 vanity_role=reward_role,
-                allowed_mentions=discord.AllowedMentions(users=True),
             )
+            # Safety net: never leave raw {user.mention} in chat
+            rendered = rendered.replace("{user.mention}", member.mention)
+            rendered = rendered.replace("{user}", member.mention)
+            rendered = rendered.replace("{member.mention}", member.mention)
+            rendered = rendered.replace("{member}", member.mention)
+
+            if not rendered.strip():
+                rendered = f"thank you {member.mention} for repping /{vanity_code}"
+
+            # Prefer Script.send for full embed scripts; plain text → channel.send
+            if "{embed}" in template.lower() or "$v{" in template:
+                msg = await script.send(
+                    channel,
+                    user=member,
+                    member=member,
+                    guild=self.guild,
+                    channel=channel,
+                    vanity=vanity_code,
+                    vanity_role=reward_role,
+                    allowed_mentions=allowed,
+                )
+            else:
+                msg = await channel.send(content=rendered, allowed_mentions=allowed)
+
             logger.info(
-                "vanity notify guild=%s member=%s channel=%s",
+                "vanity notify guild=%s member=%s channel=%s content=%r",
                 self.guild.id,
                 member.id,
                 channel.id,
+                rendered[:120],
             )
             return msg
         except HTTPException as exc:
-            logger.warning("vanity dispatch HTTP failed guild=%s: %s", self.guild.id, exc)
+            logger.warning(
+                "vanity dispatch HTTP failed guild=%s channel=%s: %s",
+                self.guild.id,
+                getattr(channel, "id", None),
+                exc,
+            )
             return None
         except Exception as exc:
-            logger.exception("vanity dispatch error guild=%s: %s", self.guild.id, exc)
-            return None
+            logger.exception(
+                "vanity dispatch error guild=%s: %s", self.guild.id, exc
+            )
+            # Last-resort plain message so the feature never silently dies
+            try:
+                return await channel.send(
+                    content=f"thank you {member.mention} for repping /{vanity_code}",
+                    allowed_mentions=allowed,
+                )
+            except Exception:
+                return None
 
 
 def get_status(member: Member) -> str:
@@ -229,13 +292,15 @@ def get_status(member: Member) -> str:
     and the real text in ``state``. We also fall back to ``str(activity)``.
     """
     parts: list[str] = []
-    activities = list(member.activities or ())
-    
+    activities = list(getattr(member, "activities", None) or ())
+
     primary = getattr(member, "activity", None)
     if primary is not None and primary not in activities:
-        activities.append(primary)
+        activities.insert(0, primary)
 
     for activity in activities:
+        if activity is None:
+            continue
         atype = getattr(activity, "type", None)
         is_custom = (
             isinstance(activity, CustomActivity)
@@ -244,18 +309,17 @@ def get_status(member: Member) -> str:
             or int(getattr(atype, "value", -1)) == 4
         )
         if is_custom:
-            for attr in ("state", "name"):
+            for attr in ("state", "name", "details"):
                 val = getattr(activity, attr, None)
                 if not val:
                     continue
                 text = str(val).strip()
-                if not text or text.lower() == "custom status":
+                if not text or text.lower() in {"custom status", "customstatus"}:
                     continue
                 parts.append(text)
-            
             try:
                 as_str = str(activity).strip()
-                if as_str and as_str.lower() != "custom status":
+                if as_str and as_str.lower() not in {"custom status", "customstatus"}:
                     parts.append(as_str)
             except Exception:
                 pass
@@ -266,10 +330,12 @@ def get_status(member: Member) -> str:
             if val:
                 parts.append(str(val))
 
-    
     seen: set[str] = set()
     clean: list[str] = []
     for p in parts:
+        p = _INVISIBLE_RE.sub("", p).strip()
+        if not p:
+            continue
         low = p.lower()
         if low not in seen:
             seen.add(low)
@@ -281,24 +347,30 @@ def vanity_matches(status: str, code: str, *, strict: bool = False) -> bool:
     """Whether *status* is considered repping *code*."""
     if not code:
         return False
-    status = (status or "").lower()
-    code = code.lower().lstrip("/").strip()
+    status = _INVISIBLE_RE.sub("", (status or "")).lower()
+    status = _SLASH_RE.sub("/", status)
+    code = _INVISIBLE_RE.sub("", code).lower().lstrip("/").strip()
     if not status or not code:
         return False
 
-    
     normalized = (
         status.replace("https://", "")
         .replace("http://", "")
         .replace("www.", "")
         .replace("discord.gg/", "/")
         .replace("discord.com/invite/", "/")
+        .replace("discordapp.com/invite/", "/")
         .replace(".gg/", "/")
     )
+    # Collapse spaces around slash: "/ bars" → "/bars"
+    normalized = re.sub(r"/\s+", "/", normalized)
+    status_ns = re.sub(r"\s+", "", status)
+    normalized_ns = re.sub(r"\s+", "", normalized)
 
     if not strict:
-        
-        return code in status or code in normalized or f"/{code}" in status
+        needles = (code, f"/{code}", f".gg/{code}")
+        haystacks = (status, normalized, status_ns, normalized_ns)
+        return any(n in h for n in needles for h in haystacks)
 
     patterns = (
         rf"(?:^|[\s])/{re.escape(code)}(?:\b|$)",

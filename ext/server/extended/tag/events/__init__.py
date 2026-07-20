@@ -28,7 +28,7 @@ class TagEvents:
         if before_on == after_on:
             return
 
-        log.debug(
+        log.info(
             "tag update guild=%s member=%s on=%s→%s",
             after.guild.id,
             after.id,
@@ -45,9 +45,9 @@ class TagEvents:
         repping: bool,
         notify: bool,
     ) -> None:
-        assignable = settings.assignable_roles
-        has = [role for role in assignable if role in member.roles]
-        miss = [role for role in assignable if role not in member.roles]
+        candidates = settings.grantable_roles
+        has = [role for role in candidates if role in member.roles]
+        miss = [role for role in candidates if role not in member.roles]
 
         if not repping:
             if has:
@@ -77,15 +77,32 @@ class TagEvents:
                     member.id,
                     exc,
                 )
-        elif not assignable and settings.role_ids:
+                for role in miss:
+                    try:
+                        await member.add_roles(role, reason="guild tag displayed")
+                    except Exception as e2:
+                        log.warning(
+                            "tag add_role failed role=%s member=%s: %s",
+                            role.id,
+                            member.id,
+                            e2,
+                        )
+        elif not candidates and settings.role_ids:
             log.warning(
-                "tag roles configured but none assignable guild=%s role_ids=%s",
+                "tag roles configured but none found guild=%s role_ids=%s",
                 member.guild.id,
                 settings.role_ids,
             )
 
         if notify:
-            await settings.dispatch(member)
+            try:
+                await settings.dispatch(member)
+            except Exception:
+                log.exception(
+                    "tag dispatch raised member=%s guild=%s",
+                    member.id,
+                    member.guild.id,
+                )
 
     async def sync_member(
         self, member: Member, *, notify: bool = False
@@ -113,9 +130,9 @@ class TagEvents:
             repping = member_repping_tag(member, guild, strict=settings.strict)
             if repping:
                 count += 1
-            assignable = settings.assignable_roles
-            has = any(r in member.roles for r in assignable)
-            will_grant = repping and assignable and not has
+            candidates = settings.grantable_roles
+            has = any(r in member.roles for r in candidates)
+            will_grant = repping and candidates and not has
             await self._apply_tag_state(
                 member,
                 settings,

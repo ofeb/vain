@@ -23,9 +23,6 @@ class VanityEvents:
 
         before_status = get_status(before)
         after_status = get_status(after)
-        
-        if before_status == after_status:
-            return
 
         settings = await Settings.fetch(self.bot, guild)
         if not settings.role_ids and not settings.channel_id:
@@ -36,7 +33,12 @@ class VanityEvents:
         before_on = vanity_matches(before_status, code, strict=strict)
         after_on = vanity_matches(after_status, code, strict=strict)
 
-        log.debug(
+        # Skip only when match state is unchanged (status text can differ
+        # without affecting match, or Discord can send empty before activities).
+        if before_on == after_on:
+            return
+
+        log.info(
             "vanity presence guild=%s member=%s before=%r after=%r on=%s→%s",
             guild.id,
             after.id,
@@ -45,9 +47,6 @@ class VanityEvents:
             before_on,
             after_on,
         )
-
-        if before_on == after_on:
-            return
 
         await self._apply_vanity_state(after, settings, repping=after_on, notify=after_on)
 
@@ -60,9 +59,10 @@ class VanityEvents:
         notify: bool,
     ) -> None:
         """Grant/remove vanity roles and optionally send the notification."""
-        assignable = settings.assignable_roles
-        has = [role for role in assignable if role in member.roles]
-        miss = [role for role in assignable if role not in member.roles]
+        # Prefer assignable; still try all configured roles if hierarchy is close
+        candidates = settings.grantable_roles
+        has = [role for role in candidates if role in member.roles]
+        miss = [role for role in candidates if role not in member.roles]
         code = member.guild.vanity_url_code or "?"
 
         if not repping:
@@ -88,7 +88,6 @@ class VanityEvents:
                     )
             return
 
-        
         if miss:
             try:
                 await member.add_roles(
@@ -104,21 +103,44 @@ class VanityEvents:
                 )
             except (HTTPException, discord.Forbidden) as exc:
                 log.warning(
-                    "vanity add_roles failed member=%s guild=%s: %s "
-                    "(check role hierarchy — bot role must be above vanity roles)",
+                    "vanity add_roles failed member=%s guild=%s roles=%s: %s "
+                    "(bot role must be ABOVE vanity roles; Manage Roles required)",
                     member.id,
                     member.guild.id,
+                    [r.id for r in miss],
                     exc,
                 )
-        elif not assignable and settings.role_ids:
+                # Try one-by-one so one bad role doesn't block the rest
+                for role in miss:
+                    try:
+                        await member.add_roles(
+                            role,
+                            reason=f"vanity /{code} now in status",
+                        )
+                    except Exception as e2:
+                        log.warning(
+                            "vanity add_role failed role=%s member=%s: %s",
+                            role.id,
+                            member.id,
+                            e2,
+                        )
+        elif not candidates and settings.role_ids:
             log.warning(
-                "vanity roles configured but none assignable guild=%s role_ids=%s",
+                "vanity roles configured but none found in guild=%s role_ids=%s",
                 member.guild.id,
                 settings.role_ids,
             )
 
+        # Always try to notify when requested — role failure must not block it
         if notify:
-            await settings.dispatch(member)
+            try:
+                await settings.dispatch(member)
+            except Exception:
+                log.exception(
+                    "vanity dispatch raised member=%s guild=%s",
+                    member.id,
+                    member.guild.id,
+                )
 
     async def sync_member(
         self, member: Member, *, notify: bool = False
@@ -131,18 +153,9 @@ class VanityEvents:
         if not settings.role_ids and not settings.channel_id:
             return None
         repping = member_repping_vanity(member, guild, strict=settings.strict)
-        assignable = settings.assignable_roles
-        has = [r for r in assignable if r in member.roles]
-        
-        should_notify = notify and repping and bool([r for r in assignable if r not in member.roles])
-        
-        if repping and not has and assignable:
-            should_notify = notify
-        elif repping and has and notify:
-            
-            should_notify = notify
+        # Always honor notify flag when repping (do not gate on role hierarchy)
         await self._apply_vanity_state(
-            member, settings, repping=repping, notify=should_notify and repping
+            member, settings, repping=repping, notify=bool(notify and repping)
         )
         return repping
 
@@ -160,10 +173,9 @@ class VanityEvents:
             repping = member_repping_vanity(member, guild, strict=settings.strict)
             if repping:
                 count += 1
-            assignable = settings.assignable_roles
-            has = any(r in member.roles for r in assignable)
-            
-            will_grant = repping and assignable and not has
+            candidates = settings.grantable_roles
+            has = any(r in member.roles for r in candidates)
+            will_grant = repping and candidates and not has
             await self._apply_vanity_state(
                 member,
                 settings,

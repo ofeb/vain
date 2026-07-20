@@ -234,21 +234,30 @@ class VanityCommands(VanityEvents, Package):
         repping = member_repping_vanity(member, ctx.guild, strict=settings.strict)
         code = ctx.guild.vanity_url_code or "?"
 
-        had_roles = any(r in member.roles for r in settings.assignable_roles)
-        
+        grantable = settings.grantable_roles
+        had_roles = any(r in member.roles for r in grantable)
+
+        # Force roles + message when currently repping
         await self.sync_member(
             member,
             notify=bool(repping and settings.channel_id),
         )
-        has_roles = any(r in member.roles for r in settings.assignable_roles)
+        # Refresh member roles from cache after grant attempt
+        try:
+            member = ctx.guild.get_member(member.id) or member
+        except Exception:
+            pass
+        has_roles = any(r in member.roles for r in grantable)
 
         lines = [
             f"**Vanity:** `/{code}`",
             f"**Status text seen:** `{raw or '∅ empty'}`",
             f"**Match ({'strict' if settings.strict else 'loose'}):** "
             f"{'yes' if repping else 'no'}",
-            f"**Roles assignable:** "
-            f"{', '.join(r.mention for r in settings.assignable_roles) or 'none'}",
+            f"**Roles (will try):** "
+            f"{', '.join(r.mention for r in grantable) or 'none'}",
+            f"**Bot can assign:** "
+            f"{', '.join(r.mention for r in settings.assignable_roles) or 'none — move bot role higher'}",
             f"**Member has reward role:** {'yes' if has_roles else 'no'}"
             + ("" if had_roles == has_roles else " *(updated)*"),
             f"**Notify channel:** "
@@ -261,7 +270,7 @@ class VanityCommands(VanityEvents, Package):
                 "\n".join(lines)
                 + "\n-# Tip: set custom status to `/"
                 + code
-                + "` then wait a few seconds, or re-run this command."
+                + "` then run `,vanity check` again."
             )
 
     @vanity.command(

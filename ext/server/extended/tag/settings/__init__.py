@@ -3,11 +3,14 @@ from __future__ import annotations
 from logging import getLogger
 from typing import Any, TypedDict
 
+import discord
 from discord import Guild, HTTPException, Member, Message, Role, TextChannel, Thread
 
 from core.vain import Vain
 
 logger = getLogger("vain.server.extended.tag.settings")
+
+_NOTIFY_COOLDOWN_SEC = 30
 
 
 class Record(TypedDict, total=False):
@@ -60,6 +63,9 @@ class Settings:
         if not cid:
             return None
         ch = self.guild.get_channel_or_thread(int(cid))
+        if isinstance(ch, (TextChannel, Thread)):
+            return ch
+        ch = self.bot.get_channel(int(cid))
         return ch if isinstance(ch, (TextChannel, Thread)) else None
 
     @property
@@ -74,6 +80,11 @@ class Settings:
     @property
     def assignable_roles(self) -> list[Role]:
         return [r for r in self.roles if r.is_assignable()]
+
+    @property
+    def grantable_roles(self) -> list[Role]:
+        assignable = self.assignable_roles
+        return assignable if assignable else list(self.roles)
 
     @property
     def _default_template(self) -> str:
@@ -161,44 +172,87 @@ class Settings:
     async def dispatch(self, member: Member) -> Message | None:
         channel = self.channel
         if not channel:
+            logger.warning(
+                "tag dispatch skipped: no channel guild=%s channel_id=%s",
+                self.guild.id,
+                self.channel_id,
+            )
             return None
+
         redis = getattr(self.bot, "redis", None)
         key = f"notifs.tag:{self.guild.id}-{member.id}"
         if redis is not None:
             try:
-                if await redis.ratelimited(key, 1, 3 * 3600):
+                if await redis.ratelimited(key, 1, _NOTIFY_COOLDOWN_SEC):
+                    logger.debug("tag dispatch cooldown %s", key)
                     return None
             except Exception:
                 pass
+
         from core.tools.embed import Script
-        import discord as _discord
 
         pg = getattr(member, "primary_guild", None)
         tag = getattr(pg, "tag", None) if pg else None
         template = self.template or self._default_template
-        script = Script(template, user=member)
         reward_role = (
             self.assignable_roles[0]
             if self.assignable_roles
             else (self.roles[0] if self.roles else None)
         )
+        allowed = discord.AllowedMentions(users=True, roles=False, everyone=False)
+        tag_str = str(tag or "tag")
+
         try:
-            return await script.send(
-                channel,
+            script = Script(template, user=member)
+            rendered = script.render(
                 user=member,
                 member=member,
                 guild=self.guild,
                 channel=channel,
-                tag=str(tag or "tag"),
+                tag=tag_str,
                 tag_role=reward_role,
-                allowed_mentions=_discord.AllowedMentions(users=True),
             )
+            rendered = rendered.replace("{user.mention}", member.mention)
+            rendered = rendered.replace("{user}", member.mention)
+            rendered = rendered.replace("{member.mention}", member.mention)
+            rendered = rendered.replace("{member}", member.mention)
+            rendered = rendered.replace("{tag}", tag_str)
+
+            if not rendered.strip():
+                rendered = f"thank you {member.mention} for repping the server tag"
+
+            if "{embed}" in template.lower() or "$v{" in template:
+                return await script.send(
+                    channel,
+                    user=member,
+                    member=member,
+                    guild=self.guild,
+                    channel=channel,
+                    tag=tag_str,
+                    tag_role=reward_role,
+                    allowed_mentions=allowed,
+                )
+            msg = await channel.send(content=rendered, allowed_mentions=allowed)
+            logger.info(
+                "tag notify guild=%s member=%s channel=%s content=%r",
+                self.guild.id,
+                member.id,
+                channel.id,
+                rendered[:120],
+            )
+            return msg
         except HTTPException as exc:
             logger.warning("tag dispatch failed guild=%s: %s", self.guild.id, exc)
             return None
         except Exception as exc:
             logger.exception("tag dispatch error guild=%s: %s", self.guild.id, exc)
-            return None
+            try:
+                return await channel.send(
+                    content=f"thank you {member.mention} for repping the server tag",
+                    allowed_mentions=allowed,
+                )
+            except Exception:
+                return None
 
 
 def member_repping_tag(
@@ -213,36 +267,6 @@ def member_repping_tag(
         return False
     enabled = getattr(pg, "identity_enabled", None)
     if strict:
-        
         return enabled is True
-    
+    # Non-strict: accept if identity is not explicitly disabled
     return enabled is not False
-
-
-def tag_label(member: Member) -> str | None:
-    pg = getattr(member, "primary_guild", None)
-    return getattr(pg, "tag", None) if pg else None
-
-
-async def fetch(bot: Vain, guild: Guild) -> Settings:
-    return await Settings.fetch(bot, guild)
-
-
-async def upsert(bot: Vain, guild: Guild, **kwargs: Any) -> Settings:
-    settings = await Settings.fetch(bot, guild)
-    return await settings.upsert(**kwargs)
-
-
-async def insert(bot: Vain, guild: Guild, **kwargs: Any) -> Settings:
-    return await upsert(bot, guild, **kwargs)
-
-
-__all__ = [
-    "Settings",
-    "Record",
-    "member_repping_tag",
-    "tag_label",
-    "fetch",
-    "upsert",
-    "insert",
-]

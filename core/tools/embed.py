@@ -112,13 +112,14 @@ def is_embed_script(raw: str) -> bool:
 
 
 def maybe_wrap_embed_script(text: str) -> str:
-    """Wrap plain text as ``{content: text}`` when it is not already embed code."""
+    """Wrap plain text as ``{content: text}`` when it is not already embed code.
+
+    Plain templates (including leftover ``{var}`` tokens) stay plain content —
+    they are NOT treated as embed scripts just because they contain braces.
+    """
     if is_embed_script(text):
         return text
-    stripped = text.strip()
-    if "{" in stripped and "}" in stripped:
-        return text
-    return f"{{content: {stripped}}}"
+    return text
 
 
 def _over_by(val, limit: int) -> int:
@@ -201,11 +202,15 @@ def _format_unix(value) -> str:
 
 
 def _user_replacements(prefix: str, user) -> dict[str, str]:
+    uid = getattr(user, "id", None)
+    # Always use snowflake mention so scripts never leave literal {user.mention}
+    mention = f"<@{uid}>" if uid is not None else str(getattr(user, "mention", user))
     replacements = {
-        f"{{{prefix}}}": str(user),
-        f"{{{prefix}.id}}": str(user.id),
-        f"{{{prefix}.mention}}": str(getattr(user, "mention", user)),
+        f"{{{prefix}}}": mention,
+        f"{{{prefix}.id}}": str(uid or ""),
+        f"{{{prefix}.mention}}": mention,
         f"{{{prefix}.name}}": str(getattr(user, "name", user)),
+        f"{{{prefix}.display_name}}": str(getattr(user, "display_name", user)),
         f"{{{prefix}.bot}}": "Yes" if getattr(user, "bot", False) else "No",
         f"{{{prefix}.color}}": str(getattr(user, "color", "")),
         f"{{{prefix}.avatar}}": _asset_url(getattr(user, "display_avatar", None)),
