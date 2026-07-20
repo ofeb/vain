@@ -250,7 +250,7 @@ class Giveaway(commands.Cog):
         ref: str | None = None,
     ) -> discord.Message | None:
         """Resolve a giveaway message from reply, jump link, or id."""
-        # Reply first
+        
         if ctx.message.reference and ctx.message.reference.message_id:
             try:
                 return await ctx.channel.fetch_message(ctx.message.reference.message_id)
@@ -261,7 +261,7 @@ class Giveaway(commands.Cog):
             return None
         raw = str(ref).strip()
 
-        # Jump URL
+        
         m = re.search(
             r"(?:https?://)?(?:(?:ptb|canary)\.)?discord(?:app)?\.com/channels/"
             r"(\d+)/(\d+)/(\d+)",
@@ -282,7 +282,7 @@ class Giveaway(commands.Cog):
                     return None
             return None
 
-        # Bare snowflake id (current channel, then DB channel)
+        
         if raw.isdigit() and 15 <= len(raw) <= 20:
             message_id = int(raw)
             try:
@@ -364,7 +364,7 @@ class Giveaway(commands.Cog):
         - `,giveaway reroll https://discord.com/channels/.../.../...`
         - `,giveaway reroll 123… 2` (2 winners)
         """
-        # Allow ",giveaway reroll 2" when replying (winners as first arg)
+        
         winners_count = winners
         ref = target
         if target and target.isdigit() and len(target) < 15 and ctx.message.reference:
@@ -660,7 +660,7 @@ class Giveaway(commands.Cog):
             host=ctx.author.mention,
         )
 
-        # Send first, then react + insert in parallel for speed
+        
         message = await channel.send(embed=embed)
 
         async def _react() -> None:
@@ -700,7 +700,7 @@ class Giveaway(commands.Cog):
         if events:
             events.schedule_end(message.id, end_time)
 
-        # Lightweight confirm (no heavy embed)
+        
         try:
             await ctx.message.add_reaction("👍")
         except Exception:

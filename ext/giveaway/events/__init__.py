@@ -81,7 +81,7 @@ class GiveawayEvents(Cog):
 
     async def cog_load(self) -> None:
         self.poll_expired_giveaways.start()
-        # Reschedule live giveaways after restart
+        
         asyncio.create_task(self._reschedule_active())
 
     async def cog_unload(self) -> None:
@@ -209,7 +209,7 @@ class GiveawayEvents(Cog):
             "max_level": giveaway.get("max_level"),
         }
         if not await self.check_requirements(member, requirements):
-            # Remove invalid reaction quickly
+            
             channel = guild.get_channel(payload.channel_id) or self.bot.get_channel(
                 payload.channel_id
             )
@@ -273,7 +273,7 @@ class GiveawayEvents(Cog):
         """End a giveaway: edit panel, pick winners, reply with ping + embed."""
         message_id = int(giveaway["message_id"])
         async with self.locks[f"giveaway-end:{message_id}"]:
-            # Re-fetch to avoid double-end races
+            
             row = await self.bot.db.fetchrow(
                 "SELECT * FROM giveaways WHERE message_id = $1",
                 message_id,
@@ -300,7 +300,7 @@ class GiveawayEvents(Cog):
 
             prize = giveaway.get("prize") or "Giveaway"
             entries = list(giveaway.get("entries") or [])
-            # Prefer reaction users if DB entries empty (fast path missed some)
+            
             if not entries and message.reactions:
                 for reaction in message.reactions:
                     if str(reaction.emoji) == "🎉":
@@ -325,7 +325,7 @@ class GiveawayEvents(Cog):
                     await message.edit(embed=ended)
                 except Exception:
                     pass
-                # Mark ended without a win message
+                
                 await self.bot.db.execute(
                     "UPDATE giveaways SET win_message_id = $1, entries = $2 WHERE message_id = $3",
                     message.id,
