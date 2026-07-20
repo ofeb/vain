@@ -47,7 +47,7 @@ def caption(text: str) -> str:
     return f"-# {text}"
 
 
-def aesthetic_embed(
+def c2(
     *,
     color: int,
     message: str,
@@ -183,7 +183,7 @@ class Fun(Package):
     async def flip(self, ctx: Context) -> None:
         """Flip a coin."""
         result = random.choice(["Heads", "Tails"])
-        embed = aesthetic_embed(
+        embed = c2(
             title="🪙 Coin Flip",
             color=color.base,
             message=f"**Result:** {result}",
@@ -220,7 +220,7 @@ class Fun(Package):
     async def rate(self, ctx: Context, *, thing: str) -> None:
         """Rate something out of 10."""
         rating = random.randint(1, 10)
-        embed = aesthetic_embed(
+        embed = c2(
             title="⭐ Rating",
             color=color.base,
             message=f"**{thing}** gets a **{rating}/10**",
@@ -241,7 +241,7 @@ class Fun(Package):
         if not user.banner:
             return await ctx.warn(f"{member.mention} doesn't have a banner")
         
-        embed = aesthetic_embed(
+        embed = c2(
             title=f"{member.display_name}'s Banner",
             color=color.base,
             message="",
@@ -308,7 +308,7 @@ class Fun(Package):
             "Cows have best friends and get stressed when separated.",
             "The first oranges weren't orange - they were green.",
         ]
-        embed = aesthetic_embed(
+        embed = c2(
             title="🎉 Fun Fact",
             color=color.base,
             message=random.choice(facts),
@@ -334,7 +334,7 @@ class Fun(Package):
             "What do you call a fish without eyes? A fsh!",
             "Why did the math book look so sad? Because it had too many problems!",
         ]
-        embed = aesthetic_embed(
+        embed = c2(
             title="😂 Joke",
             color=color.base,
             message=random.choice(jokes),
@@ -437,7 +437,7 @@ class Fun(Package):
             return await ctx.warn("Provide an image URL or attach an image.")
 
         query = urllib.parse.quote(url)
-        embed = aesthetic_embed(
+        embed = c2(
             title="Reverse Image Search",
             color=color.base,
             message=f"[Reverse search this image on Google](https://lens.google.com/uploadbyurl?url={query})",
@@ -454,7 +454,7 @@ class Fun(Package):
     @describe(search="Search query")
     async def image(self, ctx: Context, *, search: str) -> None:
         query = urllib.parse.quote(search)
-        embed = aesthetic_embed(
+        embed = c2(
             title="Image Search",
             color=color.base,
             message=f"[Search for **{search}** images on Google](https://www.google.com/search?q={query}&tbm=isch)",
@@ -470,7 +470,7 @@ class Fun(Package):
     @describe(keyword="Search keyword")
     async def giphy(self, ctx: Context, *, keyword: str) -> None:
         query = urllib.parse.quote(keyword)
-        embed = aesthetic_embed(
+        embed = c2(
             title="Giphy Search",
             color=color.base,
             message=f"[Search for **{keyword}** on Giphy](https://giphy.com/search/{query})",
@@ -485,7 +485,7 @@ class Fun(Package):
     @describe(keyword="Search keyword")
     async def tenor(self, ctx: Context, *, keyword: str) -> None:
         query = urllib.parse.quote(keyword)
-        embed = aesthetic_embed(
+        embed = c2(
             title="Tenor Search",
             color=color.base,
             message=f"[Search for **{keyword}** on Tenor](https://tenor.com/search/{query})",
@@ -501,7 +501,7 @@ class Fun(Package):
     @describe(query="What you want to learn how to do")
     async def wikihow(self, ctx: Context, *, query: str) -> None:
         query_encoded = urllib.parse.quote(query)
-        embed = aesthetic_embed(
+        embed = c2(
             title="WikiHow",
             color=color.base,
             message=f"[How to {query}?](https://www.wikihow.com/wikiHowTo?search={query_encoded})",
@@ -516,7 +516,7 @@ class Fun(Package):
     @describe(query="Question to search for")
     async def brainly(self, ctx: Context, *, query: str) -> None:
         query_encoded = urllib.parse.quote(query)
-        embed = aesthetic_embed(
+        embed = c2(
             title="Brainly",
             color=color.base,
             message=f"[Search for **{query}** on Brainly](https://brainly.com/app/ask?q={query_encoded})",

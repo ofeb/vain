@@ -29,7 +29,7 @@ def body(*lines: str) -> str:
 def caption(text: str) -> str:
     return f"-# {text}"
 
-def aesthetic_embed(
+def c2(
     *,
     color: int,
     message: str,
@@ -78,7 +78,7 @@ class Miscellaneous(MiscellaneousEvents, Package):
         delta = now - self.bot.started_at
         hours, remainder = divmod(int(delta.total_seconds()), 3600)
         minutes, seconds = divmod(remainder, 60)
-        embed = aesthetic_embed(
+        embed = c2(
             title="Uptime",
             color=color.base,
             message=f"**{hours}h {minutes}m {seconds}s**",
@@ -92,7 +92,7 @@ class Miscellaneous(MiscellaneousEvents, Package):
     )
     async def invite(self, ctx: Context) -> None:
         bot_id = self.bot.user.id if self.bot.user else "0"
-        embed = aesthetic_embed(
+        embed = c2(
             title="Invite Vain",
             color=color.base,
             message="Use the buttons to invite me or join the support server!",
@@ -117,7 +117,7 @@ class Miscellaneous(MiscellaneousEvents, Package):
     )
     @describe(question="The poll question")
     async def poll(self, ctx: Context, *, question: str) -> None:
-        embed = aesthetic_embed(
+        embed = c2(
             title="Poll",
             color=color.base,
             message=question,
@@ -152,7 +152,7 @@ class Miscellaneous(MiscellaneousEvents, Package):
     @describe(user="User whose avatar to view")
     async def avatar(self, ctx: Context, *, user: discord.User = None) -> None:
         user = user or ctx.author
-        embed = aesthetic_embed(
+        embed = c2(
             title=f"{user.display_name}'s Avatar",
             color=color.base,
             message="",
@@ -329,7 +329,7 @@ class Miscellaneous(MiscellaneousEvents, Package):
         except ValueError:
             return await ctx.warn("Invalid hex color code.")
 
-        embed = aesthetic_embed(
+        embed = c2(
             title=f"Color: #{hex_clean.upper()}",
             color=color_val,
             message="",
@@ -386,7 +386,7 @@ class Miscellaneous(MiscellaneousEvents, Package):
         emoji_id = match.group(3)
         url = f"https://cdn.discordapp.com/emojis/{emoji_id}.{ext}?size=256"
 
-        embed = aesthetic_embed(
+        embed = c2(
             title=match.group(2),
             color=color.base,
             message="",

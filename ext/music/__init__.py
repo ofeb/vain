@@ -26,7 +26,7 @@ def body(*lines: str) -> str:
 def caption(text: str) -> str:
     return f"-# {text}"
 
-def aesthetic_embed(
+def c2(
     *,
     color: int,
     message: str,
@@ -496,7 +496,7 @@ class Music(MusicEvents, Package):
                     state.tracks.insert(0, track)
                 else:
                     state.tracks.append(track)
-                return await ctx.send(embed=aesthetic_embed(
+                return await ctx.send(embed=c2(
                     title="queued",
                     message=f"**{track.title}** — {track.author}",
                     color=color.base,
@@ -507,7 +507,7 @@ class Music(MusicEvents, Package):
             await player.play(track)
             if state.active_preset:
                 await self._apply_preset(player, state.active_preset)
-            await ctx.send(embed=aesthetic_embed(
+            await ctx.send(embed=c2(
                 title="now playing",
                 message=f"**{track.title}** — {track.author}",
                 color=color.base,

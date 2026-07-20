@@ -30,7 +30,7 @@ def body(*lines: str) -> str:
 def caption(text: str) -> str:
     return f"-# {text}"
 
-def aesthetic_embed(
+def c2(
     *,
     color: int,
     message: str,
@@ -72,7 +72,7 @@ def _ticket_embed(
     footer: str | None = None,
     author: str | None = None,
 ) -> discord.Embed:
-    embed = aesthetic_embed(
+    embed = c2(
         color=color.base,
         title=title,
         message=message,
@@ -893,7 +893,7 @@ class Tickets(TicketsEvents, Package):
         ids = settings.get("blacklist_user_ids") or []
         if not ids:
             return await ctx.warn("No users are blacklisted from tickets.")
-        await ctx.send(embed=aesthetic_embed(
+        await ctx.send(embed=c2(
             color=color.base,
             title="Ticket Blacklist",
             message=" ".join(f"<@{user_id}>" for user_id in ids),

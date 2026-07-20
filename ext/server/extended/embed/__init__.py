@@ -23,7 +23,7 @@ def body(*lines: str) -> str:
 def caption(text: str) -> str:
     return f"-# {text}"
 
-def aesthetic_embed(
+def c2(
     *,
     color: int,
     message: str,
@@ -179,7 +179,7 @@ class EmbedCommands(Package):
         code = self._embed_to_code(msg.embeds[0])
         if len(code) > 2000:
             return await ctx.warn("Embed code is too long to send here.")
-        await ctx.send(embed=aesthetic_embed(
+        await ctx.send(embed=c2(
             color=color.base,
             title="Embed Code",
             message=f"```{code}```",

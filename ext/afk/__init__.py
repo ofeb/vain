@@ -31,7 +31,7 @@ def caption(text: str) -> str:
     return f"-# {text}"
 
 
-def aesthetic_embed(
+def c2(
     *,
     color: int,
     message: str,
@@ -74,9 +74,8 @@ class Away(AFKEvents, Package):
     async def afk(self, ctx: Context, *, status: str = "AFK") -> None:
         store = self._store()
         await store.set(ctx.author.id, status or "AFK")
-        embed = aesthetic_embed(
+        embed = c2(
             color=color.base,
-            title="AFK",
             message=f"You're now **afk** — {status or 'AFK'}",
             timestamp=False,
         )
@@ -87,4 +86,4 @@ async def setup(bot: "Vain") -> None:
     await bot.add_cog(Away(bot))
 
 
-__all__ = ["Away", "setup", "aesthetic_embed"]
+__all__ = ["Away", "setup", "c2"]

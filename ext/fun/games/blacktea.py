@@ -21,7 +21,7 @@ def body(*lines: str) -> str:
 def caption(text: str) -> str:
     return f"-# {text}"
 
-def aesthetic_embed(
+def c2(
     *,
     color: int,
     message: str,
@@ -63,7 +63,7 @@ class BlackteaButton(discord.ui.Button):
 async def start_blacktea(ctx: Context, *, life_count: int = 3, timeout: int = 10):
     """Start a blacktea game."""
     ctx.bot.blacktea_matches[ctx.guild.id] = {}
-    embed = aesthetic_embed(
+    embed = c2(
         color=color.base,
         title="BlackTea Matchmaking",
         message="The game will begin in **15** seconds. Please click the :coffee: to join the game.",
@@ -100,7 +100,7 @@ async def start_blacktea(ctx: Context, *, life_count: int = 3, timeout: int = 10
     if len(button.users) < 2:
         ctx.bot.blacktea_matches.pop(ctx.guild.id, None)
         return await view.message.edit(
-            embed=aesthetic_embed(
+            embed=c2(
                 color=color.base,
                 message="There are not enough players",
                 timestamp=False,
@@ -117,7 +117,7 @@ async def start_blacktea(ctx: Context, *, life_count: int = 3, timeout: int = 10
         await asyncio.sleep(0)
         for user in button.users:
             word = await ctx.bot.redis.random("words")
-            e = aesthetic_embed(
+            e = c2(
                 color=color.base,
                 message=f":coffee: <@{user}> Say a word containing **{word[:3].upper()}**",
                 timestamp=False,
@@ -140,7 +140,7 @@ async def start_blacktea(ctx: Context, *, life_count: int = 3, timeout: int = 10
             except (asyncio.TimeoutError, TimeoutError):
                 lifes = ctx.bot.blacktea_matches[ctx.guild.id].get(user)
                 if lifes - 1 == 0:
-                    e = aesthetic_embed(
+                    e = c2(
                         color=color.base,
                         message=f"☠️ <@{user}> You're eliminated",
                         timestamp=False,
@@ -154,7 +154,7 @@ async def start_blacktea(ctx: Context, *, life_count: int = 3, timeout: int = 10
                         break
                 else:
                     ctx.bot.blacktea_matches[ctx.guild.id][user] = lifes - 1
-                    e = aesthetic_embed(
+                    e = c2(
                         color=color.base,
                         message=f"🕰️ <@{user}> Time's up. **{lifes-1}** life(s) remaining",
                         timestamp=False,
@@ -162,7 +162,7 @@ async def start_blacktea(ctx: Context, *, life_count: int = 3, timeout: int = 10
                     m = await ctx.send(embed=e)
                     ctx.bot.blacktea_messages[ctx.guild.id].append(m)
     user = list(ctx.bot.blacktea_matches[ctx.guild.id].keys())[0]
-    embed = aesthetic_embed(
+    embed = c2(
         color=color.base,
         message=f"👑 <@{user}> Won the game",
         timestamp=False,

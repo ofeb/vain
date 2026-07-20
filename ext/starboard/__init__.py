@@ -23,7 +23,7 @@ def body(*lines: str) -> str:
 def caption(text: str) -> str:
     return f"-# {text}"
 
-def aesthetic_embed(
+def c2(
     *,
     color: int,
     message: str,
@@ -51,7 +51,7 @@ def reply_embed(
     message: str,
     subtitle: str | None = None,
 ) -> discord.Embed:
-    return aesthetic_embed(color=color, message=message, footer=subtitle, timestamp=False)
+    return c2(color=color, message=message, footer=subtitle, timestamp=False)
 
 
 
@@ -208,7 +208,7 @@ class Starboard(commands.Cog):
             f"**Blacklisted Users:** {members}",
             f"**Blacklisted Roles:** {roles}",
         )
-        embed = aesthetic_embed(
+        embed = c2(
             color=color.base,
             title="Starboard configuration",
             message=f"**Locked:** {_toggle_emoji(bool(settings.lock))}",
@@ -396,7 +396,7 @@ class Starboard(commands.Cog):
                 index += 1
                 rows.append(f"`{index}` {channel.mention} --**channel**")
         
-        embed = aesthetic_embed(color=color.base, title="Starboard Blacklists", message="")
+        embed = c2(color=color.base, title="Starboard Blacklists", message="")
         for i in range(0, len(rows), 10):
             chunk = rows[i:i+10]
             embed.add_field(name=f"Page {i//10 + 1}", value=body(*chunk), inline=False)

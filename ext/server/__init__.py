@@ -25,7 +25,7 @@ def body(*lines: str) -> str:
 def caption(text: str) -> str:
     return f"-# {text}"
 
-def aesthetic_embed(
+def c2(
     *,
     color: int,
     message: str,
@@ -350,7 +350,7 @@ class ServerCommands(Package):
         except Exception:
             dom_color = self.color
 
-        e = aesthetic_embed(color=dom_color, title=g.name, message=f"Server created <t:{int(g.created_at.timestamp())}:R> • ID: `{g.id}`", timestamp=True)
+        e = c2(color=dom_color, title=g.name, message=f"Server created <t:{int(g.created_at.timestamp())}:R> • ID: `{g.id}`", timestamp=True)
 
         if g.icon:
             e.set_thumbnail(url=g.icon.url)
@@ -493,7 +493,7 @@ class ServerCommands(Package):
         if not lines:
             from discord.ext.commands import CommandError
             raise CommandError("no roles in this server")
-        e = aesthetic_embed(
+        e = c2(
             color=self.color,
             title=f"Roles ({len(lines)})",
             message=" ".join(lines),
@@ -507,7 +507,7 @@ class ServerCommands(Package):
     async def bots(self, ctx):
         """list all bots"""
         bots = [m for m in ctx.guild.members if m.bot]
-        e = aesthetic_embed(
+        e = c2(
             color=self.color,
             title=f"Bots ({len(bots)})",
             message=" ".join(b.mention for b in bots) or "none",
@@ -524,7 +524,7 @@ class ServerCommands(Package):
         if not ctx.guild.icon:
             from discord.ext.commands import CommandError
             raise CommandError("this server has no icon")
-        e = aesthetic_embed(color=self.color, message="", timestamp=False)
+        e = c2(color=self.color, message="", timestamp=False)
         e.set_image(url=ctx.guild.icon.url)
         e.set_author(name=ctx.guild.name)
         await ctx.send(embed=e)
@@ -539,7 +539,7 @@ class ServerCommands(Package):
         if not ctx.guild.banner:
             from discord.ext.commands import CommandError
             raise CommandError("this server has no banner")
-        e = aesthetic_embed(color=self.color, message="", timestamp=False)
+        e = c2(color=self.color, message="", timestamp=False)
         e.set_image(url=ctx.guild.banner.url)
         e.set_author(name=ctx.guild.name)
         await ctx.send(embed=e)

@@ -21,7 +21,7 @@ def compose(*parts: str) -> str:
 def caption(text: str) -> str:
     return f"-# {text}"
 
-def aesthetic_embed(
+def c2(
     *,
     color: int,
     message: str,
@@ -49,7 +49,7 @@ def reply_embed(
     message: str,
     subtitle: str | None = None,
 ) -> discord.Embed:
-    return aesthetic_embed(color=color, message=message, footer=subtitle, timestamp=False)
+    return c2(color=color, message=message, footer=subtitle, timestamp=False)
 
 
 

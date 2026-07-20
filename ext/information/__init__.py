@@ -124,7 +124,7 @@ def layout_from_items(
 def panel_layout(**kwargs: Any) -> ui.LayoutView:
     return layout_from_items([panel_container(**kwargs)])
 
-def aesthetic_embed(
+def c2(
     *,
     color: int,
     message: str,
@@ -152,7 +152,7 @@ def reply_embed(
     message: str,
     subtitle: str | None = None,
 ) -> discord.Embed:
-    return aesthetic_embed(color=color, message=message, footer=subtitle, timestamp=False)
+    return c2(color=color, message=message, footer=subtitle, timestamp=False)
 
 async def get_dominant_color(url: str, fallback: int = 0x5865F2) -> int:
     """Fetch image and return dominant color using colorthief."""

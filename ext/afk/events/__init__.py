@@ -34,7 +34,7 @@ class AFKEvents:
         if not data:
             return
         if await store.remove(message.author.id):
-            embed = aesthetic_embed(
+            embed = c2(
                 color=color.approve,
                 message=(
                     f"{message.author.mention}: Welcome back, you were away "
@@ -70,7 +70,7 @@ class AFKEvents:
             data = await store.get(user.id)
             if not data:
                 continue
-            embed = aesthetic_embed(
+            embed = c2(
                 color=color.approve,
                 message=(
                     f"{user.mention} is AFK: **{data.status}** — "
@@ -93,7 +93,7 @@ def body(*lines: str) -> str:
 def caption(text: str) -> str:
     return f"-# {text}"
 
-def aesthetic_embed(
+def c2(
     *,
     color: int,
     message: str,

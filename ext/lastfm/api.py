@@ -30,7 +30,7 @@ def body(*lines: str) -> str:
 def caption(text: str) -> str:
     return f"-# {text}"
 
-def aesthetic_embed(
+def c2(
     *,
     color: int,
     message: str,
@@ -547,7 +547,7 @@ class LastFMApiClient:
                     with contextlib.suppress(discord.HTTPException):
                         user = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
                         if user:
-                            embed = aesthetic_embed(
+                            embed = c2(
                                 message=f"Your **Last.fm** account has been linked as `{username}`.",
                                 color=self._lastfm_color(),
                                 footer="Last.fm",

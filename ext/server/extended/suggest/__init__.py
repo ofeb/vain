@@ -22,7 +22,7 @@ def body(*lines: str) -> str:
 def caption(text: str) -> str:
     return f"-# {text}"
 
-def aesthetic_embed(
+def c2(
     *,
     color: int,
     message: str,
@@ -937,7 +937,7 @@ class SuggestCommands(Package):
         suggestion_channel = await self._resolve_channel(ctx.guild, settings.get("channel_id"))
         review_channel = await self._resolve_channel(ctx.guild, settings.get("review_channel_id"))
 
-        embed = aesthetic_embed(
+        embed = c2(
             color=self.color,
             title="Suggestion settings",
             message="",
@@ -1044,7 +1044,7 @@ class SuggestCommands(Package):
                 label = member.mention if member else f"unknown member (`{entry['target_id']}`)"
             lines.append(f"**{entry['target_type']}**: {label}")
 
-        embed = aesthetic_embed(
+        embed = c2(
             color=self.color,
             title="Ignored Suggestions",
             message="",

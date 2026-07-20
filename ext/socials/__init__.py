@@ -35,7 +35,7 @@ def body(*lines: str) -> str:
 def caption(text: str) -> str:
     return f"-# {text}"
 
-def aesthetic_embed(
+def c2(
     *,
     color: int,
     message: str,
@@ -679,7 +679,7 @@ class Socials(Package):
     )
     @has_permissions(manage_guild=True)
     async def socials_list(self, ctx: Context) -> None:
-        embed = aesthetic_embed(
+        embed = c2(
             color=color.base,
             title="Social Feeds",
             message="No social feeds configured.",
@@ -703,7 +703,7 @@ class Socials(Package):
             return
 
         bio = data["bio"][:200] or "No bio"
-        embed = aesthetic_embed(
+        embed = c2(
             color=color.base,
             title=f"{data['full_name'] or data['username']} (@{data['username']})",
             message=bio,
@@ -789,7 +789,7 @@ class Socials(Package):
             lines.append(f"**Music:** {post.music_title}")
         if post.caption:
             lines.append(f"**Caption:** {post.caption[:300]}")
-        embed = aesthetic_embed(
+        embed = c2(
             color=color.base,
             title="TikTok Video",
             message="\n".join(lines),

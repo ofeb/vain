@@ -21,7 +21,7 @@ def body(*lines: str) -> str:
 def caption(text: str) -> str:
     return f"-# {text}"
 
-def aesthetic_embed(
+def c2(
     *,
     color: int,
     message: str,
@@ -343,7 +343,7 @@ class Crypto(commands.Cog):
     )
     @describe(hash="Transaction hash to watch")
     async def subscribe(self, ctx: Context, *, hash: str) -> None:
-        embed = aesthetic_embed(
+        embed = c2(
             title="Transaction Subscribed",
             message=f"Now watching `{hash}` for confirmations.",
             color=color.base,

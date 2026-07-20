@@ -26,7 +26,7 @@ def body(*lines: str) -> str:
 def caption(text: str) -> str:
     return f"-# {text}"
 
-def aesthetic_embed(
+def c2(
     *,
     color: int,
     message: str,
@@ -147,7 +147,7 @@ class BumpReminder(BumpReminderEvents, Package):
             "last_bump": None,
             "next_bump": discord.utils.utcnow() + datetime.timedelta(seconds=BUMP_COOLDOWN),
         }
-        embed = aesthetic_embed(
+        embed = c2(
             title="Bump Reminder",
             message=f"Reminders will be sent to {channel.mention}",
             color=color.base,
