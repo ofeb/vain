@@ -14,7 +14,7 @@ from core.discord.package import Package
 
 if TYPE_CHECKING:
     from core.vain import Vain
-    from ..roleplay import Roleplay
+    from .. import Roleplay
 
 
 class RoleplayEvents(Package):

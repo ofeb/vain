@@ -4,7 +4,7 @@ import logging
 
 from core.discord.package import Package
 
-from ..stickymessage import StickymessageCommands
+from .. import StickymessageCommands
 
 log = logging.getLogger("vain.stickymessage")
 

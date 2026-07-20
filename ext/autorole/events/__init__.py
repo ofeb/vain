@@ -9,7 +9,7 @@ import discord
 from core.discord.package import Package
 
 if TYPE_CHECKING:
-    from ..autorole import Autorole
+    from .. import Autorole
     from core.vain import Vain
 
 

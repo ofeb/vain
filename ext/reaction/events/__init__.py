@@ -8,7 +8,7 @@ from discord.ext import commands
 from core.discord.ctx import Context
 
 if TYPE_CHECKING:
-    from ..reaction import Reaction
+    from .. import Reaction
 
 
 class ReactionEvents(commands.Cog):

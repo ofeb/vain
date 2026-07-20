@@ -4,7 +4,7 @@ import logging
 
 from core.discord.package import Package
 
-from ..boost import BoostCommands
+from .. import BoostCommands
 
 log = logging.getLogger("vain.boost")
 

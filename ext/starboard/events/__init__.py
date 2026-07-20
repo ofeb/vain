@@ -57,7 +57,7 @@ def panel_embed(
 
 
 if TYPE_CHECKING:
-    from ..starboard import Starboard
+    from .. import Starboard
 
 _TENOR_GIF = re.compile(
     r"(?i)\b((https?://c[.]tenor[.]com/)"

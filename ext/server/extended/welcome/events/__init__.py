@@ -4,7 +4,7 @@ import logging
 
 from core.discord.package import Package
 
-from ..welcome import WelcomeCommands
+from .. import WelcomeCommands
 
 log = logging.getLogger("vain.welcome")
 

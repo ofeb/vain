@@ -8,7 +8,7 @@ import discord
 from core.discord.package import Package
 
 if TYPE_CHECKING:
-    from ..counters import Counters
+    from .. import Counters
     from core.vain import Vain
 
 

@@ -4,7 +4,7 @@ import logging
 
 from core.discord.package import Package
 
-from ..goodbye import GoodbyeCommands
+from .. import GoodbyeCommands
 
 log = logging.getLogger("vain.goodbye")
 

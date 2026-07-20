@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from core.discord.package import Package
 
-from .settings import SettingsCommands
+from .. import SettingsCommands
 
 
 class SettingsEvents(Package):

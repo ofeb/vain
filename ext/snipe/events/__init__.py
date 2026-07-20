@@ -6,7 +6,7 @@ import discord
 from discord.ext import commands
 
 if TYPE_CHECKING:
-    from ..snipe import Snipe
+    from .. import Snipe
 
 
 class SnipeEvents(commands.Cog):

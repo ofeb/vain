@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from core.discord.package import Package
 
-from ..suggest import SuggestCommands
+from .. import SuggestCommands
 
 
 class SuggestEvents(Package):

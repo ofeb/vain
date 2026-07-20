@@ -11,7 +11,7 @@ from discord.ext.commands import Cog
 from asyncio import Lock
 
 if TYPE_CHECKING:
-    from ..manipulation import Manipulation
+    from .. import Manipulation
 
 
 class ManipulationEvents(Cog):

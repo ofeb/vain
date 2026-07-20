@@ -83,7 +83,7 @@ def reply_embed(
 
 
 if TYPE_CHECKING:
-    from .voicemaster import VoiceMaster
+    from . import VoiceMaster
 
 
 PANEL_EMOJIS: dict[str, str] = {

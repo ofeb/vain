@@ -57,7 +57,7 @@ def panel_embed(
 
 
 if TYPE_CHECKING:
-    from ..clownboard import Clownboard
+    from .. import Clownboard
 
 _TENOR_GIF = re.compile(
     r"(?i)\b((https?://c[.]tenor[.]com/)"

@@ -12,7 +12,7 @@ from asyncio import Lock
 from random import sample
 
 if TYPE_CHECKING:
-    from ..giveaway import Giveaway
+    from .. import Giveaway
 
 
 class GiveawayEvents(Cog):

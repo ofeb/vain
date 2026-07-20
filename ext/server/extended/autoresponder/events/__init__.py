@@ -4,7 +4,7 @@ import logging
 
 from core.discord.package import Package
 
-from ..autoresponder import AutoresponderCommands
+from .. import AutoresponderCommands
 
 log = logging.getLogger("vain.autoresponder")
 

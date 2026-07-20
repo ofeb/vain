@@ -15,7 +15,6 @@ from .pin import *
 from .prefix import *
 from .reposter import *
 from .set import *
-from .settings import *
 from .stickymessage import *
 from .suggest import *
 from .webhook import *
