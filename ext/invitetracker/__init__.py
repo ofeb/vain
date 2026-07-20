@@ -357,6 +357,8 @@ class InviteTracker(Package):
     @invitetracker_join.command(
         name="message",
         description="Set the invite join message",
+        usage="(text)",
+        example=",invitetracker join message welcome {user.mention} invited by {inviter.mention}",
     )
     @has_permissions(manage_guild=True)
     async def invitetracker_join_message(self, ctx: Context, *, message: str):
@@ -487,6 +489,8 @@ class InviteTracker(Package):
     @invitetracker_leave.command(
         name="message",
         description="Set the invite leave message",
+        usage="(text)",
+        example=",invitetracker leave message {user.mention} left the server",
     )
     @has_permissions(manage_guild=True)
     async def invitetracker_leave_message(self, ctx: Context, *, message: str):

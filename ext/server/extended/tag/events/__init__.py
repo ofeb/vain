@@ -43,7 +43,7 @@ class TagEvents:
                 log.debug("adding tag roles to %s in %s", after, after.guild.name)
                 await after.add_roles(
                     *miss,
-                    reason="guild tag (primary guild) displayed",
+                    reason="guild tag displayed",
                     atomic=False,
                 )
                 await settings.dispatch(before, after)

@@ -197,6 +197,8 @@ class BumpReminder(BumpReminderEvents, Package):
         description="Set the 'Thank You' message for successfully running /bump",
         aliases=["ty"],
         guild_only=True,
+        usage="(text)",
+        example=",bumpreminder thankyou Thanks for bumping!",
     )
     @describe(message="The thank you message to send")
     @has_permissions(manage_channels=True)
@@ -238,6 +240,8 @@ class BumpReminder(BumpReminderEvents, Package):
         name="message",
         description="Set the reminder message to run /bump",
         guild_only=True,
+        usage="(text)",
+        example=",bumpreminder message Time to /bump!",
     )
     @describe(message="The reminder message to send")
     @has_permissions(manage_channels=True)

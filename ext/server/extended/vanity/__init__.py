@@ -137,23 +137,30 @@ class VanityCommands(VanityEvents, Package):
         await settings.upsert(channel_id=None)
         await ctx.success("No longer sending vanity notifications")
 
-    @vanity.group(name="message", aliases=["template", "msg", "script"], invoke_without_command=True)
+    @vanity.group(
+        name="script",
+        aliases=["message", "template", "msg"],
+        invoke_without_command=True,
+        usage="[template]",
+        example=",vanity script thank you {user.mention} for repping /{guild.vanity}",
+        description="Set a custom notification template",
+    )
     @has_permissions(manage_messages=True)
-    async def vanity_message(self, ctx: commands.Context, *, script: str = None) -> None:
+    async def vanity_script(self, ctx: commands.Context, *, template: str = None) -> None:
         """Set a custom message template for vanity notifications."""
         assert ctx.guild is not None
         if not await vanity_check(ctx):
             return
-        if not script:
+        if not template:
             await ctx.send_help(ctx.command)
             return
         settings = await Settings.fetch(self.bot, ctx.guild)
-        await settings.upsert(template=script)
+        await settings.upsert(template=template)
         await ctx.success("Updated vanity notification template")
 
-    @vanity_message.command(name="remove", aliases=["delete", "del", "rm"])
+    @vanity_script.command(name="remove", aliases=["delete", "del", "rm"])
     @has_permissions(manage_messages=True)
-    async def vanity_message_remove(self, ctx: commands.Context) -> None:
+    async def vanity_script_remove(self, ctx: commands.Context) -> None:
         """Reset the vanity notification message to the default."""
         assert ctx.guild is not None
         settings = await Settings.fetch(self.bot, ctx.guild)

@@ -30,7 +30,7 @@ class TagCommands(TagEvents, Package):
         name="tag",
         aliases=["servertag", "gtag"],
         invoke_without_command=True,
-        description="Manage server tag (primary guild) role rewards",
+        description="Manage server tag role rewards",
     )
     @has_permissions(manage_roles=True)
     async def tag(self, ctx: commands.Context) -> None:
@@ -109,21 +109,28 @@ class TagCommands(TagEvents, Package):
         await settings.upsert(channel_id=None)
         await ctx.success("No longer sending tag notifications")
 
-    @tag.group(name="message", aliases=["template", "msg", "script"], invoke_without_command=True)
+    @tag.group(
+        name="script",
+        aliases=["message", "template", "msg"],
+        invoke_without_command=True,
+        usage="[template]",
+        example=",tag script thank you {user.mention} for repping {tag}",
+        description="Set a custom notification template",
+    )
     @has_permissions(manage_messages=True)
-    async def tag_message(self, ctx: commands.Context, *, script: str = None) -> None:
+    async def tag_script(self, ctx: commands.Context, *, template: str = None) -> None:
         """Set a custom notification template. Supports `{user.mention}` and `{tag}`."""
         assert ctx.guild is not None
-        if not script:
+        if not template:
             await ctx.send_help(ctx.command)
             return
         settings = await Settings.fetch(self.bot, ctx.guild)
-        await settings.upsert(template=script)
+        await settings.upsert(template=template)
         await ctx.success("Updated tag notification template")
 
-    @tag_message.command(name="remove", aliases=["delete", "del", "rm"])
+    @tag_script.command(name="remove", aliases=["delete", "del", "rm"])
     @has_permissions(manage_messages=True)
-    async def tag_message_remove(self, ctx: commands.Context) -> None:
+    async def tag_script_remove(self, ctx: commands.Context) -> None:
         assert ctx.guild is not None
         settings = await Settings.fetch(self.bot, ctx.guild)
         if not settings.template:

@@ -72,12 +72,19 @@ _HOME = "__home__"
 
 
 
+# Framework-only injection names. Never include real user args like
+# ``message``, ``bot``, ``flags``, or ``script`` — those are valid
+# subcommand names and/or parameter labels (e.g. ``,tag script``,
+# ``,invoke ban message``).
 _SKIP = frozenset({
-    "self", "cls", "ctx", "interaction", "inter",
-    "message", "flags", "bot", "args", "kwargs",
+    "self", "cls", "ctx", "context", "interaction", "inter",
+    "args", "kwargs",
 })
 _PLACEHOLDER_DESCRIPTIONS = frozenset({"no description", "no description given"})
 _USAGE_TOKENS = re.compile(r"\([^)]+\)|\[[^\]]+\]|<[^>]+>")
+_FRAMEWORK_PARAM_NAMES = frozenset({
+    "self", "cls", "ctx", "context", "interaction", "inter", "args", "kwargs",
+})
 
 _PERM_LABELS: dict[str, str] = {
     "moderate_members": "Warn Members",
@@ -523,36 +530,77 @@ def _format_usage_token(label: str, *, required: bool) -> str:
     return f"<{cleaned}>" if required else f"[{cleaned}]"
 
 
-def _derived_syntax(cmd: Command) -> str:
+def _derived_param_tokens(cmd: Command) -> list[str]:
+    """Build usage tokens for user-facing parameters only (no command path)."""
     tokens: list[str] = []
     for name, param in _param_items(cmd):
         label = _usage_parameter_label(name, getattr(param, "annotation", inspect._empty))
         if not label:
             label = name.replace("_", " ")
+        # Avoid ",tag script [script]" when the arg mirrors the subcommand name.
+        path_tail = command_display_name(cmd).lower().rsplit(" ", 1)[-1]
+        if label.lower() == path_tail and not _annotation_labels(
+            getattr(param, "annotation", inspect._empty)
+        ):
+            ann = getattr(param, "annotation", inspect._empty)
+            ann_name = (getattr(ann, "__name__", "") or str(ann)).lower()
+            if "embed" in ann_name or "script" in ann_name:
+                label = "template"
+            elif ann in (str, inspect._empty) or ann_name in {"str", "optional"}:
+                label = "text"
         token = _format_usage_token(label, required=getattr(param, "required", False))
         if token:
             tokens.append(token)
-    suffix = " ".join(tokens)
+    return tokens
+
+
+def _derived_syntax(cmd: Command) -> str:
+    suffix = " ".join(_derived_param_tokens(cmd))
     result = f"{command_display_name(cmd)} {suffix}".strip()
     return _strip_hidden_params_from_text(result)
 
 
+def _looks_like_param_only(syntax: str) -> bool:
+    """True when *syntax* is only argument tokens (no command path)."""
+    text = (syntax or "").strip()
+    if not text:
+        return True
+    # e.g. "[template]", "<user> [reason]", "(message or embed code)"
+    return bool(re.match(r"^[\(\[<]", text))
+
+
 def _syntax(cmd: Command, prefix: str) -> str:
+    """Build ``{prefix}{qualified name} [params…]`` for help usage lines.
+
+    Rules:
+    - Prefer explicit ``usage=`` when present (params or full path).
+    - Always show the real command path (``tag script``, never ``tag tag``).
+    - Never strip bare path words like ``message`` / ``script`` / ``bot``.
+    """
     usage, _ = _normalize_usage_and_example(str(cmd.usage or ""), prefix=str(prefix))
-    syntax = usage or _derived_syntax(cmd)
-    syntax = _strip_hidden_params_from_text(syntax)
+    usage = _strip_hidden_params_from_text(usage)
     name = command_display_name(cmd)
-    lowered = syntax.lower()
-    nlow = name.lower()
-    
-    while f"{nlow} {nlow}" in lowered or lowered.startswith(f"{nlow} {nlow} "):
-        syntax = re.sub(re.escape(name) + r"\s+" + re.escape(name), name, syntax, count=1, flags=re.I)
+
+    if usage and _looks_like_param_only(usage):
+        # usage="[template]" → "tag script [template]"
+        syntax = f"{name} {usage}".strip()
+    elif usage:
+        syntax = _collapse_duplicate_name(usage, cmd)
         lowered = syntax.lower()
-    if any(lowered == n or lowered.startswith(f"{n} ") for n in _command_names(cmd)):
-        pass
+        if not any(lowered == n or lowered.startswith(f"{n} ") for n in _command_names(cmd)):
+            syntax = f"{name} {syntax}".strip()
+            syntax = _collapse_duplicate_name(syntax, cmd)
     else:
-        
+        syntax = _derived_syntax(cmd)
+
+    syntax = _strip_hidden_params_from_text(syntax)
+    syntax = _collapse_duplicate_name(syntax, cmd)
+
+    lowered = syntax.lower()
+    if not any(lowered == n or lowered.startswith(f"{n} ") for n in _command_names(cmd)):
         syntax = f"{name} {syntax}".strip()
+        syntax = _collapse_duplicate_name(syntax, cmd)
+
     if prefix and not syntax.startswith(prefix):
         syntax = f"{prefix}{syntax}"
     return syntax.strip()
@@ -561,32 +609,27 @@ def _syntax(cmd: Command, prefix: str) -> str:
 def _strip_hidden_params_from_text(text: str) -> str:
     """Remove leaked framework param tokens from usage/example strings.
 
-    Only strips true injected-param names (``ctx``, ``interaction``, …).
-    Does **not** strip bare words that are real command path segments
-    (``,context color list``, ``,context self color base``).
-
-    ``self`` is only removed when it appears as a *parameter token*
-    (``<self>``, ``(self)``, ``[self]``), never as a subcommand name.
+    Only strips **wrapped** parameter tokens like ``<ctx>``, ``[interaction]``,
+    ``(self)``. Never strips bare path segments — words like ``message``,
+    ``bot``, ``script`` are valid subcommand names
+    (e.g. ``,tag script``, ``,invoke ban message``, ``,context bot``).
     """
     if not text:
         return text
-
-    hidden = {
-        "ctx", "interaction", "inter", "cls",
-        "message", "bot", "args", "kwargs",
-    }
-    
-    wrapped_only = {"self"}
 
     parts = text.split()
     cleaned = []
     for p in parts:
         stripped = p.strip("`.,:;")
         low = stripped.lower().strip("()[]<>")
-        is_wrapped = bool(stripped) and stripped[0] in "<([" and stripped[-1:] in ">)]"
-        if is_wrapped and (low in hidden or low in wrapped_only):
-            continue
-        if not is_wrapped and low in hidden:
+        is_wrapped = (
+            bool(stripped)
+            and len(stripped) >= 2
+            and stripped[0] in "<(["
+            and stripped[-1] in ">)]"
+        )
+        # Only drop wrapped tokens that are pure framework params
+        if is_wrapped and low in _FRAMEWORK_PARAM_NAMES:
             continue
         cleaned.append(p)
     return " ".join(cleaned).strip()
@@ -603,7 +646,7 @@ def _token_to_example(token: str) -> str | None:
     lowered = re.sub(r"\s+", " ", raw.replace("_", " ").strip().lower())
     if lowered.startswith("--"):
         return None
-    if lowered in {"ctx", "interaction", "cls", "message", "bot"}:
+    if lowered in _FRAMEWORK_PARAM_NAMES:
         return None
     if "|" in lowered:
         lowered = lowered.split("|", 1)[0].strip()
@@ -744,23 +787,26 @@ def _usage_params(cmd: Command, prefix: str) -> list[str]:
             break
 
     params: list[str] = []
-    hidden = {"ctx", "interaction", "self", "cls", "message"}
     for token in _USAGE_TOKENS.findall(body):
         label = token.strip().strip("()[]<>").replace("_", " ").strip().lower()
-        if label and label not in hidden:
+        if label and label not in _FRAMEWORK_PARAM_NAMES:
             params.append(label)
     return params
 
 
 def _parameter_value(cmd: Command, prefix: str) -> str:
-    
-    hidden = {"ctx", "interaction", "self", "cls", "message"}
     if raw := _params(cmd):
-        visible = [p for p in raw if p.lower().replace(" ", "") not in hidden]
+        visible = [
+            p for p in raw
+            if p.lower().replace(" ", "") not in _FRAMEWORK_PARAM_NAMES
+        ]
         if visible:
             return ", ".join(visible)
     if raw := _usage_params(cmd, prefix):
-        visible = [p for p in raw if p.lower().replace(" ", "") not in hidden]
+        visible = [
+            p for p in raw
+            if p.lower().replace(" ", "") not in _FRAMEWORK_PARAM_NAMES
+        ]
         if visible:
             return ", ".join(visible)
     return "n/a"
