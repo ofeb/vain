@@ -800,7 +800,7 @@ class Socials(Package):
 
     @hybrid(
         name="repost",
-        description="Repost TikTok / Instagram with a components panel (photos carousel-aware)",
+        description="Repost TikTok posts / Instagram reels",
         example=",repost https://www.instagram.com/reel/xxxx",
         guilds=True,
         dms=True,

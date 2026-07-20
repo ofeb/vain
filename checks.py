@@ -1,4 +1,4 @@
-"""Strip non-noqa/non-type comments from all .py files using tokenize."""
+"""i use ts and what r u gonna do ab it."""
 import io
 import re
 import tokenize
@@ -12,7 +12,7 @@ _KEEP = re.compile(
 )
 
 
-def _build_line_map(source: str) -> list[int]:
+def _blm(source: str) -> list[int]:
     lines = source.splitlines(keepends=True)
     offsets = [0]
     for line in lines:
@@ -20,13 +20,13 @@ def _build_line_map(source: str) -> list[int]:
     return offsets
 
 
-def strip_comments(source: str) -> str:
+def _commentstripper5000(source: str) -> str:
     try:
         tokens = list(tokenize.generate_tokens(io.StringIO(source).readline))
     except tokenize.TokenError:
         return source
 
-    line_map = _build_line_map(source)
+    line_map = _blm(source)
 
     def to_pos(line: int, col: int) -> int:
         return line_map[line - 1] + col
@@ -54,12 +54,12 @@ def strip_comments(source: str) -> str:
     return "".join(result_parts)
 
 
-def process_file(path: Path) -> bool:
+def fileravager2026(path: Path) -> bool:
     try:
         original = path.read_text(encoding="utf-8")
     except Exception:
         return False
-    cleaned = strip_comments(original)
+    cleaned = _commentstripper5000(original)
     if cleaned != original:
         path.write_text(cleaned, encoding="utf-8")
         return True
@@ -72,14 +72,14 @@ def main():
     for path in sorted(root.rglob("*.py")):
         if any(p in path.parts for p in ("venv", "__pycache__", ".git")):
             continue
-        if process_file(path):
+        if fileravager2026(path):
             changed.append(path)
     if changed:
         print(f"Stripped comments from {len(changed)} files:")
         for p in changed:
             print(f"  {p}")
     else:
-        print("No files changed.")
+        print("No files had any # comments.")
 
 
 if __name__ == "__main__":

@@ -366,14 +366,14 @@ class RoleplayCommands(Package):
 
     @hybrid(
         name="roleplay",
-        description="Perform a roleplay action with another member",
+        description="roleplay with another user",
         example=",roleplay punch @user",
         guilds=True,
         dms=True,
         groupchats=True,
     )
     @describe(
-        action="Roleplay action (punch, hug, kiss, etc.)",
+        action="Roleplay action to use",
         member="Member to roleplay with",
     )
     async def roleplay(
