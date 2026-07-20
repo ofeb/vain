@@ -56,8 +56,15 @@ class AFK:
             "timestamp": str(int(datetime.now(timezone.utc).timestamp())),
         }
         key = self._key(user_id)
-        await self.redis.hset(key, mapping=mapping)
-        await self.redis.expire(key, 7 * 86400)
+        # Support both redis-py (mapping=) and FileVainCache (field/value or mapping)
+        try:
+            await self.redis.hset(key, mapping=mapping)
+        except TypeError:
+            for field, value in mapping.items():
+                await self.redis.hset(key, field, value)
+        expire = getattr(self.redis, "expire", None)
+        if expire is not None:
+            await expire(key, 7 * 86400)
         logger.debug("afk set user=%s", user_id)
 
     async def get(self, user_id: int) -> AFKData | None:

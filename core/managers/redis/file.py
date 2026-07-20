@@ -260,11 +260,28 @@ class FileVainCache:
             return 0
         return len(entry["value"])
 
-    async def hset(self, key: str, field: str, value: Any) -> int:
+    async def hset(
+        self,
+        key: str,
+        field: str | None = None,
+        value: Any = None,
+        mapping: dict | None = None,
+    ) -> int:
+        """Redis-compatible hset: ``hset(key, field, value)`` or ``hset(key, mapping={...})``."""
+        pairs: dict[str, Any] = {}
+        if mapping is not None:
+            pairs.update({str(k): v for k, v in mapping.items()})
+        if field is not None:
+            pairs[str(field)] = value
+        if not pairs:
+            return 0
         async with self._lock:
             entry = self._ensure(key, "hash", {})
-            created = 0 if field in entry["value"] else 1
-            entry["value"][str(field)] = self._normalize_member(value)
+            created = 0
+            for f, v in pairs.items():
+                if f not in entry["value"]:
+                    created += 1
+                entry["value"][f] = self._normalize_member(v)
             await self._save()
             return created
 
