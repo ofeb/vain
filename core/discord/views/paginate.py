@@ -55,6 +55,12 @@ def embed_to_container(
         header_bits.append(title_md)
 
     media_url = thumb or author_icon
+    has_body = bool(embed.description and not _blankish(embed.description))
+    has_fields = bool(embed.fields)
+    image_url = embed.image.url if embed.image else None
+    has_footer = bool(embed.footer and not _blankish(getattr(embed.footer, "text", None)))
+    has_ts = bool(embed.timestamp)
+
     if header_bits and media_url:
         try:
             container.add_item(
@@ -68,15 +74,18 @@ def embed_to_container(
     elif header_bits:
         container.add_item(ui.TextDisplay("\n".join(header_bits)))
 
-    if header_bits and (embed.description or embed.fields or embed.image or embed.footer):
+    def _sep() -> None:
         container.add_item(ui.Separator(visible=True))
 
-    if embed.description and not _blankish(embed.description):
-        container.add_item(ui.TextDisplay(str(embed.description)))
+    added_content = bool(header_bits)
 
-    if embed.fields:
-        if embed.description and not _blankish(embed.description):
-            container.add_item(ui.Separator(visible=True))
+    if has_body:
+        if added_content:
+            _sep()
+        container.add_item(ui.TextDisplay(str(embed.description)))
+        added_content = True
+
+    if has_fields:
         field_chunks: list[str] = []
         for field in embed.fields:
             name = "" if _blankish(field.name) else str(field.name)
@@ -88,12 +97,14 @@ def embed_to_container(
             elif name:
                 field_chunks.append(f"**{name}**")
         if field_chunks:
+            if added_content:
+                _sep()
             container.add_item(ui.TextDisplay("\n\n".join(field_chunks)))
+            added_content = True
 
-    
-    image_url = embed.image.url if embed.image else None
     if image_url:
-        container.add_item(ui.Separator(visible=True))
+        if added_content:
+            _sep()
         try:
             if str(image_url).startswith("attachment://") and attachment_files:
                 fname = str(image_url).split("attachment://", 1)[-1]
@@ -101,40 +112,46 @@ def embed_to_container(
                 if match is not None:
                     container.add_item(ui.MediaGallery(discord.MediaGalleryItem(match)))
                 else:
-                    container.add_item(ui.MediaGallery(discord.MediaGalleryItem(str(image_url))))
+                    container.add_item(
+                        ui.MediaGallery(discord.MediaGalleryItem(str(image_url)))
+                    )
             else:
-                container.add_item(ui.MediaGallery(discord.MediaGalleryItem(str(image_url))))
+                container.add_item(
+                    ui.MediaGallery(discord.MediaGalleryItem(str(image_url)))
+                )
         except Exception:
             container.add_item(ui.TextDisplay(f"[image]({image_url})"))
+        added_content = True
 
-    
     if attachment_files and not image_url:
         for f in attachment_files[:1]:
             try:
+                if added_content:
+                    _sep()
                 container.add_item(ui.File(f))
+                added_content = True
             except Exception:
                 pass
 
-    if embed.footer and not _blankish(embed.footer.text):
-        container.add_item(ui.Separator(visible=True))
-        footer = str(embed.footer.text)
-        if embed.timestamp:
+    if has_footer or has_ts:
+        if added_content:
+            _sep()
+        footer = ""
+        if has_footer:
+            footer = str(embed.footer.text)
+        if has_ts:
             try:
-                footer = f"{footer} · <t:{int(embed.timestamp.timestamp())}:R>"
+                ts = f"<t:{int(embed.timestamp.timestamp())}:R>"
+                footer = f"{footer} · {ts}" if footer else ts
             except Exception:
                 pass
-        container.add_item(ui.TextDisplay(f"-# {footer}"))
-    elif embed.timestamp and not (embed.footer and embed.footer.text):
-        try:
-            container.add_item(ui.Separator(visible=True))
-            container.add_item(
-                ui.TextDisplay(f"-# <t:{int(embed.timestamp.timestamp())}:R>")
-            )
-        except Exception:
-            pass
+        if footer:
+            container.add_item(ui.TextDisplay(f"-# {footer}"))
+        added_content = True
 
     if extra_rows:
-        container.add_item(ui.Separator(visible=True))
+        if added_content:
+            _sep()
         for row in extra_rows:
             container.add_item(row)
 

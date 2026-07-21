@@ -85,7 +85,29 @@ log = logging.getLogger("Vain.music")
 _SEARCH_PREFIX_RE = re.compile(r"^[a-z]+search:", re.I)
 _URL_HINT_RE = re.compile(
     r"^(?:www\.|(?:open\.)?spotify\.com/|(?:music\.)?youtube\.com/|youtu\.be/|"
-    r"soundcloud\.com/|(?:www\.)?deezer\.com/|music\.apple\.com/)",
+    r"soundcloud\.com/|(?:www\.)?deezer\.com/|music\.apple\.com/|"
+    r"music\.youtube\.com/)",
+    re.I,
+)
+_PLATFORM_RE = re.compile(
+    r"(?:open\.)?spotify\.com/|"
+    r"(?:www\.)?deezer\.com/|"
+    r"music\.apple\.com/|"
+    r"soundcloud\.com/|"
+    r"music\.youtube\.com/|"
+    r"(?:www\.)?youtube\.com/|"
+    r"youtu\.be/",
+    re.I,
+)
+_VIDEO_NOISE_RE = re.compile(
+    r"\b(official\s*(music\s*)?video|official\s*video|music\s*video|vevo|"
+    r"lyric\s*video|visualizer|mv|4k|8k|hd|remaster(ed)?)\b",
+    re.I,
+)
+_CLEAN_PARENS_RE = re.compile(
+    r"\[.*?\]|\(from .*?\)|\(official.*?\)|\(feat\..*?\)|\(ft\..*?\)|"
+    r"\(explicit\)|\(audio\)|\(lyrics?\)|\(official\s*visualizer\)|"
+    r"\(official\s*music\s*video\)|\(official\s*audio\)|\(visualizer\)",
     re.I,
 )
 
@@ -143,7 +165,17 @@ except ImportError:
 
 
 class GuildQueue:
-    __slots__ = ("tracks", "current", "loop", "loop_queue", "volume", "active_preset")
+    __slots__ = (
+        "tracks",
+        "current",
+        "loop",
+        "loop_queue",
+        "volume",
+        "active_preset",
+        "text_channel_id",
+        "control_message_id",
+        "meta",  
+    )
 
     def __init__(self) -> None:
         self.tracks: list = []
@@ -152,6 +184,9 @@ class GuildQueue:
         self.loop_queue = False
         self.volume = 100
         self.active_preset: str | None = None
+        self.text_channel_id: int | None = None
+        self.control_message_id: int | None = None
+        self.meta: dict[str, dict] = {}
 
 
 class Music(MusicEvents, Package):
@@ -302,6 +337,23 @@ class Music(MusicEvents, Package):
         info = getattr(track, "info", None) or {}
         return str(info.get("sourceName", "")).lower()
 
+    @staticmethod
+    def _clean_title_artist(title: str, artist: str) -> tuple[str, str]:
+        clean_title = _CLEAN_PARENS_RE.sub("", title or "")
+        clean_title = _VIDEO_NOISE_RE.sub("", clean_title)
+        artist = (artist or "").strip()
+        if " - " in clean_title:
+            left, right = clean_title.split(" - ", 1)
+            if left.strip() and right.strip():
+                
+                if not artist or left.strip().lower() == artist.lower():
+                    artist, clean_title = left.strip(), right.strip()
+                else:
+                    clean_title = right.strip()
+        clean_title = re.sub(r"\s+", " ", clean_title).strip(" -_|")
+        artist = re.sub(r"\s+", " ", artist).strip(" -_|")
+        return clean_title, artist
+
     def _score_track(self, query: str, track) -> float:
         q = query.lower().strip()
         title = (track.title or "").lower()
@@ -317,19 +369,32 @@ class Music(MusicEvents, Package):
             score += 120
 
         q_tokens = [t for t in q.split() if len(t) >= 2]
-        if not q_tokens:
-            return score
+        if q_tokens:
+            hits = sum(1 for token in q_tokens if token in title or token in author)
+            score += hits * 15
+            if hits == len(q_tokens):
+                score += 40
 
-        hits = sum(1 for token in q_tokens if token in title or token in author)
-        score += hits * 15
-        if hits == len(q_tokens):
-            score += 40
+        
+        if _VIDEO_NOISE_RE.search(title) or "vevo" in author:
+            score -= 80
+        if "topic" in author or " - topic" in author:
+            score += 50
+        if "audio" in title and "video" not in title:
+            score += 30
 
         source = self._track_source(track)
-        if source == "deezer":
-            score += 25
-        elif source == "spotify":
-            score -= 10
+        if source in {"youtube", "youtubemusic", "ytm"}:
+            score += 20
+        elif source == "soundcloud":
+            score -= 30
+
+        
+        length = int(getattr(track, "length", 0) or 0)
+        if 60_000 <= length <= 8 * 60_000:
+            score += 10
+        elif length > 15 * 60_000:
+            score -= 25
 
         return score
 
@@ -340,16 +405,19 @@ class Music(MusicEvents, Package):
         if not tracks:
             return None
         if not pick_query or len(tracks) == 1:
-            return tracks[0]
+            
+            ranked = sorted(
+                tracks,
+                key=lambda t: self._score_track(pick_query or (t.title or ""), t),
+                reverse=True,
+            )
+            return ranked[0]
         ranked = sorted(
             tracks,
             key=lambda track: self._score_track(pick_query, track),
             reverse=True,
         )
-        best = ranked[0]
-        if self._score_track(pick_query, best) <= 0:
-            return tracks[0]
-        return best
+        return ranked[0]
 
     async def _load_query(self, query: str, *, pick_query: str | None = None):
         try:
@@ -362,28 +430,117 @@ class Music(MusicEvents, Package):
             return None
         return self._pick_track(results, pick_query)
 
-    async def _resolve_deezer_uri(self, track):
-        uri = (getattr(track, "uri", None) or "").strip()
-        if "deezer.com/track/" not in uri:
-            return track
-        direct = await self._load_query(uri)
-        if direct:
-            log.debug("reloaded deezer track from %s", uri)
-            return direct
-        return track
+    def _is_platform_url(self, query: str) -> bool:
+        q = query.lower()
+        return bool(_PLATFORM_RE.search(q))
 
-    async def _finalize_track(self, track, *, query: str | None = None):
-        source = self._track_source(track)
-        if source == "deezer":
-            return await self._resolve_deezer_uri(track)
-        if source == "spotify" and query:
-            fallback = await self._load_query(
-                f"dzsearch:{track.title} {track.author}",
-                pick_query=query,
-            )
-            if fallback:
-                return await self._resolve_deezer_uri(fallback)
-        return track
+    def _platform_name(self, query: str) -> str:
+        q = query.lower()
+        if "spotify.com" in q or q.startswith("spotify:"):
+            return "spotify"
+        if "deezer.com" in q:
+            return "deezer"
+        if "music.apple.com" in q:
+            return "apple music"
+        if "soundcloud.com" in q:
+            return "soundcloud"
+        if "music.youtube.com" in q:
+            return "youtube music"
+        if "youtube.com" in q or "youtu.be" in q:
+            return "youtube"
+        return "link"
+
+    def _ytm_url(self, track) -> str:
+        """Prefer a youtube / ytm browse url for display."""
+        uri = (getattr(track, "uri", None) or "").strip()
+        ident = getattr(track, "identifier", None) or ""
+        if "music.youtube.com" in uri:
+            return uri
+        if "youtube.com" in uri or "youtu.be" in uri:
+            
+            if "watch?v=" in uri:
+                vid = uri.split("watch?v=", 1)[-1].split("&", 1)[0]
+                return f"https://music.youtube.com/watch?v={vid}"
+            return uri
+        if ident and len(ident) >= 6:
+            return f"https://music.youtube.com/watch?v={ident}"
+        return uri or "https://music.youtube.com"
+
+    def _bind_meta(
+        self,
+        track,
+        *,
+        display_title: str | None = None,
+        display_author: str | None = None,
+        source_url: str | None = None,
+        platform: str | None = None,
+        from_search: bool = False,
+    ) -> None:
+        tid = getattr(track, "track_id", None) or id(track)
+        setattr(
+            track,
+            "_vain_meta",
+            {
+                "display_title": display_title or track.title,
+                "display_author": display_author or track.author,
+                "source_url": source_url,
+                "platform": platform,
+                "from_search": from_search,
+                "play_url": self._ytm_url(track),
+            },
+        )
+        return
+
+    def _meta(self, track) -> dict:
+        return getattr(track, "_vain_meta", None) or {
+            "display_title": getattr(track, "title", "unknown"),
+            "display_author": getattr(track, "author", "unknown"),
+            "source_url": None,
+            "platform": None,
+            "from_search": True,
+            "play_url": self._ytm_url(track),
+        }
+
+    async def _resolve_to_youtube_audio(
+        self,
+        *,
+        title: str,
+        artist: str,
+        source_url: str | None = None,
+        platform: str | None = None,
+    ):
+        """Search YouTube Music / YouTube for an audio (non-VEVO) match."""
+        clean_title, clean_artist = self._clean_title_artist(title, artist)
+        pick = f"{clean_title} {clean_artist}".strip()
+        queries = []
+        if clean_artist and clean_title:
+            queries.append(f"{clean_title} {clean_artist}")
+            queries.append(f"{clean_artist} - {clean_title}")
+        if clean_title:
+            queries.append(clean_title)
+        queries.append(f"{pick} audio")
+
+        for source in ("ytmsearch", "ytsearch"):
+            for q in queries:
+                track = await self._load_query(f"{source}:{q}", pick_query=pick)
+                if track is None:
+                    continue
+                self._bind_meta(
+                    track,
+                    display_title=clean_title or title,
+                    display_author=clean_artist or artist,
+                    source_url=source_url,
+                    platform=platform,
+                    from_search=source_url is None,
+                )
+                log.info(
+                    "resolved via %s → %s — %s",
+                    source,
+                    track.title,
+                    track.author,
+                )
+                return track
+        return None
 
     async def _first_track(self, query: str):
         if self._node is None:
@@ -392,11 +549,59 @@ class Music(MusicEvents, Package):
         if not query:
             return None
 
-        if self._is_direct_query(query):
-            track = await self._load_query(query)
+        
+        if self._is_direct_query(query) and (
+            query.startswith(("http://", "https://", "spotify:"))
+            or self._is_platform_url(query)
+        ):
+            platform = self._platform_name(query)
+            seeded = await self._load_query(query)
+            if seeded is not None:
+                
+                src = self._track_source(seeded)
+                if src in {"youtube", "youtubemusic", "ytm"} and not (
+                    _VIDEO_NOISE_RE.search(seeded.title or "")
+                    or "vevo" in (seeded.author or "").lower()
+                ):
+                    self._bind_meta(
+                        seeded,
+                        display_title=seeded.title,
+                        display_author=seeded.author,
+                        source_url=query,
+                        platform=platform,
+                        from_search=False,
+                    )
+                    return seeded
+
+                resolved = await self._resolve_to_youtube_audio(
+                    title=seeded.title or query,
+                    artist=seeded.author or "",
+                    source_url=query,
+                    platform=platform,
+                )
+                if resolved is not None:
+                    return resolved
+                
+                self._bind_meta(
+                    seeded,
+                    display_title=seeded.title,
+                    display_author=seeded.author,
+                    source_url=query,
+                    platform=platform,
+                    from_search=False,
+                )
+                return seeded
+            
+            return await self._resolve_to_youtube_audio(
+                title=query, artist="", source_url=None, platform=None
+            )
+
+        
+        if _SEARCH_PREFIX_RE.match(query):
+            track = await self._load_query(query, pick_query=query.split(":", 1)[-1])
             if track:
-                return await self._finalize_track(track, query=query)
-            return None
+                self._bind_meta(track, from_search=True)
+            return track
 
         for source in nl.search_sources:
             search = f"{source}:{query}"
@@ -404,23 +609,109 @@ class Music(MusicEvents, Package):
             track = await self._load_query(search, pick_query=query)
             if track is None:
                 continue
-            track = await self._finalize_track(track, query=query)
-            log.info(
-                "resolved %r via %s -> %s — %s (%s)",
-                query,
-                source,
-                track.title,
-                track.author,
-                track.uri,
+            title, artist = self._clean_title_artist(
+                track.title or query, track.author or ""
+            )
+            self._bind_meta(
+                track,
+                display_title=title,
+                display_author=artist,
+                from_search=True,
             )
             return track
 
-        log.info(
-            "no results for %r (tried %s)",
-            query,
-            ", ".join(nl.search_sources),
-        )
+        log.info("no results for %r (tried %s)", query, ", ".join(nl.search_sources))
         return None
+
+    
+
+    @staticmethod
+    def _fmt_ms(ms: int | float | None) -> str:
+        try:
+            total = max(0, int(ms or 0) // 1000)
+        except Exception:
+            total = 0
+        m, s = divmod(total, 60)
+        h, m = divmod(m, 60)
+        if h:
+            return f"{h}:{m:02d}:{s:02d}"
+        return f"{m}:{s:02d}"
+
+    @staticmethod
+    def _progress_bar(position: int, length: int, *, width: int = 14) -> str:
+        if length <= 0:
+            filled = 0
+        else:
+            filled = int(round((position / length) * width))
+            filled = max(0, min(width, filled))
+        return "━" * filled + "●" + "─" * max(0, width - filled)
+
+    def _np_embed(self, track, player=None) -> discord.Embed:
+        meta = self._meta(track)
+        title = meta.get("display_title") or track.title or "unknown"
+        artist = meta.get("display_author") or track.author or "unknown"
+        platform = meta.get("platform")
+        source_url = meta.get("source_url")
+        play_url = meta.get("play_url") or self._ytm_url(track)
+        from_search = bool(meta.get("from_search"))
+
+        
+        
+        link = source_url if (source_url and not from_search) else play_url
+        song_line = f"[**{title}** — **{artist}**]({link})"
+
+        pos = int(getattr(player, "position", 0) or 0) if player else 0
+        length = int(getattr(track, "length", 0) or 0)
+        bar = self._progress_bar(pos, length)
+        time_line = f"`{self._fmt_ms(pos)}` {bar} `{self._fmt_ms(length)}`"
+
+        if platform and not from_search:
+            header = f"playing **{platform}** track"
+        else:
+            header = "now playing"
+
+        emb = discord.Embed(
+            color=color.base,
+            description=compose(
+                body(header, song_line, time_line),
+                caption("youtube music"),
+            ),
+        )
+        thumb = getattr(track, "thumbnail", None)
+        if thumb:
+            try:
+                emb.set_thumbnail(url=str(thumb))
+            except Exception:
+                pass
+        return emb
+
+    async def _send_control_panel(self, guild_id: int, player, track) -> None:
+        """Send / refresh the control panel every time the song changes."""
+        state = self._queue(guild_id)
+        channel = None
+        if state.text_channel_id:
+            channel = self.bot.get_channel(state.text_channel_id)
+        if channel is None:
+            return
+
+        embed = self._np_embed(track, player)
+        view = MusicControlView(self, guild_id)
+
+        
+        if state.control_message_id:
+            try:
+                msg = await channel.fetch_message(state.control_message_id)
+                await msg.edit(embed=embed, view=view)
+                view.message = msg
+                return
+            except Exception:
+                pass
+        try:
+            msg = await channel.send(embed=embed, view=view)
+            state.control_message_id = msg.id
+            view.message = msg
+        except Exception:
+            log.exception("failed to send control panel guild=%s", guild_id)
 
     async def _apply_preset(self, player, preset: str) -> None:
         if not HAS_LYRA:
@@ -463,6 +754,11 @@ class Music(MusicEvents, Package):
             return
         if state.active_preset:
             await self._apply_preset(player, state.active_preset)
+        
+        try:
+            await self._send_control_panel(guild_id, player, track)
+        except Exception:
+            pass
 
     async def _set_preset(self, ctx: Context, name: str, setting: str | None) -> None:
         player = ctx.voice_client
@@ -489,6 +785,12 @@ class Music(MusicEvents, Package):
             return await ctx.warn("no results")
 
         state = self._queue(ctx.guild.id)
+        state.text_channel_id = ctx.channel.id
+        meta = self._meta(track)
+        title = meta.get("display_title") or track.title
+        artist = meta.get("display_author") or track.author
+        platform = meta.get("platform")
+        link = meta.get("source_url") or meta.get("play_url") or self._ytm_url(track)
 
         try:
             if player.is_playing or player.current:
@@ -496,23 +798,30 @@ class Music(MusicEvents, Package):
                     state.tracks.insert(0, track)
                 else:
                     state.tracks.append(track)
-                return await ctx.send(embed=c2(
-                    title="queued",
-                    message=f"**{track.title}** — {track.author}",
-                    color=color.base,
-                    timestamp=False,
-                ))
+                qmsg = f"[**{title}** — **{artist}**]({link})"
+                if platform and meta.get("source_url"):
+                    qmsg = f"**{platform}** · {qmsg}"
+                return await ctx.send(
+                    embed=discord.Embed(
+                        color=color.base,
+                        description=compose(
+                            body("queued", qmsg),
+                            caption(f"position `{len(state.tracks)}`"),
+                        ),
+                    )
+                )
 
             state.current = track
             await player.play(track)
             if state.active_preset:
                 await self._apply_preset(player, state.active_preset)
-            await ctx.send(embed=c2(
-                title="now playing",
-                message=f"**{track.title}** — {track.author}",
-                color=color.base,
-                timestamp=False,
-            ))
+            
+            await self._send_control_panel(ctx.guild.id, player, track)
+            if ctx.message is not None:
+                try:
+                    await ctx.message.add_reaction("👍")
+                except Exception:
+                    pass
         except NodeRestException as exc:
             log.error("play failed for %r: %s", query, exc)
             return await ctx.fail(f"failed to play track: {exc}")
@@ -527,14 +836,39 @@ class Music(MusicEvents, Package):
         state = self._queue(ctx.guild.id)
         if not state.tracks and not state.current:
             return await ctx.warn("queue is empty")
-        lines = [f"**now:** {state.current.title}"] if state.current else []
-        lines.extend(f"`{i}.` **{t.title}** — {t.author}" for i, t in enumerate(state.tracks[:15], 1))
-        await ctx.send(embed=panel_embed(
-            title=f"queue ({len(state.tracks)})",
-            color=color.base,
-            lines=lines,
-            timestamp=False,
-        ))
+        lines: list[str] = []
+        if state.current:
+            m = self._meta(state.current)
+            lines.append(
+                f"**now:** {m.get('display_title') or state.current.title} — "
+                f"{m.get('display_author') or state.current.author}"
+            )
+        for i, t in enumerate(state.tracks[:15], 1):
+            m = self._meta(t)
+            lines.append(
+                f"`{i}.` **{m.get('display_title') or t.title}** — "
+                f"{m.get('display_author') or t.author}"
+            )
+        await ctx.send(
+            embed=discord.Embed(
+                color=color.base,
+                description=compose(
+                    body(*lines),
+                    caption(f"{len(state.tracks)} queued"),
+                ),
+            )
+        )
+
+    @hybrid(name="nowplaying", aliases=["np", "peak"], guild_only=True)
+    async def nowplaying(self, ctx) -> None:
+        """Show the current track control panel."""
+        player = ctx.voice_client
+        state = self._queue(ctx.guild.id)
+        track = state.current or (player.current if player else None)
+        if player is None or track is None:
+            return await ctx.warn("nothing playing")
+        state.text_channel_id = ctx.channel.id
+        await self._send_control_panel(ctx.guild.id, player, track)
 
     @queue.command(name="remove", description="Remove a track from the queue")
     @describe(position="Track position in the queue")
@@ -662,6 +996,86 @@ for _preset_name in Music.PRESETS:
         await self._set_preset(ctx, _name, setting)
 
     _preset_cmd.__name__ = f"preset_{_preset_name.replace('8d', 'eightd')}"
+
+
+class MusicControlView(discord.ui.View):
+    """Skip / pause / resume controls on the now-playing panel."""
+
+    def __init__(self, cog: Music, guild_id: int):
+        super().__init__(timeout=None)
+        self.cog = cog
+        self.guild_id = guild_id
+        self.message: discord.Message | None = None
+
+    def _player(self, inter: discord.Interaction):
+        guild = inter.guild
+        if guild is None:
+            return None
+        return guild.voice_client
+
+    async def interaction_check(self, inter: discord.Interaction) -> bool:
+        if inter.guild is None or inter.guild.id != self.guild_id:
+            return False
+        member = inter.user
+        if not isinstance(member, discord.Member):
+            return False
+        vc = self._player(inter)
+        if vc is None or vc.channel is None:
+            await inter.response.send_message("nothing playing", ephemeral=True)
+            return False
+        if not member.voice or member.voice.channel != vc.channel:
+            await inter.response.send_message(
+                "join the voice channel first", ephemeral=True
+            )
+            return False
+        return True
+
+    @discord.ui.button(label="pause", style=discord.ButtonStyle.secondary)
+    async def pause_btn(self, inter: discord.Interaction, button: discord.ui.Button):
+        player = self._player(inter)
+        if player is None:
+            return
+        if player.is_paused:
+            await player.resume()
+            await inter.response.send_message("resumed", ephemeral=True)
+        else:
+            await player.pause()
+            await inter.response.send_message("paused", ephemeral=True)
+
+    @discord.ui.button(label="skip", style=discord.ButtonStyle.primary)
+    async def skip_btn(self, inter: discord.Interaction, button: discord.ui.Button):
+        player = self._player(inter)
+        if player is None:
+            return
+        await inter.response.defer()
+        await player.stop()
+        await self.cog._play_next(self.guild_id, player)
+
+    @discord.ui.button(label="stop", style=discord.ButtonStyle.danger)
+    async def stop_btn(self, inter: discord.Interaction, button: discord.ui.Button):
+        player = self._player(inter)
+        if player is None:
+            return
+        state = self.cog._queue(self.guild_id)
+        state.tracks.clear()
+        state.current = None
+        state.loop = False
+        try:
+            await player.stop()
+        except Exception:
+            pass
+        try:
+            await player.disconnect(force=True)
+        except Exception:
+            pass
+        self.cog.queues.pop(self.guild_id, None)
+        await inter.response.edit_message(
+            embed=discord.Embed(
+                color=color.base,
+                description=compose(body("stopped"), caption("queue cleared")),
+            ),
+            view=None,
+        )
 
 
 async def setup(bot: Vain):

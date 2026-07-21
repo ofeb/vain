@@ -148,12 +148,15 @@ class Miscellaneous(MiscellaneousEvents, Package):
         name="avatar",
         description="View a user's avatar",
         aliases=["av"],
+        guilds=True,
+        dms=True,
+        groupchats=True,
     )
     @describe(user="User whose avatar to view")
     async def avatar(self, ctx: Context, *, user: discord.User = None) -> None:
         user = user or ctx.author
         embed = c2(
-            title=f"{user.display_name}'s Avatar",
+            title=f"{user.display_name}'s avatar",
             color=color.base,
             message="",
             timestamp=False,

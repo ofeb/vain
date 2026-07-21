@@ -187,11 +187,10 @@ class music:
     host: str = "127.0.0.1"
     port: int = 2009
     password: str = "youshallnotpass"
+    
     search_sources: tuple[str, ...] = (
-        "dzsearch",
-        "scsearch",
+        "ytmsearch",
         "ytsearch",
-        "spsearch",
     )
 
     @classmethod

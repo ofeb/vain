@@ -111,7 +111,7 @@ _EMBED_FIELD_KEYS = (
     "text:",
 )
 
-# Field-like tokens that imply a classic embed when no mode tag is present
+
 _SMART_EMBED_HINTS = (
     "{title:",
     "{description:",
@@ -160,7 +160,7 @@ def is_embed_script(raw: str) -> bool:
         lowered.startswith(f"{{{k}") for k in _EMBED_FIELD_KEYS
     ):
         return True
-    # Smart detection: field tags anywhere in the script body
+    
     if any(hint in lowered for hint in _SMART_EMBED_HINTS):
         return True
     if "$v{" in stripped and any(
@@ -193,7 +193,7 @@ def maybe_wrap_embed_script(text: str) -> str:
             return "{embed}" + stripped
         if stripped.startswith("{"):
             return f"{{embed}}$v{stripped}"
-        # Field tags mid-string without a leading mode tag
+        
         return f"{{embed}}$v{stripped}" if "$v{" in stripped else stripped
     return stripped
 
@@ -223,15 +223,15 @@ def _parse_button_state(value: str | None) -> bool | None:
 
 def _parse_button_style(value: str) -> discord.ButtonStyle:
     lowered = str(value).strip().lower()
-    if lowered == "link":
+    if lowered in {"link", "url"}:
         return discord.ButtonStyle.link
-    if lowered == "blurple":
+    if lowered in {"blurple", "blue", "primary"}:
         return discord.ButtonStyle.primary
-    if lowered == "green":
+    if lowered in {"green", "success"}:
         return discord.ButtonStyle.success
-    if lowered in {"grey", "gray"}:
+    if lowered in {"grey", "gray", "secondary"}:
         return discord.ButtonStyle.secondary
-    if lowered == "red":
+    if lowered in {"red", "danger"}:
         return discord.ButtonStyle.danger
     return discord.ButtonStyle.secondary
 
@@ -371,7 +371,7 @@ async def parse_container(raw: str, sendable: bool = False) -> dict:
     from discord import ui
 
     raw = str(raw).strip()
-    # strip mode tag (case-insensitive)
+    
     raw = re.sub(r"^\s*\{container\}\s*", "", raw, flags=re.IGNORECASE)
     raw = re.sub(r"^\s*container\$v", "", raw, flags=re.IGNORECASE)
 
@@ -459,7 +459,7 @@ async def parse_container(raw: str, sendable: bool = False) -> dict:
                 lines.append(f"**{bits[0]}**\n{bits[1]}")
             continue
         if key == "image":
-            # Images on containers are best-effort via media gallery when available
+            
             _flush_text()
             if payload and _has_link(payload):
                 try:
@@ -470,7 +470,7 @@ async def parse_container(raw: str, sendable: bool = False) -> dict:
                     lines.append(payload)
             continue
         if key == "thumbnail":
-            # Thumbnail not first-class on freeform containers — append as link
+            
             if payload:
                 lines.append(payload)
             continue
@@ -511,7 +511,7 @@ async def parse_container(raw: str, sendable: bool = False) -> dict:
                 )
             )
             continue
-        # unknown keys become text lines when they have payload
+        
         if payload:
             lines.append(payload)
 
@@ -551,7 +551,7 @@ async def parse(raw: str, sendable: bool = False) -> dict:
         return await parse_container(raw_in, sendable=sendable)
 
     raw = raw_in
-    # strip {embed} mode tag (keep field content)
+    
     raw = re.sub(r"^\s*\{embed\}\s*", "", raw, flags=re.IGNORECASE)
     raw = re.sub(r"^\s*embed\$v", "", raw, flags=re.IGNORECASE)
     out: dict[str, Any] = {"fields": []}
@@ -1201,9 +1201,9 @@ class Script:
         **kwargs,
     ) -> discord.Message:
         payload = await self.data(True, **kwargs)
-        # Classic embeds from {embed} scripts must not be auto-containerized by Context.send
+        
         if payload.get("embed") is not None and "raw_embed" not in payload:
-            # Only apply when destination is a Context-like sender that accepts the kwarg
+            
             if hasattr(destination, "send"):
                 try:
                     import inspect

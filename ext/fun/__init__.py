@@ -231,23 +231,30 @@ class Fun(Package):
     @hybrid(
         name="banner",
         description="Get a user's banner",
+        aliases=["userbanner"],
+        guilds=True,
+        dms=True,
+        groupchats=True,
     )
-    @describe(member="Member to get banner from (defaults to you)")
-    async def banner(self, ctx: Context, member: discord.Member = None) -> None:
-        """Get a user's banner."""
-        member = member or ctx.author
-        user = await self.bot.fetch_user(member.id)
-        
-        if not user.banner:
-            return await ctx.warn(f"{member.mention} doesn't have a banner")
-        
+    @describe(user="User to get banner from (defaults to you)")
+    async def banner(self, ctx: Context, user: discord.User = None) -> None:
+        """Get a user's banner (works with mentions, IDs, and DMs)."""
+        target = user or ctx.author
+        try:
+            fetched = await self.bot.fetch_user(target.id)
+        except (discord.NotFound, discord.HTTPException):
+            return await ctx.warn("could not fetch that user")
+
+        if not fetched.banner:
+            return await ctx.warn(f"{target.mention} doesn't have a banner")
+
         embed = c2(
-            title=f"{member.display_name}'s Banner",
+            title=f"{fetched.display_name}'s banner",
             color=color.base,
             message="",
             timestamp=False,
         )
-        embed.set_image(url=user.banner.url)
+        embed.set_image(url=fetched.banner.url)
         await ctx.send(embed=embed)
 
     @hybrid(
