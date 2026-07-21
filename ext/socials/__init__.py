@@ -1506,19 +1506,48 @@ class EmbedBuilderView(discord.ui.View):
         self.stop()
 
 
-class ContainerBuilderView(discord.ui.View):
-    """Interactive Components V2 container builder with live preview."""
+class ContainerBuilderView(ui.LayoutView):
+    """Interactive Components V2 container builder — live visual container preview.
 
-    def __init__(self, author_id: int):
+    The message *is* the container: body fields render as TextDisplay / MediaGallery /
+    Separator / preview buttons, with a field select + Approve/Cancel in the same panel.
+    """
+
+    _FIELD_OPTIONS = [
+        discord.SelectOption(label="Title", value="title", description="Heading text"),
+        discord.SelectOption(label="Description", value="description"),
+        discord.SelectOption(label="Color (hex)", value="color", description="Accent colour"),
+        discord.SelectOption(label="Author", value="author"),
+        discord.SelectOption(label="Footer", value="footer"),
+        discord.SelectOption(label="Image URL", value="image"),
+        discord.SelectOption(
+            label="Thumbnail URL",
+            value="thumbnail",
+            description="Small image beside the body",
+        ),
+        discord.SelectOption(
+            label="Divider on/off",
+            value="divider",
+            description="Toggle a separator line",
+        ),
+        discord.SelectOption(
+            label="Button",
+            value="button",
+            description="URL, label, optional emoji & style",
+        ),
+    ]
+
+    def __init__(self, author_id: int, accent: int | None = None):
         super().__init__(timeout=300)
         self.author_id = author_id
         self.data: dict[str, str] = {
             "title": "",
             "description": "",
-            "color": "2b2d31",
+            "color": f"{(accent if accent is not None else 0x2B2D31):06x}",
             "author": "",
             "footer": "",
             "image": "",
+            "thumbnail": "",
             "divider": "0",
             "button_url": "",
             "button_label": "",
@@ -1526,15 +1555,14 @@ class ContainerBuilderView(discord.ui.View):
             "button_style": "link",
         }
         self.message: discord.Message | None = None
+        self._rebuild()
 
-    async def interaction_check(self, inter: discord.Interaction) -> bool:
-        if inter.user.id == self.author_id:
-            return True
-        await inter.response.send_message(
-            f"Only <@{self.author_id}> can use this.",
-            ephemeral=True,
-        )
-        return False
+    def _accent(self) -> int:
+        raw = (self.data.get("color") or "2b2d31").lstrip("#")
+        try:
+            return int(raw, 16) & 0xFFFFFF
+        except ValueError:
+            return 0x2B2D31
 
     def _to_script(self) -> str:
         parts = ["{container}"]
@@ -1552,71 +1580,197 @@ class ContainerBuilderView(discord.ui.View):
             parts.append("$v{divider}")
         if self.data.get("image"):
             parts.append(f"$v{{image: {self.data['image']}}}")
+        if self.data.get("thumbnail"):
+            parts.append(f"$v{{thumbnail: {self.data['thumbnail']}}}")
         if self.data.get("button_url") and self.data.get("button_label"):
+            style = (self.data.get("button_style") or "link").lower()
             emoji = self.data.get("button_emoji") or ""
-            bit = f"$v{{button: {self.data['button_url']} && {self.data['button_label']}"
-            if emoji:
-                bit += f" && {emoji}"
-            bit += "}"
+            url = self.data["button_url"]
+            label = self.data["button_label"]
+            if style in {"link", "url"} or url.startswith("http"):
+                bit = f"$v{{button: {url} && {label}"
+                if emoji:
+                    bit += f" && {emoji}"
+                bit += "}"
+            else:
+                bit = f"$v{{button: {style} && {label} && {url}"
+                if emoji:
+                    bit += f" && {emoji}"
+                bit += "}"
             parts.append(bit)
-        return "".join(parts) if len(parts) > 1 else "{container}$v{description: empty}"
+        return (
+            "".join(parts)
+            if len(parts) > 1
+            else "{container}$v{description: _Select fields below to build your container_}"
+        )
 
-    async def _preview_view(self):
-        from core.tools.embed import parse_container
+    def _body_lines(self) -> list[str]:
+        lines: list[str] = []
+        if self.data.get("author"):
+            lines.append(f"**{self.data['author']}**")
+        if self.data.get("title"):
+            lines.append(f"## {self.data['title']}")
+        if self.data.get("description"):
+            lines.append(self.data["description"])
+        if not lines:
+            lines.append("_Select a field below to build your container_")
+        if self.data.get("footer"):
+            lines.append(f"-# {self.data['footer']}")
+        return lines
 
-        try:
-            payload = await parse_container(self._to_script(), sendable=True)
-            return payload.get("view")
-        except Exception:
-            return None
+    def _rebuild(self) -> None:
+        """Rebuild the visual container + control rows from current field data."""
+        self.clear_items()
+        accent = self._accent()
+        container = ui.Container(accent_colour=accent)
 
-    async def _refresh(self) -> None:
-        if not self.message:
-            return
-        # Keep controls message as script source-of-truth; live LayoutView is sent once at start
-        try:
-            await self.message.edit(
-                content=(
-                    "**Container Builder** · edit fields below, Approve DMs the script\n"
-                    f"```\n{self._to_script()}\n```"
-                ),
-                view=self,
-            )
-        except Exception:
-            pass
-        # Update companion live-preview message if we have one
-        preview_msg = getattr(self, "preview_message", None)
-        if preview_msg is not None:
-            layout = await self._preview_view()
-            if layout is not None:
+        body = "\n".join(self._body_lines())
+        thumb = (self.data.get("thumbnail") or "").strip()
+        if thumb and thumb.startswith("http"):
+            try:
+                container.add_item(
+                    ui.Section(
+                        ui.TextDisplay(body),
+                        accessory=ui.Thumbnail(media=thumb),
+                    )
+                )
+            except Exception:
+                container.add_item(ui.TextDisplay(body))
+        else:
+            container.add_item(ui.TextDisplay(body))
+
+        if self.data.get("divider") in {"1", "true", "yes", "on"}:
+            container.add_item(ui.Separator(visible=True))
+
+        image = (self.data.get("image") or "").strip()
+        if image and image.startswith("http"):
+            try:
+                container.add_item(
+                    ui.MediaGallery(discord.MediaGalleryItem(image))
+                )
+            except Exception:
                 try:
-                    await preview_msg.edit(content=None, view=layout)
+                    gallery = ui.MediaGallery()
+                    gallery.add_item(media=image)
+                    container.add_item(gallery)
                 except Exception:
-                    pass
+                    container.add_item(ui.TextDisplay(f"[image]({image})"))
 
-    @discord.ui.select(
-        placeholder="Choose what to edit...",
-        options=[
-            discord.SelectOption(label="Title", value="title"),
-            discord.SelectOption(label="Description", value="description"),
-            discord.SelectOption(label="Color (hex)", value="color"),
-            discord.SelectOption(label="Author", value="author"),
-            discord.SelectOption(label="Footer", value="footer"),
-            discord.SelectOption(label="Image URL", value="image"),
-            discord.SelectOption(
-                label="Divider on/off",
-                value="divider",
-                description="Set to on or off",
-            ),
-            discord.SelectOption(
-                label="Button",
-                value="button",
-                description="URL, label, optional emoji & style",
-            ),
-        ],
-    )
-    async def choose(self, inter: discord.Interaction, select: discord.ui.Select):
-        key = select.values[0]
+        # Preview link/styled button (non-interactive preview if not a link)
+        if self.data.get("button_url") and self.data.get("button_label"):
+            container.add_item(ui.Separator(visible=True))
+            row = ui.ActionRow()
+            label = (self.data["button_label"] or "Button")[:80]
+            emoji = (self.data.get("button_emoji") or "").strip() or None
+            url = self.data["button_url"]
+            style_name = (self.data.get("button_style") or "link").lower()
+            style_map = {
+                "link": discord.ButtonStyle.link,
+                "url": discord.ButtonStyle.link,
+                "blue": discord.ButtonStyle.primary,
+                "blurple": discord.ButtonStyle.primary,
+                "primary": discord.ButtonStyle.primary,
+                "green": discord.ButtonStyle.success,
+                "success": discord.ButtonStyle.success,
+                "red": discord.ButtonStyle.danger,
+                "danger": discord.ButtonStyle.danger,
+                "grey": discord.ButtonStyle.secondary,
+                "gray": discord.ButtonStyle.secondary,
+                "secondary": discord.ButtonStyle.secondary,
+            }
+            style = style_map.get(style_name, discord.ButtonStyle.link)
+            try:
+                if style == discord.ButtonStyle.link or url.startswith("http"):
+                    btn = ui.Button(
+                        style=discord.ButtonStyle.link,
+                        label=label,
+                        url=url if url.startswith("http") else f"https://{url}",
+                        emoji=emoji,
+                    )
+                else:
+                    # Disabled styled button so it looks real but does nothing
+                    btn = ui.Button(
+                        style=style,
+                        label=label,
+                        emoji=emoji,
+                        disabled=True,
+                        custom_id="cb:preview_btn",
+                    )
+                row.add_item(btn)
+                container.add_item(row)
+            except Exception:
+                container.add_item(ui.TextDisplay(f"**Button:** {label} → {url}"))
+
+        # Controls
+        container.add_item(ui.Separator(visible=True))
+        container.add_item(
+            ui.TextDisplay(
+                "-# **Container Builder** · pick a field, fill the modal, preview updates live · Approve DMs the script"
+            )
+        )
+
+        select_row = ui.ActionRow()
+        select = ui.Select(
+            placeholder="Choose what to edit...",
+            min_values=1,
+            max_values=1,
+            options=list(self._FIELD_OPTIONS),
+        )
+        select.callback = self._on_select
+        select_row.add_item(select)
+        container.add_item(select_row)
+
+        btn_row = ui.ActionRow()
+        approve_btn = ui.Button(
+            label="Approve & DM Script",
+            style=discord.ButtonStyle.success,
+        )
+        cancel_btn = ui.Button(
+            label="Cancel",
+            style=discord.ButtonStyle.danger,
+        )
+        approve_btn.callback = self._on_approve
+        cancel_btn.callback = self._on_cancel
+        btn_row.add_item(approve_btn)
+        btn_row.add_item(cancel_btn)
+        container.add_item(btn_row)
+
+        self.add_item(container)
+
+    async def interaction_check(self, inter: discord.Interaction) -> bool:
+        if inter.user.id == self.author_id:
+            return True
+        await inter.response.send_message(
+            f"Only <@{self.author_id}> can use this.",
+            ephemeral=True,
+        )
+        return False
+
+    async def _refresh_message(self, inter: discord.Interaction | None = None) -> None:
+        self._rebuild()
+        if inter is not None and not inter.response.is_done():
+            try:
+                await inter.response.edit_message(view=self)
+                return
+            except Exception:
+                pass
+        if self.message is not None:
+            try:
+                await self.message.edit(view=self)
+            except Exception:
+                pass
+
+    async def _on_select(self, inter: discord.Interaction) -> None:
+        # values live on the select component
+        values: list[str] = []
+        data = inter.data or {}
+        if isinstance(data, dict):
+            values = list(data.get("values") or [])
+        key = values[0] if values else ""
+        if not key:
+            await inter.response.defer()
+            return
+
         if key == "button":
             modal = _BuilderModal(
                 "Button",
@@ -1637,8 +1791,9 @@ class ContainerBuilderView(discord.ui.View):
             if modal.values:
                 for k, v in modal.values.items():
                     self.data[k] = v
-            await self._refresh()
+            await self._refresh_message()
             return
+
         if key == "divider":
             modal = _BuilderModal(
                 "Divider",
@@ -1651,16 +1806,17 @@ class ContainerBuilderView(discord.ui.View):
                 self.data["divider"] = (
                     "1" if val in {"on", "yes", "true", "1", "enable"} else "0"
                 )
-            await self._refresh()
+            await self._refresh_message()
             return
 
         labels = {
             "title": "Title",
             "description": "Description",
-            "color": "Color hex",
-            "author": "Author",
-            "footer": "Footer",
+            "color": "Color hex (e.g. 5865F2)",
+            "author": "Author name",
+            "footer": "Footer text",
             "image": "Image URL",
+            "thumbnail": "Thumbnail URL",
         }
         modal = _BuilderModal(
             f"Edit {labels.get(key, key)}",
@@ -1669,7 +1825,7 @@ class ContainerBuilderView(discord.ui.View):
                     key,
                     labels.get(key, key),
                     key in {"description", "footer"},
-                    4000 if key == "description" else 256,
+                    4000 if key == "description" else 500 if key in {"image", "thumbnail"} else 256,
                 )
             ],
         )
@@ -1681,10 +1837,9 @@ class ContainerBuilderView(discord.ui.View):
         await modal.wait()
         if modal.values and key in modal.values:
             self.data[key] = modal.values[key]
-        await self._refresh()
+        await self._refresh_message()
 
-    @discord.ui.button(label="Approve & DM Script", style=discord.ButtonStyle.success)
-    async def approve(self, inter: discord.Interaction, button: discord.ui.Button):
+    async def _on_approve(self, inter: discord.Interaction) -> None:
         script = self._to_script()
         dm_ok = False
         try:
@@ -1696,7 +1851,8 @@ class ContainerBuilderView(discord.ui.View):
             pass
         if dm_ok:
             await inter.response.send_message(
-                "Script sent to your **DMs**.", ephemeral=True
+                "Script sent to your **DMs**. Live preview stays above.",
+                ephemeral=True,
             )
         else:
             await inter.response.send_message(
@@ -1705,12 +1861,33 @@ class ContainerBuilderView(discord.ui.View):
             )
         self.stop()
 
-    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.danger)
-    async def cancel(self, inter: discord.Interaction, button: discord.ui.Button):
-        await inter.response.edit_message(
-            content="Container builder cancelled.", view=None
-        )
+    async def _on_cancel(self, inter: discord.Interaction) -> None:
+        # Collapse to a plain cancelled notice container
+        bare = ui.LayoutView(timeout=None)
+        c = ui.Container(accent_colour=self._accent())
+        c.add_item(ui.TextDisplay("Container builder **cancelled**."))
+        bare.add_item(c)
+        try:
+            await inter.response.edit_message(view=bare)
+        except Exception:
+            pass
         self.stop()
+
+    async def on_timeout(self) -> None:
+        if self.message is None:
+            return
+        bare = ui.LayoutView(timeout=None)
+        c = ui.Container(accent_colour=self._accent())
+        # Final static preview without controls
+        body = "\n".join(self._body_lines())
+        c.add_item(ui.TextDisplay(body))
+        c.add_item(ui.Separator(visible=True))
+        c.add_item(ui.TextDisplay("-# builder timed out"))
+        bare.add_item(c)
+        try:
+            await self.message.edit(view=bare)
+        except Exception:
+            pass
 
 
 async def setup(bot: Vain):
@@ -1739,27 +1916,15 @@ async def setup(bot: Vain):
     @hybrid(
         name="containerbuilder",
         aliases=["cb"],
-        description="Interactive container builder with live container preview. Approve DMs the script.",
+        description="Interactive container builder with live visual Components V2 preview. Approve DMs the script.",
         example=",containerbuilder",
     )
     async def _run_cb(ctx: Context):
-        view = ContainerBuilderView(ctx.author.id)
-        m = await ctx.send(
-            content=(
-                "**Container Builder** · edit fields below, Approve DMs the script\n"
-                f"```\n{view._to_script()}\n```"
-            ),
-            view=view,
-        )
+        accent = getattr(ctx.bot, "color", None) or 0x2B2D31
+        view = ContainerBuilderView(ctx.author.id, accent=int(accent))
+        # Message is the visual container itself (LayoutView)
+        m = await ctx.send(view=view)
         view.message = m
-        # Companion live preview of the actual container
-        layout = await view._preview_view()
-        if layout is not None:
-            try:
-                preview = await ctx.send(view=layout)
-                view.preview_message = preview
-            except Exception:
-                view.preview_message = None
 
     bot.add_command(_run_eb)
     bot.add_command(_run_cb)
