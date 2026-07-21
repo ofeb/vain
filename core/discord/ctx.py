@@ -371,7 +371,19 @@ class Context(commands.Context):
         if return_embed:
             return embed
         kwargs.setdefault("mention_author", False)
-        return await self.reply(embed=embed, **kwargs)
+        try:
+            return await self.reply(embed=embed, **kwargs)
+        except discord.NotFound:
+            # Channel deleted (e.g. mid-nuke cancel) — fall back to send, then drop
+            try:
+                return await self.send(embed=embed, **kwargs)
+            except (discord.NotFound, discord.HTTPException):
+                return None
+        except discord.HTTPException:
+            try:
+                return await self.send(embed=embed, **kwargs)
+            except (discord.NotFound, discord.HTTPException):
+                return None
 
     async def success(self, message: str, **kw):
         """send a success reply with vain styling"""

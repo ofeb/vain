@@ -91,8 +91,63 @@ def _has_link(s: str) -> bool:
     return len(re.findall(pat, s)) > 0
 
 
+_EMBED_FIELD_KEYS = (
+    "content:",
+    "message:",
+    "description:",
+    "title:",
+    "color:",
+    "field:",
+    "footer:",
+    "author:",
+    "image:",
+    "thumbnail:",
+    "button:",
+    "url:",
+    "autodelete:",
+    "timestamp",
+    "divider",
+    "separator",
+    "text:",
+)
+
+# Field-like tokens that imply a classic embed when no mode tag is present
+_SMART_EMBED_HINTS = (
+    "{title:",
+    "{description:",
+    "{color:",
+    "{author:",
+    "{author.name:",
+    "{footer:",
+    "{field:",
+    "{image:",
+    "{thumbnail:",
+    "{url:",
+    "{timestamp",
+    "{button:",
+    "{content:",
+    "{message:",
+)
+
+
+def is_container_script(raw: str) -> bool:
+    """Return True when a template is Components V2 container script."""
+    stripped = str(raw).strip().lower()
+    if stripped.startswith("{container}") or stripped.startswith("container$v"):
+        return True
+    if re.search(r"\{container\b", stripped):
+        return True
+    return False
+
+
 def is_embed_script(raw: str) -> bool:
-    """Return True when a template should be parsed as vain embed code."""
+    """Return True when a template should be parsed as vain embed code.
+
+    Smart default: bare ``{title:}`` / ``{description:}`` (etc.) scripts without
+    an explicit ``{embed}`` or ``{container}`` tag are treated as embeds.
+    """
+    if is_container_script(raw):
+        return False
     stripped = str(raw).strip()
     if (
         stripped.startswith("{embed}")
@@ -101,25 +156,46 @@ def is_embed_script(raw: str) -> bool:
     ):
         return True
     lowered = stripped.lower()
-    _EMBED_KEYS = (
-        "content:", "description:", "title:", "color:", "field:",
-        "footer:", "author:", "image:", "thumbnail:", "button:",
-        "url:", "autodelete:", "timestamp",
-    )
-    if stripped.startswith("{") and any(lowered.startswith(f"{{{k}") for k in _EMBED_KEYS):
+    if stripped.startswith("{") and any(
+        lowered.startswith(f"{{{k}") for k in _EMBED_FIELD_KEYS
+    ):
+        return True
+    # Smart detection: field tags anywhere in the script body
+    if any(hint in lowered for hint in _SMART_EMBED_HINTS):
+        return True
+    if "$v{" in stripped and any(
+        f"{{{k.rstrip(':')}" in lowered or f"{k}" in lowered for k in _EMBED_FIELD_KEYS
+    ):
         return True
     return False
 
 
 def maybe_wrap_embed_script(text: str) -> str:
-    """Wrap plain text as ``{content: text}`` when it is not already embed code.
+    """Normalize scripts: auto-prefix ``{embed}`` when field tags are present.
 
-    Plain templates (including leftover ``{var}`` tokens) stay plain content —
-    they are NOT treated as embed scripts just because they contain braces.
+    Explicit ``{container}`` is left alone. Plain chat templates without embed
+    field keys stay as plain content.
     """
-    if is_embed_script(text):
-        return text
-    return text
+    stripped = str(text).strip()
+    if not stripped:
+        return stripped
+    if is_container_script(stripped):
+        return stripped
+    if is_embed_script(stripped):
+        lowered = stripped.lower()
+        if (
+            lowered.startswith("{embed}")
+            or lowered.startswith("embed$v")
+            or lowered.startswith("{container}")
+        ):
+            return stripped
+        if stripped.startswith("$v{"):
+            return "{embed}" + stripped
+        if stripped.startswith("{"):
+            return f"{{embed}}$v{stripped}"
+        # Field tags mid-string without a leading mode tag
+        return f"{{embed}}$v{stripped}" if "$v{" in stripped else stripped
+    return stripped
 
 
 def _over_by(val, limit: int) -> int:
@@ -290,9 +366,194 @@ async def _validate(data: dict) -> bool:
     return True
 
 
+async def parse_container(raw: str, sendable: bool = False) -> dict:
+    """Parse a ``{container}`` script into a LayoutView payload."""
+    from discord import ui
+
+    raw = str(raw).strip()
+    # strip mode tag (case-insensitive)
+    raw = re.sub(r"^\s*\{container\}\s*", "", raw, flags=re.IGNORECASE)
+    raw = re.sub(r"^\s*container\$v", "", raw, flags=re.IGNORECASE)
+
+    if raw.startswith("$v"):
+        raw = raw[2:]
+    if raw.endswith("$v"):
+        raw = raw[:-2]
+
+    chunks = [chunk.strip() for chunk in raw.split("$v") if chunk.strip()]
+    layout = ui.LayoutView(timeout=None)
+    container = ui.Container()
+    content: str | None = None
+    accent: int | None = None
+    lines: list[str] = []
+    buttons: list[discord.ui.Button] = []
+    delete_after = None
+
+    def _flush_text() -> None:
+        nonlocal lines
+        if not lines:
+            return
+        body = "\n".join(lines)
+        try:
+            container.add_item(ui.TextDisplay(body))
+        except Exception:
+            pass
+        lines = []
+
+    for chunk in chunks:
+        if not chunk.startswith("{") or not chunk.endswith("}"):
+            continue
+        part = Str(chunk)
+        key = (part.declaration or "").lower()
+        payload = (part.payload or "").strip() if part.payload is not None else ""
+
+        if key in {"content", "message"}:
+            content = payload
+            continue
+        if key == "autodelete":
+            try:
+                delete_after = int(payload)
+            except ValueError as error:
+                raise BadEmbed("autodelete must be a number") from error
+            continue
+        if key in {"divider", "separator"}:
+            _flush_text()
+            try:
+                container.add_item(ui.Separator(visible=True))
+            except Exception:
+                pass
+            continue
+        if key == "color":
+            color_value = payload
+            if not color_value.startswith("#"):
+                try:
+                    accent = discord.Color(value=int(color_value)).value
+                    continue
+                except Exception:
+                    color_value = f"#{color_value}"
+            try:
+                accent = int(discord.Color.from_str(color_value))
+            except Exception as error:
+                raise BadEmbed(str(error)) from error
+            continue
+        if key == "title":
+            lines.append(f"## {payload}" if payload else "")
+            continue
+        if key in {"description", "text"}:
+            if payload:
+                lines.append(payload)
+            continue
+        if key == "footer":
+            bits = _split_fields(payload)
+            if bits and bits[0]:
+                lines.append(f"-# {bits[0]}")
+            continue
+        if key == "author":
+            bits = _split_fields(payload)
+            if bits and bits[0]:
+                lines.append(f"**{bits[0]}**")
+            continue
+        if key == "field":
+            bits = _split_fields(payload)
+            if len(bits) >= 2:
+                lines.append(f"**{bits[0]}**\n{bits[1]}")
+            continue
+        if key == "image":
+            # Images on containers are best-effort via media gallery when available
+            _flush_text()
+            if payload and _has_link(payload):
+                try:
+                    gallery = ui.MediaGallery()
+                    gallery.add_item(media=payload)
+                    container.add_item(gallery)
+                except Exception:
+                    lines.append(payload)
+            continue
+        if key == "thumbnail":
+            # Thumbnail not first-class on freeform containers — append as link
+            if payload:
+                lines.append(payload)
+            continue
+        if key == "button":
+            bits = _split_fields(payload)
+            if len(bits) < 2:
+                raise BadEmbed("button needs at least two arguments")
+            first, second = bits[0], bits[1]
+            third = bits[2] if len(bits) > 2 else ""
+            fourth = bits[3] if len(bits) > 3 else None
+            first_url = first if _has_link(first) else None
+            label = second or None
+            emoji = None
+            url = None
+            if first_url:
+                style = discord.ButtonStyle.link
+                url = first_url
+                state_third = _parse_button_state(third)
+                if state_third is None:
+                    emoji = _parse_button_emoji(third)
+            else:
+                if len(bits) < 3:
+                    raise BadEmbed("styled buttons need a type, label, and emoji or url")
+                style = _parse_button_style(first)
+                target = third
+                if style == discord.ButtonStyle.link:
+                    if not target or not _has_link(target):
+                        raise BadEmbed("link buttons need a valid url")
+                    url = target
+                else:
+                    emoji = _parse_button_emoji(target)
+            buttons.append(
+                discord.ui.Button(
+                    label=label,
+                    style=style if first_url or style == discord.ButtonStyle.link else style,
+                    url=url,
+                    emoji=emoji,
+                )
+            )
+            continue
+        # unknown keys become text lines when they have payload
+        if payload:
+            lines.append(payload)
+
+    _flush_text()
+
+    if accent is not None:
+        try:
+            container.accent_colour = accent  # type: ignore[attr-defined]
+        except Exception:
+            try:
+                container.accent_color = accent  # type: ignore[attr-defined]
+            except Exception:
+                pass
+
+    if buttons:
+        try:
+            container.add_item(ui.Separator(visible=True))
+        except Exception:
+            pass
+        for i in range(0, len(buttons), 5):
+            row = ui.ActionRow(*buttons[i : i + 5])
+            container.add_item(row)
+
+    layout.add_item(container)
+    final: dict[str, Any] = {"view": layout}
+    if content is not None:
+        final["content"] = content
+    if delete_after is not None:
+        final["delete_after"] = delete_after
+    return final
+
+
 async def parse(raw: str, sendable: bool = False) -> dict:
-    """parse embed script string into dict or embed"""
-    raw = str(raw).strip().replace("{embed}", "")
+    """parse embed or container script string into dict or embed"""
+    raw_in = str(raw).strip()
+    if is_container_script(raw_in):
+        return await parse_container(raw_in, sendable=sendable)
+
+    raw = raw_in
+    # strip {embed} mode tag (keep field content)
+    raw = re.sub(r"^\s*\{embed\}\s*", "", raw, flags=re.IGNORECASE)
+    raw = re.sub(r"^\s*embed\$v", "", raw, flags=re.IGNORECASE)
     out: dict[str, Any] = {"fields": []}
     final: dict[str, Any] = {"view": discord.ui.View(timeout=None)}
 
@@ -925,7 +1186,7 @@ class Script:
     async def data(self, sendable: bool = False, **kwargs) -> dict[str, Any]:
         rendered = self.render(**kwargs)
         rendered = maybe_wrap_embed_script(rendered)
-        if is_embed_script(rendered):
+        if is_container_script(rendered) or is_embed_script(rendered):
             payload = await parse(rendered, sendable=sendable)
         else:
             payload = {"content": rendered}
@@ -940,8 +1201,23 @@ class Script:
         **kwargs,
     ) -> discord.Message:
         payload = await self.data(True, **kwargs)
+        # Classic embeds from {embed} scripts must not be auto-containerized by Context.send
+        if payload.get("embed") is not None and "raw_embed" not in payload:
+            # Only apply when destination is a Context-like sender that accepts the kwarg
+            if hasattr(destination, "send"):
+                try:
+                    import inspect
+                    sig = inspect.signature(destination.send)
+                    if "raw_embed" in sig.parameters or any(
+                        p.kind == inspect.Parameter.VAR_KEYWORD
+                        for p in sig.parameters.values()
+                    ):
+                        payload.setdefault("raw_embed", True)
+                except (TypeError, ValueError):
+                    payload.setdefault("raw_embed", True)
         if isinstance(destination, discord.Message):
             payload.pop("delete_after", None)
+            payload.pop("raw_embed", None)
             return await destination.edit(**payload)
         return await destination.send(**payload)
 

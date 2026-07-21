@@ -32,6 +32,11 @@ def build_giveaway_panel(
     winner_mentions: str | None = None,
     no_entries: bool = False,
     accent: int | None = None,
+    button_label: str | None = None,
+    button_emoji: str | None = None,
+    show_entries: bool = True,
+    join_type: str = "button",
+    custom_body: str | None = None,
 ) -> ui.LayoutView:
     """Active / ended giveaway panel matching the inspo Components V2 layout."""
     prize = (prize or "Giveaway").strip() or "Giveaway"
@@ -39,7 +44,9 @@ def build_giveaway_panel(
     layout = ui.LayoutView(timeout=None)
     container = ui.Container(accent_colour=accent)
 
-    if ended:
+    if custom_body:
+        body = custom_body
+    elif ended:
         if no_entries:
             body = (
                 f"## {prize}\n"
@@ -56,10 +63,11 @@ def build_giveaway_panel(
                 f"-# ended · Hosted by {host_mention}"
             )
     else:
+        entries_bit = f"  **Entries** {entries}" if show_entries else ""
         body = (
             f"## {prize}\n"
             f"{_ends_line(end_time)}\n"
-            f"**Winners** {winners}  **Entries** {entries}\n"
+            f"**Winners** {winners}{entries_bit}\n"
             f"-# Hosted by {host_mention}"
         )
 
@@ -79,23 +87,40 @@ def build_giveaway_panel(
     container.add_item(ui.Separator(visible=True))
 
     row = ui.ActionRow()
-    if not ended:
+    join_type = (join_type or "button").lower()
+    if not ended and join_type != "reaction":
+        label = (button_label or "Enter").strip() or "Enter"
+        if show_entries:
+            label = f"{label}  ({entries})"
+        emoji = (button_emoji or "🎉").strip() or "🎉"
+        try:
+            row.add_item(
+                ui.Button(
+                    style=discord.ButtonStyle.secondary,
+                    emoji=emoji,
+                    label=label[:80],
+                    custom_id=f"gw:enter:{message_id}",
+                )
+            )
+        except Exception:
+            row.add_item(
+                ui.Button(
+                    style=discord.ButtonStyle.secondary,
+                    emoji="🎉",
+                    label=label[:80],
+                    custom_id=f"gw:enter:{message_id}",
+                )
+            )
+    if show_entries:
         row.add_item(
             ui.Button(
                 style=discord.ButtonStyle.secondary,
-                emoji="🎉",
-                label=f"Enter  ({entries})",
-                custom_id=f"gw:enter:{message_id}",
+                label="View Entries",
+                custom_id=f"gw:entries:{message_id}",
             )
         )
-    row.add_item(
-        ui.Button(
-            style=discord.ButtonStyle.secondary,
-            label="View Entries",
-            custom_id=f"gw:entries:{message_id}",
-        )
-    )
-    container.add_item(row)
+    if row.children:
+        container.add_item(row)
     layout.add_item(container)
     return layout
 

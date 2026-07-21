@@ -83,27 +83,44 @@ class ServerCommands(Package):
     """standalone server commands"""
 
     @staticmethod
-    def _normalize_embed_script(script: str) -> str:
-        from core.tools.embed import maybe_wrap_embed_script
-        value = maybe_wrap_embed_script(str(script).strip())
+    def _normalize_embed_script(script: str, *, prefer: str = "embed") -> str:
+        """Normalize script mode. prefer='embed'|'container' when no mode tag."""
+        from core.tools.embed import (
+            is_container_script,
+            is_embed_script,
+            maybe_wrap_embed_script,
+        )
+
+        value = str(script).strip()
+        if is_container_script(value):
+            return value
+        value = maybe_wrap_embed_script(value)
         lowered = value.lower()
         if lowered.startswith("{embed}") or lowered.startswith("embed$v"):
             return value
+        if lowered.startswith("{container}") or lowered.startswith("container$v"):
+            return value
+        if prefer == "container":
+            if value.startswith("$v{"):
+                return "{container}" + value
+            if value.startswith("{"):
+                return f"{{container}}$v{value}"
+            return f"{{container}}$v{{description: {value}}}"
         if value.startswith("$v{"):
             return "{embed}" + value
-        if value.startswith("{"):
-            return f"{{embed}}$v{value}"
+        if is_embed_script(value) or value.startswith("{"):
+            if value.startswith("{"):
+                return f"{{embed}}$v{value}" if not lowered.startswith("{embed}") else value
+            return value
         return value
 
-    async def _send_embed_script(self, ctx, script: str):
-        normalized = self._normalize_embed_script(script)
+    async def _send_embed_script(self, ctx, script: str, *, prefer: str = "embed"):
+        normalized = self._normalize_embed_script(script, prefer=prefer)
 
-        
-        
         try:
             from core.tools.embed import Script
             sc = Script(normalized, user=ctx.author)
-            
+
             rendered = sc.render(
                 guild=ctx.guild,
                 channel=ctx.channel,
@@ -114,12 +131,13 @@ class ServerCommands(Package):
                 time=discord.utils.utcnow().strftime("%H:%M"),
                 datetime=str(discord.utils.utcnow()),
             )
-            normalized = self._normalize_embed_script(rendered)
+            normalized = self._normalize_embed_script(rendered, prefer=prefer)
         except Exception:
-            pass  
+            pass
 
-        from core.tools.embed import is_embed_script
-        if not is_embed_script(normalized):
+        from core.tools.embed import is_container_script, is_embed_script
+
+        if not is_embed_script(normalized) and not is_container_script(normalized):
             payload = {"content": normalized}
         else:
             try:
@@ -134,9 +152,18 @@ class ServerCommands(Package):
             and payload.get("embed") is None
             and payload.get("view") is None
         ):
-            return await ctx.warn("Provide **valid embed code**.")
+            return await ctx.warn("Provide **valid embed/container code**.")
 
         try:
+            # Classic embeds stay embeds; containers send as LayoutView
+            if payload.get("embed") is not None:
+                return await ctx.send(
+                    content=payload.get("content"),
+                    embed=payload.get("embed"),
+                    view=payload.get("view"),
+                    raw_embed=True,
+                    delete_after=payload.get("delete_after"),
+                )
             return await PreparedScript(payload).send(ctx)
         except discord.HTTPException as error:
             message = str(error)
@@ -147,16 +174,16 @@ class ServerCommands(Package):
     @group(
         name="embedcreate",
         aliases=["ce", "createembed"],
-        description="Create and send a custom embed using the powerful embed script syntax. Supports {guild.name}, {user}, {channel}, {date} etc.",
+        description="Create and send a classic embed. Use {embed} or bare {title}/{description}. Supports variables.",
         usage="(script)",
         example="{title: Hello from {guild.name}}$v{description: Sent by {user} in {channel.name} on {date}}$v{color: #5865F2}",
         invoke_without_command=True,
     )
     async def embedcreate(self, ctx, *, script: str = None):
-        """Create a custom embed using embed scripting."""
+        """Create a classic Discord embed using embed scripting."""
         if script is None:
             return await ctx.send_help()
-        return await self._send_embed_script(ctx, script)
+        return await self._send_embed_script(ctx, script, prefer="embed")
 
     @embedcreate.command(
         name="preview",
@@ -168,7 +195,32 @@ class ServerCommands(Package):
         """Preview an embed script without sending it."""
         if script is None:
             return await ctx.fail("Provide an embed script to preview")
-        return await self._send_embed_script(ctx, script)
+        return await self._send_embed_script(ctx, script, prefer="embed")
+
+    @group(
+        name="containercreate",
+        aliases=["cc", "createcontainer"],
+        description="Create and send a Components V2 container. Use {container}, {divider}, {title}, {description}, {button}.",
+        usage="(script)",
+        example="{container}$v{title: Hello}$v{description: World}$v{divider}$v{button: link && Site && https://example.com}",
+        invoke_without_command=True,
+    )
+    async def containercreate(self, ctx, *, script: str = None):
+        """Create a Components V2 container using container scripting."""
+        if script is None:
+            return await ctx.send_help()
+        return await self._send_embed_script(ctx, script, prefer="container")
+
+    @containercreate.command(
+        name="preview",
+        aliases=["view"],
+        usage="(script)",
+    )
+    async def containercreate_preview(self, ctx, *, script: str = None):
+        """Preview a container script."""
+        if script is None:
+            return await ctx.fail("Provide a container script to preview")
+        return await self._send_embed_script(ctx, script, prefer="container")
 
     @command(
         name="variables",

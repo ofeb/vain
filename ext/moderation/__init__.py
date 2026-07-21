@@ -233,12 +233,12 @@ class ModerationCommands(Package):
         return ", ".join(parts) if parts else "0 seconds"
 
     async def _ensure_jail_ready(self, ctx) -> dict | None:
-        row = await self.db.fetchrow(
+        raw = await self.db.fetchrow(
             "SELECT jail_channel_id, jail_role_id, jail_remove_roles, jail_message FROM server_settings WHERE guild_id = $1",
             ctx.guild.id,
         )
-        if not row:
-            row = {}
+        # asyncpg Row is immutable — always work with a plain dict
+        row: dict = dict(raw) if raw else {}
 
         jail_role = ctx.guild.get_role(row.get("jail_role_id") or 0)
         if jail_role is None:
@@ -250,7 +250,6 @@ class ModerationCommands(Package):
                     permissions=discord.Permissions.none(),
                 )
             await self.db.set_server_settings(ctx.guild.id, jail_role_id=jail_role.id)
-            row = dict(row)
             row["jail_role_id"] = jail_role.id
 
         jail_channel = ctx.guild.get_channel(row.get("jail_channel_id") or 0)
@@ -279,7 +278,6 @@ class ModerationCommands(Package):
                     reason="Jail system setup",
                 )
             await self.db.set_server_settings(ctx.guild.id, jail_channel_id=jail_channel.id)
-            row = dict(row)
             row["jail_channel_id"] = jail_channel.id
 
         await self._sync_jail_permissions(ctx.guild, jail_role, jail_channel)

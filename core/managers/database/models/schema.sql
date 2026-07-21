@@ -499,8 +499,14 @@ CREATE TABLE IF NOT EXISTS giveaways (
 
 CREATE TABLE IF NOT EXISTS giveaway_settings (
     guild_id BIGINT PRIMARY KEY,
-    dm_on_win BOOLEAN NOT NULL DEFAULT TRUE,
-    dm_script TEXT
+    dm_on_win BOOLEAN NOT NULL DEFAULT FALSE,
+    dm_script TEXT,
+    embed_script TEXT,
+    button_label TEXT,
+    button_emoji TEXT,
+    show_entries BOOLEAN NOT NULL DEFAULT TRUE,
+    join_type TEXT NOT NULL DEFAULT 'button',
+    join_reaction TEXT
 );
 
 CREATE TABLE IF NOT EXISTS pingonjoin (
@@ -890,6 +896,22 @@ CREATE TABLE IF NOT EXISTS invocation (
 
 ALTER TABLE invocation ADD COLUMN IF NOT EXISTS dm_enabled BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE invocation ADD COLUMN IF NOT EXISTS message_enabled BOOLEAN NOT NULL DEFAULT TRUE;
+
+-- server_settings columns added after initial CREATE TABLE IF NOT EXISTS
+ALTER TABLE server_settings ADD COLUMN IF NOT EXISTS antinuke_log_channel_id BIGINT;
+ALTER TABLE server_settings ADD COLUMN IF NOT EXISTS antiraid_log_channel_id BIGINT;
+ALTER TABLE server_settings ADD COLUMN IF NOT EXISTS jail_message TEXT;
+ALTER TABLE server_settings ADD COLUMN IF NOT EXISTS jail_remove_roles BOOLEAN NOT NULL DEFAULT TRUE;
+
+-- giveaway_settings customization columns
+ALTER TABLE giveaway_settings ADD COLUMN IF NOT EXISTS dm_on_win BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE giveaway_settings ADD COLUMN IF NOT EXISTS dm_script TEXT;
+ALTER TABLE giveaway_settings ADD COLUMN IF NOT EXISTS embed_script TEXT;
+ALTER TABLE giveaway_settings ADD COLUMN IF NOT EXISTS button_label TEXT;
+ALTER TABLE giveaway_settings ADD COLUMN IF NOT EXISTS button_emoji TEXT;
+ALTER TABLE giveaway_settings ADD COLUMN IF NOT EXISTS show_entries BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE giveaway_settings ADD COLUMN IF NOT EXISTS join_type TEXT NOT NULL DEFAULT 'button';
+ALTER TABLE giveaway_settings ADD COLUMN IF NOT EXISTS join_reaction TEXT;
 
 CREATE TABLE IF NOT EXISTS silenced (
     guild_id BIGINT NOT NULL,

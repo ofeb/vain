@@ -333,7 +333,12 @@ class RoleplayCommands(Package):
             )
 
         target = member or ctx.author
-        gif_bytes = await fetch_action_gif(action)
+        try:
+            gif_bytes = await fetch_action_gif(action)
+        except Exception as exc:
+            raise commands.CommandError(
+                f"Could not fetch a GIF for **{action}** right now. Try again later."
+            ) from exc
         attachment = discord.File(BytesIO(gif_bytes), filename="action.gif")
 
         total = await self._record(action, ctx.author.id, target.id)

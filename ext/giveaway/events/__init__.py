@@ -66,11 +66,30 @@ class GiveawayEvents(Cog):
                 """
                 CREATE TABLE IF NOT EXISTS giveaway_settings (
                     guild_id BIGINT PRIMARY KEY,
-                    dm_on_win BOOLEAN NOT NULL DEFAULT TRUE,
-                    dm_script TEXT
+                    dm_on_win BOOLEAN NOT NULL DEFAULT FALSE,
+                    dm_script TEXT,
+                    embed_script TEXT,
+                    button_label TEXT,
+                    button_emoji TEXT,
+                    show_entries BOOLEAN NOT NULL DEFAULT TRUE,
+                    join_type TEXT NOT NULL DEFAULT 'button',
+                    join_reaction TEXT
                 )
                 """
             )
+        # Migrate columns for existing installs
+        for stmt in (
+            "ALTER TABLE giveaway_settings ADD COLUMN IF NOT EXISTS dm_on_win BOOLEAN NOT NULL DEFAULT FALSE",
+            "ALTER TABLE giveaway_settings ADD COLUMN IF NOT EXISTS dm_script TEXT",
+            "ALTER TABLE giveaway_settings ADD COLUMN IF NOT EXISTS embed_script TEXT",
+            "ALTER TABLE giveaway_settings ADD COLUMN IF NOT EXISTS button_label TEXT",
+            "ALTER TABLE giveaway_settings ADD COLUMN IF NOT EXISTS button_emoji TEXT",
+            "ALTER TABLE giveaway_settings ADD COLUMN IF NOT EXISTS show_entries BOOLEAN NOT NULL DEFAULT TRUE",
+            "ALTER TABLE giveaway_settings ADD COLUMN IF NOT EXISTS join_type TEXT NOT NULL DEFAULT 'button'",
+            "ALTER TABLE giveaway_settings ADD COLUMN IF NOT EXISTS join_reaction TEXT",
+        ):
+            with suppress(Exception):
+                await self.bot.db.execute(stmt)
         with suppress(Exception):
             await self.bot.db.execute(
                 """
@@ -93,41 +112,78 @@ class GiveawayEvents(Cog):
                 """
             )
 
+    def _default_settings(self) -> dict[str, Any]:
+        return {
+            "dm_on_win": False,
+            "dm_script": None,
+            "embed_script": None,
+            "button_label": None,
+            "button_emoji": None,
+            "show_entries": True,
+            "join_type": "button",
+            "join_reaction": None,
+        }
+
     async def get_settings(self, guild_id: int) -> dict[str, Any]:
         row = None
         with suppress(Exception):
             row = await self.bot.db.fetchrow(
                 "SELECT * FROM giveaway_settings WHERE guild_id = $1",
                 guild_id,
+                cached=False,
             )
+        base = self._default_settings()
         if not row:
-            return {"dm_on_win": True, "dm_script": None}
+            return base
+        data = dict(row)
         return {
-            "dm_on_win": bool(row.get("dm_on_win", True)),
-            "dm_script": row.get("dm_script"),
+            "dm_on_win": bool(data.get("dm_on_win", False)),
+            "dm_script": data.get("dm_script"),
+            "embed_script": data.get("embed_script"),
+            "button_label": data.get("button_label"),
+            "button_emoji": data.get("button_emoji"),
+            "show_entries": bool(data.get("show_entries", True)),
+            "join_type": str(data.get("join_type") or "button").lower(),
+            "join_reaction": data.get("join_reaction"),
         }
 
-    async def set_dm_on_win(self, guild_id: int, enabled: bool) -> None:
+    async def update_settings(self, guild_id: int, **fields: Any) -> dict[str, Any]:
+        """Upsert any subset of giveaway_settings columns."""
+        current = await self.get_settings(guild_id)
+        current.update({k: v for k, v in fields.items() if k in current or k in self._default_settings()})
         await self.bot.db.execute(
             """
-            INSERT INTO giveaway_settings (guild_id, dm_on_win)
-            VALUES ($1, $2)
-            ON CONFLICT (guild_id) DO UPDATE SET dm_on_win = EXCLUDED.dm_on_win
+            INSERT INTO giveaway_settings (
+                guild_id, dm_on_win, dm_script, embed_script,
+                button_label, button_emoji, show_entries, join_type, join_reaction
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            ON CONFLICT (guild_id) DO UPDATE SET
+                dm_on_win = EXCLUDED.dm_on_win,
+                dm_script = EXCLUDED.dm_script,
+                embed_script = EXCLUDED.embed_script,
+                button_label = EXCLUDED.button_label,
+                button_emoji = EXCLUDED.button_emoji,
+                show_entries = EXCLUDED.show_entries,
+                join_type = EXCLUDED.join_type,
+                join_reaction = EXCLUDED.join_reaction
             """,
             guild_id,
-            enabled,
+            bool(current.get("dm_on_win", False)),
+            current.get("dm_script"),
+            current.get("embed_script"),
+            current.get("button_label"),
+            current.get("button_emoji"),
+            bool(current.get("show_entries", True)),
+            str(current.get("join_type") or "button"),
+            current.get("join_reaction"),
         )
+        return current
+
+    async def set_dm_on_win(self, guild_id: int, enabled: bool) -> None:
+        await self.update_settings(guild_id, dm_on_win=enabled)
 
     async def set_dm_script(self, guild_id: int, script: str | None) -> None:
-        await self.bot.db.execute(
-            """
-            INSERT INTO giveaway_settings (guild_id, dm_script)
-            VALUES ($1, $2)
-            ON CONFLICT (guild_id) DO UPDATE SET dm_script = EXCLUDED.dm_script
-            """,
-            guild_id,
-            script,
-        )
+        await self.update_settings(guild_id, dm_script=script)
 
     def schedule_end(
         self,
@@ -258,6 +314,34 @@ class GiveawayEvents(Cog):
     ) -> None:
         guild = message.guild
         entries = list(record.get("entries") or [])
+        settings = await self.get_settings(int(record.get("guild_id") or (guild.id if guild else 0)))
+        custom_body = None
+        embed_script = settings.get("embed_script")
+        if embed_script and guild is not None:
+            try:
+                from core.tools.embed import Script
+
+                prize = str(record.get("prize") or "Giveaway")
+                rendered = Script(embed_script).render(
+                    guild=guild,
+                    prize=prize,
+                    winners=int(record.get("winner_count") or 1),
+                    host=self._host_mention(record),
+                    entries=len(entries),
+                    ends_at=str(record.get("expiration") or ""),
+                )
+                # Prefer description-ish body for the panel text
+                custom_body = rendered
+                if "{embed}" in embed_script.lower() or "$v{" in embed_script:
+                    # strip mode tags for plain body fallback
+                    custom_body = (
+                        rendered.replace("{embed}", "")
+                        .replace("$v", "\n")
+                        .strip()
+                    ) or None
+            except Exception:
+                custom_body = None
+
         panel = build_giveaway_panel(
             message_id=int(record["message_id"]),
             prize=str(record.get("prize") or "Giveaway"),
@@ -270,6 +354,11 @@ class GiveawayEvents(Cog):
             winner_mentions=winner_mentions,
             no_entries=no_entries,
             accent=color.base,
+            button_label=settings.get("button_label"),
+            button_emoji=settings.get("button_emoji"),
+            show_entries=bool(settings.get("show_entries", True)),
+            join_type=str(settings.get("join_type") or "button"),
+            custom_body=custom_body,
         )
         await message.edit(content=None, embed=None, view=panel)
 
@@ -317,6 +406,91 @@ class GiveawayEvents(Cog):
             await self._handle_enter(interaction, message_id)
         elif action == "entries":
             await self._handle_view_entries(interaction, message_id)
+
+    @Cog.listener("on_raw_reaction_add")
+    async def on_giveaway_reaction_add(self, payload: discord.RawReactionActionEvent) -> None:
+        await self._handle_reaction_entry(payload, adding=True)
+
+    @Cog.listener("on_raw_reaction_remove")
+    async def on_giveaway_reaction_remove(self, payload: discord.RawReactionActionEvent) -> None:
+        await self._handle_reaction_entry(payload, adding=False)
+
+    async def _handle_reaction_entry(
+        self, payload: discord.RawReactionActionEvent, *, adding: bool
+    ) -> None:
+        if payload.user_id == getattr(self.bot.user, "id", None):
+            return
+        if not payload.guild_id:
+            return
+        row = await self.bot.db.fetchrow(
+            "SELECT * FROM giveaways WHERE message_id = $1 AND win_message_id IS NULL",
+            payload.message_id,
+        )
+        if not row:
+            return
+        settings = await self.get_settings(int(row["guild_id"]))
+        if str(settings.get("join_type") or "button").lower() != "reaction":
+            return
+        expected = str(settings.get("join_reaction") or "🎉")
+        emoji = payload.emoji
+        got = str(emoji) if emoji.is_custom_emoji() else (emoji.name or "")
+        # Accept unicode match or custom emoji string forms
+        if got != expected and str(emoji) != expected and (emoji.name or "") != expected:
+            # also allow bare name for custom
+            if not (
+                emoji.is_custom_emoji()
+                and expected.strip("<>").split(":")[-1].rstrip(">") in str(emoji)
+            ):
+                return
+
+        guild = self.bot.get_guild(payload.guild_id)
+        if not guild:
+            return
+        member = guild.get_member(payload.user_id)
+        if member is None or member.bot:
+            return
+
+        requirements = {
+            "required_roles": row.get("required_roles"),
+            "min_level": row.get("min_level"),
+            "max_level": row.get("max_level"),
+        }
+        if not await self.check_requirements(member, requirements):
+            return
+
+        message_id = int(row["message_id"])
+        async with self.locks[f"giveaway:{message_id}"]:
+            fresh = await self.bot.db.fetchrow(
+                "SELECT * FROM giveaways WHERE message_id = $1 AND win_message_id IS NULL",
+                message_id,
+            )
+            if not fresh:
+                return
+            entries = list(fresh.get("entries") or [])
+            uid = int(member.id)
+            if adding:
+                if uid not in entries:
+                    entries.append(uid)
+            else:
+                entries = [e for e in entries if int(e) != uid]
+            await self.bot.db.execute(
+                "UPDATE giveaways SET entries = $1 WHERE message_id = $2",
+                entries,
+                message_id,
+            )
+            channel = guild.get_channel(int(fresh["channel_id"])) or self.bot.get_channel(
+                int(fresh["channel_id"])
+            )
+            if channel is None:
+                return
+            try:
+                message = await channel.fetch_message(message_id)
+            except (discord.NotFound, discord.HTTPException):
+                return
+            try:
+                await self.rebuild_panel_message(message, dict(fresh) | {"entries": entries})
+            except Exception:
+                pass
 
     async def _handle_enter(
         self, interaction: discord.Interaction, message_id: int
@@ -516,34 +690,49 @@ class GiveawayEvents(Cog):
         script: str | None,
         reroll: bool = False,
     ) -> bool:
-        """Return True if DM succeeded."""
+        """Return True if DM succeeded.
+
+        Universal script variables (user, guild, vanity, tag, date, prize, …)
+        are resolved even though the destination is a DM channel.
+        """
         template = script or DEFAULT_DM_SCRIPT
-        if reroll and "reroll" not in template.lower():
-            
-            pass
         view = build_dm_win_view(jump_url)
         try:
-            
-            if hasattr(self.bot, "send_embed"):
-                msg = await self.bot.send_embed(
-                    member,
-                    template,
-                    user=member,
-                    member=member,
-                    guild=guild,
-                    prize=str(prize),
-                    jump_url=jump_url,
-                )
-                if view and msg:
-                    with suppress(Exception):
-                        await msg.edit(view=view)
-                return True
+            from core.tools.embed import Script
+
+            sc = Script(template, user=member)
+            vanity = getattr(guild, "vanity_url_code", None)
+            tag = None
+            pg = getattr(member, "primary_guild", None)
+            if pg is not None:
+                tag = getattr(pg, "tag", None)
+            payload = await sc.data(
+                True,
+                user=member,
+                member=member,
+                guild=guild,
+                prize=str(prize),
+                jump_url=jump_url,
+                host=None,
+                vanity=vanity,
+                tag=tag,
+            )
+            if view is not None:
+                payload["view"] = view
+            # DMs: never auto-containerize
+            payload.pop("raw_embed", None)
+            await member.send(**{
+                k: v
+                for k, v in payload.items()
+                if k in {"content", "embed", "embeds", "view", "file", "files"}
+                and v is not None
+            })
+            return True
         except (discord.Forbidden, discord.HTTPException):
             return False
         except Exception:
             pass
 
-        
         try:
             emb = discord.Embed(
                 title="You won a giveaway!" if not reroll else "You won a reroll!",
@@ -649,7 +838,8 @@ class GiveawayEvents(Cog):
 
             
             settings = await self.get_settings(guild.id)
-            if settings.get("dm_on_win", True):
+            # dmonwin defaults OFF — only DM when explicitly enabled
+            if settings.get("dm_on_win", False):
                 failed: list[discord.Member] = []
                 for winner in winners:
                     ok = await self._dm_winner(

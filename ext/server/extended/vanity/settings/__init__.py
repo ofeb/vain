@@ -122,9 +122,11 @@ class Settings:
     @classmethod
     async def fetch(cls, bot: Vain, guild: Guild) -> Settings:
         await cls._ensure_schema(bot)
+        # Never serve a stale channel_id after ,vanity channel ...
         row = await bot.db.fetchrow(
             "SELECT * FROM vanity WHERE guild_id = $1",
             guild.id,
+            cached=False,
         )
         if row is None:
             data = cls._default_config()
@@ -167,6 +169,7 @@ class Settings:
             values["role_ids"],
             values["template"],
             bool(values["strict"]),
+            cached=False,
         )
         if record is not None:
             self.record = dict(record)

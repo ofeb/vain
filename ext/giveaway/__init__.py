@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import re
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
@@ -292,8 +293,10 @@ class Giveaway(commands.Cog):
         ended: bool = False,
         winner_mentions: str | None = None,
         no_entries: bool = False,
+        settings: dict | None = None,
     ):
         icon = str(guild.icon.url) if guild and guild.icon else None
+        settings = settings or {}
         return build_giveaway_panel(
             message_id=message_id,
             prize=prize,
@@ -305,6 +308,10 @@ class Giveaway(commands.Cog):
             ended=ended,
             winner_mentions=winner_mentions,
             no_entries=no_entries,
+            button_label=settings.get("button_label"),
+            button_emoji=settings.get("button_emoji"),
+            show_entries=bool(settings.get("show_entries", True)),
+            join_type=str(settings.get("join_type") or "button"),
         )
 
     @group(
@@ -633,6 +640,9 @@ class Giveaway(commands.Cog):
         
         end_time = datetime.now() + timedelta(seconds=seconds)
 
+        events = self._events()
+        settings = await events.get_settings(ctx.guild.id) if events else {}
+
         panel = self._panel(
             message_id=0,
             prize=prize,
@@ -641,8 +651,19 @@ class Giveaway(commands.Cog):
             host=ctx.author.mention,
             entries=0,
             guild=ctx.guild,
+            settings=settings,
         )
         message = await channel.send(view=panel)
+
+        # Seed reaction entry if configured
+        join_type = str(settings.get("join_type") or "button").lower()
+        if join_type == "reaction":
+            react = settings.get("join_reaction") or "🎉"
+            try:
+                await message.add_reaction(react)
+            except Exception:
+                with contextlib.suppress(Exception):
+                    await message.add_reaction("🎉")
 
         panel = self._panel(
             message_id=message.id,
@@ -652,6 +673,7 @@ class Giveaway(commands.Cog):
             host=ctx.author.mention,
             entries=0,
             guild=ctx.guild,
+            settings=settings,
         )
 
         async def _edit() -> None:
@@ -688,9 +710,7 @@ class Giveaway(commands.Cog):
 
         await asyncio.gather(_edit(), _insert())
 
-        events = self._events()
         if events:
-            
             events.schedule_end(message.id, delay_seconds=float(seconds))
 
         try:
@@ -698,23 +718,223 @@ class Giveaway(commands.Cog):
         except Exception:
             await ctx.success(f"Giveaway started in {channel.mention}")
 
+    # ------------------------------------------------------------------
+    # giveaway customize …
+    # ------------------------------------------------------------------
+
     @giveaway.group(
-        name="dmonwin",
-        aliases=["dmonswin"],
+        name="customize",
+        aliases=["custom", "cfg"],
         invoke_without_command=True,
-        description="Toggle or configure DMs when someone wins a giveaway",
+        description="Customize giveaway embeds, join method, buttons, and DM-on-win",
         guild_only=True,
     )
     @has_permissions(manage_guild=True)
-    async def dmonwin(self, ctx: Context, state: str = None) -> None:
-        """`,giveaway dmonwin on|off` or subcommands."""
+    async def giveaway_customize(self, ctx: Context) -> None:
+        events = self._events()
+        if not events:
+            await ctx.warn("Giveaway events are not loaded")
+            return
+        s = await events.get_settings(ctx.guild.id)
+        lines = [
+            f"**DM on win:** `{'on' if s.get('dm_on_win') else 'off'}` (default off)",
+            f"**Join type:** `{s.get('join_type') or 'button'}`"
+            + (
+                f" · reaction `{s.get('join_reaction') or '🎉'}`"
+                if (s.get("join_type") or "") == "reaction"
+                else ""
+            ),
+            f"**Button:** `{s.get('button_label') or 'Enter'}` "
+            f"`{s.get('button_emoji') or '🎉'}`",
+            f"**Show entries:** `{'on' if s.get('show_entries', True) else 'off'}`",
+            f"**Embed script:** `{'set' if s.get('embed_script') else 'default'}`",
+            f"**DM script:** `{'set' if s.get('dm_script') else 'default'}`",
+            "",
+            "Subcommands: `embed` · `join` · `button` · `showentries` · `dmonwin`",
+        ]
+        await ctx.success("\n".join(lines))
+
+    @giveaway_customize.command(
+        name="embed",
+        aliases=["panel", "message"],
+        description="Set a custom giveaway panel embed/script",
+        usage="[script|clear]",
+        example=",giveaway customize embed {title: {prize}}$v{description: Ends soon · hosted by {host}}",
+    )
+    @has_permissions(manage_guild=True)
+    async def customize_embed(self, ctx: Context, *, script: str = None) -> None:
+        events = self._events()
+        if not events:
+            return
+        if not script or not script.strip():
+            s = await events.get_settings(ctx.guild.id)
+            cur = s.get("embed_script")
+            if cur:
+                await ctx.send(f"```\n{cur[:1900]}\n```")
+            else:
+                await ctx.success("Using the **default** giveaway panel")
+            return
+        if script.strip().lower() in {"clear", "reset", "default", "none", "remove"}:
+            await events.update_settings(ctx.guild.id, embed_script=None)
+            await ctx.success("Giveaway panel script **reset** to default")
+            return
+        await events.update_settings(ctx.guild.id, embed_script=script.strip())
+        await ctx.success("Updated **giveaway panel** script")
+
+    @giveaway_customize.group(
+        name="join",
+        invoke_without_command=True,
+        description="Configure how users join giveaways (button or reaction)",
+    )
+    @has_permissions(manage_guild=True)
+    async def customize_join(self, ctx: Context, join_type: str = None) -> None:
+        events = self._events()
+        if not events:
+            return
+        if join_type is None:
+            s = await events.get_settings(ctx.guild.id)
+            await ctx.success(
+                f"Join type is **{s.get('join_type') or 'button'}**"
+                + (
+                    f" · reaction `{s.get('join_reaction') or '🎉'}`"
+                    if (s.get("join_type") or "") == "reaction"
+                    else ""
+                )
+            )
+            return
+        low = join_type.lower().strip()
+        if low in {"button", "btn", "buttons"}:
+            await events.update_settings(ctx.guild.id, join_type="button")
+            await ctx.success("Giveaways now use a **button** to join")
+            return
+        if low in {"reaction", "react", "emoji"}:
+            await events.update_settings(ctx.guild.id, join_type="reaction")
+            await ctx.success(
+                "Giveaways now use a **reaction** to join "
+                "(set emoji with `,giveaway customize join reaction`)"
+            )
+            return
+        await ctx.warn("Use `button` or `reaction`")
+
+    @customize_join.command(
+        name="type",
+        description="Set join type to button or reaction",
+    )
+    @has_permissions(manage_guild=True)
+    async def customize_join_type(self, ctx: Context, join_type: str) -> None:
+        await self.customize_join(ctx, join_type)
+
+    @customize_join.command(
+        name="reaction",
+        aliases=["emoji", "react"],
+        description="Set the reaction emoji used to join",
+        example=",giveaway customize join reaction 🎉",
+    )
+    @has_permissions(manage_guild=True)
+    async def customize_join_reaction(self, ctx: Context, *, emoji: str = None) -> None:
+        events = self._events()
+        if not events:
+            return
+        if not emoji or not emoji.strip():
+            s = await events.get_settings(ctx.guild.id)
+            await ctx.success(
+                f"Join reaction is `{s.get('join_reaction') or '🎉'}`"
+            )
+            return
+        await events.update_settings(
+            ctx.guild.id,
+            join_type="reaction",
+            join_reaction=emoji.strip(),
+        )
+        await ctx.success(
+            f"Join type set to **reaction** with emoji {emoji.strip()}"
+        )
+
+    @giveaway_customize.command(
+        name="button",
+        aliases=["btn"],
+        description="Set enter button label and emoji",
+        usage="[label] [emoji]",
+        example=",giveaway customize button Enter 🎉",
+    )
+    @has_permissions(manage_guild=True)
+    async def customize_button(
+        self, ctx: Context, label: str = None, emoji: str = None
+    ) -> None:
+        events = self._events()
+        if not events:
+            return
+        if label is None and emoji is None:
+            s = await events.get_settings(ctx.guild.id)
+            await ctx.success(
+                f"Button: **{s.get('button_label') or 'Enter'}** "
+                f"{s.get('button_emoji') or '🎉'}"
+            )
+            return
+        fields: dict = {}
+        if label is not None:
+            if label.lower() in {"clear", "reset", "default"}:
+                fields["button_label"] = None
+            else:
+                fields["button_label"] = label[:80]
+        if emoji is not None:
+            if emoji.lower() in {"clear", "reset", "default"}:
+                fields["button_emoji"] = None
+            else:
+                fields["button_emoji"] = emoji[:100]
+        await events.update_settings(ctx.guild.id, **fields)
+        s = await events.get_settings(ctx.guild.id)
+        await ctx.success(
+            f"Button set to **{s.get('button_label') or 'Enter'}** "
+            f"{s.get('button_emoji') or '🎉'}"
+        )
+
+    @giveaway_customize.command(
+        name="showentries",
+        aliases=["entries", "showentry"],
+        description="Toggle showing entry count on the giveaway panel",
+        usage="<on|off>",
+        example=",giveaway customize showentries off",
+    )
+    @has_permissions(manage_guild=True)
+    async def customize_showentries(self, ctx: Context, state: str = None) -> None:
+        events = self._events()
+        if not events:
+            return
+        if state is None:
+            s = await events.get_settings(ctx.guild.id)
+            await ctx.success(
+                f"Show entries is **{'on' if s.get('show_entries', True) else 'off'}**"
+            )
+            return
+        low = state.lower().strip()
+        if low in {"on", "enable", "true", "yes", "1"}:
+            await events.update_settings(ctx.guild.id, show_entries=True)
+            await ctx.success("Entry count will be **shown**")
+            return
+        if low in {"off", "disable", "false", "no", "0"}:
+            await events.update_settings(ctx.guild.id, show_entries=False)
+            await ctx.success("Entry count will be **hidden**")
+            return
+        await ctx.warn("Use `on` or `off`")
+
+    @giveaway_customize.group(
+        name="dmonwin",
+        aliases=["dm", "dmonswin"],
+        invoke_without_command=True,
+        description="Toggle DMing winners (default: off)",
+        usage="[on|off]",
+    )
+    @has_permissions(manage_guild=True)
+    async def customize_dmonwin(self, ctx: Context, state: str = None) -> None:
+        """`,giveaway customize dmonwin on|off` — off by default."""
         events = self._events()
         if events is None:
             await ctx.warn("Giveaway events are not loaded")
             return
         if state is None:
             settings = await events.get_settings(ctx.guild.id)
-            on = settings.get("dm_on_win", True)
+            on = settings.get("dm_on_win", False)
             await ctx.success(
                 f"DM on win is **{'on' if on else 'off'}**"
                 + (" · custom script set" if settings.get("dm_script") else "")
@@ -729,36 +949,36 @@ class Giveaway(commands.Cog):
             await events.set_dm_on_win(ctx.guild.id, False)
             await ctx.success("Winners will **not** be DM'd (channel announce only)")
             return
-        await ctx.warn("Use `on` or `off`, or `,giveaway dmonwin script ...`")
+        await ctx.warn("Use `on` or `off`, or `,giveaway customize dmonwin script ...`")
 
-    @dmonwin.command(name="on", description="Enable DMing winners")
+    @customize_dmonwin.command(name="on", description="Enable DMing winners")
     @has_permissions(manage_guild=True)
-    async def dmonwin_on(self, ctx: Context) -> None:
+    async def customize_dmonwin_on(self, ctx: Context) -> None:
         events = self._events()
         if not events:
             return
         await events.set_dm_on_win(ctx.guild.id, True)
         await ctx.success("Winners will be **DM'd** when they win")
 
-    @dmonwin.command(name="off", description="Disable DMing winners")
+    @customize_dmonwin.command(name="off", description="Disable DMing winners")
     @has_permissions(manage_guild=True)
-    async def dmonwin_off(self, ctx: Context) -> None:
+    async def customize_dmonwin_off(self, ctx: Context) -> None:
         events = self._events()
         if not events:
             return
         await events.set_dm_on_win(ctx.guild.id, False)
         await ctx.success("Winners will **not** be DM'd")
 
-    @dmonwin.command(
+    @customize_dmonwin.command(
         name="script",
         aliases=["message", "msg", "template"],
         description="Set a custom DM script for winners",
         usage="[script|clear]",
-        example=",giveaway dmonwin script {embed}$v{title: You won!}$v{description: **{prize}** in {guild.name}}",
+        example=",giveaway customize dmonwin script {embed}$v{title: You won!}$v{description: **{prize}** in {guild.name}}",
     )
     @has_permissions(manage_guild=True)
-    async def dmonwin_script(self, ctx: Context, *, script: str = None) -> None:
-        """Customize the winner DM (embed script syntax). Use `clear` to reset."""
+    async def customize_dmonwin_script(self, ctx: Context, *, script: str = None) -> None:
+        """Customize the winner DM (embed script). Variables work in DMs."""
         events = self._events()
         if not events:
             await ctx.warn("Giveaway events are not loaded")
@@ -777,6 +997,37 @@ class Giveaway(commands.Cog):
             return
         await events.set_dm_script(ctx.guild.id, script.strip())
         await ctx.success("Updated **winner DM** script")
+
+    # Back-compat aliases: ,giveaway dmonwin …
+    @giveaway.group(
+        name="dmonwin",
+        aliases=["dmonswin"],
+        invoke_without_command=True,
+        description="Alias for giveaway customize dmonwin (default off)",
+        guild_only=True,
+    )
+    @has_permissions(manage_guild=True)
+    async def dmonwin(self, ctx: Context, state: str = None) -> None:
+        await self.customize_dmonwin(ctx, state)
+
+    @dmonwin.command(name="on", description="Enable DMing winners")
+    @has_permissions(manage_guild=True)
+    async def dmonwin_on(self, ctx: Context) -> None:
+        await self.customize_dmonwin_on(ctx)
+
+    @dmonwin.command(name="off", description="Disable DMing winners")
+    @has_permissions(manage_guild=True)
+    async def dmonwin_off(self, ctx: Context) -> None:
+        await self.customize_dmonwin_off(ctx)
+
+    @dmonwin.command(
+        name="script",
+        aliases=["message", "msg", "template"],
+        description="Set a custom DM script for winners",
+    )
+    @has_permissions(manage_guild=True)
+    async def dmonwin_script(self, ctx: Context, *, script: str = None) -> None:
+        await self.customize_dmonwin_script(ctx, script=script)
 
 
 async def setup(bot: commands.Bot):

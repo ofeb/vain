@@ -8,6 +8,8 @@ from discord import Guild, HTTPException, Member, Message, Role, TextChannel, Th
 
 from core.vain import Vain
 
+# re-export helpers used by events
+
 logger = getLogger("vain.server.extended.tag.settings")
 
 _NOTIFY_COOLDOWN_SEC = 30
@@ -18,7 +20,6 @@ class Record(TypedDict, total=False):
     channel_id: Any | None
     role_ids: list[Any]
     template: Any | None
-    strict: bool
 
 
 class Settings:
@@ -52,10 +53,6 @@ class Settings:
     def template(self) -> str | None:
         val = self.record.get("template")
         return str(val) if val else None
-
-    @property
-    def strict(self) -> bool:
-        return bool(self.record.get("strict", False))
 
     @property
     def channel(self) -> TextChannel | Thread | None:
@@ -97,15 +94,14 @@ class Settings:
             "channel_id": None,
             "role_ids": [],
             "template": None,
-            "strict": False,
         }
 
     @classmethod
     async def fetch(cls, bot: Vain, guild: Guild) -> Settings:
-        await cls._ensure_schema(bot)
         row = await bot.db.fetchrow(
             "SELECT * FROM guild_tag WHERE guild_id = $1",
             guild.id,
+            cached=False,
         )
         if row is None:
             data = cls._default_config()
@@ -113,32 +109,20 @@ class Settings:
             return cls(bot, guild, data)
         return cls(bot, guild, dict(row))
 
-    @staticmethod
-    async def _ensure_schema(bot: Vain) -> None:
-        try:
-            await bot.db.execute(
-                "ALTER TABLE guild_tag ADD COLUMN IF NOT EXISTS strict BOOLEAN NOT NULL DEFAULT FALSE"
-            )
-        except Exception:
-            pass
-
     async def upsert(self, revalidate: bool = True, **kwargs: Any) -> Settings:
-        await self._ensure_schema(self.bot)
         values = {
             "guild_id": self.guild.id,
             "channel_id": kwargs.get("channel_id", self.channel_id),
             "role_ids": kwargs.get("role_ids", self.role_ids),
             "template": kwargs.get("template", self.template),
-            "strict": kwargs.get("strict", self.strict),
         }
         query = """
-        INSERT INTO guild_tag (guild_id, channel_id, role_ids, template, strict)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO guild_tag (guild_id, channel_id, role_ids, template)
+        VALUES ($1, $2, $3, $4)
         ON CONFLICT (guild_id) DO UPDATE SET
             channel_id = EXCLUDED.channel_id,
             role_ids = EXCLUDED.role_ids,
-            template = EXCLUDED.template,
-            strict = EXCLUDED.strict
+            template = EXCLUDED.template
         RETURNING *
         """
         record = await self.bot.db.fetchrow(
@@ -147,7 +131,7 @@ class Settings:
             values["channel_id"],
             values["role_ids"],
             values["template"],
-            bool(values["strict"]),
+            cached=False,
         )
         if record is not None:
             self.record = dict(record)
@@ -255,30 +239,42 @@ class Settings:
                 return None
 
 
+def primary_guild_info(user: Any) -> dict[str, Any]:
+    """Extract primary_guild / clan identity fields from a User or Member."""
+    pg = getattr(user, "primary_guild", None) or getattr(user, "clan", None)
+    if pg is None:
+        return {"id": None, "tag": None, "identity_enabled": None}
+    return {
+        "id": getattr(pg, "id", None),
+        "tag": getattr(pg, "tag", None),
+        "identity_enabled": getattr(pg, "identity_enabled", None),
+    }
+
+
 def tag_label(member: Member) -> str | None:
     """Return the member's displayed primary-guild tag text, if any."""
-    pg = getattr(member, "primary_guild", None)
-    if pg is None:
-        return None
-    tag = getattr(pg, "tag", None)
+    info = primary_guild_info(member)
+    tag = info.get("tag")
     if tag is None:
         return None
     text = str(tag).strip()
     return text or None
 
 
-def member_repping_tag(
-    member: Member, guild: Guild, *, strict: bool = False
-) -> bool:
-    """Whether *member* is displaying this guild as their primary guild tag."""
-    pg = getattr(member, "primary_guild", None)
-    if pg is None:
-        return False
-    gid = getattr(pg, "id", None)
-    if gid is None or int(gid) != int(guild.id):
-        return False
-    enabled = getattr(pg, "identity_enabled", None)
-    if strict:
-        return enabled is True
+def member_repping_tag(member: Member, guild: Guild, *, strict: bool = False) -> bool:
+    """Whether *member* is displaying this guild as their primary guild tag.
 
+    ``strict`` is ignored (kept for call-site compat) — there is no strict mode.
+    """
+    info = primary_guild_info(member)
+    gid = info.get("id")
+    if gid is None:
+        return False
+    try:
+        if int(gid) != int(guild.id):
+            return False
+    except (TypeError, ValueError):
+        return False
+    enabled = info.get("identity_enabled")
+    # Match when identity is enabled or the field is omitted by the API
     return enabled is not False

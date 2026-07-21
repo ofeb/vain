@@ -189,15 +189,26 @@ class Database:
                 return match.group(1)
         return None
 
+    def _maybe_purge_write(self, sql: str) -> None:
+        """Invalidate cache when fetch*/execute run INSERT/UPDATE/DELETE (e.g. RETURNING)."""
+        if table := self._write_table(sql):
+            # fire-and-forget sync purge (no await needed)
+            keys = [k for k in self.cache if table.lower() in k.lower()]
+            for k in keys:
+                self.cache.pop(k, None)
+
     async def fetch(self, sql: str, *args, **kw) -> list:
         """fetch all rows"""
+        self._maybe_purge_write(sql)
         key = f"fetch {sql} {args}"
         if kw.get("cached", True) and (hit := self.cache.get(key)):
             return hit
         async with self.pool.acquire() as conn:
             async with conn.transaction():
                 data = await conn.fetch(sql, *args)
-                await self._store(data, "fetch", sql, args)
+                # Don't cache write statements (INSERT...RETURNING etc.)
+                if self._write_table(sql) is None:
+                    await self._store(data, "fetch", sql, args)
                 return data
 
     async def fetchiter(self, sql: str, *args):
@@ -207,24 +218,28 @@ class Database:
 
     async def fetchrow(self, sql: str, *args, **kw) -> Optional[Row]:
         """fetch single row"""
+        self._maybe_purge_write(sql)
         key = f"fetchrow {sql} {args}"
         if kw.get("cached", True) and (hit := self.cache.get(key)):
             return hit
         async with self.pool.acquire() as conn:
             async with conn.transaction():
                 data = await conn.fetchrow(sql, *args)
-                await self._store(data, "fetchrow", sql, args)
+                if self._write_table(sql) is None:
+                    await self._store(data, "fetchrow", sql, args)
                 return data
 
     async def fetchval(self, sql: str, *args, **kw) -> Any:
         """fetch single value"""
+        self._maybe_purge_write(sql)
         key = f"fetchval {sql} {args}"
         if kw.get("cached", True) and (hit := self.cache.get(key)):
             return hit
         async with self.pool.acquire() as conn:
             async with conn.transaction():
                 data = await conn.fetchval(sql, *args)
-                await self._store(data, "fetchval", sql, args)
+                if self._write_table(sql) is None:
+                    await self._store(data, "fetchval", sql, args)
                 return data
 
     async def execute(self, sql: str, *args, **kw) -> Any:
@@ -1382,6 +1397,14 @@ class Database:
         antiraid_channel_id: int | None = None,
     ) -> None:
         """upsert antinuke and antiraid log channel bindings"""
+        # Older DBs may predate these columns (CREATE TABLE IF NOT EXISTS won't add them)
+        for col in ("antinuke_log_channel_id", "antiraid_log_channel_id"):
+            try:
+                await self.execute(
+                    f"ALTER TABLE server_settings ADD COLUMN IF NOT EXISTS {col} BIGINT"
+                )
+            except Exception:
+                pass
         await self.execute(
             """
             INSERT INTO server_settings (guild_id, antinuke_log_channel_id, antiraid_log_channel_id)

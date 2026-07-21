@@ -40,18 +40,24 @@ class Nuke(Package):
             ),
         )
         if not await view.prompt(embed=embed):
-            return await ctx.warn("Nuke **cancelled**")
+            # Channel may have been deleted while the confirm was open
+            try:
+                return await ctx.warn("Nuke **cancelled**")
+            except (discord.NotFound, discord.HTTPException):
+                return
 
         channel_info = [ctx.channel.category, ctx.channel.position]
         old_channel = ctx.channel
         await old_channel.clone(reason=f"Nuked by {str(ctx.author)}")
-        await old_channel.delete(reason=f"Nuked by {str(ctx.author)}")
-        
+        try:
+            await old_channel.delete(reason=f"Nuked by {str(ctx.author)}")
+        except (discord.NotFound, discord.HTTPException):
+            pass
+
         new_channel = None
         if channel_info[0] is not None:
             new_channel = channel_info[0].text_channels[-1]
         else:
-            
             matches = [
                 c
                 for c in ctx.guild.text_channels
@@ -60,9 +66,15 @@ class Nuke(Package):
             new_channel = max(matches, key=lambda c: c.id) if matches else None
         if new_channel is None:
             return
-        await new_channel.edit(position=channel_info[1])
+        try:
+            await new_channel.edit(position=channel_info[1])
+        except (discord.NotFound, discord.HTTPException, discord.Forbidden):
+            pass
         asyncio.ensure_future(self.update_channels(old_channel, new_channel))
-        await new_channel.send(content="first")
+        try:
+            await new_channel.send(content="first")
+        except (discord.NotFound, discord.HTTPException):
+            pass
 
     async def update_channels(self, old: TextChannel, new: TextChannel) -> None:
         old_id = old.id

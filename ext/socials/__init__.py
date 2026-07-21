@@ -1263,27 +1263,51 @@ class Socials(Package):
 
 
 
-class EmbedBuilderModal(discord.ui.Modal, title="Edit Embed Part"):
-    def __init__(self, key: str, current: str = ""):
-        super().__init__()
-        self.key = key
-        self.input = discord.ui.TextInput(
-            label=key.title(),
-            style=discord.TextStyle.paragraph if key in ("description", "fields") else discord.TextStyle.short,
-            default=current[:100] if current else "",
-            required=False,
-        )
-        self.add_item(self.input)
+class _BuilderModal(discord.ui.Modal):
+    """Generic single/multi-field modal for embed & container builders."""
+
+    def __init__(self, title: str, fields: list[tuple[str, str, bool, int]]):
+        """fields: list of (key, label, paragraph, max_length)"""
+        super().__init__(title=title[:45])
+        self.keys: list[str] = []
+        self.values: dict[str, str] = {}
+        for key, label, paragraph, maxlen in fields[:5]:
+            self.keys.append(key)
+            style = discord.TextStyle.paragraph if paragraph else discord.TextStyle.short
+            item = discord.ui.TextInput(
+                label=label[:45],
+                style=style,
+                required=False,
+                max_length=min(maxlen, 4000),
+            )
+            self.add_item(item)
 
     async def on_submit(self, interaction: discord.Interaction):
-        self.value = self.input.value
+        for key, child in zip(self.keys, self.children):
+            if isinstance(child, discord.ui.TextInput):
+                self.values[key] = child.value or ""
         await interaction.response.defer()
 
+
 class EmbedBuilderView(discord.ui.View):
+    """Interactive classic-embed builder with live embed preview."""
+
     def __init__(self, author_id: int):
         super().__init__(timeout=300)
         self.author_id = author_id
-        self.data = {"title": "", "description": "", "color": "2b2d31", "image": "", "thumbnail": ""}
+        self.data: dict[str, str] = {
+            "title": "",
+            "description": "",
+            "color": "2b2d31",
+            "author": "",
+            "footer": "",
+            "image": "",
+            "thumbnail": "",
+            "button_url": "",
+            "button_label": "",
+            "button_emoji": "",
+            "button_style": "link",
+        }
         self.message: discord.Message | None = None
 
     async def interaction_check(self, inter: discord.Interaction) -> bool:
@@ -1295,34 +1319,28 @@ class EmbedBuilderView(discord.ui.View):
         )
         return False
 
-    @discord.ui.select(
-        placeholder="Choose what to edit...",
-        options=[
-            discord.SelectOption(label="Title", value="title"),
-            discord.SelectOption(label="Description", value="description"),
-            discord.SelectOption(label="Color (hex)", value="color"),
-            discord.SelectOption(label="Image URL", value="image"),
-            discord.SelectOption(label="Thumbnail URL", value="thumbnail"),
-        ]
-    )
-    async def choose(self, inter: discord.Interaction, select: discord.ui.Select):
-        key = select.values[0]
-        modal = EmbedBuilderModal(key, self.data.get(key, ""))
-        await inter.response.send_modal(modal)
-        await modal.wait()
-        if hasattr(modal, "value"):
-            self.data[key] = modal.value or ""
-        
-        if self.message:
-            await self._update_preview(inter)
-
-    async def _update_preview(self, inter: discord.Interaction):
-        script = self._to_script()
+    def _preview_embed(self) -> discord.Embed:
+        color_raw = (self.data.get("color") or "2b2d31").lstrip("#")
         try:
-            await self.message.edit(content=f"```yaml\n{script}\n```")
-        except Exception:
-            pass
-        await inter.response.defer()
+            col = int(color_raw, 16)
+        except ValueError:
+            col = 0x2B2D31
+        emb = discord.Embed(
+            title=self.data.get("title") or None,
+            description=self.data.get("description") or None,
+            color=col,
+        )
+        if self.data.get("author"):
+            emb.set_author(name=self.data["author"])
+        if self.data.get("footer"):
+            emb.set_footer(text=self.data["footer"])
+        if self.data.get("image"):
+            emb.set_image(url=self.data["image"])
+        if self.data.get("thumbnail"):
+            emb.set_thumbnail(url=self.data["thumbnail"])
+        if not emb.title and not emb.description and not emb.fields:
+            emb.description = "_Select fields below to build your embed_"
+        return emb
 
     def _to_script(self) -> str:
         parts = ["{embed}"]
@@ -1332,40 +1350,417 @@ class EmbedBuilderView(discord.ui.View):
             parts.append(f"$v{{description: {self.data['description']}}}")
         if self.data.get("color"):
             parts.append(f"$v{{color: #{self.data['color'].lstrip('#')}}}")
+        if self.data.get("author"):
+            parts.append(f"$v{{author: {self.data['author']}}}")
+        if self.data.get("footer"):
+            parts.append(f"$v{{footer: {self.data['footer']}}}")
         if self.data.get("image"):
             parts.append(f"$v{{image: {self.data['image']}}}")
         if self.data.get("thumbnail"):
             parts.append(f"$v{{thumbnail: {self.data['thumbnail']}}}")
-        return "\n".join(parts)
+        if self.data.get("button_url") and self.data.get("button_label"):
+            style = (self.data.get("button_style") or "link").lower()
+            emoji = self.data.get("button_emoji") or ""
+            if style in {"link", "url"} or self.data["button_url"].startswith("http"):
+                # link button: url && label && emoji
+                bit = f"$v{{button: {self.data['button_url']} && {self.data['button_label']}"
+                if emoji:
+                    bit += f" && {emoji}"
+                bit += "}"
+                parts.append(bit)
+            else:
+                # styled: style && label && url_or_emoji
+                bit = (
+                    f"$v{{button: {style} && {self.data['button_label']} "
+                    f"&& {self.data['button_url']}"
+                )
+                if emoji:
+                    bit += f" && {emoji}"
+                bit += "}"
+                parts.append(bit)
+        return "".join(parts) if len(parts) > 1 else "{embed}$v{description: empty}"
 
-    @discord.ui.button(label="Approve & Copy Script", style=discord.ButtonStyle.success, emoji="✅")
-    async def approve(self, inter: discord.Interaction, button: discord.ui.Button):
-        script = self._to_script()
-        await inter.response.send_message(f"```yaml\n{script}\n```", ephemeral=True)
-        
+    async def _refresh(self, inter: discord.Interaction | None = None) -> None:
+        if not self.message:
+            return
         try:
-            await inter.channel.send(f"**Embed script:**\n```yaml\n{script}\n```")
+            await self.message.edit(
+                content=(
+                    "**Embed Builder** · live preview below\n"
+                    "-# Select a field → fill modal → preview updates. "
+                    "Approve DMs you the script."
+                ),
+                embed=self._preview_embed(),
+                view=self,
+            )
         except Exception:
             pass
+
+    @discord.ui.select(
+        placeholder="Choose what to edit...",
+        options=[
+            discord.SelectOption(label="Title", value="title", description="Embed title"),
+            discord.SelectOption(label="Description", value="description"),
+            discord.SelectOption(label="Color (hex)", value="color"),
+            discord.SelectOption(label="Author", value="author"),
+            discord.SelectOption(label="Footer", value="footer"),
+            discord.SelectOption(label="Image URL", value="image"),
+            discord.SelectOption(label="Thumbnail URL", value="thumbnail"),
+            discord.SelectOption(
+                label="Button",
+                value="button",
+                description="URL, label, optional emoji & style",
+            ),
+        ],
+    )
+    async def choose(self, inter: discord.Interaction, select: discord.ui.Select):
+        key = select.values[0]
+        if key == "button":
+            modal = _BuilderModal(
+                "Button",
+                [
+                    ("button_url", "URL", False, 500),
+                    ("button_label", "Label / title", False, 80),
+                    (
+                        "button_emoji",
+                        "Emoji (optional)",
+                        False,
+                        100,
+                    ),
+                    (
+                        "button_style",
+                        "Style: url blue green red grey (opt)",
+                        False,
+                        20,
+                    ),
+                ],
+            )
+            # note in labels: url blue green red grey; emoji optional
+            await inter.response.send_modal(modal)
+            await modal.wait()
+            if modal.values:
+                for k, v in modal.values.items():
+                    self.data[k] = v
+            await self._refresh()
+            return
+
+        labels = {
+            "title": "Title",
+            "description": "Description",
+            "color": "Color hex (e.g. 5865F2)",
+            "author": "Author name",
+            "footer": "Footer text",
+            "image": "Image URL",
+            "thumbnail": "Thumbnail URL",
+        }
+        modal = _BuilderModal(
+            f"Edit {labels.get(key, key)}",
+            [
+                (
+                    key,
+                    labels.get(key, key),
+                    key in {"description", "footer"},
+                    4000 if key == "description" else 256,
+                )
+            ],
+        )
+        # prefill
+        if self.data.get(key) and modal.children:
+            child = modal.children[0]
+            if isinstance(child, discord.ui.TextInput):
+                child.default = self.data[key][: child.max_length]
+        await inter.response.send_modal(modal)
+        await modal.wait()
+        if modal.values and key in modal.values:
+            self.data[key] = modal.values[key]
+        await self._refresh()
+
+    @discord.ui.button(label="Approve & DM Script", style=discord.ButtonStyle.success)
+    async def approve(self, inter: discord.Interaction, button: discord.ui.Button):
+        script = self._to_script()
+        dm_ok = False
+        try:
+            await inter.user.send(
+                f"**Your embed script** — paste with `,ce` / `,createembed`:\n```\n{script}\n```"
+            )
+            dm_ok = True
+        except Exception:
+            pass
+        if dm_ok:
+            await inter.response.send_message(
+                "Script sent to your **DMs**. Live preview stays above.",
+                ephemeral=True,
+            )
+        else:
+            await inter.response.send_message(
+                f"Could not DM you — here is the script:\n```\n{script[:1800]}\n```",
+                ephemeral=True,
+            )
         self.stop()
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.danger)
     async def cancel(self, inter: discord.Interaction, button: discord.ui.Button):
-        await inter.response.edit_message(content="Embed builder cancelled.", view=None)
+        await inter.response.edit_message(
+            content="Embed builder cancelled.", embed=None, view=None
+        )
         self.stop()
+
+
+class ContainerBuilderView(discord.ui.View):
+    """Interactive Components V2 container builder with live preview."""
+
+    def __init__(self, author_id: int):
+        super().__init__(timeout=300)
+        self.author_id = author_id
+        self.data: dict[str, str] = {
+            "title": "",
+            "description": "",
+            "color": "2b2d31",
+            "author": "",
+            "footer": "",
+            "image": "",
+            "divider": "0",
+            "button_url": "",
+            "button_label": "",
+            "button_emoji": "",
+            "button_style": "link",
+        }
+        self.message: discord.Message | None = None
+
+    async def interaction_check(self, inter: discord.Interaction) -> bool:
+        if inter.user.id == self.author_id:
+            return True
+        await inter.response.send_message(
+            f"Only <@{self.author_id}> can use this.",
+            ephemeral=True,
+        )
+        return False
+
+    def _to_script(self) -> str:
+        parts = ["{container}"]
+        if self.data.get("title"):
+            parts.append(f"$v{{title: {self.data['title']}}}")
+        if self.data.get("description"):
+            parts.append(f"$v{{description: {self.data['description']}}}")
+        if self.data.get("color"):
+            parts.append(f"$v{{color: #{self.data['color'].lstrip('#')}}}")
+        if self.data.get("author"):
+            parts.append(f"$v{{author: {self.data['author']}}}")
+        if self.data.get("footer"):
+            parts.append(f"$v{{footer: {self.data['footer']}}}")
+        if self.data.get("divider") in {"1", "true", "yes", "on"}:
+            parts.append("$v{divider}")
+        if self.data.get("image"):
+            parts.append(f"$v{{image: {self.data['image']}}}")
+        if self.data.get("button_url") and self.data.get("button_label"):
+            emoji = self.data.get("button_emoji") or ""
+            bit = f"$v{{button: {self.data['button_url']} && {self.data['button_label']}"
+            if emoji:
+                bit += f" && {emoji}"
+            bit += "}"
+            parts.append(bit)
+        return "".join(parts) if len(parts) > 1 else "{container}$v{description: empty}"
+
+    async def _preview_view(self):
+        from core.tools.embed import parse_container
+
+        try:
+            payload = await parse_container(self._to_script(), sendable=True)
+            return payload.get("view")
+        except Exception:
+            return None
+
+    async def _refresh(self) -> None:
+        if not self.message:
+            return
+        # Keep controls message as script source-of-truth; live LayoutView is sent once at start
+        try:
+            await self.message.edit(
+                content=(
+                    "**Container Builder** · edit fields below, Approve DMs the script\n"
+                    f"```\n{self._to_script()}\n```"
+                ),
+                view=self,
+            )
+        except Exception:
+            pass
+        # Update companion live-preview message if we have one
+        preview_msg = getattr(self, "preview_message", None)
+        if preview_msg is not None:
+            layout = await self._preview_view()
+            if layout is not None:
+                try:
+                    await preview_msg.edit(content=None, view=layout)
+                except Exception:
+                    pass
+
+    @discord.ui.select(
+        placeholder="Choose what to edit...",
+        options=[
+            discord.SelectOption(label="Title", value="title"),
+            discord.SelectOption(label="Description", value="description"),
+            discord.SelectOption(label="Color (hex)", value="color"),
+            discord.SelectOption(label="Author", value="author"),
+            discord.SelectOption(label="Footer", value="footer"),
+            discord.SelectOption(label="Image URL", value="image"),
+            discord.SelectOption(
+                label="Divider on/off",
+                value="divider",
+                description="Set to on or off",
+            ),
+            discord.SelectOption(
+                label="Button",
+                value="button",
+                description="URL, label, optional emoji & style",
+            ),
+        ],
+    )
+    async def choose(self, inter: discord.Interaction, select: discord.ui.Select):
+        key = select.values[0]
+        if key == "button":
+            modal = _BuilderModal(
+                "Button",
+                [
+                    ("button_url", "URL", False, 500),
+                    ("button_label", "Label / title", False, 80),
+                    ("button_emoji", "Emoji (optional)", False, 100),
+                    (
+                        "button_style",
+                        "Style: url blue green red grey (opt)",
+                        False,
+                        20,
+                    ),
+                ],
+            )
+            await inter.response.send_modal(modal)
+            await modal.wait()
+            if modal.values:
+                for k, v in modal.values.items():
+                    self.data[k] = v
+            await self._refresh()
+            return
+        if key == "divider":
+            modal = _BuilderModal(
+                "Divider",
+                [("divider", "on or off", False, 10)],
+            )
+            await inter.response.send_modal(modal)
+            await modal.wait()
+            if modal.values:
+                val = (modal.values.get("divider") or "").lower().strip()
+                self.data["divider"] = (
+                    "1" if val in {"on", "yes", "true", "1", "enable"} else "0"
+                )
+            await self._refresh()
+            return
+
+        labels = {
+            "title": "Title",
+            "description": "Description",
+            "color": "Color hex",
+            "author": "Author",
+            "footer": "Footer",
+            "image": "Image URL",
+        }
+        modal = _BuilderModal(
+            f"Edit {labels.get(key, key)}",
+            [
+                (
+                    key,
+                    labels.get(key, key),
+                    key in {"description", "footer"},
+                    4000 if key == "description" else 256,
+                )
+            ],
+        )
+        if self.data.get(key) and modal.children:
+            child = modal.children[0]
+            if isinstance(child, discord.ui.TextInput):
+                child.default = (self.data[key] or "")[: child.max_length]
+        await inter.response.send_modal(modal)
+        await modal.wait()
+        if modal.values and key in modal.values:
+            self.data[key] = modal.values[key]
+        await self._refresh()
+
+    @discord.ui.button(label="Approve & DM Script", style=discord.ButtonStyle.success)
+    async def approve(self, inter: discord.Interaction, button: discord.ui.Button):
+        script = self._to_script()
+        dm_ok = False
+        try:
+            await inter.user.send(
+                f"**Your container script** — paste with `,cc` / `,createcontainer`:\n```\n{script}\n```"
+            )
+            dm_ok = True
+        except Exception:
+            pass
+        if dm_ok:
+            await inter.response.send_message(
+                "Script sent to your **DMs**.", ephemeral=True
+            )
+        else:
+            await inter.response.send_message(
+                f"Could not DM you — script:\n```\n{script[:1800]}\n```",
+                ephemeral=True,
+            )
+        self.stop()
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.danger)
+    async def cancel(self, inter: discord.Interaction, button: discord.ui.Button):
+        await inter.response.edit_message(
+            content="Container builder cancelled.", view=None
+        )
+        self.stop()
+
 
 async def setup(bot: Vain):
     cog = Socials(bot)
-    
-    eb = hybrid(
+
+    @hybrid(
         name="embedbuilder",
-        description="Interactive Components v2 embed builder. Dropdowns open modals. Approve to get the script.",
+        aliases=["eb"],
+        description="Interactive embed builder with live classic embed preview. Approve DMs the script.",
         example=",embedbuilder",
-    )(lambda ctx: None)  
+    )
     async def _run_eb(ctx: Context):
         view = EmbedBuilderView(ctx.author.id)
-        m = await ctx.send("**Embed Builder** (v2)\nSelect fields from the menu, fill modals, then Approve.", view=view)
+        m = await ctx.send(
+            content=(
+                "**Embed Builder** · live preview below\n"
+                "-# Select a field → fill modal → preview updates. "
+                "Approve DMs you the script."
+            ),
+            embed=view._preview_embed(),
+            view=view,
+            raw_embed=True,
+        )
         view.message = m
-    eb.callback = _run_eb
-    bot.add_command(eb)
+
+    @hybrid(
+        name="containerbuilder",
+        aliases=["cb"],
+        description="Interactive container builder with live container preview. Approve DMs the script.",
+        example=",containerbuilder",
+    )
+    async def _run_cb(ctx: Context):
+        view = ContainerBuilderView(ctx.author.id)
+        m = await ctx.send(
+            content=(
+                "**Container Builder** · edit fields below, Approve DMs the script\n"
+                f"```\n{view._to_script()}\n```"
+            ),
+            view=view,
+        )
+        view.message = m
+        # Companion live preview of the actual container
+        layout = await view._preview_view()
+        if layout is not None:
+            try:
+                preview = await ctx.send(view=layout)
+                view.preview_message = preview
+            except Exception:
+                view.preview_message = None
+
+    bot.add_command(_run_eb)
+    bot.add_command(_run_cb)
     await bot.add_cog(cog)
