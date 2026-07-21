@@ -859,8 +859,12 @@ class Music(MusicEvents, Package):
             )
         )
 
-    @hybrid(name="nowplaying", aliases=["np", "peak"], guild_only=True)
-    async def nowplaying(self, ctx) -> None:
+    @hybrid(
+        name="currentlyplaying",
+        aliases=["cplay", "current", "currently"],
+        guild_only=True,
+    )
+    async def currentlyplaying(self, ctx) -> None:
         """Show the current track control panel."""
         player = ctx.voice_client
         state = self._queue(ctx.guild.id)
