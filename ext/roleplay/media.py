@@ -4,8 +4,8 @@ from core.networks.web import get_bytes, get_json
 
 _GIF_ENDPOINT = "https://api.otakugifs.xyz/gif"
 
-# otakugifs.xyz reaction names (GET /gif?reaction=NAME). Aliases map local command
-# names that are not API reactions onto the closest valid one.
+
+
 _VALID_REACTIONS: frozenset[str] = frozenset(
     {
         "airkiss",
@@ -100,7 +100,7 @@ def resolve_reaction(action: str) -> str:
         return _REACTION_ALIASES[key]
     if key in _VALID_REACTIONS:
         return key
-    # last resort: pat is a safe, widely available reaction
+    
     return "pat"
 
 

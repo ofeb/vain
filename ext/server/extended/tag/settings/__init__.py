@@ -8,7 +8,7 @@ from discord import Guild, HTTPException, Member, Message, Role, TextChannel, Th
 
 from core.vain import Vain
 
-# re-export helpers used by events
+
 
 logger = getLogger("vain.server.extended.tag.settings")
 
@@ -276,5 +276,5 @@ def member_repping_tag(member: Member, guild: Guild, *, strict: bool = False) ->
     except (TypeError, ValueError):
         return False
     enabled = info.get("identity_enabled")
-    # Match when identity is enabled or the field is omitted by the API
+    
     return enabled is not False

@@ -655,7 +655,7 @@ class Giveaway(commands.Cog):
         )
         message = await channel.send(view=panel)
 
-        # Seed reaction entry if configured
+        
         join_type = str(settings.get("join_type") or "button").lower()
         if join_type == "reaction":
             react = settings.get("join_reaction") or "🎉"
@@ -718,9 +718,9 @@ class Giveaway(commands.Cog):
         except Exception:
             await ctx.success(f"Giveaway started in {channel.mention}")
 
-    # ------------------------------------------------------------------
-    # giveaway customize …
-    # ------------------------------------------------------------------
+    
+    
+    
 
     @giveaway.group(
         name="customize",
@@ -998,7 +998,7 @@ class Giveaway(commands.Cog):
         await events.set_dm_script(ctx.guild.id, script.strip())
         await ctx.success("Updated **winner DM** script")
 
-    # Back-compat aliases: ,giveaway dmonwin …
+    
     @giveaway.group(
         name="dmonwin",
         aliases=["dmonswin"],

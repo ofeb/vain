@@ -56,7 +56,7 @@ class AFK:
             "timestamp": str(int(datetime.now(timezone.utc).timestamp())),
         }
         key = self._key(user_id)
-        # Support both redis-py (mapping=) and FileVainCache (field/value or mapping)
+        
         try:
             await self.redis.hset(key, mapping=mapping)
         except TypeError:

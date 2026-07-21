@@ -237,7 +237,7 @@ class ModerationCommands(Package):
             "SELECT jail_channel_id, jail_role_id, jail_remove_roles, jail_message FROM server_settings WHERE guild_id = $1",
             ctx.guild.id,
         )
-        # asyncpg Row is immutable — always work with a plain dict
+        
         row: dict = dict(raw) if raw else {}
 
         jail_role = ctx.guild.get_role(row.get("jail_role_id") or 0)

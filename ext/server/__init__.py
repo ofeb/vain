@@ -155,7 +155,7 @@ class ServerCommands(Package):
             return await ctx.warn("Provide **valid embed/container code**.")
 
         try:
-            # Classic embeds stay embeds; containers send as LayoutView
+            
             if payload.get("embed") is not None:
                 return await ctx.send(
                     content=payload.get("content"),

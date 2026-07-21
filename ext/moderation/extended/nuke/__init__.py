@@ -40,7 +40,7 @@ class Nuke(Package):
             ),
         )
         if not await view.prompt(embed=embed):
-            # Channel may have been deleted while the confirm was open
+            
             try:
                 return await ctx.warn("Nuke **cancelled**")
             except (discord.NotFound, discord.HTTPException):

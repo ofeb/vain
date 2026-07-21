@@ -77,7 +77,7 @@ class GiveawayEvents(Cog):
                 )
                 """
             )
-        # Migrate columns for existing installs
+        
         for stmt in (
             "ALTER TABLE giveaway_settings ADD COLUMN IF NOT EXISTS dm_on_win BOOLEAN NOT NULL DEFAULT FALSE",
             "ALTER TABLE giveaway_settings ADD COLUMN IF NOT EXISTS dm_script TEXT",
@@ -330,10 +330,10 @@ class GiveawayEvents(Cog):
                     entries=len(entries),
                     ends_at=str(record.get("expiration") or ""),
                 )
-                # Prefer description-ish body for the panel text
+                
                 custom_body = rendered
                 if "{embed}" in embed_script.lower() or "$v{" in embed_script:
-                    # strip mode tags for plain body fallback
+                    
                     custom_body = (
                         rendered.replace("{embed}", "")
                         .replace("$v", "\n")
@@ -434,9 +434,9 @@ class GiveawayEvents(Cog):
         expected = str(settings.get("join_reaction") or "🎉")
         emoji = payload.emoji
         got = str(emoji) if emoji.is_custom_emoji() else (emoji.name or "")
-        # Accept unicode match or custom emoji string forms
+        
         if got != expected and str(emoji) != expected and (emoji.name or "") != expected:
-            # also allow bare name for custom
+            
             if not (
                 emoji.is_custom_emoji()
                 and expected.strip("<>").split(":")[-1].rstrip(">") in str(emoji)
@@ -719,7 +719,7 @@ class GiveawayEvents(Cog):
             )
             if view is not None:
                 payload["view"] = view
-            # DMs: never auto-containerize
+            
             payload.pop("raw_embed", None)
             await member.send(**{
                 k: v
@@ -838,7 +838,7 @@ class GiveawayEvents(Cog):
 
             
             settings = await self.get_settings(guild.id)
-            # dmonwin defaults OFF — only DM when explicitly enabled
+            
             if settings.get("dm_on_win", False):
                 failed: list[discord.Member] = []
                 for winner in winners:

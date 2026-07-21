@@ -180,5 +180,5 @@ def member_repping_tag_from_info(info: dict, guild: discord.Guild) -> bool:
     except (TypeError, ValueError):
         return False
     enabled = info.get("identity_enabled")
-    # Treat missing identity_enabled as a match (Discord sometimes omits it)
+    
     return enabled is not False

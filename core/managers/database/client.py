@@ -192,7 +192,7 @@ class Database:
     def _maybe_purge_write(self, sql: str) -> None:
         """Invalidate cache when fetch*/execute run INSERT/UPDATE/DELETE (e.g. RETURNING)."""
         if table := self._write_table(sql):
-            # fire-and-forget sync purge (no await needed)
+            
             keys = [k for k in self.cache if table.lower() in k.lower()]
             for k in keys:
                 self.cache.pop(k, None)
@@ -206,7 +206,7 @@ class Database:
         async with self.pool.acquire() as conn:
             async with conn.transaction():
                 data = await conn.fetch(sql, *args)
-                # Don't cache write statements (INSERT...RETURNING etc.)
+                
                 if self._write_table(sql) is None:
                     await self._store(data, "fetch", sql, args)
                 return data
@@ -1397,7 +1397,7 @@ class Database:
         antiraid_channel_id: int | None = None,
     ) -> None:
         """upsert antinuke and antiraid log channel bindings"""
-        # Older DBs may predate these columns (CREATE TABLE IF NOT EXISTS won't add them)
+        
         for col in ("antinuke_log_channel_id", "antiraid_log_channel_id"):
             try:
                 await self.execute(
