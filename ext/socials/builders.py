@@ -635,7 +635,7 @@ class _BaseBuilder:
         dm_ok = False
         try:
             await inter.user.send(
-                f"`\n{script}\n`"
+                f"`{script}`"
             )
             dm_ok = True
         except Exception:
