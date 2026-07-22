@@ -219,7 +219,6 @@ class GuildQueue:
         "active_preset",
         "text_channel_id",
         "control_message_id",
-        "meta",  
     )
 
     def __init__(self) -> None:
@@ -231,7 +230,6 @@ class GuildQueue:
         self.active_preset: str | None = None
         self.text_channel_id: int | None = None
         self.control_message_id: int | None = None
-        self.meta: dict[str, dict] = {}
 
 
 class Music(MusicEvents, Package):
@@ -245,6 +243,8 @@ class Music(MusicEvents, Package):
         self.queues: dict[int, GuildQueue] = {}
         self._node = None
         self._node_lock = asyncio.Lock()
+        # Track objects use __slots__ — never setattr on them; store display meta here
+        self._track_meta: dict[str, dict] = {}
 
     async def _wait_node_ready(self, node, *, timeout: float = 10.0) -> bool:
         """Wait until the node is available for get_tracks / Player init."""
@@ -552,16 +552,38 @@ class Music(MusicEvents, Package):
         )
         return ranked[0]
 
-    async def _load_query(self, query: str, *, pick_query: str | None = None):
+    async def _load_results(self, query: str):
+        """Return raw get_tracks payload (list / Playlist) or None."""
+        node = self._node
+        if node is None or not _node_ready(node):
+            if not await self._connect_node():
+                return None
+            node = self._node
+        if node is None:
+            return None
         try:
-            results = await self._node.get_tracks(query)
+            return await node.get_tracks(query)
         except TrackLoadError as e:
             log.debug("track load failed for %r: %s", query, e)
             return None
         except Exception as e:
             log.debug("unexpected load error for %r: %s", query, e)
             return None
+
+    async def _load_query(self, query: str, *, pick_query: str | None = None):
+        results = await self._load_results(query)
         return self._pick_track(results, pick_query)
+
+    async def _load_all_tracks(self, query: str) -> list:
+        """Load a single track or expand a playlist into a list."""
+        results = await self._load_results(query)
+        if not results:
+            return []
+        if hasattr(results, "tracks"):
+            return list(results.tracks or [])
+        if isinstance(results, (list, tuple)):
+            return list(results)
+        return [results]
 
     def _is_platform_url(self, query: str) -> bool:
         q = query.lower()
@@ -599,6 +621,16 @@ class Music(MusicEvents, Package):
             return f"https://music.youtube.com/watch?v={ident}"
         return uri or "https://music.youtube.com"
 
+    @staticmethod
+    def _track_key(track) -> str:
+        tid = getattr(track, "track_id", None)
+        if tid:
+            return str(tid)
+        ident = getattr(track, "identifier", None)
+        if ident:
+            return f"id:{ident}"
+        return f"obj:{id(track)}"
+
     def _bind_meta(
         self,
         track,
@@ -609,25 +641,27 @@ class Music(MusicEvents, Package):
         platform: str | None = None,
         from_search: bool = False,
     ) -> None:
-        tid = getattr(track, "track_id", None) or id(track)
-        setattr(
-            track,
-            "_vain_meta",
-            {
-                "display_title": display_title or track.title,
-                "display_author": display_author or track.author,
-                "source_url": source_url,
-                "platform": platform,
-                "from_search": from_search,
-                "play_url": self._ytm_url(track),
-            },
-        )
-        return
+        # lava_lyra Track uses __slots__ — cannot setattr custom attrs on it
+        key = self._track_key(track)
+        self._track_meta[key] = {
+            "display_title": display_title or getattr(track, "title", None) or "unknown",
+            "display_author": display_author
+            or getattr(track, "author", None)
+            or "unknown",
+            "source_url": source_url,
+            "platform": platform,
+            "from_search": from_search,
+            "play_url": self._ytm_url(track),
+        }
 
     def _meta(self, track) -> dict:
-        return getattr(track, "_vain_meta", None) or {
-            "display_title": getattr(track, "title", "unknown"),
-            "display_author": getattr(track, "author", "unknown"),
+        key = self._track_key(track)
+        hit = self._track_meta.get(key)
+        if hit is not None:
+            return hit
+        return {
+            "display_title": getattr(track, "title", None) or "unknown",
+            "display_author": getattr(track, "author", None) or "unknown",
             "source_url": None,
             "platform": None,
             "from_search": True,
@@ -867,9 +901,15 @@ class Music(MusicEvents, Package):
             f = lyra.Timescale(tag=preset, speed=1.0, pitch=1.0, rate=1.0)
         await player.add_filter(f)
 
-    async def _play_next(self, guild_id: int, player) -> None:
+    async def _play_next(
+        self, guild_id: int, player, *, force: bool = False, _depth: int = 0
+    ) -> None:
+        """Start the next track. force=True skips single-track loop (used by skip)."""
+        if _depth > 8:
+            log.warning("play_next depth exceeded guild=%s", guild_id)
+            return
         state = self._queue(guild_id)
-        if state.loop and state.current:
+        if state.loop and state.current and not force:
             track = state.current
         elif state.tracks:
             track = state.tracks.pop(0)
@@ -881,13 +921,20 @@ class Music(MusicEvents, Package):
             return
         try:
             await player.play(track)
-        except NodeRestException:
+        except Exception:
             log.exception("auto-advance failed in guild %s", guild_id)
+            # drop broken track and try the next one
             state.current = None
+            if state.tracks:
+                await self._play_next(
+                    guild_id, player, force=force, _depth=_depth + 1
+                )
             return
         if state.active_preset:
-            await self._apply_preset(player, state.active_preset)
-        
+            try:
+                await self._apply_preset(player, state.active_preset)
+            except Exception:
+                log.exception("preset apply failed guild=%s", guild_id)
         try:
             await self._send_control_panel(guild_id, player, track)
         except Exception:
@@ -908,48 +955,98 @@ class Music(MusicEvents, Package):
 
     @hybrid(name="play", aliases=["p"], guild_only=True)
     @describe(query="Song name or URL", next="Play after the current track")
-    async def play(self, ctx, *, query: str, next: bool = False) -> None:
+    async def play(self, ctx: Context, *, query: str, next: bool = False) -> None:
         query, play_next = self._parse_play_flags(query, next=next)
+        if not query or not query.strip():
+            return await ctx.warn("give a song name or link")
         player = await self._player(ctx)
         if player is None:
             return
-        track = await self._first_track(query)
-        if track is None:
-            return await ctx.warn("no results")
+
+        # Playlists / multi-track URLs
+        normalized = self._normalize_query(query)
+        tracks: list = []
+        if self._is_direct_query(normalized) and (
+            "playlist" in normalized.lower()
+            or "album" in normalized.lower()
+            or "/sets/" in normalized.lower()
+        ):
+            raw = await self._load_all_tracks(normalized)
+            if raw:
+                platform = self._platform_name(normalized)
+                for t in raw:
+                    self._bind_meta(
+                        t,
+                        display_title=getattr(t, "title", None),
+                        display_author=getattr(t, "author", None),
+                        source_url=normalized,
+                        platform=platform,
+                        from_search=False,
+                    )
+                tracks = raw
+
+        if not tracks:
+            track = await self._first_track(query)
+            if track is None:
+                return await ctx.warn("no results")
+            tracks = [track]
 
         state = self._queue(ctx.guild.id)
         state.text_channel_id = ctx.channel.id
-        meta = self._meta(track)
-        title = meta.get("display_title") or track.title
-        artist = meta.get("display_author") or track.author
+        first = tracks[0]
+        meta = self._meta(first)
+        title = meta.get("display_title") or first.title
+        artist = meta.get("display_author") or first.author
         platform = meta.get("platform")
-        link = meta.get("source_url") or meta.get("play_url") or self._ytm_url(track)
+        link = meta.get("source_url") or meta.get("play_url") or self._ytm_url(first)
 
         try:
-            if player.is_playing or player.current:
+            busy = bool(getattr(player, "is_playing", False) or getattr(player, "current", None))
+            if busy:
                 if play_next:
-                    state.tracks.insert(0, track)
+                    # reverse insert so first track is next
+                    for t in reversed(tracks):
+                        state.tracks.insert(0, t)
                 else:
-                    state.tracks.append(track)
+                    state.tracks.extend(tracks)
                 qmsg = f"[**{title}** — **{artist}**]({link})"
                 if platform and meta.get("source_url"):
                     qmsg = f"**{platform}** · {qmsg}"
+                extra = f" · +{len(tracks) - 1} more" if len(tracks) > 1 else ""
                 return await ctx.send(
                     embed=discord.Embed(
                         color=color.base,
                         description=compose(
                             body("queued", qmsg),
-                            caption(f"position `{len(state.tracks)}`"),
+                            caption(f"position `{len(state.tracks)}`{extra}"),
                         ),
                     )
                 )
 
-            state.current = track
-            await player.play(track)
+            # start first, queue the rest
+            state.current = first
+            if len(tracks) > 1:
+                state.tracks.extend(tracks[1:])
+            await player.play(first)
             if state.active_preset:
-                await self._apply_preset(player, state.active_preset)
-            
-            await self._send_control_panel(ctx.guild.id, player, track)
+                try:
+                    await self._apply_preset(player, state.active_preset)
+                except Exception:
+                    pass
+            await self._send_control_panel(ctx.guild.id, player, first)
+            if len(tracks) > 1:
+                await ctx.send(
+                    embed=discord.Embed(
+                        color=color.base,
+                        description=compose(
+                            body(
+                                "now playing",
+                                f"[**{title}** — **{artist}**]({link})",
+                            ),
+                            caption(f"queued **{len(tracks) - 1}** more"),
+                        ),
+                    )
+                )
             if ctx.message is not None:
                 try:
                     await ctx.message.add_reaction("👍")
@@ -957,6 +1054,9 @@ class Music(MusicEvents, Package):
                     pass
         except NodeRestException as exc:
             log.error("play failed for %r: %s", query, exc)
+            return await ctx.fail(f"failed to play track: {exc}")
+        except Exception as exc:
+            log.exception("play failed for %r", query)
             return await ctx.fail(f"failed to play track: {exc}")
 
     @hybrid(name="queue", description="View all tracks queued", group=True, invoke_without_command=True, guild_only=True)
@@ -1040,46 +1140,72 @@ class Music(MusicEvents, Package):
         await ctx.success(f"moved **{track.title}** to `{new_position}`")
 
     @hybrid(name="skip", guild_only=True)
-    async def skip(self, ctx) -> None:
+    async def skip(self, ctx: Context) -> None:
         player = ctx.voice_client
-        if player is None or not player.is_playing:
+        if player is None or not getattr(player, "is_playing", False):
             return await ctx.warn("nothing playing")
-        await player.stop()
-        await self._play_next(ctx.guild.id, player)
-        await ctx.success("skipped")
+        state = self._queue(ctx.guild.id)
+        # stop() ends with reason=stopped (events do not auto-advance)
+        try:
+            await player.stop()
+        except Exception as exc:
+            return await ctx.warn(f"couldn't skip: {exc}")
+        # force=True so single-track loop does not re-play the same song
+        await self._play_next(ctx.guild.id, player, force=True)
+        if state.current:
+            await ctx.success("skipped")
+        else:
+            await ctx.success("skipped · queue empty")
 
     @hybrid(name="pause", guild_only=True)
-    async def pause(self, ctx) -> None:
+    async def pause(self, ctx: Context) -> None:
         player = ctx.voice_client
-        if player is None or not player.is_playing:
+        if player is None or not getattr(player, "is_playing", False):
             return await ctx.warn("nothing playing")
-        await player.pause()
+        if getattr(player, "is_paused", False):
+            return await ctx.warn("already paused")
+        await player.set_pause(True)
         await ctx.success("paused")
 
     @hybrid(name="resume", guild_only=True)
-    async def resume(self, ctx) -> None:
+    async def resume(self, ctx: Context) -> None:
         player = ctx.voice_client
-        if player is None or not player.is_paused:
+        if player is None:
+            return await ctx.warn("nothing playing")
+        if not getattr(player, "is_paused", False):
             return await ctx.warn("not paused")
-        await player.resume()
+        await player.set_pause(False)
         await ctx.success("resumed")
 
     @hybrid(name="shuffle", guild_only=True)
-    async def shuffle(self, ctx) -> None:
+    async def shuffle(self, ctx: Context) -> None:
+        """Shuffle the upcoming queue (not loop-queue toggle)."""
+        state = self._queue(ctx.guild.id)
+        if len(state.tracks) < 2:
+            return await ctx.warn("not enough tracks")
+        random.shuffle(state.tracks)
+        await ctx.success("shuffled queue")
+
+    @hybrid(name="loopqueue", aliases=["qloop"], guild_only=True)
+    async def loopqueue(self, ctx: Context) -> None:
         state = self._queue(ctx.guild.id)
         state.loop_queue = not state.loop_queue
         await ctx.success(f"queue loop **{'on' if state.loop_queue else 'off'}**")
 
     @hybrid(name="repeat", guild_only=True)
     @describe(option="on or off")
-    async def repeat(self, ctx, option: str | None = None) -> None:
+    async def repeat(self, ctx: Context, option: str | None = None) -> None:
         state = self._queue(ctx.guild.id)
-        state.loop = (not state.loop) if option is None else option.lower() in {"on", "true", "yes", "enable"}
+        state.loop = (
+            (not state.loop)
+            if option is None
+            else option.lower() in {"on", "true", "yes", "enable"}
+        )
         await ctx.success(f"repeat **{'on' if state.loop else 'off'}**")
 
     @hybrid(name="volume", guild_only=True)
     @describe(volume="Volume from 0 to 200")
-    async def volume(self, ctx, volume: int) -> None:
+    async def volume(self, ctx: Context, volume: int) -> None:
         if not 0 <= volume <= 200:
             return await ctx.warn("volume must be 0–200")
         player = ctx.voice_client
@@ -1091,27 +1217,36 @@ class Music(MusicEvents, Package):
 
     @hybrid(name="fastforward", guild_only=True)
     @describe(position="Seconds to fast forward")
-    async def fastforward(self, ctx, position: int) -> None:
+    async def fastforward(self, ctx: Context, position: int) -> None:
         player = ctx.voice_client
         if player is None or player.current is None:
             return await ctx.warn("nothing playing")
-        await player.seek(min(player.position + position * 1000, player.current.length))
+        length = int(getattr(player.current, "length", 0) or 0)
+        target = min(int(player.position) + position * 1000, length)
+        await player.seek(target)
         await ctx.success(f"+{position}s")
 
     @hybrid(name="rewind", guild_only=True)
     @describe(position="Seconds to rewind")
-    async def rewind(self, ctx, position: int) -> None:
+    async def rewind(self, ctx: Context, position: int) -> None:
         player = ctx.voice_client
         if player is None or player.current is None:
             return await ctx.warn("nothing playing")
-        await player.seek(max(player.position - position * 1000, 0))
+        target = max(int(player.position) - position * 1000, 0)
+        await player.seek(target)
         await ctx.success(f"-{position}s")
 
     @hybrid(name="disconnect", aliases=["dc", "leave"], guild_only=True)
-    async def disconnect(self, ctx) -> None:
+    async def disconnect(self, ctx: Context) -> None:
         if ctx.voice_client:
-            await ctx.voice_client.disconnect(force=True)
+            try:
+                await ctx.voice_client.disconnect(force=True)
+            except Exception:
+                pass
         self.queues.pop(ctx.guild.id, None)
+        # prune orphaned track meta (keep it small)
+        if len(self._track_meta) > 200:
+            self._track_meta.clear()
         await ctx.success("disconnected")
 
     @hybrid(name="preset", description="Audio filter presets", group=True, invoke_without_command=True, guild_only=True)
@@ -1126,17 +1261,26 @@ class Music(MusicEvents, Package):
         await ctx.info(f"active: **{active}**")
 
 
-for _preset_name in Music.PRESETS:
-    @Music.preset.command(name=_preset_name, description=f"Toggle the {_preset_name} audio preset")
-    @describe(setting="on or off")
-    async def _preset_cmd(self, ctx, setting: str | None = None, *, _name: str = _preset_name) -> None:
-        await self._set_preset(ctx, _name, setting)
+def _make_preset_command(preset_name: str):
+    async def _preset_cmd(self, ctx: Context, setting: str | None = None) -> None:
+        await self._set_preset(ctx, preset_name, setting)
 
-    _preset_cmd.__name__ = f"preset_{_preset_name.replace('8d', 'eightd')}"
+    _preset_cmd.__name__ = f"preset_{preset_name.replace('8d', 'eightd')}"
+    _preset_cmd.__qualname__ = f"Music.preset_{preset_name.replace('8d', 'eightd')}"
+    return Music.preset.command(
+        name=preset_name,
+        description=f"Toggle the {preset_name} audio preset",
+    )(
+        describe(setting="on or off")(_preset_cmd)
+    )
+
+
+for _preset_name in Music.PRESETS:
+    _make_preset_command(_preset_name)
 
 
 class MusicControlView(discord.ui.View):
-    """Skip / pause / resume controls on the now-playing panel."""
+    """Skip / pause / stop controls on the now-playing panel."""
 
     def __init__(self, cog: Music, guild_id: int):
         super().__init__(timeout=None)
@@ -1172,11 +1316,12 @@ class MusicControlView(discord.ui.View):
         player = self._player(inter)
         if player is None:
             return
-        if player.is_paused:
-            await player.resume()
+        # lava_lyra uses set_pause(bool) — not pause()/resume()
+        if getattr(player, "is_paused", False):
+            await player.set_pause(False)
             await inter.response.send_message("resumed", ephemeral=True)
         else:
-            await player.pause()
+            await player.set_pause(True)
             await inter.response.send_message("paused", ephemeral=True)
 
     @discord.ui.button(label="skip", style=discord.ButtonStyle.primary)
@@ -1185,8 +1330,11 @@ class MusicControlView(discord.ui.View):
         if player is None:
             return
         await inter.response.defer()
-        await player.stop()
-        await self.cog._play_next(self.guild_id, player)
+        try:
+            await player.stop()
+        except Exception:
+            return
+        await self.cog._play_next(self.guild_id, player, force=True)
 
     @discord.ui.button(label="stop", style=discord.ButtonStyle.danger)
     async def stop_btn(self, inter: discord.Interaction, button: discord.ui.Button):
