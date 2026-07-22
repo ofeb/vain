@@ -27,8 +27,8 @@ class MusicEvents(Package):
         if not player.guild:
             return
         reason_u = str(getattr(reason, "name", reason) or reason).upper().replace(" ", "_")
-        # stopped = manual skip/stop (caller advances or clears queue)
-        # replaced = play() swapped tracks
+        
+        
         if reason_u in {"REPLACED", "STOPPED", "CLEANUP"}:
             return
         if reason_u not in {"FINISHED", "LOAD_FAILED", "LOADFAILED"}:
@@ -58,7 +58,7 @@ class MusicEvents(Package):
 
     @Package.listener("on_voice_state_update")
     async def _vc_cleanup(self, member, before, after) -> None:
-        # Only care when someone leaves a channel the bot is in
+        
         if before.channel is None:
             return
         guild = before.channel.guild
@@ -69,7 +69,7 @@ class MusicEvents(Package):
             return
         if vc.channel.id != before.channel.id:
             return
-        # Bot alone → disconnect and clear queue
+        
         humans = [m for m in before.channel.members if not m.bot]
         if humans:
             return

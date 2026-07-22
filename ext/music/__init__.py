@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import logging
 import random
 import re
@@ -14,6 +15,11 @@ from core.discord.hybrid import describe, hybrid
 from core.managers.values import color, music as nl, music_enabled
 
 from .events import MusicEvents
+from .panel import (
+    MusicControlView,
+    fetch_image_bytes,
+    render_now_playing_card,
+)
 
 
 
@@ -125,13 +131,12 @@ try:
     )
 
     class VainPlayer(lyra.Player):
-        """Player that always binds to our nodelink node (by identifier)."""
+        """Player bound to our nodelink node with a hard play path that actually works."""
 
         def __init__(self, client, channel, *, node=None):
             if node is None:
                 node = _resolve_pool_node()
             super().__init__(client, channel, node=node)
-            # Session id may be ready now — keep endpoint URI correct
             self._sync_endpoint()
 
         def _sync_endpoint(self) -> None:
@@ -140,12 +145,42 @@ try:
                 self._player_endpoint_uri = f"sessions/{sid}/players"
 
         def voice_ready(self) -> bool:
-            """True once Discord has given us both voice state pieces for Lavalink."""
             vs = getattr(self, "_voice_state", None) or {}
             return "sessionId" in vs and "event" in vs
 
-        async def wait_until_ready(self, *, timeout: float = 8.0) -> bool:
-            """Wait for node session + Discord voice handshake, then push voice to Lavalink."""
+        async def _force_voice_update(self) -> bool:
+            """Push voice state to Lavalink. Uses subset keys (stock requires exact key set)."""
+            vs = getattr(self, "_voice_state", None) or {}
+            if "sessionId" not in vs or "event" not in vs:
+                return False
+            event = vs["event"]
+            if not isinstance(event, dict):
+                return False
+            token = event.get("token")
+            endpoint = event.get("endpoint")
+            if not token or not endpoint:
+                return False
+            self._sync_endpoint()
+            data = {
+                "token": token,
+                "endpoint": endpoint,
+                "sessionId": vs["sessionId"],
+            }
+            if self.channel is not None:
+                data["channelId"] = str(self.channel.id)
+            try:
+                await self._node.send(
+                    method="PATCH",
+                    path=self._player_endpoint_uri,
+                    guild_id=self._guild.id,
+                    data={"voice": data},
+                )
+                return True
+            except Exception as exc:
+                log.warning("force voice update failed: %s", exc)
+                return False
+
+        async def wait_until_ready(self, *, timeout: float = 12.0) -> bool:
             self._sync_endpoint()
             deadline = asyncio.get_event_loop().time() + timeout
             while asyncio.get_event_loop().time() < deadline:
@@ -154,59 +189,106 @@ try:
                     node is not None
                     and getattr(node, "_available", False)
                     and getattr(node, "_session_id", None)
+                    and self.voice_ready()
                 ):
                     self._sync_endpoint()
-                    if self.voice_ready():
-                        try:
-                            # Re-dispatch in case state arrived after server (lava_lyra race)
-                            await self._dispatch_voice_update()
-                        except Exception as exc:
-                            log.debug("voice dispatch retry: %s", exc)
+                    ok = await self._force_voice_update()
+                    if ok:
                         return True
-                await asyncio.sleep(0.1)
-            # Last attempt even if only partially ready
+                await asyncio.sleep(0.15)
             self._sync_endpoint()
             if self.voice_ready():
-                try:
-                    await self._dispatch_voice_update()
-                except Exception:
-                    pass
-                return True
+                return await self._force_voice_update()
             log.warning(
-                "player not fully ready guild=%s node_avail=%s session=%s voice=%s",
+                "player not ready guild=%s avail=%s session=%s voice_keys=%s",
                 getattr(self._guild, "id", None),
                 getattr(self._node, "_available", None),
                 bool(getattr(self._node, "_session_id", None)),
-                dict.fromkeys(getattr(self, "_voice_state", {}) or {}),
+                list((getattr(self, "_voice_state", None) or {}).keys()),
             )
             return False
 
-        async def on_voice_state_update(self, data) -> None:
-            """Ensure we always re-dispatch when the second half of the handshake arrives."""
-            self._voice_state.update({"sessionId": data.get("session_id")})
+        async def on_voice_server_update(self, data) -> None:
+            self._voice_state.update({"event": data})
+            if self.voice_ready():
+                await self._force_voice_update()
 
+        async def on_voice_state_update(self, data) -> None:
+            self._voice_state.update({"sessionId": data.get("session_id")})
             channel_id = data.get("channel_id")
             if not channel_id:
                 await self.disconnect()
                 self._voice_state.clear()
                 return
-
             channel = self.guild.get_channel(int(channel_id))
-            if self.channel != channel:
-                self.channel = channel
-            if not channel:
+            if channel is None:
                 await self.disconnect()
                 self._voice_state.clear()
                 return
-
-            # lava_lyra's stock handler returns early when data has no token
-            # (normal for VOICE_STATE_UPDATE). That drops the handshake if
-            # SERVER_UPDATE arrived first. Always dispatch when both keys exist.
+            self.channel = channel
             if self.voice_ready():
+                await self._force_voice_update()
+
+        async def _resolve_encoded(self, track) -> str:
+            """Return a playable encoded track id (resolve Spotify/Apple via YT if needed)."""
+            encoded = getattr(track, "track_id", None)
+            original = getattr(track, "original", None)
+            search_type = getattr(track, "_search_type", None)
+
+            
+            info = getattr(track, "info", None) or {}
+            source = str(info.get("sourceName", "")).lower()
+            if encoded and original is not None and original is track:
+                return encoded
+            if encoded and source in {
+                "youtube",
+                "youtubemusic",
+                "ytmusic",
+                "soundcloud",
+                "http",
+                "local",
+            }:
+                return encoded
+
+            
+            queries: list[str] = []
+            isrc = getattr(track, "isrc", None)
+            st = getattr(search_type, "value", None) or "ytmsearch"
+            if st in {"ytsearch", "ytmsearch", "scsearch", "spsearch", "amsearch"}:
+                prefix = st
+            else:
+                prefix = "ytmsearch"
+            if isrc:
+                queries.append(f"{prefix}:{isrc}")
+            title = getattr(track, "title", "") or ""
+            author = getattr(track, "author", "") or ""
+            if title and author:
+                queries.append(f"{prefix}:{title} - {author}")
+                queries.append(f"ytsearch:{title} {author} audio")
+            elif title:
+                queries.append(f"{prefix}:{title}")
+
+            for q in queries:
                 try:
-                    await self._dispatch_voice_update()
-                except Exception as exc:
-                    log.debug("voice state dispatch failed: %s", exc)
+                    results = await self._node.get_tracks(q, search_type=None)
+                except Exception:
+                    continue
+                if not results:
+                    continue
+                tracks = results.tracks if hasattr(results, "tracks") else results
+                if not tracks:
+                    continue
+                found = tracks[0]
+                try:
+                    track.original = found
+                    track.track_id = found.track_id
+                except Exception:
+                    pass
+                return found.track_id
+
+            if not encoded:
+                raise TrackLoadError("No equivalent track was able to be found.")
+            return encoded
 
         async def play(
             self,
@@ -216,96 +298,87 @@ try:
             end: int = 0,
             ignore_if_playing: bool = False,
         ):
-            # Wait for node + voice — stock play() silently no-ops when node is "unavailable"
-            ready = await self.wait_until_ready(timeout=10.0)
+            """Hard play: never silently return; always send voice + track together."""
+            ready = await self.wait_until_ready(timeout=15.0)
             if not ready:
-                # One more short wait; still try play rather than silent success
-                await asyncio.sleep(0.5)
+                
+                for _ in range(20):
+                    if self.voice_ready() and getattr(self._node, "_session_id", None):
+                        break
+                    await asyncio.sleep(0.25)
                 self._sync_endpoint()
+                if not self.voice_ready():
+                    log.error("play aborted: voice not ready guild=%s", self._guild.id)
+                    raise RuntimeError("Voice connection is not ready for playback")
 
-            if getattr(self._node, "_session_id", None):
-                self._sync_endpoint()
+            self._sync_endpoint()
+            await self._force_voice_update()
 
-            # Prefer playable youtube tracks; clear broken search flags when we
-            # already have an encoded track id from ytmsearch/ytsearch.
+            encoded = await self._resolve_encoded(track)
+            is_nodelink = bool(getattr(self._node, "_is_nodelink", False))
+
+            vs = self._voice_state
+            voice = {
+                "token": vs["event"]["token"],
+                "endpoint": vs["event"]["endpoint"],
+                "sessionId": vs["sessionId"],
+            }
+            if self.channel is not None:
+                voice["channelId"] = str(self.channel.id)
+
+            volume = int(getattr(self, "_volume", 100) or 100)
+
+            if is_nodelink:
+                data: dict = {
+                    "track": {"encoded": encoded},
+                    "position": int(start or 0),
+                    "paused": False,
+                    "volume": volume,
+                    "voice": voice,
+                }
+                if end and end > 0:
+                    data["endTime"] = int(end)
+            else:
+                data = {
+                    "encodedTrack": encoded,
+                    "position": str(int(start or 0)),
+                    "paused": False,
+                    "volume": volume,
+                    "voice": voice,
+                }
+                if end and end > 0:
+                    data["endTime"] = str(int(end))
+
+            self._current = track
             try:
-                if getattr(track, "track_id", None) and getattr(track, "original", None) is None:
-                    # Avoid re-search path that can fail silently for platform tracks
-                    if getattr(track, "_search_type", None):
-                        # Only clear when it already looks like a resolved playable track
-                        info = getattr(track, "info", None) or {}
-                        source = str(info.get("sourceName", "")).lower()
-                        if source in {"youtube", "youtubemusic", "soundcloud", "http", "local"}:
-                            try:
-                                track._search_type = None  # type: ignore[attr-defined]
-                            except Exception:
-                                pass
-                            try:
-                                track.original = track
-                            except Exception:
-                                pass
-            except Exception:
-                pass
-
-            try:
-                result = await super().play(
-                    track,
-                    start=start,
-                    end=end,
-                    ignore_if_playing=ignore_if_playing,
-                )
-            except NodeRestException as exc:
-                if "Invalid query parameters" not in str(exc) or not track.track_id:
-                    raise
-                log.debug("retrying play with minimal payload after: %s", exc)
-                self._sync_endpoint()
-                self._current = track
-                payload = (
-                    {"track": {"encoded": track.track_id}, "position": start}
-                    if getattr(self._node, "_is_nodelink", False)
-                    else {
-                        "encodedTrack": track.track_id,
-                        "position": str(start),
-                    }
-                )
                 await self._node.send(
                     method="PATCH",
                     path=self._player_endpoint_uri,
                     guild_id=self._guild.id,
-                    data=payload,
+                    data=data,
+                    query=f"noReplace={str(bool(ignore_if_playing)).lower()}",
                 )
-                return track
-
-            # Stock play() can return the track without sending if node was down —
-            # detect and hard-retry once.
-            if (
-                result is not None
-                and getattr(self, "_current", None) is None
-                and getattr(track, "track_id", None)
-            ):
-                log.warning("play() returned without setting current; hard retry")
+            except Exception as exc:
+                log.warning("play PATCH failed (%s); retry once", exc)
+                await asyncio.sleep(0.6)
                 self._sync_endpoint()
-                if self.voice_ready():
-                    try:
-                        await self._dispatch_voice_update()
-                    except Exception:
-                        pass
-                self._current = track
-                payload = (
-                    {"track": {"encoded": track.track_id}, "position": start}
-                    if getattr(self._node, "_is_nodelink", False)
-                    else {
-                        "encodedTrack": track.track_id,
-                        "position": str(start),
-                    }
-                )
+                await self._force_voice_update()
                 await self._node.send(
                     method="PATCH",
                     path=self._player_endpoint_uri,
                     guild_id=self._guild.id,
-                    data=payload,
+                    data=data,
+                    query=f"noReplace={str(bool(ignore_if_playing)).lower()}",
                 )
-            return result
+
+            log.info(
+                "playing %r by %r encoded=%s… guild=%s",
+                getattr(track, "title", "?"),
+                getattr(track, "author", "?"),
+                str(encoded)[:18],
+                self._guild.id,
+            )
+            return track
 
     HAS_LYRA = True
 except ImportError:
@@ -364,6 +437,7 @@ class GuildQueue:
         "active_preset",
         "text_channel_id",
         "control_message_id",
+        "play_message_id",
     )
 
     def __init__(self) -> None:
@@ -375,6 +449,7 @@ class GuildQueue:
         self.active_preset: str | None = None
         self.text_channel_id: int | None = None
         self.control_message_id: int | None = None
+        self.play_message_id: int | None = None
 
 
 class Music(MusicEvents, Package):
@@ -388,7 +463,7 @@ class Music(MusicEvents, Package):
         self.queues: dict[int, GuildQueue] = {}
         self._node = None
         self._node_lock = asyncio.Lock()
-        # Track objects use __slots__ — never setattr on them; store display meta here
+        
         self._track_meta: dict[str, dict] = {}
 
     async def _wait_node_ready(self, node, *, timeout: float = 10.0) -> bool:
@@ -562,7 +637,7 @@ class Music(MusicEvents, Package):
                 return None
 
         player = ctx.voice_client
-        # Critical: wait for Discord voice handshake before any play()
+        
         if isinstance(player, VainPlayer) or hasattr(player, "wait_until_ready"):
             ok = await player.wait_until_ready(timeout=10.0)
             if not ok:
@@ -716,11 +791,11 @@ class Music(MusicEvents, Package):
         if node is None:
             return None
         try:
-            # Pass search_type=None so existing ytmsearch:/ytsearch: prefixes
-            # are not double-wrapped as ytsearch:ytmsearch:...
+            
+            
             return await node.get_tracks(query, search_type=None)
         except TypeError:
-            # older lava_lyra without search_type kw
+            
             try:
                 return await node.get_tracks(query)
             except TrackLoadError as e:
@@ -807,7 +882,7 @@ class Music(MusicEvents, Package):
         platform: str | None = None,
         from_search: bool = False,
     ) -> None:
-        # lava_lyra Track uses __slots__ — cannot setattr custom attrs on it
+        
         key = self._track_key(track)
         self._track_meta[key] = {
             "display_title": display_title or getattr(track, "title", None) or "unknown",
@@ -979,47 +1054,89 @@ class Music(MusicEvents, Package):
             filled = max(0, min(width, filled))
         return "━" * filled + "●" + "─" * max(0, width - filled)
 
-    def _np_embed(self, track, player=None) -> discord.Embed:
+    def _display_bits(self, track) -> tuple[str, str, str, str | None]:
         meta = self._meta(track)
-        title = meta.get("display_title") or track.title or "unknown"
-        artist = meta.get("display_author") or track.author or "unknown"
-        platform = meta.get("platform")
+        title = str(meta.get("display_title") or getattr(track, "title", None) or "unknown")
+        artist = str(
+            meta.get("display_author") or getattr(track, "author", None) or "unknown"
+        )
         source_url = meta.get("source_url")
         play_url = meta.get("play_url") or self._ytm_url(track)
         from_search = bool(meta.get("from_search"))
-
-        
-        
         link = source_url if (source_url and not from_search) else play_url
-        song_line = f"[**{title}** — **{artist}**]({link})"
+        platform = meta.get("platform")
+        return title, artist, str(link or ""), platform
 
+    async def _set_vc_status(self, player, track=None) -> None:
+        channel = getattr(player, "channel", None)
+        if channel is None:
+            return
+        try:
+            if track is None:
+                await channel.edit(status=None)
+                return
+            title, artist, _, _ = self._display_bits(track)
+            status = f"now playing: {title} by {artist}"
+            if len(status) > 500:
+                status = status[:497] + "…"
+            await channel.edit(status=status)
+        except Exception as exc:
+            log.debug("vc status update failed: %s", exc)
+
+    async def _build_panel_payload(
+        self, guild_id: int, track, player=None
+    ) -> tuple[discord.Embed, discord.File | None, MusicControlView]:
+        title, artist, link, platform = self._display_bits(track)
         pos = int(getattr(player, "position", 0) or 0) if player else 0
         length = int(getattr(track, "length", 0) or 0)
-        bar = self._progress_bar(pos, length)
-        time_line = f"`{self._fmt_ms(pos)}` {bar} `{self._fmt_ms(length)}`"
+        paused = bool(getattr(player, "is_paused", False)) if player else False
 
-        if platform and not from_search:
-            header = f"playing **{platform}** track"
+        if platform:
+            header = f"playing **{platform}**"
         else:
             header = "now playing"
 
+        song_line = (
+            f"[**{title}** — **{artist}**]({link})"
+            if link
+            else f"**{title}** — **{artist}**"
+        )
         emb = discord.Embed(
             color=color.base,
             description=compose(
-                body(header, song_line, time_line),
-                caption("youtube music"),
+                body(header, song_line),
+                caption("youtube music · use the menu or buttons"),
             ),
         )
-        thumb = getattr(track, "thumbnail", None)
-        if thumb:
-            try:
-                emb.set_thumbnail(url=str(thumb))
-            except Exception:
-                pass
-        return emb
+
+        art_url = getattr(track, "thumbnail", None)
+        art_bytes = await fetch_image_bytes(str(art_url) if art_url else None)
+        file = None
+        try:
+            card = await asyncio.to_thread(
+                render_now_playing_card,
+                title=title,
+                artist=artist,
+                position_ms=pos,
+                length_ms=length,
+                album_art=art_bytes,
+                accent=int(color.base),
+            )
+            file = discord.File(io.BytesIO(card), filename="nowplaying.png")
+            emb.set_image(url="attachment://nowplaying.png")
+        except Exception:
+            log.exception("panel art render failed")
+            if art_url:
+                try:
+                    emb.set_thumbnail(url=str(art_url))
+                except Exception:
+                    pass
+
+        view = MusicControlView(self, guild_id, paused=paused)
+        return emb, file, view
 
     async def _send_control_panel(self, guild_id: int, player, track) -> None:
-        """Send / refresh the control panel every time the song changes."""
+        """Delete old panel, send a fresh one (reply to ,play when possible)."""
         state = self._queue(guild_id)
         channel = None
         if state.text_channel_id:
@@ -1027,24 +1144,148 @@ class Music(MusicEvents, Package):
         if channel is None:
             return
 
-        embed = self._np_embed(track, player)
-        view = MusicControlView(self, guild_id)
+        
+        await self._set_vc_status(player, track)
 
         
         if state.control_message_id:
             try:
-                msg = await channel.fetch_message(state.control_message_id)
-                await msg.edit(embed=embed, view=view)
-                view.message = msg
-                return
+                old = await channel.fetch_message(state.control_message_id)
+                await old.delete()
             except Exception:
                 pass
+            state.control_message_id = None
+
+        emb, file, view = await self._build_panel_payload(guild_id, track, player)
+
+        
+        reference = None
+        if state.play_message_id:
+            try:
+                play_msg = await channel.fetch_message(state.play_message_id)
+                reference = play_msg.to_reference(fail_if_not_exists=False)
+            except Exception:
+                state.play_message_id = None
+                reference = None
+
+        kwargs: dict = {
+            "embed": emb,
+            "view": view,
+            "allowed_mentions": discord.AllowedMentions.none(),
+        }
+        if file is not None:
+            kwargs["file"] = file
+        if reference is not None:
+            kwargs["reference"] = reference
+
         try:
-            msg = await channel.send(embed=embed, view=view)
+            msg = await channel.send(**kwargs)
             state.control_message_id = msg.id
             view.message = msg
         except Exception:
-            log.exception("failed to send control panel guild=%s", guild_id)
+            
+            try:
+                kwargs.pop("reference", None)
+                emb2, file2, view2 = await self._build_panel_payload(
+                    guild_id, track, player
+                )
+                send_kw = {
+                    "embed": emb2,
+                    "view": view2,
+                    "allowed_mentions": discord.AllowedMentions.none(),
+                }
+                if file2 is not None:
+                    send_kw["file"] = file2
+                msg = await channel.send(**send_kw)
+                state.control_message_id = msg.id
+                view2.message = msg
+            except Exception:
+                log.exception("failed to send control panel guild=%s", guild_id)
+
+    async def _stop_and_leave(self, guild_id: int, player) -> None:
+        state = self._queue(guild_id)
+        state.tracks.clear()
+        state.current = None
+        state.loop = False
+        await self._set_vc_status(player, None)
+        try:
+            await player.stop()
+        except Exception:
+            pass
+        try:
+            await player.disconnect(force=True)
+        except Exception:
+            pass
+        self.queues.pop(guild_id, None)
+
+    async def _panel_show_queue(
+        self, inter: discord.Interaction, guild_id: int
+    ) -> None:
+        state = self._queue(guild_id)
+        lines: list[str] = []
+        if state.current:
+            t, a, _, _ = self._display_bits(state.current)
+            lines.append(f"**now:** {t} — {a}")
+        for i, tr in enumerate(state.tracks[:20], 1):
+            t, a, _, _ = self._display_bits(tr)
+            lines.append(f"`{i}.` **{t}** — {a}")
+        if not lines:
+            text = "> queue is empty"
+        else:
+            text = compose(body(*lines), caption(f"{len(state.tracks)} queued"))
+        if inter.response.is_done():
+            await inter.followup.send(text, ephemeral=True)
+        else:
+            await inter.response.send_message(text, ephemeral=True)
+
+    async def _panel_add_track(
+        self, inter: discord.Interaction, guild_id: int, query: str
+    ) -> None:
+        if not query:
+            return await inter.response.send_message("give a song or url", ephemeral=True)
+        await inter.response.defer(ephemeral=True)
+        player = inter.guild.voice_client if inter.guild else None
+        if player is None:
+            return await inter.followup.send("nothing playing — use `,play` first", ephemeral=True)
+
+        tracks: list = []
+        normalized = self._normalize_query(query)
+        if self._is_direct_query(normalized) and (
+            "playlist" in normalized.lower()
+            or "album" in normalized.lower()
+            or "/sets/" in normalized.lower()
+        ):
+            raw = await self._load_all_tracks(normalized)
+            if raw:
+                platform = self._platform_name(normalized)
+                for t in raw:
+                    self._bind_meta(
+                        t,
+                        display_title=getattr(t, "title", None),
+                        display_author=getattr(t, "author", None),
+                        source_url=normalized,
+                        platform=platform,
+                        from_search=False,
+                    )
+                tracks = raw
+        if not tracks:
+            t = await self._first_track(query)
+            if t is None:
+                return await inter.followup.send("no results", ephemeral=True)
+            tracks = [t]
+
+        state = self._queue(guild_id)
+        state.tracks.extend(tracks)
+        first = tracks[0]
+        title, artist, link, _ = self._display_bits(first)
+        extra = f" · +{len(tracks) - 1} more" if len(tracks) > 1 else ""
+        await inter.followup.send(
+            compose(
+                body("queued", f"[**{title}** — **{artist}**]({link})"),
+                caption(f"{len(state.tracks)} in queue{extra}"),
+            ),
+            ephemeral=True,
+        )
 
     async def _apply_preset(self, player, preset: str) -> None:
         if not HAS_LYRA:
@@ -1084,19 +1325,31 @@ class Music(MusicEvents, Package):
             state.current = track
         else:
             state.current = None
+            
+            await self._set_vc_status(player, None)
+            try:
+                await player.disconnect(force=True)
+            except Exception:
+                pass
             return
         try:
             if hasattr(player, "wait_until_ready"):
-                await player.wait_until_ready(timeout=8.0)
+                await player.wait_until_ready(timeout=12.0)
             await player.play(track)
         except Exception:
             log.exception("auto-advance failed in guild %s", guild_id)
-            # drop broken track and try the next one
+            
             state.current = None
             if state.tracks:
                 await self._play_next(
                     guild_id, player, force=force, _depth=_depth + 1
                 )
+            else:
+                await self._set_vc_status(player, None)
+                try:
+                    await player.disconnect(force=True)
+                except Exception:
+                    pass
             return
         if state.active_preset:
             try:
@@ -1131,7 +1384,7 @@ class Music(MusicEvents, Package):
         if player is None:
             return
 
-        # Playlists / multi-track URLs
+        
         normalized = self._normalize_query(query)
         tracks: list = []
         if self._is_direct_query(normalized) and (
@@ -1161,24 +1414,24 @@ class Music(MusicEvents, Package):
 
         state = self._queue(ctx.guild.id)
         state.text_channel_id = ctx.channel.id
+        if ctx.message is not None:
+            state.play_message_id = ctx.message.id
         first = tracks[0]
-        meta = self._meta(first)
-        title = meta.get("display_title") or first.title
-        artist = meta.get("display_author") or first.author
-        platform = meta.get("platform")
-        link = meta.get("source_url") or meta.get("play_url") or self._ytm_url(first)
+        title, artist, link, platform = self._display_bits(first)
 
         try:
-            busy = bool(getattr(player, "is_playing", False) or getattr(player, "current", None))
+            busy = bool(
+                getattr(player, "is_playing", False)
+                or getattr(player, "current", None)
+            )
             if busy:
                 if play_next:
-                    # reverse insert so first track is next
                     for t in reversed(tracks):
                         state.tracks.insert(0, t)
                 else:
                     state.tracks.extend(tracks)
                 qmsg = f"[**{title}** — **{artist}**]({link})"
-                if platform and meta.get("source_url"):
+                if platform:
                     qmsg = f"**{platform}** · {qmsg}"
                 extra = f" · +{len(tracks) - 1} more" if len(tracks) > 1 else ""
                 return await ctx.send(
@@ -1191,29 +1444,12 @@ class Music(MusicEvents, Package):
                     )
                 )
 
-            # start first, queue the rest
             state.current = first
             if len(tracks) > 1:
                 state.tracks.extend(tracks[1:])
-            # Voice handshake first — play() without it joins VC but is silent
             if hasattr(player, "wait_until_ready"):
-                await player.wait_until_ready(timeout=10.0)
+                await player.wait_until_ready(timeout=15.0)
             await player.play(first)
-            # Confirm something is actually playing
-            await asyncio.sleep(0.35)
-            if not getattr(player, "is_playing", False) and not getattr(
-                player, "current", None
-            ):
-                log.error(
-                    "play() finished but player idle guild=%s track=%r id=%s",
-                    ctx.guild.id,
-                    getattr(first, "title", None),
-                    getattr(first, "track_id", None),
-                )
-                # one hard retry
-                if hasattr(player, "wait_until_ready"):
-                    await player.wait_until_ready(timeout=5.0)
-                await player.play(first)
             if state.active_preset:
                 try:
                     await self._apply_preset(player, state.active_preset)
@@ -1221,18 +1457,20 @@ class Music(MusicEvents, Package):
                     pass
             await self._send_control_panel(ctx.guild.id, player, first)
             if len(tracks) > 1:
-                await ctx.send(
-                    embed=discord.Embed(
-                        color=color.base,
-                        description=compose(
-                            body(
-                                "now playing",
-                                f"[**{title}** — **{artist}**]({link})",
+                try:
+                    await ctx.send(
+                        embed=discord.Embed(
+                            color=color.base,
+                            description=compose(
+                                body(
+                                    "playlist loaded",
+                                    f"**{len(tracks) - 1}** more tracks queued",
+                                ),
                             ),
-                            caption(f"queued **{len(tracks) - 1}** more"),
-                        ),
+                        )
                     )
-                )
+                except Exception:
+                    pass
             if ctx.message is not None:
                 try:
                     await ctx.message.add_reaction("👍")
@@ -1283,7 +1521,7 @@ class Music(MusicEvents, Package):
         aliases=["cplay", "current", "currently"],
         guild_only=True,
     )
-    async def currentlyplaying(self, ctx) -> None:
+    async def currentlyplaying(self, ctx: Context) -> None:
         """Show the current track control panel."""
         player = ctx.voice_client
         state = self._queue(ctx.guild.id)
@@ -1291,6 +1529,8 @@ class Music(MusicEvents, Package):
         if player is None or track is None:
             return await ctx.warn("nothing playing")
         state.text_channel_id = ctx.channel.id
+        if ctx.message is not None:
+            state.play_message_id = ctx.message.id
         await self._send_control_panel(ctx.guild.id, player, track)
 
     @queue.command(name="remove", description="Remove a track from the queue")
@@ -1331,12 +1571,12 @@ class Music(MusicEvents, Package):
         if player is None or not getattr(player, "is_playing", False):
             return await ctx.warn("nothing playing")
         state = self._queue(ctx.guild.id)
-        # stop() ends with reason=stopped (events do not auto-advance)
+        
         try:
             await player.stop()
         except Exception as exc:
             return await ctx.warn(f"couldn't skip: {exc}")
-        # force=True so single-track loop does not re-play the same song
+        
         await self._play_next(ctx.guild.id, player, force=True)
         if state.current:
             await ctx.success("skipped")
@@ -1430,7 +1670,7 @@ class Music(MusicEvents, Package):
             except Exception:
                 pass
         self.queues.pop(ctx.guild.id, None)
-        # prune orphaned track meta (keep it small)
+        
         if len(self._track_meta) > 200:
             self._track_meta.clear()
         await ctx.success("disconnected")
@@ -1463,90 +1703,6 @@ def _make_preset_command(preset_name: str):
 
 for _preset_name in Music.PRESETS:
     _make_preset_command(_preset_name)
-
-
-class MusicControlView(discord.ui.View):
-    """Skip / pause / stop controls on the now-playing panel."""
-
-    def __init__(self, cog: Music, guild_id: int):
-        super().__init__(timeout=None)
-        self.cog = cog
-        self.guild_id = guild_id
-        self.message: discord.Message | None = None
-
-    def _player(self, inter: discord.Interaction):
-        guild = inter.guild
-        if guild is None:
-            return None
-        return guild.voice_client
-
-    async def interaction_check(self, inter: discord.Interaction) -> bool:
-        if inter.guild is None or inter.guild.id != self.guild_id:
-            return False
-        member = inter.user
-        if not isinstance(member, discord.Member):
-            return False
-        vc = self._player(inter)
-        if vc is None or vc.channel is None:
-            await inter.response.send_message("nothing playing", ephemeral=True)
-            return False
-        if not member.voice or member.voice.channel != vc.channel:
-            await inter.response.send_message(
-                "join the voice channel first", ephemeral=True
-            )
-            return False
-        return True
-
-    @discord.ui.button(label="pause", style=discord.ButtonStyle.secondary)
-    async def pause_btn(self, inter: discord.Interaction, button: discord.ui.Button):
-        player = self._player(inter)
-        if player is None:
-            return
-        # lava_lyra uses set_pause(bool) — not pause()/resume()
-        if getattr(player, "is_paused", False):
-            await player.set_pause(False)
-            await inter.response.send_message("resumed", ephemeral=True)
-        else:
-            await player.set_pause(True)
-            await inter.response.send_message("paused", ephemeral=True)
-
-    @discord.ui.button(label="skip", style=discord.ButtonStyle.primary)
-    async def skip_btn(self, inter: discord.Interaction, button: discord.ui.Button):
-        player = self._player(inter)
-        if player is None:
-            return
-        await inter.response.defer()
-        try:
-            await player.stop()
-        except Exception:
-            return
-        await self.cog._play_next(self.guild_id, player, force=True)
-
-    @discord.ui.button(label="stop", style=discord.ButtonStyle.danger)
-    async def stop_btn(self, inter: discord.Interaction, button: discord.ui.Button):
-        player = self._player(inter)
-        if player is None:
-            return
-        state = self.cog._queue(self.guild_id)
-        state.tracks.clear()
-        state.current = None
-        state.loop = False
-        try:
-            await player.stop()
-        except Exception:
-            pass
-        try:
-            await player.disconnect(force=True)
-        except Exception:
-            pass
-        self.cog.queues.pop(self.guild_id, None)
-        await inter.response.edit_message(
-            embed=discord.Embed(
-                color=color.base,
-                description=compose(body("stopped"), caption("queue cleared")),
-            ),
-            view=None,
-        )
 
 
 async def setup(bot: Vain):
