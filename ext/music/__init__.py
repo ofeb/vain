@@ -131,6 +131,82 @@ try:
             if node is None:
                 node = _resolve_pool_node()
             super().__init__(client, channel, node=node)
+            # Session id may be ready now — keep endpoint URI correct
+            self._sync_endpoint()
+
+        def _sync_endpoint(self) -> None:
+            sid = getattr(self._node, "_session_id", None)
+            if sid:
+                self._player_endpoint_uri = f"sessions/{sid}/players"
+
+        def voice_ready(self) -> bool:
+            """True once Discord has given us both voice state pieces for Lavalink."""
+            vs = getattr(self, "_voice_state", None) or {}
+            return "sessionId" in vs and "event" in vs
+
+        async def wait_until_ready(self, *, timeout: float = 8.0) -> bool:
+            """Wait for node session + Discord voice handshake, then push voice to Lavalink."""
+            self._sync_endpoint()
+            deadline = asyncio.get_event_loop().time() + timeout
+            while asyncio.get_event_loop().time() < deadline:
+                node = self._node
+                if (
+                    node is not None
+                    and getattr(node, "_available", False)
+                    and getattr(node, "_session_id", None)
+                ):
+                    self._sync_endpoint()
+                    if self.voice_ready():
+                        try:
+                            # Re-dispatch in case state arrived after server (lava_lyra race)
+                            await self._dispatch_voice_update()
+                        except Exception as exc:
+                            log.debug("voice dispatch retry: %s", exc)
+                        return True
+                await asyncio.sleep(0.1)
+            # Last attempt even if only partially ready
+            self._sync_endpoint()
+            if self.voice_ready():
+                try:
+                    await self._dispatch_voice_update()
+                except Exception:
+                    pass
+                return True
+            log.warning(
+                "player not fully ready guild=%s node_avail=%s session=%s voice=%s",
+                getattr(self._guild, "id", None),
+                getattr(self._node, "_available", None),
+                bool(getattr(self._node, "_session_id", None)),
+                dict.fromkeys(getattr(self, "_voice_state", {}) or {}),
+            )
+            return False
+
+        async def on_voice_state_update(self, data) -> None:
+            """Ensure we always re-dispatch when the second half of the handshake arrives."""
+            self._voice_state.update({"sessionId": data.get("session_id")})
+
+            channel_id = data.get("channel_id")
+            if not channel_id:
+                await self.disconnect()
+                self._voice_state.clear()
+                return
+
+            channel = self.guild.get_channel(int(channel_id))
+            if self.channel != channel:
+                self.channel = channel
+            if not channel:
+                await self.disconnect()
+                self._voice_state.clear()
+                return
+
+            # lava_lyra's stock handler returns early when data has no token
+            # (normal for VOICE_STATE_UPDATE). That drops the handshake if
+            # SERVER_UPDATE arrived first. Always dispatch when both keys exist.
+            if self.voice_ready():
+                try:
+                    await self._dispatch_voice_update()
+                except Exception as exc:
+                    log.debug("voice state dispatch failed: %s", exc)
 
         async def play(
             self,
@@ -140,10 +216,39 @@ try:
             end: int = 0,
             ignore_if_playing: bool = False,
         ):
-            if track.original is None and track.track_id:
-                track.original = track
+            # Wait for node + voice — stock play() silently no-ops when node is "unavailable"
+            ready = await self.wait_until_ready(timeout=10.0)
+            if not ready:
+                # One more short wait; still try play rather than silent success
+                await asyncio.sleep(0.5)
+                self._sync_endpoint()
+
+            if getattr(self._node, "_session_id", None):
+                self._sync_endpoint()
+
+            # Prefer playable youtube tracks; clear broken search flags when we
+            # already have an encoded track id from ytmsearch/ytsearch.
             try:
-                return await super().play(
+                if getattr(track, "track_id", None) and getattr(track, "original", None) is None:
+                    # Avoid re-search path that can fail silently for platform tracks
+                    if getattr(track, "_search_type", None):
+                        # Only clear when it already looks like a resolved playable track
+                        info = getattr(track, "info", None) or {}
+                        source = str(info.get("sourceName", "")).lower()
+                        if source in {"youtube", "youtubemusic", "soundcloud", "http", "local"}:
+                            try:
+                                track._search_type = None  # type: ignore[attr-defined]
+                            except Exception:
+                                pass
+                            try:
+                                track.original = track
+                            except Exception:
+                                pass
+            except Exception:
+                pass
+
+            try:
+                result = await super().play(
                     track,
                     start=start,
                     end=end,
@@ -153,14 +258,54 @@ try:
                 if "Invalid query parameters" not in str(exc) or not track.track_id:
                     raise
                 log.debug("retrying play with minimal payload after: %s", exc)
+                self._sync_endpoint()
                 self._current = track
+                payload = (
+                    {"track": {"encoded": track.track_id}, "position": start}
+                    if getattr(self._node, "_is_nodelink", False)
+                    else {
+                        "encodedTrack": track.track_id,
+                        "position": str(start),
+                    }
+                )
                 await self._node.send(
                     method="PATCH",
                     path=self._player_endpoint_uri,
                     guild_id=self._guild.id,
-                    data={"track": {"encoded": track.track_id}, "position": start},
+                    data=payload,
                 )
                 return track
+
+            # Stock play() can return the track without sending if node was down —
+            # detect and hard-retry once.
+            if (
+                result is not None
+                and getattr(self, "_current", None) is None
+                and getattr(track, "track_id", None)
+            ):
+                log.warning("play() returned without setting current; hard retry")
+                self._sync_endpoint()
+                if self.voice_ready():
+                    try:
+                        await self._dispatch_voice_update()
+                    except Exception:
+                        pass
+                self._current = track
+                payload = (
+                    {"track": {"encoded": track.track_id}, "position": start}
+                    if getattr(self._node, "_is_nodelink", False)
+                    else {
+                        "encodedTrack": track.track_id,
+                        "position": str(start),
+                    }
+                )
+                await self._node.send(
+                    method="PATCH",
+                    path=self._player_endpoint_uri,
+                    guild_id=self._guild.id,
+                    data=payload,
+                )
+            return result
 
     HAS_LYRA = True
 except ImportError:
@@ -402,7 +547,6 @@ class Music(MusicEvents, Package):
             return None
         if not ctx.voice_client:
             try:
-                
                 _resolve_pool_node()
                 await ctx.author.voice.channel.connect(
                     cls=VainPlayer, self_deaf=True
@@ -416,7 +560,17 @@ class Music(MusicEvents, Package):
                 log.exception("voice connect failed: %s", exc)
                 await ctx.warn(f"couldn't join voice: {exc}")
                 return None
-        return ctx.voice_client
+
+        player = ctx.voice_client
+        # Critical: wait for Discord voice handshake before any play()
+        if isinstance(player, VainPlayer) or hasattr(player, "wait_until_ready"):
+            ok = await player.wait_until_ready(timeout=10.0)
+            if not ok:
+                log.warning(
+                    "voice handshake incomplete guild=%s — play may be silent",
+                    ctx.guild.id if ctx.guild else None,
+                )
+        return player
 
     def _normalize_query(self, query: str) -> str:
         query = query.strip()
@@ -562,7 +716,19 @@ class Music(MusicEvents, Package):
         if node is None:
             return None
         try:
-            return await node.get_tracks(query)
+            # Pass search_type=None so existing ytmsearch:/ytsearch: prefixes
+            # are not double-wrapped as ytsearch:ytmsearch:...
+            return await node.get_tracks(query, search_type=None)
+        except TypeError:
+            # older lava_lyra without search_type kw
+            try:
+                return await node.get_tracks(query)
+            except TrackLoadError as e:
+                log.debug("track load failed for %r: %s", query, e)
+                return None
+            except Exception as e:
+                log.debug("unexpected load error for %r: %s", query, e)
+                return None
         except TrackLoadError as e:
             log.debug("track load failed for %r: %s", query, e)
             return None
@@ -920,6 +1086,8 @@ class Music(MusicEvents, Package):
             state.current = None
             return
         try:
+            if hasattr(player, "wait_until_ready"):
+                await player.wait_until_ready(timeout=8.0)
             await player.play(track)
         except Exception:
             log.exception("auto-advance failed in guild %s", guild_id)
@@ -1027,7 +1195,25 @@ class Music(MusicEvents, Package):
             state.current = first
             if len(tracks) > 1:
                 state.tracks.extend(tracks[1:])
+            # Voice handshake first — play() without it joins VC but is silent
+            if hasattr(player, "wait_until_ready"):
+                await player.wait_until_ready(timeout=10.0)
             await player.play(first)
+            # Confirm something is actually playing
+            await asyncio.sleep(0.35)
+            if not getattr(player, "is_playing", False) and not getattr(
+                player, "current", None
+            ):
+                log.error(
+                    "play() finished but player idle guild=%s track=%r id=%s",
+                    ctx.guild.id,
+                    getattr(first, "title", None),
+                    getattr(first, "track_id", None),
+                )
+                # one hard retry
+                if hasattr(player, "wait_until_ready"):
+                    await player.wait_until_ready(timeout=5.0)
+                await player.play(first)
             if state.active_preset:
                 try:
                     await self._apply_preset(player, state.active_preset)
