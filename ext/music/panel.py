@@ -1,4 +1,4 @@
-"""Now-playing panel art + interactive controls."""
+"""Now-playing panel art + select-menu controls."""
 
 from __future__ import annotations
 
@@ -68,7 +68,9 @@ async def fetch_image_bytes(url: str | None, *, timeout: float = 6.0) -> bytes |
         return None
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=timeout)) as resp:
+            async with session.get(
+                url, timeout=aiohttp.ClientTimeout(total=timeout)
+            ) as resp:
                 if resp.status != 200:
                     return None
                 return await resp.read()
@@ -85,7 +87,7 @@ def render_now_playing_card(
     album_art: bytes | None = None,
     accent: int = 0x5865F2,
 ) -> bytes:
-    """Aesthetic card: translucent album art bg, title, artist, dotted progress."""
+    """Card with opaque album-art background, title/artist, progress line + dot."""
     W, H = 900, 320
     pad = 36
 
@@ -94,56 +96,73 @@ def render_now_playing_card(
     ab = accent & 255
 
     
-    canvas = Image.new("RGBA", (W, H), (18, 18, 22, 255))
+    canvas = Image.new("RGBA", (W, H), (14, 14, 18, 255))
 
     
     if album_art:
         try:
             art = Image.open(io.BytesIO(album_art)).convert("RGBA")
-            art = art.resize((W, H), Image.Resampling.LANCZOS)
-            art = art.filter(ImageFilter.GaussianBlur(radius=22))
-            art = ImageEnhance.Brightness(art).enhance(0.45)
-            art.putalpha(110)
-            canvas = Image.alpha_composite(canvas, art)
+            
+            scale = max(W / art.width, H / art.height)
+            nw, nh = int(art.width * scale), int(art.height * scale)
+            art = art.resize((nw, nh), Image.Resampling.LANCZOS)
+            left = (nw - W) // 2
+            top = (nh - H) // 2
+            art = art.crop((left, top, left + W, top + H))
+            art = art.filter(ImageFilter.GaussianBlur(radius=10))
+            art = ImageEnhance.Brightness(art).enhance(0.55)
+            art = ImageEnhance.Color(art).enhance(0.9)
+            
+            canvas = Image.alpha_composite(
+                canvas, art.convert("RGBA")
+            )
+            
+            overlay = Image.new("RGBA", (W, H), (10, 10, 14, 140))
+            canvas = Image.alpha_composite(canvas, overlay)
         except Exception:
             pass
 
     
-    wash = Image.new("RGBA", (W, H), (ar, ag, ab, 28))
+    wash = Image.new("RGBA", (W, H), (ar, ag, ab, 35))
     canvas = Image.alpha_composite(canvas, wash)
 
     draw = ImageDraw.Draw(canvas)
     title_font = _load_font(34, bold=True)
     artist_font = _load_font(22, bold=False)
     time_font = _load_font(18, bold=False)
+    label_font = _load_font(16, bold=False)
 
-    
     cover_size = 200
-    cover_box = (pad, (H - cover_size) // 2, pad + cover_size, (H - cover_size) // 2 + cover_size)
+    cover_box = (
+        pad,
+        (H - cover_size) // 2,
+        pad + cover_size,
+        (H - cover_size) // 2 + cover_size,
+    )
     if album_art:
         try:
             cover = Image.open(io.BytesIO(album_art)).convert("RGBA")
             cover = cover.resize((cover_size, cover_size), Image.Resampling.LANCZOS)
-            
             mask = Image.new("L", (cover_size, cover_size), 0)
-            mdraw = ImageDraw.Draw(mask)
-            mdraw.rounded_rectangle((0, 0, cover_size, cover_size), radius=22, fill=255)
+            ImageDraw.Draw(mask).rounded_rectangle(
+                (0, 0, cover_size, cover_size), radius=22, fill=255
+            )
             canvas.paste(cover, (cover_box[0], cover_box[1]), mask)
         except Exception:
-            draw.rounded_rectangle(cover_box, radius=22, fill=(40, 40, 48, 200))
+            draw.rounded_rectangle(cover_box, radius=22, fill=(40, 40, 48, 220))
     else:
-        draw.rounded_rectangle(cover_box, radius=22, fill=(40, 40, 48, 200))
+        draw.rounded_rectangle(cover_box, radius=22, fill=(40, 40, 48, 220))
 
     text_x = pad + cover_size + 28
     text_max = W - text_x - pad
 
-    title_s = _fit_text(draw, title or "Unknown", title_font, text_max)
-    artist_s = _fit_text(draw, artist or "Unknown", artist_font, text_max)
+    title_s = _fit_text(draw, title or "Unknown", title_font, int(text_max))
+    artist_s = _fit_text(draw, artist or "Unknown", artist_font, int(text_max))
 
-    draw.text((text_x, pad + 28), title_s, font=title_font, fill=(245, 245, 250, 255))
-    draw.text((text_x, pad + 78), artist_s, font=artist_font, fill=(200, 200, 210, 230))
+    draw.text((text_x, pad + 4), "NOW PLAYING", font=label_font, fill=(ar, ag, ab, 240))
+    draw.text((text_x, pad + 28), title_s, font=title_font, fill=(250, 250, 252, 255))
+    draw.text((text_x, pad + 78), artist_s, font=artist_font, fill=(220, 220, 228, 240))
 
-    
     bar_x1 = text_x
     bar_x2 = W - pad
     bar_y = H - pad - 48
@@ -153,24 +172,19 @@ def render_now_playing_card(
     if length_ms and length_ms > 0:
         pct = max(0.0, min(1.0, float(position_ms) / float(length_ms)))
 
-    
-    track_col = (255, 255, 255, 45)
     draw.rounded_rectangle(
         (bar_x1, bar_y, bar_x2, bar_y + bar_h),
         radius=5,
-        fill=track_col,
+        fill=(255, 255, 255, 50),
     )
-
-    
     fill_w = int((bar_x2 - bar_x1) * pct)
     if fill_w > 4:
         draw.rounded_rectangle(
             (bar_x1, bar_y, bar_x1 + fill_w, bar_y + bar_h),
             radius=5,
-            fill=(ar, ag, ab, 240),
+            fill=(ar, ag, ab, 250),
         )
 
-    
     dot_r = 9
     dot_cx = bar_x1 + fill_w
     dot_cy = bar_y + bar_h // 2
@@ -181,21 +195,16 @@ def render_now_playing_card(
         width=3,
     )
 
-    
     left_t = _fmt_ms(position_ms)
     right_t = _fmt_ms(length_ms)
-    draw.text((bar_x1, bar_y + 18), left_t, font=time_font, fill=(210, 210, 220, 220))
+    draw.text((bar_x1, bar_y + 18), left_t, font=time_font, fill=(230, 230, 235, 230))
     tw = draw.textlength(right_t, font=time_font)
     draw.text(
         (bar_x2 - tw, bar_y + 18),
         right_t,
         font=time_font,
-        fill=(210, 210, 220, 220),
+        fill=(230, 230, 235, 230),
     )
-
-    
-    label_font = _load_font(16, bold=False)
-    draw.text((text_x, pad + 4), "NOW PLAYING", font=label_font, fill=(ar, ag, ab, 220))
 
     buf = io.BytesIO()
     canvas.convert("RGB").save(buf, format="PNG", optimize=True)
@@ -211,7 +220,9 @@ class AddTrackModal(ui.Modal, title="Add to queue"):
         max_length=400,
     )
 
-    def __init__(self, on_submit: Callable[[discord.Interaction, str], Coroutine[Any, Any, None]]):
+    def __init__(
+        self, on_submit: Callable[[discord.Interaction, str], Coroutine[Any, Any, None]]
+    ):
         super().__init__()
         self._on_submit = on_submit
 
@@ -220,7 +231,7 @@ class AddTrackModal(ui.Modal, title="Add to queue"):
 
 
 class MusicControlView(ui.View):
-    """pause/resume · skip · stop · add · queue + select menu."""
+    """Select-menu only controls (no action-row buttons, no option emojis)."""
 
     def __init__(self, cog: "Music", guild_id: int, *, paused: bool = False):
         super().__init__(timeout=None)
@@ -229,49 +240,43 @@ class MusicControlView(ui.View):
         self.message: discord.Message | None = None
         self._paused = paused
 
-        
-        self.pause_btn.label = "resume" if paused else "pause"
-        self.pause_btn.style = (
-            discord.ButtonStyle.success if paused else discord.ButtonStyle.secondary
-        )
-
+        pause_label = "Resume" if paused else "Pause"
         select = ui.Select(
-            placeholder="More controls…",
+            placeholder="Music controls…",
             min_values=1,
             max_values=1,
             options=[
                 discord.SelectOption(
+                    label=pause_label,
+                    value="pause",
+                    description="Pause or resume the current track",
+                ),
+                discord.SelectOption(
                     label="Skip",
                     value="skip",
                     description="Skip to the next track",
-                    emoji="⏭",
-                ),
-                discord.SelectOption(
-                    label="Stop",
-                    value="stop",
-                    description="Stop and leave voice",
-                    emoji="⏹",
                 ),
                 discord.SelectOption(
                     label="Add song",
                     value="add",
                     description="Queue a song or playlist URL",
-                    emoji="➕",
                 ),
                 discord.SelectOption(
                     label="Show queue",
                     value="queue",
                     description="View the queue (ephemeral)",
-                    emoji="📜",
                 ),
                 discord.SelectOption(
                     label="Refresh panel",
                     value="refresh",
-                    description="Update progress / art",
-                    emoji="🔄",
+                    description="Update progress and artwork",
+                ),
+                discord.SelectOption(
+                    label="Stop",
+                    value="stop",
+                    description="Stop playback and leave voice",
                 ),
             ],
-            row=1,
         )
         select.callback = self._on_select
         self.add_item(select)
@@ -299,79 +304,79 @@ class MusicControlView(ui.View):
             return False
         return True
 
-    @ui.button(label="pause", style=discord.ButtonStyle.secondary, row=0)
-    async def pause_btn(self, inter: discord.Interaction, button: ui.Button):
-        player = self._player(inter)
-        if player is None:
-            return
-        paused = bool(getattr(player, "is_paused", False))
-        await player.set_pause(not paused)
-        self._paused = not paused
-        button.label = "resume" if self._paused else "pause"
-        button.style = (
-            discord.ButtonStyle.success if self._paused else discord.ButtonStyle.secondary
-        )
-        await inter.response.edit_message(view=self)
-        await inter.followup.send(
-            "paused" if self._paused else "resumed", ephemeral=True
-        )
-
-    @ui.button(label="skip", style=discord.ButtonStyle.primary, row=0)
-    async def skip_btn(self, inter: discord.Interaction, button: ui.Button):
-        player = self._player(inter)
-        if player is None:
-            return
-        await inter.response.defer()
-        try:
-            await player.stop()
-        except Exception:
-            return
-        await self.cog._play_next(self.guild_id, player, force=True)
-
-    @ui.button(label="add", style=discord.ButtonStyle.secondary, row=0)
-    async def add_btn(self, inter: discord.Interaction, button: ui.Button):
-        async def _submit(i: discord.Interaction, query: str) -> None:
-            await self.cog._panel_add_track(i, self.guild_id, query)
-
-        await inter.response.send_modal(AddTrackModal(_submit))
-
-    @ui.button(label="queue", style=discord.ButtonStyle.secondary, row=0)
-    async def queue_btn(self, inter: discord.Interaction, button: ui.Button):
-        await self.cog._panel_show_queue(inter, self.guild_id)
-
-    @ui.button(label="stop", style=discord.ButtonStyle.danger, row=0)
-    async def stop_btn(self, inter: discord.Interaction, button: ui.Button):
-        player = self._player(inter)
-        if player is None:
-            return
-        await self.cog._stop_and_leave(self.guild_id, player)
-        try:
-            await inter.response.edit_message(
-                content=None,
-                attachments=[],
-                embed=discord.Embed(
-                    color=0x2B2D31,
-                    description="> stopped\n-# queue cleared",
+    def _rebuild_select(self) -> None:
+        
+        for child in list(self.children):
+            self.remove_item(child)
+        pause_label = "Resume" if self._paused else "Pause"
+        select = ui.Select(
+            placeholder="Music controls…",
+            min_values=1,
+            max_values=1,
+            options=[
+                discord.SelectOption(
+                    label=pause_label,
+                    value="pause",
+                    description="Pause or resume the current track",
                 ),
-                view=None,
-            )
-        except Exception:
-            try:
-                await inter.response.defer()
-            except Exception:
-                pass
+                discord.SelectOption(
+                    label="Skip",
+                    value="skip",
+                    description="Skip to the next track",
+                ),
+                discord.SelectOption(
+                    label="Add song",
+                    value="add",
+                    description="Queue a song or playlist URL",
+                ),
+                discord.SelectOption(
+                    label="Show queue",
+                    value="queue",
+                    description="View the queue (ephemeral)",
+                ),
+                discord.SelectOption(
+                    label="Refresh panel",
+                    value="refresh",
+                    description="Update progress and artwork",
+                ),
+                discord.SelectOption(
+                    label="Stop",
+                    value="stop",
+                    description="Stop playback and leave voice",
+                ),
+            ],
+        )
+        select.callback = self._on_select
+        self.add_item(select)
 
     async def _on_select(self, inter: discord.Interaction) -> None:
-        values = []
+        values: list[str] = []
         data = inter.data or {}
         if isinstance(data, dict):
             values = list(data.get("values") or [])
         choice = values[0] if values else ""
         player = self._player(inter)
 
+        if choice == "pause":
+            if player is None:
+                return await inter.response.send_message(
+                    "nothing playing", ephemeral=True
+                )
+            paused = bool(getattr(player, "is_paused", False))
+            await player.set_pause(not paused)
+            self._paused = not paused
+            self._rebuild_select()
+            await inter.response.edit_message(view=self)
+            await inter.followup.send(
+                "paused" if self._paused else "resumed", ephemeral=True
+            )
+            return
+
         if choice == "skip":
             if player is None:
-                return await inter.response.send_message("nothing playing", ephemeral=True)
+                return await inter.response.send_message(
+                    "nothing playing", ephemeral=True
+                )
             await inter.response.defer()
             try:
                 await player.stop()
@@ -382,7 +387,9 @@ class MusicControlView(ui.View):
 
         if choice == "stop":
             if player is None:
-                return await inter.response.send_message("nothing playing", ephemeral=True)
+                return await inter.response.send_message(
+                    "nothing playing", ephemeral=True
+                )
             await self.cog._stop_and_leave(self.guild_id, player)
             await inter.response.edit_message(
                 embed=discord.Embed(

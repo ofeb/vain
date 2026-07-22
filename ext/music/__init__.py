@@ -214,18 +214,19 @@ try:
                 await self._force_voice_update()
 
         async def on_voice_state_update(self, data) -> None:
-            self._voice_state.update({"sessionId": data.get("session_id")})
+            sid = data.get("session_id")
+            if sid:
+                self._voice_state.update({"sessionId": sid})
             channel_id = data.get("channel_id")
+            
+            
             if not channel_id:
-                await self.disconnect()
-                self._voice_state.clear()
                 return
             channel = self.guild.get_channel(int(channel_id))
             if channel is None:
-                await self.disconnect()
-                self._voice_state.clear()
                 return
             self.channel = channel
+            self._is_connected = True
             if self.voice_ready():
                 await self._force_voice_update()
 
@@ -1101,11 +1102,12 @@ class Music(MusicEvents, Package):
             if link
             else f"**{title}** — **{artist}**"
         )
+        
         emb = discord.Embed(
             color=color.base,
             description=compose(
                 body(header, song_line),
-                caption("youtube music · use the menu or buttons"),
+                caption("> -# source: **youtube music**"),
             ),
         )
 
@@ -1325,31 +1327,29 @@ class Music(MusicEvents, Package):
             state.current = track
         else:
             state.current = None
-            
             await self._set_vc_status(player, None)
-            try:
-                await player.disconnect(force=True)
-            except Exception:
-                pass
+            
+            
+            await asyncio.sleep(1.0)
+            state2 = self._queue(guild_id)
+            if state2.current is None and not state2.tracks:
+                try:
+                    if not getattr(player, "is_playing", False):
+                        await player.disconnect(force=True)
+                except Exception:
+                    pass
             return
         try:
             if hasattr(player, "wait_until_ready"):
-                await player.wait_until_ready(timeout=12.0)
+                await player.wait_until_ready(timeout=15.0)
             await player.play(track)
         except Exception:
             log.exception("auto-advance failed in guild %s", guild_id)
-            
             state.current = None
             if state.tracks:
                 await self._play_next(
-                    guild_id, player, force=force, _depth=_depth + 1
+                    guild_id, player, force=True, _depth=_depth + 1
                 )
-            else:
-                await self._set_vc_status(player, None)
-                try:
-                    await player.disconnect(force=True)
-                except Exception:
-                    pass
             return
         if state.active_preset:
             try:
@@ -1447,9 +1447,35 @@ class Music(MusicEvents, Package):
             state.current = first
             if len(tracks) > 1:
                 state.tracks.extend(tracks[1:])
+            
+            await asyncio.sleep(0.6)
             if hasattr(player, "wait_until_ready"):
-                await player.wait_until_ready(timeout=15.0)
-            await player.play(first)
+                ok = await player.wait_until_ready(timeout=15.0)
+                if not ok:
+                    log.warning(
+                        "voice handshake incomplete before play guild=%s",
+                        ctx.guild.id,
+                    )
+            try:
+                await player.play(first)
+            except Exception as exc:
+                log.exception("initial play failed: %s", exc)
+                try:
+                    player._current = None
+                except Exception:
+                    pass
+                
+                await asyncio.sleep(1.0)
+                if hasattr(player, "wait_until_ready"):
+                    await player.wait_until_ready(timeout=10.0)
+                try:
+                    await player.play(first)
+                except Exception as exc2:
+                    state.current = None
+                    log.exception("play retry failed: %s", exc2)
+                    return await ctx.fail(
+                        f"couldn't start playback — check nodelink/lavalink logs ({exc2})"
+                    )
             if state.active_preset:
                 try:
                     await self._apply_preset(player, state.active_preset)
