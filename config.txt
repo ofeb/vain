@@ -1,0 +1,467 @@
+export default {
+  server: {
+    host: '0.0.0.0',
+    port: 2009,
+    password: 'youshallnotpass',
+    useBunServer: false
+  },
+
+  cluster: {
+    enabled: true,
+    workers: 0,
+    minWorkers: 1,
+    runtime: {
+      workerMaxOldSpaceMb: 0,
+      workerExposeGc: false,
+      workerExecArgv: [],
+      sourceWorkerMaxOldSpaceMb: 0,
+      sourceWorkerExposeGc: false,
+      sourceWorkerExecArgv: []
+    },
+    specializedSourceWorker: {
+      enabled: true,
+      count: 1,
+      microWorkers: 2,
+      tasksPerWorker: 32,
+      silentLogs: true
+    },
+    commandTimeout: 8000,
+    fastCommandTimeout: 5000,
+    maxRetries: 2,
+    hibernation: {
+      enabled: true,
+      timeoutMs: 1200000
+    },
+    scaling: {
+      maxPlayersPerWorker: 20,
+      targetUtilization: 0.7,
+      scaleUpThreshold: 0.75,
+      scaleDownThreshold: 0.3,
+      checkIntervalMs: 5000,
+      idleWorkerTimeoutMs: 60000,
+      queueLengthScaleUpFactor: 5,
+      lagPenaltyLimit: 60,
+      cpuPenaltyLimit: 0.85
+    },
+    endpoint: {
+      patchEnabled: true,
+      allowExternalPatch: false,
+      code: 'CAPYBARA'
+    }
+  },
+
+  logging: {
+    level: 'info',
+    file: {
+      enabled: false,
+      path: 'logs',
+      rotation: 'daily',
+      ttlDays: 7
+    },
+    debug: {
+      all: false,
+      request: false,
+      session: true,
+      player: true,
+      filters: false,
+      sources: true,
+      lyrics: false,
+      youtube: true,
+      'youtube-cipher': true,
+      sabr: false,
+      potoken: false
+    }
+  },
+
+  connection: {
+    logAllChecks: false,
+    interval: 300000,
+    timeout: 10000,
+    thresholds: {
+      bad: 1,
+      average: 5
+    }
+  },
+
+  maxSearchResults: 10,
+  maxAlbumPlaylistLength: 100,
+  playerUpdateInterval: 2000,
+  statsUpdateInterval: 30000,
+  trackStuckThresholdMs: 10000,
+  eventTimeoutMs: 15000,
+  zombieThresholdMs: 60000,
+  enableHoloTracks: false,
+  enableTrackStreamEndpoint: false,
+  enableLoadStreamEndpoint: false,
+  resolveExternalLinks: false,
+  fetchChannelInfo: false,
+
+  // ONLY YouTube + YouTube Music for searches
+  // ytmsearch / ytsearch both go through the youtube source
+  defaultSearchSource: ['youtube'],
+  unifiedSearchSources: ['youtube'],
+
+  sponsorblock: {
+    enabled: false,
+    api: 'https://sponsor.ajay.app',
+    categories: [
+      'sponsor',
+      'selfpromo',
+      'interaction',
+      'intro',
+      'outro',
+      'preview',
+      'music_offtopic',
+      'filler'
+    ],
+    actionTypes: ['skip'],
+    skipMarginMs: 150
+  },
+
+  filters: {
+    enabled: {
+      tremolo: true,
+      vibrato: true,
+      lowpass: true,
+      highpass: true,
+      rotation: true,
+      karaoke: true,
+      distortion: true,
+      channelMix: true,
+      equalizer: true,
+      chorus: true,
+      compressor: true,
+      echo: true,
+      phaser: true,
+      timescale: true
+    }
+  },
+
+  sources: {
+    // ---- KEEP ENABLED ----
+    youtube: {
+      enabled: true,
+      allowItag: [],
+      targetItag: null,
+      getOAuthToken: false,
+      hl: 'en',
+      gl: 'US',
+      proxies: [],
+      // IMPORTANT: no SoundCloud/Deezer fallbacks — YT / YT Music only
+      fallbackSources: [],
+      clients: {
+        // Search clients (ytsearch / ytmsearch)
+        search: ['Android'],
+        // Playback clients (order = priority)
+        playback: [
+          'AndroidVR',
+          'TV',
+          'TVCast',
+          'WebEmbedded',
+          'WebParentTools',
+          'Web',
+          'IOS'
+        ],
+        resolve: [
+          'AndroidVR',
+          'TV',
+          'TVCast',
+          'WebEmbedded',
+          'WebParentTools',
+          'IOS',
+          'Web'
+        ],
+        settings: {
+          TV: {
+            // Optional: paste a TV OAuth refresh token if YouTube blocks streams
+            refreshToken: ['']
+          }
+        }
+      },
+      cipher: {
+        url: 'https://cipher.kikkia.dev/api',
+        token: null
+      }
+    },
+
+    // Direct HTTP streams (rare; leave on so raw audio URLs still work)
+    http: {
+      enabled: true,
+      userAgent: ''
+    },
+
+    // ---- DISABLE EVERYTHING ELSE ----
+    soundcloud: { enabled: false },
+    spotify: {
+      enabled: false,
+      clientId: '',
+      clientSecret: '',
+      externalAuthUrl: '',
+      market: 'US',
+      playlistLoadLimit: 1,
+      playlistPageLoadConcurrency: 5,
+      albumLoadLimit: 1,
+      albumPageLoadConcurrency: 5,
+      allowExplicit: true,
+      allowLocalFiles: false,
+      sp_dc: ''
+    },
+    deezer: { enabled: false },
+    applemusic: {
+      enabled: false,
+      mediaApiToken: '',
+      market: 'US',
+      playlistLoadLimit: 0,
+      albumLoadLimit: 0,
+      playlistPageLoadConcurrency: 5,
+      albumPageLoadConcurrency: 5,
+      allowExplicit: true
+    },
+    bandcamp: { enabled: false },
+    audius: {
+      enabled: false,
+      appName: '',
+      apiKey: '',
+      apiSecret: '',
+      playlistLoadLimit: 100,
+      albumLoadLimit: 100
+    },
+    tidal: {
+      enabled: false,
+      token: '',
+      countryCode: 'US',
+      playlistLoadLimit: 2,
+      playlistPageLoadConcurrency: 5,
+      hifiApis: [''],
+      hifiQualities: ['HI_RES_LOSSLESS', 'LOSSLESS', 'HIGH', 'LOW']
+    },
+    pandora: {
+      enabled: false,
+      remoteTokenUrl: ''
+    },
+    yandexmusic: {
+      enabled: false,
+      accessToken: '',
+      allowUnavailable: false,
+      allowExplicit: true,
+      artistLoadLimit: 1,
+      albumLoadLimit: 1,
+      playlistLoadLimit: 1,
+      proxy: { url: '', username: '', password: '' }
+    },
+    qobuz: {
+      enabled: false,
+      userToken: '',
+      formatId: '5',
+      allowExplicit: true
+    },
+    jiosaavn: {
+      enabled: false,
+      playlistLoadLimit: 50,
+      artistLoadLimit: 20,
+      proxy: { url: '', username: '', password: '' }
+    },
+    gaana: {
+      enabled: false,
+      streamQuality: 'high',
+      playlistLoadLimit: 100,
+      albumLoadLimit: 100,
+      artistLoadLimit: 100,
+      proxy: { url: '', username: '', password: '' }
+    },
+    vkmusic: {
+      enabled: false,
+      userToken: '',
+      userCookie: '',
+      proxy: { url: '', username: '', password: '' }
+    },
+    amazonmusic: { enabled: false },
+    audiomack: { enabled: false },
+    mixcloud: { enabled: false },
+    bluesky: { enabled: false },
+    anghami: { enabled: false, cookies: '' },
+    rss: { enabled: false },
+    songlink: {
+      enabled: false,
+      apiKey: '',
+      userCountry: 'US',
+      songIfSingle: true,
+      useApi: true,
+      useScrapeFallback: true,
+      preferredPlatforms: ['youtubeMusic', 'youtube'],
+      fallbackToAny: false
+    },
+    local: { enabled: false, basePath: './local-music/' },
+    eternalbox: {
+      enabled: false,
+      baseUrl: 'https://eternalboxmirror.xyz',
+      searchResults: 30,
+      enrichSpotify: false,
+      includeAnalysis: false,
+      includeAnalysisSummary: false,
+      eternalStream: false,
+      cacheMaxBytes: 20 * 1024 * 1024,
+      maxBranches: 4,
+      maxBranchThreshold: 75,
+      branchThresholdStart: 10,
+      branchThresholdStep: 5,
+      branchTargetDivisor: 6,
+      addLastEdge: true,
+      justBackwards: false,
+      justLongBranches: false,
+      removeSequentialBranches: true,
+      useFilteredSegments: true,
+      minRandomBranchChance: 0.18,
+      maxRandomBranchChance: 0.5,
+      randomBranchChanceDelta: 0.09,
+      timbreWeight: 1,
+      pitchWeight: 10,
+      loudStartWeight: 1,
+      loudMaxWeight: 1,
+      durationWeight: 100,
+      confidenceWeight: 1,
+      infiniteStream: false,
+      maxReconnects: 0,
+      reconnectDelayMs: 1000
+    },
+    vimeo: { enabled: false },
+    iheartradio: { enabled: false },
+    telegram: { enabled: false },
+    shazam: { enabled: false, allowExplicit: true },
+    bilibili: { enabled: false, sessdata: '' },
+    genius: { enabled: false },
+    pinterest: { enabled: false },
+    flowery: {
+      enabled: false,
+      voice: 'Salli',
+      translate: false,
+      silence: 0,
+      speed: 1.0,
+      enforceConfig: false
+    },
+    lazypytts: {
+      enabled: false,
+      service: 'Cerence',
+      voice: 'Luciana',
+      maxTextLength: 3000,
+      enforceConfig: false
+    },
+    'google-tts': { enabled: false, language: 'en-US' },
+    pipertts: { enabled: false, url: 'http://localhost:5000' },
+    instagram: { enabled: false },
+    kwai: { enabled: false },
+    twitch: { enabled: false },
+    nicovideo: { enabled: false },
+    reddit: { enabled: false },
+    tumblr: { enabled: false },
+    twitter: { enabled: false },
+    lastfm: { enabled: false, apiKey: '' },
+    netease: { enabled: false },
+    letrasmus: { enabled: false },
+    monochrome: {
+      enabled: false,
+      instances: [],
+      streamingInstances: [],
+      quality: 'HI_RES_LOSSLESS'
+    },
+    googledrive: { enabled: false }
+  },
+
+  lyrics: {
+    fallbackSource: 'genius',
+    youtube: { enabled: true },
+    genius: { enabled: false },
+    musixmatch: { enabled: false },
+    deezer: { enabled: false },
+    lrclib: { enabled: true },
+    letrasmus: { enabled: false },
+    bilibili: { enabled: false },
+    yandexmusic: { enabled: false },
+    monochrome: { enabled: false }
+  },
+
+  meanings: {
+    letrasmus: { enabled: false },
+    wikipedia: { enabled: false }
+  },
+
+  audio: {
+    quality: 'high',
+    encryption: 'aead_aes256_gcm_rtpsize',
+    resamplingQuality: 'best',
+    loudnessNormalizer: false,
+    lookaheadMs: 5,
+    gateThresholdLUFS: -60,
+    fading: {
+      enabled: false,
+      trackStart: { duration: 0, curve: 'linear', type: 'volume' },
+      trackEnd: { duration: 0, curve: 'linear', type: 'volume' },
+      trackStop: { duration: 0, curve: 'linear', type: 'volume' },
+      seek: { duration: 0, curve: 'linear', type: 'volume' },
+      pause: { duration: 0, curve: 'sinusoidal', type: 'tape' },
+      resume: { duration: 0, curve: 'sinusoidal', type: 'tape' },
+      ducking: {
+        enabled: false,
+        duration: 0,
+        targetVolume: 0.3,
+        curve: 'linear'
+      }
+    },
+    crossfade: {
+      enabled: false,
+      duration: 0,
+      curve: 'sinusoidal',
+      mode: 'preload',
+      minBufferMs: 250,
+      bufferMs: 0
+    }
+  },
+
+  voiceReceive: {
+    enabled: false,
+    format: 'opus'
+  },
+
+  routePlanner: {
+    strategy: 'RotateOnBan',
+    bannedIpData: 600000,
+    ipBlocks: []
+  },
+
+  rateLimit: {
+    enabled: true,
+    global: { maxRequests: 1000, timeWindowMs: 60000 },
+    perIp: { maxRequests: 100, timeWindowMs: 10000 },
+    perUserId: { maxRequests: 50, timeWindowMs: 5000 },
+    perGuildId: { maxRequests: 20, timeWindowMs: 5000 },
+    ignorePaths: [],
+    ignore: { userIds: [], guildIds: [], ips: [] }
+  },
+
+  dosProtection: {
+    enabled: true,
+    thresholds: { burstRequests: 50, timeWindowMs: 10000 },
+    mitigation: { delayMs: 500, blockDurationMs: 300000 },
+    ignore: { userIds: [], guildIds: [], ips: [] }
+  },
+
+  metrics: {
+    enabled: false,
+    authorization: {
+      type: 'Bearer',
+      username: 'admin',
+      password: ''
+    }
+  },
+
+  mix: {
+    enabled: true,
+    defaultVolume: 0.8,
+    maxLayersMix: 5,
+    autoCleanup: true
+  },
+
+  plugins: [],
+  pluginConfig: {}
+}
+c

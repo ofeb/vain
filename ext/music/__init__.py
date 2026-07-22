@@ -232,46 +232,67 @@ try:
 
         async def _resolve_encoded(self, track) -> str:
             """Return a playable encoded track id (resolve Spotify/Apple via YT if needed)."""
-            encoded = getattr(track, "track_id", None)
-            original = getattr(track, "original", None)
-            search_type = getattr(track, "_search_type", None)
+            encoded = _safe_attr(track, "track_id")
+            original = _safe_attr(track, "original")
+            search_type = _safe_attr(track, "_search_type")
+            info = _safe_attr(track, "info") or {}
+            if not isinstance(info, dict):
+                info = {}
+            source = str(info.get("sourceName", "") or "").lower().replace(" ", "")
 
-            
-            info = getattr(track, "info", None) or {}
-            source = str(info.get("sourceName", "")).lower()
-            if encoded and original is not None and original is track:
-                return encoded
-            if encoded and source in {
+            # Prefer already-encoded YouTube / YT Music tracks (no re-search)
+            playable_sources = {
                 "youtube",
                 "youtubemusic",
                 "ytmusic",
                 "soundcloud",
                 "http",
                 "local",
-            }:
-                return encoded
+                "bandcamp",
+                "vimeo",
+                "twitch",
+            }
+            if encoded and source in playable_sources:
+                return str(encoded)
+            if encoded and original is track:
+                return str(encoded)
+            if encoded and original is not None and original is not track:
+                oid = _safe_attr(original, "track_id")
+                if oid:
+                    return str(oid)
+            # If we already have an encoded track id, play it — do not crash on missing slots
+            if encoded and source not in {"spotify", "applemusic", "deezer"}:
+                return str(encoded)
 
-            
+            # Platform-only tracks: resolve to ytmsearch / ytsearch
             queries: list[str] = []
-            isrc = getattr(track, "isrc", None)
-            st = getattr(search_type, "value", None) or "ytmsearch"
-            if st in {"ytsearch", "ytmsearch", "scsearch", "spsearch", "amsearch"}:
-                prefix = st
-            else:
-                prefix = "ytmsearch"
+            isrc = _safe_attr(track, "isrc")
+            st = _safe_attr(search_type, "value") if search_type is not None else None
+            if not st and isinstance(search_type, str):
+                st = search_type
+            st = (st or "ytmsearch").lower()
+            if st not in {"ytsearch", "ytmsearch", "scsearch", "spsearch", "amsearch"}:
+                st = "ytmsearch"
             if isrc:
-                queries.append(f"{prefix}:{isrc}")
-            title = getattr(track, "title", "") or ""
-            author = getattr(track, "author", "") or ""
+                queries.append(f"{st}:{isrc}")
+                queries.append(f"ytmsearch:{isrc}")
+            title = _safe_attr(track, "title") or ""
+            author = _safe_attr(track, "author") or ""
             if title and author:
-                queries.append(f"{prefix}:{title} - {author}")
+                queries.append(f"ytmsearch:{title} - {author}")
                 queries.append(f"ytsearch:{title} {author} audio")
             elif title:
-                queries.append(f"{prefix}:{title}")
+                queries.append(f"ytmsearch:{title}")
+                queries.append(f"ytsearch:{title}")
 
             for q in queries:
                 try:
                     results = await self._node.get_tracks(q, search_type=None)
+                except TypeError:
+                    try:
+                        results = await self._node.get_tracks(q)
+                    except Exception:
+                        continue
                 except Exception:
                     continue
                 if not results:
@@ -280,16 +301,19 @@ try:
                 if not tracks:
                     continue
                 found = tracks[0]
+                found_id = _safe_attr(found, "track_id")
+                if not found_id:
+                    continue
                 try:
                     track.original = found
-                    track.track_id = found.track_id
+                    track.track_id = found_id
                 except Exception:
                     pass
-                return found.track_id
+                return str(found_id)
 
-            if not encoded:
-                raise TrackLoadError("No equivalent track was able to be found.")
-            return encoded
+            if encoded:
+                return str(encoded)
+            raise TrackLoadError("No equivalent track was able to be found.")
 
         async def play(
             self,
@@ -428,6 +452,17 @@ def _node_ready(node) -> bool:
     return available and connected and bool(session)
 
 
+def _safe_attr(obj, name: str, default=None):
+    """Read attrs on lava_lyra Track safely (slots raise if unset; getattr default can fail)."""
+    try:
+        return object.__getattribute__(obj, name)
+    except Exception:
+        try:
+            return getattr(obj, name, default)
+        except Exception:
+            return default
+
+
 class GuildQueue:
     __slots__ = (
         "tracks",
@@ -439,6 +474,7 @@ class GuildQueue:
         "text_channel_id",
         "control_message_id",
         "play_message_id",
+        "session_started_at",
     )
 
     def __init__(self) -> None:
@@ -451,6 +487,7 @@ class GuildQueue:
         self.text_channel_id: int | None = None
         self.control_message_id: int | None = None
         self.play_message_id: int | None = None
+        self.session_started_at: float = 0.0
 
 
 class Music(MusicEvents, Package):
@@ -1328,14 +1365,20 @@ class Music(MusicEvents, Package):
         else:
             state.current = None
             await self._set_vc_status(player, None)
-            
-            
-            await asyncio.sleep(1.0)
+            # Never leave immediately after join/play failures (was: join → leave)
+            import time as _time
+
+            age = _time.time() - (state.session_started_at or 0.0)
+            await asyncio.sleep(1.5)
             state2 = self._queue(guild_id)
-            if state2.current is None and not state2.tracks:
+            if (
+                state2.current is None
+                and not state2.tracks
+                and age >= 5.0
+                and not getattr(player, "is_playing", False)
+            ):
                 try:
-                    if not getattr(player, "is_playing", False):
-                        await player.disconnect(force=True)
+                    await player.disconnect(force=True)
                 except Exception:
                     pass
             return
@@ -1414,16 +1457,17 @@ class Music(MusicEvents, Package):
 
         state = self._queue(ctx.guild.id)
         state.text_channel_id = ctx.channel.id
+        import time as _time
+
+        if not state.session_started_at:
+            state.session_started_at = _time.time()
         if ctx.message is not None:
             state.play_message_id = ctx.message.id
         first = tracks[0]
         title, artist, link, platform = self._display_bits(first)
 
         try:
-            busy = bool(
-                getattr(player, "is_playing", False)
-                or getattr(player, "current", None)
-            )
+            busy = bool(getattr(player, "is_playing", False))
             if busy:
                 if play_next:
                     for t in reversed(tracks):

@@ -159,7 +159,6 @@ def render_now_playing_card(
     title_s = _fit_text(draw, title or "Unknown", title_font, int(text_max))
     artist_s = _fit_text(draw, artist or "Unknown", artist_font, int(text_max))
 
-    draw.text((text_x, pad + 4), "NOW PLAYING", font=label_font, fill=(ar, ag, ab, 240))
     draw.text((text_x, pad + 28), title_s, font=title_font, fill=(250, 250, 252, 255))
     draw.text((text_x, pad + 78), artist_s, font=artist_font, fill=(220, 220, 228, 240))
 

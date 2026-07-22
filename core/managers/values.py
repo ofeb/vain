@@ -188,9 +188,12 @@ class music:
     port: int = 2009
     password: str = "youshallnotpass"
     
+    
+    
     search_sources: tuple[str, ...] = (
         "ytmsearch",
         "ytsearch",
+        "scsearch",
     )
 
     @classmethod
