@@ -188,10 +188,16 @@ class Vain(commands.AutoShardedBot):
             },
         }
 
+        
+        owner_list = list(
+            getattr(config.Bot, "owners", None)
+            or getattr(config.bot, "owners", None)
+            or []
+        )
         super().__init__(
             command_prefix=self._get_prefix,
             intents=discord.Intents.all(),
-            owner_ids=config.Bot.owners,
+            owner_ids=set(int(x) for x in owner_list),
             help_command=VainHelp(),
             allowed_mentions=discord.AllowedMentions(
                 users=True, roles=False, everyone=False, replied_user=False
@@ -201,8 +207,18 @@ class Vain(commands.AutoShardedBot):
             chunk_guilds_at_startup=False,
             max_messages=1000,
         )
-        
         self._vain_help = self.help_command
+
+    @property
+    def owners(self) -> set[int]:
+        """Owner ids for codebase checks (`bot.owners`). Backed by discord.py owner_ids."""
+        ids: set[int] = set(self.owner_ids or ())
+        if getattr(self, "owner_id", None):
+            ids.add(int(self.owner_id))
+        
+        for oid in getattr(config.Bot, "owners", None) or getattr(config.bot, "owners", None) or []:
+            ids.add(int(oid))
+        return ids
 
     async def remember(self, key: str, ttl: int, loader: Callable[[], Awaitable[object]]) -> object:
         """small local ttl cache for hot runtime reads"""
