@@ -88,7 +88,7 @@ def panel_embed(
 
 log = logging.getLogger("Vain.music")
 
-# Discord channel for music play/fail diagnostics
+
 MUSIC_LOG_CHANNEL_ID = 1523010752045256724
 
 _SEARCH_PREFIX_RE = re.compile(r"^[a-z]+search:", re.I)
@@ -243,7 +243,7 @@ try:
                 info = {}
             source = str(info.get("sourceName", "") or "").lower().replace(" ", "")
 
-            # Prefer already-encoded YouTube / YT Music tracks (no re-search)
+            
             playable_sources = {
                 "youtube",
                 "youtubemusic",
@@ -263,11 +263,11 @@ try:
                 oid = _safe_attr(original, "track_id")
                 if oid:
                     return str(oid)
-            # If we already have an encoded track id, play it — do not crash on missing slots
+            
             if encoded and source not in {"spotify", "applemusic", "deezer"}:
                 return str(encoded)
 
-            # Platform-only tracks: resolve to ytmsearch / ytsearch
+            
             queries: list[str] = []
             isrc = _safe_attr(track, "isrc")
             st = _safe_attr(search_type, "value") if search_type is not None else None
@@ -1488,7 +1488,7 @@ class Music(MusicEvents, Package):
         else:
             state.current = None
             await self._set_vc_status(player, None)
-            # Never leave immediately after join/play failures (was: join → leave)
+            
             import time as _time
 
             age = _time.time() - (state.session_started_at or 0.0)

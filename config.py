@@ -27,6 +27,10 @@ class Bot:
     stream_url: str = ""
 
 
+
+bot = Bot
+
+
 class emojis:
     approve: str = default_emoji("approve", "<:approve_new:1526186163457490974>")
     warn: str = default_emoji("warn", "<:warning:1526186228561477642>")

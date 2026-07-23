@@ -105,8 +105,8 @@ def _matches_trigger(content: str, trigger: str, *, strict: bool) -> bool:
         return False
     if strict:
         return content == trigger
-    # Word/phrase boundary match — avoid substring false positives
-    # e.g. "pic" must not match "suspicious", "rep for pic" matches full phrase
+    
+    
     pattern = re.compile(
         r"(?<!\w)" + re.escape(trigger) + r"(?!\w)",
         re.IGNORECASE,

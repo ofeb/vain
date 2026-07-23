@@ -165,7 +165,7 @@ class Reaction(ReactionEvents, Package):
         """
         strict = False
         trigger_raw = trigger.strip()
-        # Parse trailing flags
+        
         flag_re = re.compile(
             r"(?:\s+--(?P<flag>strict|not_strict|not-strict))\s*$",
             re.IGNORECASE,
@@ -189,7 +189,7 @@ class Reaction(ReactionEvents, Package):
         if not emojis_list:
             return await ctx.warn("give at least one emoji")
 
-        # Validate by reacting to the command message first
+        
         for em in emojis_list:
             try:
                 await ctx.message.add_reaction(em)
@@ -232,7 +232,7 @@ class Reaction(ReactionEvents, Package):
             ctx.guild.id,
             trigger,
         )
-        # asyncpg execute returns status string like "DELETE 1"
+        
         if str(result).endswith("0"):
             return await ctx.fail(f"No auto reaction for `{trigger}`")
         await ctx.success(f"Deleted auto reaction for `{trigger}`")
@@ -411,7 +411,7 @@ class Reaction(ReactionEvents, Package):
         rows = []
         for record in reactions:
             trig = str(record["trigger"])
-            # Skip channel-id triggers (shown under messages list)
+            
             if trig.isnumeric() and ctx.guild.get_channel(int(trig)):
                 continue
             resp = record["response"] or []

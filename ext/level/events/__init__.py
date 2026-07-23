@@ -19,7 +19,7 @@ class LevelEvents:
         if message.author.bot or not message.guild:
             return
 
-        # Cooldown first (cheap) before DB
+        
         now = message.created_at.timestamp()
         last = self._cooldowns.get(message.author.id, 0)
         if now - last < XP_COOLDOWN:

@@ -14,7 +14,7 @@ import ujson
 from asyncpg import Connection, Pool, Record as BaseRecord, create_pool
 from asyncpg.exceptions import InvalidCatalogNameError
 from discord.ext.commands import Context, check
-from ....config import database
+from config import database
 from ..app_emojis import default_emoji
 from ..filetypes import POSTGRES_DB_FILE, ensure_storage_files
 

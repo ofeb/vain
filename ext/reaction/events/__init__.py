@@ -38,7 +38,7 @@ class ReactionEvents(Package):
             return
         content = ctx.message.content or ""
         if not content and not ctx.message.attachments:
-            # still allow channel-wide auto reactions (trigger = channel id)
+            
             pass
 
         try:
@@ -56,7 +56,7 @@ class ReactionEvents(Package):
         if not records:
             return
 
-        # Prefer longer triggers first (same as autoresponder)
+        
         records = sorted(
             records,
             key=lambda r: (-len(str(r["trigger"] or "")), str(r["trigger"] or "").lower()),
@@ -69,9 +69,9 @@ class ReactionEvents(Package):
             if not trigger:
                 continue
 
-            # Channel-wide: trigger is the channel id
+            
             if trigger == channel_id:
-                pass  # always matches this channel
+                pass  
             elif not content:
                 continue
             elif not _matches_trigger(
@@ -88,7 +88,7 @@ class ReactionEvents(Package):
                 except Exception:
                     continue
 
-            # One word-trigger match is enough; still allow channel-wide separately
+            
             if trigger != channel_id and applied:
-                # keep scanning only for other channel-id rows
+                
                 break
