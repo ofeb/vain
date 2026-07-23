@@ -1706,7 +1706,7 @@ class Music(MusicEvents, Package):
         player = guild.voice_client if guild else None
         if player is None:
             return
-        # Don't refresh if nothing is playing / wrong track session
+        
         if state.current is None:
             return
         channel = (
@@ -1747,7 +1747,7 @@ class Music(MusicEvents, Package):
             return
 
         await self._set_vc_status(player, track)
-        # New track → refresh art cache
+        
         state.panel_art_bytes = None
 
         if state.control_message_id:
@@ -1762,7 +1762,7 @@ class Music(MusicEvents, Package):
             guild_id, track, player, reuse_art=True
         )
 
-        # Silent: no reply ping, suppress push notifications
+        
         kwargs: dict = {
             "embed": emb,
             "view": view,
@@ -1778,7 +1778,7 @@ class Music(MusicEvents, Package):
             view.message = msg
             self._start_panel_refresh(guild_id)
         except TypeError:
-            # Older discord.py without silent=
+            
             kwargs.pop("silent", None)
             try:
                 msg = await channel.send(**kwargs)
@@ -1820,7 +1820,7 @@ class Music(MusicEvents, Package):
             return None
 
         q_low = q.lower()
-        # Exact / substring title-author match
+        
         for i, tr in enumerate(state.tracks):
             title, artist, link, _ = self._display_bits(tr)
             blob = f"{title} {artist} {link} {getattr(tr, 'uri', '') or ''}".lower()
@@ -1830,7 +1830,7 @@ class Music(MusicEvents, Package):
                 return i
             if title.lower() == q_low or f"{title} - {artist}".lower() == q_low:
                 return i
-        # Token hit scoring
+        
         tokens = [t for t in re.split(r"\s+", q_low) if len(t) >= 2]
         best_i, best_score = None, 0
         for i, tr in enumerate(state.tracks):
@@ -2364,7 +2364,7 @@ class Music(MusicEvents, Package):
             color=color.base,
             title=f"Queue — {ctx.guild.name}",
         )
-        # Paginated, no goto button
+        
         return await ctx.paginate(
             embed,
             lines,
@@ -2516,7 +2516,7 @@ class Music(MusicEvents, Package):
 
         idx = self._queue_match_index(state, target)
         if idx is not None:
-            # Drop tracks before target; play target next immediately
+            
             chosen = state.tracks[idx]
             state.tracks = state.tracks[idx + 1 :]
             state.tracks.insert(0, chosen)
@@ -2528,7 +2528,7 @@ class Music(MusicEvents, Package):
             await self._play_next(ctx.guild.id, player, force=True)
             return await ctx.success(f"jumped to **{title}** — **{artist}**")
 
-        # Not in queue — resolve and play now
+        
         track = await self._first_track(target)
         if track is None:
             return await ctx.warn("couldn't find that track in queue or search")
@@ -2570,7 +2570,7 @@ class Music(MusicEvents, Package):
                 f"priority set · **{title}** — **{artist}** plays next"
             )
 
-        # Resolve outside queue and insert front
+        
         track = await self._first_track(target)
         if track is None:
             return await ctx.warn("couldn't find that track")

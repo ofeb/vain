@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from typing import Iterable, Sequence
 
 import discord
@@ -73,12 +74,57 @@ class Paginator:
         self.message: discord.Message | None = None
 
     async def start(self) -> discord.Message:
-        self.message = await send_pages(
-            self.ctx,
-            self.pages,
-            start_index=self.start_index,
-            owner_only=self.owner_only,
-            timeout=self.timeout,
-            show_goto=self.show_goto,
-        )
+        
+        kwargs = {
+            "start_index": self.start_index,
+            "owner_only": self.owner_only,
+            "timeout": self.timeout,
+            "show_goto": self.show_goto,
+        }
+        try:
+            params = inspect.signature(send_pages).parameters
+            if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values()):
+                filtered = kwargs
+            else:
+                filtered = {k: v for k, v in kwargs.items() if k in params}
+        except (TypeError, ValueError):
+            filtered = {
+                k: v
+                for k, v in kwargs.items()
+                if k in {"start_index", "owner_only", "timeout"}
+            }
+
+        
+        if not self.show_goto and "show_goto" not in filtered:
+            try:
+                view_kwargs = {
+                    "timeout": self.timeout,
+                    "start_index": self.start_index,
+                    "owner_only": self.owner_only,
+                    "show_goto": False,
+                }
+                try:
+                    vparams = inspect.signature(PaginateView.__init__).parameters
+                    if not any(
+                        p.kind == inspect.Parameter.VAR_KEYWORD for p in vparams.values()
+                    ):
+                        view_kwargs = {k: v for k, v in view_kwargs.items() if k in vparams}
+                except (TypeError, ValueError):
+                    view_kwargs = {
+                        "timeout": self.timeout,
+                        "start_index": self.start_index,
+                        "owner_only": self.owner_only,
+                    }
+                view = PaginateView(self.ctx, list(self.pages), **view_kwargs)
+                
+                if hasattr(view, "show_goto"):
+                    view.show_goto = False
+                    if hasattr(view, "_rebuild"):
+                        view._rebuild()
+                self.message = await view.start()
+                return self.message
+            except TypeError:
+                pass
+
+        self.message = await send_pages(self.ctx, self.pages, **filtered)
         return self.message
