@@ -6,7 +6,6 @@ from typing import Final
 
 from core.managers.app_emojis import default_emoji, prime_emoji_environment
 
-# config.py lives at the project root (same dir as launcher.py)
 repo_root: Final[Path] = Path(__file__).resolve().parent
 root: Final[Path] = repo_root
 storage: Final[Path] = root / "core" / "storage"
