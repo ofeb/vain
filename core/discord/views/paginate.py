@@ -311,6 +311,7 @@ class PaginateView(discord.ui.LayoutView):
         timeout: float | None = None,
         start_index: int = 0,
         owner_only: bool = True,
+        show_goto: bool = True,
     ) -> None:
         super().__init__(timeout=timeout if timeout is not None else 180)
         self.ctx = ctx
@@ -318,6 +319,7 @@ class PaginateView(discord.ui.LayoutView):
         self.index = min(max(start_index, 0), max(len(self.pages) - 1, 0))
         self.message: discord.Message | None = None
         self.owner_only = owner_only
+        self.show_goto = show_goto
         self._rebuild()
 
     def _page_container(self) -> discord.ui.Container:
@@ -340,21 +342,22 @@ class PaginateView(discord.ui.LayoutView):
                 style=discord.ButtonStyle.secondary,
                 emoji=discord.PartialEmoji.from_str(emojis.paginator.next),
             )
-            goto_btn = discord.ui.Button(
-                style=discord.ButtonStyle.secondary,
-                emoji=discord.PartialEmoji.from_str(emojis.paginator.navigate),
-            )
             cancel_btn = discord.ui.Button(
                 style=discord.ButtonStyle.danger,
                 emoji=discord.PartialEmoji.from_str(emojis.paginator.cancel),
             )
             prev_btn.callback = self._prev
             next_btn.callback = self._next
-            goto_btn.callback = self._goto
             cancel_btn.callback = self._cancel
             row.add_item(prev_btn)
             row.add_item(next_btn)
-            row.add_item(goto_btn)
+            if self.show_goto:
+                goto_btn = discord.ui.Button(
+                    style=discord.ButtonStyle.secondary,
+                    emoji=discord.PartialEmoji.from_str(emojis.paginator.navigate),
+                )
+                goto_btn.callback = self._goto
+                row.add_item(goto_btn)
             row.add_item(cancel_btn)
             container.add_item(row)
             
@@ -439,6 +442,7 @@ async def send_pages(
     start_index: int = 0,
     owner_only: bool = True,
     timeout: float | None = None,
+    show_goto: bool = True,
 ) -> discord.Message:
     """send or attach paginated embeds; skip buttons when there is only one page."""
     pages = list(pages)
@@ -466,6 +470,7 @@ async def send_pages(
         timeout=timeout,
         start_index=start_index,
         owner_only=owner_only,
+        show_goto=show_goto,
     )
     if message is not None:
         return await view.attach(message)

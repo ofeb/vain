@@ -57,6 +57,7 @@ class Paginator:
         timeout: float | None = None,
         start_index: int = 0,
         owner_only: bool = True,
+        show_goto: bool = True,
         **kwargs,
     ) -> None:
         if isinstance(pages, list):
@@ -67,6 +68,7 @@ class Paginator:
         self.timeout = timeout
         self.start_index = start_index
         self.owner_only = owner_only
+        self.show_goto = show_goto
         self.kwargs = kwargs
         self.message: discord.Message | None = None
 
@@ -77,5 +79,6 @@ class Paginator:
             start_index=self.start_index,
             owner_only=self.owner_only,
             timeout=self.timeout,
+            show_goto=self.show_goto,
         )
         return self.message

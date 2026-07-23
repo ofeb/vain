@@ -639,6 +639,7 @@ class GuildQueue:
         "control_message_id",
         "play_message_id",
         "session_started_at",
+        "panel_art_bytes",
     )
 
     def __init__(self) -> None:
@@ -652,6 +653,7 @@ class GuildQueue:
         self.control_message_id: int | None = None
         self.play_message_id: int | None = None
         self.session_started_at: float = 0.0
+        self.panel_art_bytes: bytes | None = None
 
 
 class Music(MusicEvents, Package):
@@ -659,14 +661,15 @@ class Music(MusicEvents, Package):
         "vaporwave", "karaoke", "nightcore", "boost", "flat",
         "chipmunk", "piano", "metal", "vibrato", "8d", "soft",
     )
+    PANEL_REFRESH_SECONDS = 30
 
     def __init__(self, bot: Vain):
         super().__init__(bot)
         self.queues: dict[int, GuildQueue] = {}
         self._node = None
         self._node_lock = asyncio.Lock()
-        
         self._track_meta: dict[str, dict] = {}
+        self._panel_tasks: dict[int, asyncio.Task] = {}
 
     async def music_log(
         self,
@@ -1607,8 +1610,14 @@ class Music(MusicEvents, Package):
             log.debug("vc status update failed: %s", exc)
 
     async def _build_panel_payload(
-        self, guild_id: int, track, player=None
+        self,
+        guild_id: int,
+        track,
+        player=None,
+        *,
+        reuse_art: bool = True,
     ) -> tuple[discord.Embed, discord.File | None, MusicControlView]:
+        state = self._queue(guild_id)
         title, artist, link, platform = self._display_bits(track)
         pos = int(getattr(player, "position", 0) or 0) if player else 0
         length = int(getattr(track, "length", 0) or 0)
@@ -1626,17 +1635,21 @@ class Music(MusicEvents, Package):
             if link
             else f"**{title}** — **{artist}**"
         )
+        time_line = f"`{self._fmt_ms(pos)}` / `{self._fmt_ms(length)}`"
 
         emb = discord.Embed(
             color=color.base,
             description=compose(
-                body(header, song_line),
+                body(header, song_line, time_line),
                 caption(provider_line),
             ),
         )
 
         art_url = getattr(track, "thumbnail", None)
-        art_bytes = await fetch_image_bytes(str(art_url) if art_url else None)
+        art_bytes = state.panel_art_bytes if reuse_art else None
+        if art_bytes is None:
+            art_bytes = await fetch_image_bytes(str(art_url) if art_url else None)
+            state.panel_art_bytes = art_bytes
         file = None
         try:
             card = await asyncio.to_thread(
@@ -1661,8 +1674,71 @@ class Music(MusicEvents, Package):
         view = MusicControlView(self, guild_id, paused=paused)
         return emb, file, view
 
+    def _cancel_panel_refresh(self, guild_id: int) -> None:
+        task = self._panel_tasks.pop(guild_id, None)
+        if task is not None and not task.done():
+            task.cancel()
+
+    def _start_panel_refresh(self, guild_id: int) -> None:
+        self._cancel_panel_refresh(guild_id)
+
+        async def _loop() -> None:
+            try:
+                while True:
+                    await asyncio.sleep(self.PANEL_REFRESH_SECONDS)
+                    await self._refresh_control_panel(guild_id)
+            except asyncio.CancelledError:
+                return
+            except Exception:
+                log.exception("panel refresh loop crashed guild=%s", guild_id)
+
+        self._panel_tasks[guild_id] = asyncio.create_task(
+            _loop(),
+            name=f"music-panel-{guild_id}",
+        )
+
+    async def _refresh_control_panel(self, guild_id: int) -> None:
+        """Edit existing control panel image/embed with updated progress."""
+        state = self._queue(guild_id)
+        if not state.control_message_id or not state.current:
+            return
+        guild = self.bot.get_guild(guild_id)
+        player = guild.voice_client if guild else None
+        if player is None:
+            return
+        # Don't refresh if nothing is playing / wrong track session
+        if state.current is None:
+            return
+        channel = (
+            self.bot.get_channel(state.text_channel_id)
+            if state.text_channel_id
+            else None
+        )
+        if channel is None:
+            return
+        try:
+            msg = await channel.fetch_message(state.control_message_id)
+        except Exception:
+            return
+        try:
+            emb, file, view = await self._build_panel_payload(
+                guild_id,
+                state.current,
+                player,
+                reuse_art=True,
+            )
+            kwargs: dict = {
+                "embed": emb,
+                "view": view,
+                "attachments": [file] if file is not None else [],
+            }
+            await msg.edit(**kwargs)
+            view.message = msg
+        except Exception:
+            log.debug("panel refresh edit failed guild=%s", guild_id, exc_info=True)
+
     async def _send_control_panel(self, guild_id: int, player, track) -> None:
-        """Delete old panel, send a fresh one (reply to ,play when possible)."""
+        """Delete old panel, send a fresh silent one, start 30s progress refresh."""
         state = self._queue(guild_id)
         channel = None
         if state.text_channel_id:
@@ -1670,10 +1746,10 @@ class Music(MusicEvents, Package):
         if channel is None:
             return
 
-        
         await self._set_vc_status(player, track)
+        # New track → refresh art cache
+        state.panel_art_bytes = None
 
-        
         if state.control_message_id:
             try:
                 old = await channel.fetch_message(state.control_message_id)
@@ -1682,57 +1758,45 @@ class Music(MusicEvents, Package):
                 pass
             state.control_message_id = None
 
-        emb, file, view = await self._build_panel_payload(guild_id, track, player)
+        emb, file, view = await self._build_panel_payload(
+            guild_id, track, player, reuse_art=True
+        )
 
-        
-        reference = None
-        if state.play_message_id:
-            try:
-                play_msg = await channel.fetch_message(state.play_message_id)
-                reference = play_msg.to_reference(fail_if_not_exists=False)
-            except Exception:
-                state.play_message_id = None
-                reference = None
-
+        # Silent: no reply ping, suppress push notifications
         kwargs: dict = {
             "embed": emb,
             "view": view,
             "allowed_mentions": discord.AllowedMentions.none(),
+            "silent": True,
         }
         if file is not None:
             kwargs["file"] = file
-        if reference is not None:
-            kwargs["reference"] = reference
 
         try:
             msg = await channel.send(**kwargs)
             state.control_message_id = msg.id
             view.message = msg
-        except Exception:
-            
+            self._start_panel_refresh(guild_id)
+        except TypeError:
+            # Older discord.py without silent=
+            kwargs.pop("silent", None)
             try:
-                kwargs.pop("reference", None)
-                emb2, file2, view2 = await self._build_panel_payload(
-                    guild_id, track, player
-                )
-                send_kw = {
-                    "embed": emb2,
-                    "view": view2,
-                    "allowed_mentions": discord.AllowedMentions.none(),
-                }
-                if file2 is not None:
-                    send_kw["file"] = file2
-                msg = await channel.send(**send_kw)
+                msg = await channel.send(**kwargs)
                 state.control_message_id = msg.id
-                view2.message = msg
+                view.message = msg
+                self._start_panel_refresh(guild_id)
             except Exception:
                 log.exception("failed to send control panel guild=%s", guild_id)
+        except Exception:
+            log.exception("failed to send control panel guild=%s", guild_id)
 
     async def _stop_and_leave(self, guild_id: int, player) -> None:
+        self._cancel_panel_refresh(guild_id)
         state = self._queue(guild_id)
         state.tracks.clear()
         state.current = None
         state.loop = False
+        state.panel_art_bytes = None
         await self._set_vc_status(player, None)
         try:
             await player.stop()
@@ -1743,6 +1807,40 @@ class Music(MusicEvents, Package):
         except Exception:
             pass
         self.queues.pop(guild_id, None)
+
+    def _queue_match_index(self, state: GuildQueue, query: str) -> int | None:
+        """Resolve a queue index from `1`, song name, or url. 0-based index or None."""
+        q = (query or "").strip()
+        if not q:
+            return None
+        if q.isdigit():
+            idx = int(q) - 1
+            if 0 <= idx < len(state.tracks):
+                return idx
+            return None
+
+        q_low = q.lower()
+        # Exact / substring title-author match
+        for i, tr in enumerate(state.tracks):
+            title, artist, link, _ = self._display_bits(tr)
+            blob = f"{title} {artist} {link} {getattr(tr, 'uri', '') or ''}".lower()
+            meta = self._meta(tr)
+            src = str(meta.get("source_url") or "")
+            if q_low in blob or (src and q_low in src.lower()) or q_low in (getattr(tr, "uri", "") or "").lower():
+                return i
+            if title.lower() == q_low or f"{title} - {artist}".lower() == q_low:
+                return i
+        # Token hit scoring
+        tokens = [t for t in re.split(r"\s+", q_low) if len(t) >= 2]
+        best_i, best_score = None, 0
+        for i, tr in enumerate(state.tracks):
+            title, artist, _, _ = self._display_bits(tr)
+            combined = f"{title} {artist}".lower()
+            score = sum(1 for t in tokens if t in combined)
+            if score > best_score and score >= max(1, len(tokens) // 2):
+                best_score = score
+                best_i = i
+        return best_i
 
     async def _panel_show_queue(
         self, inter: discord.Interaction, guild_id: int
@@ -1835,6 +1933,8 @@ class Music(MusicEvents, Package):
             state.current = track
         else:
             state.current = None
+            state.panel_art_bytes = None
+            self._cancel_panel_refresh(guild_id)
             await self._set_vc_status(player, None)
             
             import time as _time
@@ -2254,20 +2354,22 @@ class Music(MusicEvents, Package):
                 f"**now:** {m.get('display_title') or state.current.title} — "
                 f"{m.get('display_author') or state.current.author}"
             )
-        for i, t in enumerate(state.tracks[:15], 1):
+        for i, t in enumerate(state.tracks, 1):
             m = self._meta(t)
             lines.append(
                 f"`{i}.` **{m.get('display_title') or t.title}** — "
                 f"{m.get('display_author') or t.author}"
             )
-        await ctx.send(
-            embed=discord.Embed(
-                color=color.base,
-                description=compose(
-                    body(*lines),
-                    caption(f"{len(state.tracks)} queued"),
-                ),
-            )
+        embed = discord.Embed(
+            color=color.base,
+            title=f"Queue — {ctx.guild.name}",
+        )
+        # Paginated, no goto button
+        return await ctx.paginate(
+            embed,
+            lines,
+            split=10,
+            show_goto=False,
         )
 
     @hybrid(
@@ -2395,29 +2497,118 @@ class Music(MusicEvents, Package):
         self._queue(ctx.guild.id).volume = volume
         await ctx.success(f"volume **{volume}%**")
 
-    @hybrid(name="fastforward", guild_only=True)
-    @describe(position="Seconds to fast forward")
-    async def fastforward(self, ctx: Context, position: int) -> None:
+    @hybrid(name="fastforward", aliases=["ff", "jump"], guild_only=True)
+    @describe(target="Queue #, song name, or URL to jump to (skips current)")
+    async def fastforward(self, ctx: Context, *, target: str) -> None:
+        """Jump the queue to a track now (by position, name, or URL).
+
+        Examples:
+        - `,fastforward 3` — play queue #3 now
+        - `,fastforward blinding lights` — find in queue / search and play
+        - `,fastforward https://open.spotify.com/track/...`
+        """
         player = ctx.voice_client
-        if player is None or player.current is None:
+        if player is None:
+            return await ctx.warn("nothing playing")
+        state = self._queue(ctx.guild.id)
+        if not state.tracks and not state.current:
+            return await ctx.warn("queue is empty")
+
+        idx = self._queue_match_index(state, target)
+        if idx is not None:
+            # Drop tracks before target; play target next immediately
+            chosen = state.tracks[idx]
+            state.tracks = state.tracks[idx + 1 :]
+            state.tracks.insert(0, chosen)
+            title, artist, _, _ = self._display_bits(chosen)
+            try:
+                await player.stop()
+            except Exception:
+                pass
+            await self._play_next(ctx.guild.id, player, force=True)
+            return await ctx.success(f"jumped to **{title}** — **{artist}**")
+
+        # Not in queue — resolve and play now
+        track = await self._first_track(target)
+        if track is None:
+            return await ctx.warn("couldn't find that track in queue or search")
+        state.tracks.insert(0, track)
+        title, artist, _, _ = self._display_bits(track)
+        try:
+            await player.stop()
+        except Exception:
+            pass
+        await self._play_next(ctx.guild.id, player, force=True)
+        return await ctx.success(f"jumped to **{title}** — **{artist}**")
+
+    @hybrid(name="priority", aliases=["prio", "playnext"], guild_only=True)
+    @describe(target="Queue #, song name, or URL to play after the current track")
+    async def priority(self, ctx: Context, *, target: str) -> None:
+        """Move a track to the front of the queue (plays when current song ends).
+
+        Examples:
+        - `,priority 5`
+        - `,priority never gonna give you up`
+        - `,priority https://open.spotify.com/track/...`
+        """
+        state = self._queue(ctx.guild.id)
+        player = ctx.voice_client
+        if player is None and not state.tracks and not state.current:
+            return await ctx.warn("nothing playing")
+
+        idx = self._queue_match_index(state, target)
+        if idx is not None:
+            if idx == 0:
+                title, artist, _, _ = self._display_bits(state.tracks[0])
+                return await ctx.success(
+                    f"**{title}** — **{artist}** is already next up"
+                )
+            chosen = state.tracks.pop(idx)
+            state.tracks.insert(0, chosen)
+            title, artist, _, _ = self._display_bits(chosen)
+            return await ctx.success(
+                f"priority set · **{title}** — **{artist}** plays next"
+            )
+
+        # Resolve outside queue and insert front
+        track = await self._first_track(target)
+        if track is None:
+            return await ctx.warn("couldn't find that track")
+        state.tracks.insert(0, track)
+        if ctx.channel:
+            state.text_channel_id = ctx.channel.id
+        title, artist, _, _ = self._display_bits(track)
+        return await ctx.success(
+            f"priority queued · **{title}** — **{artist}** plays next"
+        )
+
+    @hybrid(name="seek", guild_only=True)
+    @describe(seconds="Seconds to seek forward (negative to go back)")
+    async def seek(self, ctx: Context, seconds: int) -> None:
+        """Seek within the current track by seconds."""
+        player = ctx.voice_client
+        if player is None or getattr(player, "current", None) is None:
             return await ctx.warn("nothing playing")
         length = int(getattr(player.current, "length", 0) or 0)
-        target = min(int(player.position) + position * 1000, length)
+        target = int(player.position) + seconds * 1000
+        target = max(0, min(target, length) if length else max(0, target))
         await player.seek(target)
-        await ctx.success(f"+{position}s")
+        sign = "+" if seconds >= 0 else ""
+        await ctx.success(f"seek {sign}{seconds}s → `{self._fmt_ms(target)}`")
 
     @hybrid(name="rewind", guild_only=True)
     @describe(position="Seconds to rewind")
     async def rewind(self, ctx: Context, position: int) -> None:
         player = ctx.voice_client
-        if player is None or player.current is None:
+        if player is None or getattr(player, "current", None) is None:
             return await ctx.warn("nothing playing")
         target = max(int(player.position) - position * 1000, 0)
         await player.seek(target)
-        await ctx.success(f"-{position}s")
+        await ctx.success(f"-{position}s → `{self._fmt_ms(target)}`")
 
     @hybrid(name="disconnect", aliases=["dc", "leave"], guild_only=True)
     async def disconnect(self, ctx: Context) -> None:
+        self._cancel_panel_refresh(ctx.guild.id)
         if ctx.voice_client:
             try:
                 await ctx.voice_client.disconnect(force=True)

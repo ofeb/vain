@@ -118,6 +118,10 @@ class MusicEvents(Package):
         if humans:
             return
         try:
+            self._cancel_panel_refresh(guild.id)
+        except Exception:
+            pass
+        try:
             await self._set_vc_status(vc, None)
         except Exception:
             pass
