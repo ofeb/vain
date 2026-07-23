@@ -141,51 +141,96 @@ try:
                 node = _resolve_pool_node()
             super().__init__(client, channel, node=node)
             self._sync_endpoint()
+            # Ensure this player is tracked on the node immediately
+            try:
+                self._node._players[self._guild.id] = self  # type: ignore[attr-defined]
+            except Exception:
+                pass
 
         def _sync_endpoint(self) -> None:
             sid = getattr(self._node, "_session_id", None)
             if sid:
                 self._player_endpoint_uri = f"sessions/{sid}/players"
+            else:
+                # Keep a sentinel so we never silently hit sessions/None/...
+                self._player_endpoint_uri = "sessions/pending/players"
 
         def voice_ready(self) -> bool:
             vs = getattr(self, "_voice_state", None) or {}
-            return "sessionId" in vs and "event" in vs
-
-        async def _force_voice_update(self) -> bool:
-            """Push voice state to Lavalink. Uses subset keys (stock requires exact key set)."""
-            vs = getattr(self, "_voice_state", None) or {}
             if "sessionId" not in vs or "event" not in vs:
                 return False
-            event = vs["event"]
+            event = vs.get("event")
             if not isinstance(event, dict):
                 return False
+            return bool(event.get("token") and event.get("endpoint") and vs.get("sessionId"))
+
+        def _voice_payload(self) -> dict | None:
+            """Lavalink voice object (channelId required when updating)."""
+            vs = getattr(self, "_voice_state", None) or {}
+            event = vs.get("event")
+            if not isinstance(event, dict):
+                return None
             token = event.get("token")
             endpoint = event.get("endpoint")
-            if not token or not endpoint:
-                return False
-            self._sync_endpoint()
+            session_id = vs.get("sessionId")
+            if not token or not endpoint or not session_id:
+                return None
+            # Discord sometimes prefixes endpoint with wss:// — strip it
+            endpoint = str(endpoint).removeprefix("wss://").removeprefix("ws://")
             data = {
-                "token": token,
+                "token": str(token),
                 "endpoint": endpoint,
-                "sessionId": vs["sessionId"],
+                "sessionId": str(session_id),
             }
             if self.channel is not None:
                 data["channelId"] = str(self.channel.id)
+            return data
+
+        async def _force_voice_update(self) -> bool:
+            """Push voice state to Lavalink/NodeLink (creates player if missing)."""
+            voice = self._voice_payload()
+            if not voice:
+                return False
+            if not getattr(self._node, "_session_id", None):
+                return False
+            self._sync_endpoint()
             try:
                 await self._node.send(
                     method="PATCH",
                     path=self._player_endpoint_uri,
                     guild_id=self._guild.id,
-                    data={"voice": data},
+                    data={"voice": voice},
                 )
                 return True
             except Exception as exc:
+                msg = str(exc).lower()
+                # 404 player not found on some NodeLink builds: retry with PUT
+                if "404" in msg or "player not found" in msg or "session" in msg:
+                    try:
+                        self._sync_endpoint()
+                        await self._node.send(
+                            method="PUT",
+                            path=self._player_endpoint_uri,
+                            guild_id=self._guild.id,
+                            data={"voice": voice},
+                        )
+                        return True
+                    except Exception as exc2:
+                        log.warning("force voice update failed: %s / put: %s", exc, exc2)
+                        return False
                 log.warning("force voice update failed: %s", exc)
                 return False
 
         async def wait_until_ready(self, *, timeout: float = 12.0) -> bool:
+            """Wait for node session + Discord voice credentials.
+
+            Voice PATCH success is nice-to-have; play() will create the player
+            atomically with track+voice. Returning True once voice_ready avoids
+            false 'handshake incomplete' when NodeLink 404s voice-only updates.
+            """
             self._sync_endpoint()
             deadline = asyncio.get_event_loop().time() + timeout
+            voice_ok = False
             while asyncio.get_event_loop().time() < deadline:
                 node = self._node
                 if (
@@ -195,19 +240,22 @@ try:
                     and self.voice_ready()
                 ):
                     self._sync_endpoint()
-                    ok = await self._force_voice_update()
-                    if ok:
-                        return True
+                    voice_ok = True
+                    # Best-effort create player early; failure is OK
+                    await self._force_voice_update()
+                    return True
                 await asyncio.sleep(0.15)
             self._sync_endpoint()
-            if self.voice_ready():
-                return await self._force_voice_update()
+            if self.voice_ready() and getattr(self._node, "_session_id", None):
+                await self._force_voice_update()
+                return True
             log.warning(
-                "player not ready guild=%s avail=%s session=%s voice_keys=%s",
+                "player not ready guild=%s avail=%s session=%s voice_keys=%s voice_ok=%s",
                 getattr(self._guild, "id", None),
                 getattr(self._node, "_available", None),
                 bool(getattr(self._node, "_session_id", None)),
                 list((getattr(self, "_voice_state", None) or {}).keys()),
+                voice_ok,
             )
             return False
 
@@ -221,15 +269,18 @@ try:
             if sid:
                 self._voice_state.update({"sessionId": sid})
             channel_id = data.get("channel_id")
-            
-            
             if not channel_id:
+                # Bot left voice — don't hard-disconnect mid-handshake
                 return
             channel = self.guild.get_channel(int(channel_id))
             if channel is None:
                 return
             self.channel = channel
             self._is_connected = True
+            try:
+                self._node._players[self._guild.id] = self  # type: ignore[attr-defined]
+            except Exception:
+                pass
             if self.voice_ready():
                 await self._force_voice_update()
 
@@ -318,6 +369,71 @@ try:
                 return str(encoded)
             raise TrackLoadError("No equivalent track was able to be found.")
 
+        def _play_payloads(
+            self,
+            encoded: str,
+            voice: dict,
+            *,
+            start: int = 0,
+            end: int = 0,
+            volume: int = 100,
+        ) -> list[dict]:
+            """Build candidate play payloads (v4 track object + legacy encodedTrack)."""
+            pos = int(start or 0)
+            payloads: list[dict] = []
+
+            # Lavalink v4 / NodeLink preferred form
+            modern: dict = {
+                "track": {"encoded": encoded},
+                "position": pos,
+                "paused": False,
+                "volume": int(volume),
+                "voice": voice,
+            }
+            if end and end > 0:
+                modern["endTime"] = int(end)
+            payloads.append(modern)
+
+            # Legacy Lavalink form (some forks still expect this)
+            legacy: dict = {
+                "encodedTrack": encoded,
+                "position": str(pos),
+                "paused": False,
+                "volume": int(volume),
+                "voice": voice,
+            }
+            if end and end > 0:
+                legacy["endTime"] = str(int(end))
+            payloads.append(legacy)
+
+            # Also try modern without volume (some strict validators)
+            modern_min = {
+                "track": {"encoded": encoded},
+                "voice": voice,
+                "paused": False,
+            }
+            payloads.append(modern_min)
+            return payloads
+
+        async def _send_play_request(
+            self,
+            data: dict,
+            *,
+            method: str = "PATCH",
+            no_replace: bool | None = False,
+        ):
+            self._sync_endpoint()
+            query = None
+            if no_replace is not None:
+                query = f"noReplace={str(bool(no_replace)).lower()}"
+            return await self._node.send(
+                method=method,
+                path=self._player_endpoint_uri,
+                guild_id=self._guild.id,
+                data=data,
+                query=query,
+            )
+
         async def play(
             self,
             track,
@@ -326,10 +442,9 @@ try:
             end: int = 0,
             ignore_if_playing: bool = False,
         ):
-            """Hard play: never silently return; always send voice + track together."""
+            """Hard play: always send voice + track together; recover from 404 Player not found."""
             ready = await self.wait_until_ready(timeout=15.0)
             if not ready:
-                
                 for _ in range(20):
                     if self.voice_ready() and getattr(self._node, "_session_id", None):
                         break
@@ -338,75 +453,96 @@ try:
                 if not self.voice_ready():
                     log.error("play aborted: voice not ready guild=%s", self._guild.id)
                     raise RuntimeError("Voice connection is not ready for playback")
+                if not getattr(self._node, "_session_id", None):
+                    log.error("play aborted: node has no session guild=%s", self._guild.id)
+                    raise RuntimeError("Music node has no active session")
 
             self._sync_endpoint()
+            try:
+                self._node._players[self._guild.id] = self  # type: ignore[attr-defined]
+            except Exception:
+                pass
+
+            # Best-effort pre-create; play payload will create if this 404s
             await self._force_voice_update()
 
             encoded = await self._resolve_encoded(track)
-            is_nodelink = bool(getattr(self._node, "_is_nodelink", False))
-
-            vs = self._voice_state
-            voice = {
-                "token": vs["event"]["token"],
-                "endpoint": vs["event"]["endpoint"],
-                "sessionId": vs["sessionId"],
-            }
-            if self.channel is not None:
-                voice["channelId"] = str(self.channel.id)
+            voice = self._voice_payload()
+            if not voice:
+                raise RuntimeError("Voice credentials incomplete for playback")
 
             volume = int(getattr(self, "_volume", 100) or 100)
-
-            if is_nodelink:
-                data: dict = {
-                    "track": {"encoded": encoded},
-                    "position": int(start or 0),
-                    "paused": False,
-                    "volume": volume,
-                    "voice": voice,
-                }
-                if end and end > 0:
-                    data["endTime"] = int(end)
-            else:
-                data = {
-                    "encodedTrack": encoded,
-                    "position": str(int(start or 0)),
-                    "paused": False,
-                    "volume": volume,
-                    "voice": voice,
-                }
-                if end and end > 0:
-                    data["endTime"] = str(int(end))
+            payloads = self._play_payloads(
+                encoded,
+                voice,
+                start=start,
+                end=end,
+                volume=volume,
+            )
 
             self._current = track
-            try:
-                await self._node.send(
-                    method="PATCH",
-                    path=self._player_endpoint_uri,
-                    guild_id=self._guild.id,
-                    data=data,
-                    query=f"noReplace={str(bool(ignore_if_playing)).lower()}",
-                )
-            except Exception as exc:
-                log.warning("play PATCH failed (%s); retry once", exc)
-                await asyncio.sleep(0.6)
-                self._sync_endpoint()
-                await self._force_voice_update()
-                await self._node.send(
-                    method="PATCH",
-                    path=self._player_endpoint_uri,
-                    guild_id=self._guild.id,
-                    data=data,
-                    query=f"noReplace={str(bool(ignore_if_playing)).lower()}",
-                )
+            last_exc: Exception | None = None
+            # Prefer replace so a missing player is created (noReplace=true can 404)
+            attempts: list[tuple[str, dict, bool | None]] = []
+            for data in payloads:
+                attempts.append(("PATCH", data, bool(ignore_if_playing)))
+                attempts.append(("PATCH", data, False))
+                attempts.append(("PUT", data, False))
+                attempts.append(("PATCH", data, None))
 
-            log.info(
-                "playing %r by %r encoded=%s… guild=%s",
-                getattr(track, "title", "?"),
-                getattr(track, "author", "?"),
-                str(encoded)[:18],
+            for round_i in range(3):
+                self._sync_endpoint()
+                if not getattr(self._node, "_session_id", None):
+                    await asyncio.sleep(0.5)
+                    continue
+
+                for method, data, nr in attempts:
+                    try:
+                        await self._send_play_request(
+                            data,
+                            method=method,
+                            no_replace=nr,
+                        )
+                        log.info(
+                            "playing %r by %r encoded=%s… guild=%s method=%s nr=%s round=%s",
+                            getattr(track, "title", "?"),
+                            getattr(track, "author", "?"),
+                            str(encoded)[:18],
+                            self._guild.id,
+                            method,
+                            nr,
+                            round_i + 1,
+                        )
+                        return track
+                    except Exception as exc:
+                        last_exc = exc
+                        msg = str(exc).lower()
+                        log.warning(
+                            "play %s failed guild=%s round=%s: %s",
+                            method,
+                            self._guild.id,
+                            round_i + 1,
+                            exc,
+                        )
+                        if "session not found" in msg:
+                            # Session died — wait for node reconnect
+                            await asyncio.sleep(1.2)
+                            self._sync_endpoint()
+                            break
+
+                await asyncio.sleep(0.6 + round_i * 0.4)
+                await self._force_voice_update()
+
+            log.error(
+                "play exhausted retries guild=%s last=%s endpoint=%s session=%s",
                 self._guild.id,
+                last_exc,
+                self._player_endpoint_uri,
+                bool(getattr(self._node, "_session_id", None)),
             )
-            return track
+            if last_exc is not None:
+                raise last_exc
+            raise RuntimeError("Failed to start playback on music node")
 
     HAS_LYRA = True
 except ImportError:
@@ -1674,11 +1810,12 @@ class Music(MusicEvents, Package):
                         "voice handshake incomplete before play guild=%s",
                         ctx.guild.id,
                     )
+                    node = getattr(player, "_node", None)
                     await self.music_log(
                         title="Handshake incomplete before play",
                         description=(
-                            "Proceeding to play anyway — if silent, check voice "
-                            "server update / nodelink session."
+                            "Discord voice and/or node session not ready. "
+                            "Will still attempt play."
                         ),
                         guild=ctx.guild,
                         user=ctx.author,
@@ -1689,12 +1826,25 @@ class Music(MusicEvents, Package):
                                 "Voice ready",
                                 str(getattr(player, "voice_ready", lambda: "?")()),
                             ),
+                            (
+                                "Node session",
+                                str(bool(getattr(node, "_session_id", None))),
+                            ),
+                            (
+                                "NodeLink",
+                                str(bool(getattr(node, "_is_nodelink", False))),
+                            ),
+                            (
+                                "Endpoint",
+                                str(getattr(player, "_player_endpoint_uri", "?")),
+                            ),
                         ],
                     )
             try:
                 await player.play(first)
             except Exception as exc:
                 log.exception("initial play failed: %s", exc)
+                node = getattr(player, "_node", None)
                 await self.music_log(
                     title="Initial play failed — retrying",
                     description=f"```{exc}```",
@@ -1705,6 +1855,18 @@ class Music(MusicEvents, Package):
                         ("Track", f"{title} — {artist}"),
                         ("Encoded", str(_safe_attr(first, "track_id") or "?")[:40]),
                         ("Source", self._track_source(first) or "?"),
+                        (
+                            "Node session",
+                            str(getattr(node, "_session_id", None) or "none")[:32],
+                        ),
+                        (
+                            "Endpoint",
+                            str(getattr(player, "_player_endpoint_uri", "?")),
+                        ),
+                        (
+                            "Voice keys",
+                            str(list((getattr(player, "_voice_state", None) or {}).keys())),
+                        ),
                     ],
                 )
                 try:
