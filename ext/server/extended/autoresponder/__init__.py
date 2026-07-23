@@ -92,6 +92,28 @@ def _is_embed_script(response: str) -> bool:
     return _core_is_embed_script(response)
 
 
+def _matches_trigger(content: str, trigger: str, *, strict: bool) -> bool:
+    """Match trigger against message content.
+
+    Strict: entire message must equal the trigger.
+    Not strict: trigger must appear as a whole word/phrase (word boundaries),
+    so ``pic`` does not fire inside ``suspicious``.
+    """
+    content = (content or "").lower().strip()
+    trigger = (trigger or "").lower().strip()
+    if not trigger:
+        return False
+    if strict:
+        return content == trigger
+    # Word/phrase boundary match — avoid substring false positives
+    # e.g. "pic" must not match "suspicious", "rep for pic" matches full phrase
+    pattern = re.compile(
+        r"(?<!\w)" + re.escape(trigger) + r"(?!\w)",
+        re.IGNORECASE,
+    )
+    return pattern.search(content) is not None
+
+
 def _normalize_embed_script_urls(response: str) -> str:
     """Unwrap angle-bracket URLs inside embed scripts copied from Discord."""
     if not _is_embed_script(response):
@@ -426,7 +448,8 @@ class AutoresponderCommands(Package):
 
         **Flags** (append to response on add/update):
         - `--strict` — exact message match
-        - `--not_strict` — trigger may appear anywhere (**default**)
+        - `--not_strict` — whole-word/phrase match (**default**).
+          Triggers won't fire inside other words (`pic` ≠ `suspicious`).
         - `--self_destruct 10` — delete reply after 6–60 seconds
         - `--reply` — reply to the trigger message
         - `--delete` — delete the trigger message
@@ -578,9 +601,10 @@ class AutoresponderCommands(Package):
     )
     @has_permissions(manage_channels=True)
     async def autoresponder_strict(self, ctx, trigger: str, state: str = None):
-        """`,autoresponder strict <name|all> on|off` — exact match vs substring.
+        """`,autoresponder strict <name|all> on|off` — exact match vs word-boundary.
 
-        Also accepts: `,autoresponder strict all off`
+        Not strict matches whole words/phrases only (so `pic` won't match
+        `suspicious`). Also accepts: `,autoresponder strict all off`
         """
         if not state:
             if trigger.lower() == "all":
@@ -778,19 +802,18 @@ class AutoresponderCommands(Package):
             if not records:
                 return
 
-            content = ctx.message.content.lower().strip()
+            content = ctx.message.content
             for record in records:
-                trigger = str(record["trigger"] or "").lower().strip()
+                trigger = str(record["trigger"] or "").strip()
                 if not trigger:
                     continue
-                
-                is_strict = bool(record.get("strict"))
-                if is_strict:
-                    if content != trigger:
-                        continue
-                else:
-                    if trigger not in content:
-                        continue
+
+                if not _matches_trigger(
+                    content,
+                    trigger,
+                    strict=bool(record.get("strict")),
+                ):
+                    continue
 
                 handled = await self._send_response(ctx, record)
                 if handled:

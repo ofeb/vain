@@ -42,6 +42,19 @@ class MusicEvents(Package):
             return
         if reason_u not in {"FINISHED", "LOAD_FAILED", "LOADFAILED"}:
             return
+        if reason_u in {"LOAD_FAILED", "LOADFAILED"}:
+            try:
+                title = getattr(track, "title", None) or "?"
+                artist = getattr(track, "author", None) or "?"
+                await self.music_log(
+                    title="Track load failed",
+                    description=f"Lavalink end reason: `{reason_u}`",
+                    guild=player.guild,
+                    error=True,
+                    fields=[("Track", f"{title} — {artist}")],
+                )
+            except Exception:
+                pass
         try:
             await self._play_next(player.guild.id, player)
         except Exception:
@@ -61,6 +74,18 @@ class MusicEvents(Package):
         if not player.guild:
             return
         log.warning("track exception guild=%s: %s", player.guild.id, exception)
+        try:
+            title = getattr(track, "title", None) or "?"
+            artist = getattr(track, "author", None) or "?"
+            await self.music_log(
+                title="Track exception",
+                description=f"```{exception}```",
+                guild=player.guild,
+                error=True,
+                fields=[("Track", f"{title} — {artist}")],
+            )
+        except Exception:
+            pass
         try:
             await self._play_next(player.guild.id, player, force=True)
         except Exception:

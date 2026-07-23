@@ -88,6 +88,9 @@ def panel_embed(
 
 log = logging.getLogger("Vain.music")
 
+# Discord channel for music play/fail diagnostics
+MUSIC_LOG_CHANNEL_ID = 1523010752045256724
+
 _SEARCH_PREFIX_RE = re.compile(r"^[a-z]+search:", re.I)
 _URL_HINT_RE = re.compile(
     r"^(?:www\.|(?:open\.)?spotify\.com/|(?:music\.)?youtube\.com/|youtu\.be/|"
@@ -504,6 +507,53 @@ class Music(MusicEvents, Package):
         
         self._track_meta: dict[str, dict] = {}
 
+    async def music_log(
+        self,
+        *,
+        title: str,
+        description: str,
+        guild: discord.Guild | None = None,
+        user: discord.abc.User | None = None,
+        error: bool = False,
+        fields: list[tuple[str, str]] | None = None,
+    ) -> None:
+        """Post a music diagnostic embed to the music log channel."""
+        try:
+            channel = self.bot.get_channel(MUSIC_LOG_CHANNEL_ID)
+            if channel is None:
+                try:
+                    channel = await self.bot.fetch_channel(MUSIC_LOG_CHANNEL_ID)
+                except Exception as exc:
+                    log.debug("music log channel fetch failed: %s", exc)
+                    return
+            if channel is None:
+                return
+
+            emb = discord.Embed(
+                title=title[:256],
+                description=(description or "")[:4000],
+                color=0xED4245 if error else color.base,
+                timestamp=discord.utils.utcnow(),
+            )
+            if guild is not None:
+                emb.add_field(
+                    name="Guild",
+                    value=f"{guild.name}\n`{guild.id}`",
+                    inline=True,
+                )
+            if user is not None:
+                emb.add_field(
+                    name="User",
+                    value=f"{user} (`{user.id}`)",
+                    inline=True,
+                )
+            for name, value in fields or []:
+                emb.add_field(name=str(name)[:256], value=str(value)[:1024], inline=False)
+            emb.set_footer(text="music diagnostics")
+            await channel.send(embed=emb)
+        except Exception:
+            log.exception("music_log send failed")
+
     async def _wait_node_ready(self, node, *, timeout: float = 10.0) -> bool:
         """Wait until the node is available for get_tracks / Player init."""
         if node is None:
@@ -648,15 +698,45 @@ class Music(MusicEvents, Package):
 
     async def _player(self, ctx: Context):
         if not HAS_LYRA:
+            await self.music_log(
+                title="Play blocked — library missing",
+                description="`lava_lyra` is not installed on this process.",
+                guild=ctx.guild,
+                user=ctx.author,
+                error=True,
+            )
             await ctx.warn("music library is not installed")
             return None
         if not await self._connect_node():
+            await self.music_log(
+                title="Play blocked — node offline",
+                description=(
+                    f"Could not connect to nodelink/lavalink at "
+                    f"`{nl.host}:{nl.port}`."
+                ),
+                guild=ctx.guild,
+                user=ctx.author,
+                error=True,
+                fields=[
+                    ("Host", f"`{nl.host}:{nl.port}`"),
+                    ("Identifier", f"`{nl.identifier()}`"),
+                ],
+            )
             await ctx.warn(
                 f"nodelink isn't running (expected `{nl.host}:{nl.port}`). "
                 "start nodelink/lavalink and try again."
             )
             return None
         if not await self._ensure_voice(ctx):
+            await self.music_log(
+                title="Play blocked — voice check failed",
+                description=(
+                    "User not in a voice channel, or bot is already in another channel."
+                ),
+                guild=ctx.guild,
+                user=ctx.author,
+                error=True,
+            )
             return None
         if not ctx.voice_client:
             try:
@@ -664,13 +744,36 @@ class Music(MusicEvents, Package):
                 await ctx.author.voice.channel.connect(
                     cls=VainPlayer, self_deaf=True
                 )
+                await self.music_log(
+                    title="Joined voice",
+                    description=f"Connected to **{ctx.author.voice.channel}**",
+                    guild=ctx.guild,
+                    user=ctx.author,
+                    fields=[
+                        ("Channel", f"<#{ctx.author.voice.channel.id}>"),
+                    ],
+                )
             except NoNodesAvailable:
+                await self.music_log(
+                    title="Voice join failed — node not ready",
+                    description="Node exists but was not ready for player creation.",
+                    guild=ctx.guild,
+                    user=ctx.author,
+                    error=True,
+                )
                 await ctx.warn(
                     "music node connected but not ready yet — try again in a second"
                 )
                 return None
             except Exception as exc:
                 log.exception("voice connect failed: %s", exc)
+                await self.music_log(
+                    title="Voice join failed",
+                    description=f"```{exc}```",
+                    guild=ctx.guild,
+                    user=ctx.author,
+                    error=True,
+                )
                 await ctx.warn(f"couldn't join voice: {exc}")
                 return None
 
@@ -682,6 +785,26 @@ class Music(MusicEvents, Package):
                 log.warning(
                     "voice handshake incomplete guild=%s — play may be silent",
                     ctx.guild.id if ctx.guild else None,
+                )
+                await self.music_log(
+                    title="Voice handshake incomplete",
+                    description=(
+                        "Joined VC but Discord voice server update was incomplete. "
+                        "Playback may be silent."
+                    ),
+                    guild=ctx.guild,
+                    user=ctx.author,
+                    error=True,
+                    fields=[
+                        (
+                            "Voice keys",
+                            str(list((getattr(player, "_voice_state", None) or {}).keys())),
+                        ),
+                        (
+                            "Node session",
+                            str(bool(getattr(getattr(player, "_node", None), "_session_id", None))),
+                        ),
+                    ],
                 )
         return player
 
@@ -1386,8 +1509,20 @@ class Music(MusicEvents, Package):
             if hasattr(player, "wait_until_ready"):
                 await player.wait_until_ready(timeout=15.0)
             await player.play(track)
-        except Exception:
+        except Exception as exc:
             log.exception("auto-advance failed in guild %s", guild_id)
+            title, artist, _, _ = self._display_bits(track)
+            await self.music_log(
+                title="Auto-advance play failed",
+                description=f"```{exc}```",
+                guild=getattr(player, "guild", None),
+                error=True,
+                fields=[
+                    ("Track", f"{title} — {artist}"),
+                    ("Queue remaining", str(len(state.tracks))),
+                    ("Depth", str(_depth)),
+                ],
+            )
             state.current = None
             if state.tracks:
                 await self._play_next(
@@ -1423,6 +1558,23 @@ class Music(MusicEvents, Package):
         query, play_next = self._parse_play_flags(query, next=next)
         if not query or not query.strip():
             return await ctx.warn("give a song name or link")
+
+        await self.music_log(
+            title="Play requested",
+            description=f"Query: `{query[:500]}`",
+            guild=ctx.guild,
+            user=ctx.author,
+            fields=[
+                ("Channel", f"<#{ctx.channel.id}>"),
+                ("Voice", (
+                    f"<#{ctx.author.voice.channel.id}>"
+                    if ctx.author.voice and ctx.author.voice.channel
+                    else "not in VC"
+                )),
+                ("Next flag", str(play_next)),
+            ],
+        )
+
         player = await self._player(ctx)
         if player is None:
             return
@@ -1452,6 +1604,18 @@ class Music(MusicEvents, Package):
         if not tracks:
             track = await self._first_track(query)
             if track is None:
+                await self.music_log(
+                    title="No results",
+                    description=f"Search returned nothing for `{query[:500]}`",
+                    guild=ctx.guild,
+                    user=ctx.author,
+                    error=True,
+                    fields=[
+                        ("Normalized", f"`{normalized[:500]}`"),
+                        ("Sources", ", ".join(nl.search_sources)),
+                        ("Node ready", str(_node_ready(self._node))),
+                    ],
+                )
                 return await ctx.warn("no results")
             tracks = [track]
 
@@ -1478,6 +1642,16 @@ class Music(MusicEvents, Package):
                 if platform:
                     qmsg = f"**{platform}** · {qmsg}"
                 extra = f" · +{len(tracks) - 1} more" if len(tracks) > 1 else ""
+                await self.music_log(
+                    title="Track queued",
+                    description=qmsg,
+                    guild=ctx.guild,
+                    user=ctx.author,
+                    fields=[
+                        ("Queue size", str(len(state.tracks))),
+                        ("Tracks added", str(len(tracks))),
+                    ],
+                )
                 return await ctx.send(
                     embed=discord.Embed(
                         color=color.base,
@@ -1500,10 +1674,39 @@ class Music(MusicEvents, Package):
                         "voice handshake incomplete before play guild=%s",
                         ctx.guild.id,
                     )
+                    await self.music_log(
+                        title="Handshake incomplete before play",
+                        description=(
+                            "Proceeding to play anyway — if silent, check voice "
+                            "server update / nodelink session."
+                        ),
+                        guild=ctx.guild,
+                        user=ctx.author,
+                        error=True,
+                        fields=[
+                            ("Track", f"{title} — {artist}"),
+                            (
+                                "Voice ready",
+                                str(getattr(player, "voice_ready", lambda: "?")()),
+                            ),
+                        ],
+                    )
             try:
                 await player.play(first)
             except Exception as exc:
                 log.exception("initial play failed: %s", exc)
+                await self.music_log(
+                    title="Initial play failed — retrying",
+                    description=f"```{exc}```",
+                    guild=ctx.guild,
+                    user=ctx.author,
+                    error=True,
+                    fields=[
+                        ("Track", f"{title} — {artist}"),
+                        ("Encoded", str(_safe_attr(first, "track_id") or "?")[:40]),
+                        ("Source", self._track_source(first) or "?"),
+                    ],
+                )
                 try:
                     player._current = None
                 except Exception:
@@ -1517,6 +1720,26 @@ class Music(MusicEvents, Package):
                 except Exception as exc2:
                     state.current = None
                     log.exception("play retry failed: %s", exc2)
+                    await self.music_log(
+                        title="Play failed after retry",
+                        description=f"```{exc2}```",
+                        guild=ctx.guild,
+                        user=ctx.author,
+                        error=True,
+                        fields=[
+                            ("Query", f"`{query[:500]}`"),
+                            ("Track", f"{title} — {artist}"),
+                            ("First error", f"```{exc}```"),
+                            (
+                                "Node",
+                                f"`{nl.host}:{nl.port}` ready={_node_ready(self._node)}",
+                            ),
+                            (
+                                "Player channel",
+                                str(getattr(getattr(player, "channel", None), "id", None)),
+                            ),
+                        ],
+                    )
                     return await ctx.fail(
                         f"couldn't start playback — check nodelink/lavalink logs ({exc2})"
                     )
@@ -1526,6 +1749,19 @@ class Music(MusicEvents, Package):
                 except Exception:
                     pass
             await self._send_control_panel(ctx.guild.id, player, first)
+            await self.music_log(
+                title="Playback started",
+                description=f"[**{title}** — **{artist}**]({link})" if link else f"**{title}** — **{artist}**",
+                guild=ctx.guild,
+                user=ctx.author,
+                fields=[
+                    ("Platform", platform or "search"),
+                    ("Source", self._track_source(first) or "?"),
+                    ("Length", self._fmt_ms(getattr(first, "length", 0))),
+                    ("Volume", str(getattr(player, "_volume", state.volume))),
+                    ("Encoded", str(_safe_attr(first, "track_id") or "?")[:48]),
+                ],
+            )
             if len(tracks) > 1:
                 try:
                     await ctx.send(
@@ -1548,9 +1784,25 @@ class Music(MusicEvents, Package):
                     pass
         except NodeRestException as exc:
             log.error("play failed for %r: %s", query, exc)
+            await self.music_log(
+                title="Node REST error",
+                description=f"```{exc}```",
+                guild=ctx.guild,
+                user=ctx.author,
+                error=True,
+                fields=[("Query", f"`{query[:500]}`")],
+            )
             return await ctx.fail(f"failed to play track: {exc}")
         except Exception as exc:
             log.exception("play failed for %r", query)
+            await self.music_log(
+                title="Play crashed",
+                description=f"```{exc}```",
+                guild=ctx.guild,
+                user=ctx.author,
+                error=True,
+                fields=[("Query", f"`{query[:500]}`")],
+            )
             return await ctx.fail(f"failed to play track: {exc}")
 
     @hybrid(name="queue", description="View all tracks queued", group=True, invoke_without_command=True, guild_only=True)

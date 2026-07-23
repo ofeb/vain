@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import random
 from typing import TYPE_CHECKING, Optional
 
@@ -83,11 +84,12 @@ def panel_embed(
 if TYPE_CHECKING:
     from core.vain import Vain
 
+log = logging.getLogger("vain.level")
+
 XP_PER_MESSAGE = 15
 XP_COOLDOWN = 60
 LEVEL_BASE = 100
 LEVEL_MULTIPLIER = 50
-
 
 def xp_for_level(level: int) -> int:
     return LEVEL_BASE + (level * LEVEL_MULTIPLIER)
@@ -95,10 +97,22 @@ def xp_for_level(level: int) -> int:
 
 def level_from_xp(xp: int) -> int:
     level = 0
-    while xp >= xp_for_level(level):
-        xp -= xp_for_level(level)
+    remaining = max(0, int(xp or 0))
+    while remaining >= xp_for_level(level):
+        remaining -= xp_for_level(level)
         level += 1
     return level
+
+
+def xp_into_level(xp: int) -> tuple[int, int, int]:
+    """Return (level, xp_progress_in_level, xp_needed_for_next)."""
+    level = 0
+    remaining = max(0, int(xp or 0))
+    while remaining >= xp_for_level(level):
+        remaining -= xp_for_level(level)
+        level += 1
+    needed = xp_for_level(level)
+    return level, remaining, needed
 
 
 from .events import LevelEvents
@@ -110,6 +124,52 @@ class Level(LevelEvents, Package):
     def __init__(self, bot: Vain):
         super().__init__(bot)
         self._cooldowns: dict[int, float] = {}
+
+    async def _ensure_tables(self) -> None:
+        """Create levels tables if missing (self-heal for older DBs)."""
+        try:
+            await self.bot.db.execute(
+                """
+                CREATE TABLE IF NOT EXISTS levels (
+                    guild_id BIGINT NOT NULL,
+                    user_id BIGINT NOT NULL,
+                    xp BIGINT NOT NULL DEFAULT 0,
+                    level INT NOT NULL DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (guild_id, user_id)
+                )
+                """
+            )
+            await self.bot.db.execute(
+                """
+                CREATE TABLE IF NOT EXISTS level_config (
+                    guild_id BIGINT PRIMARY KEY,
+                    enabled BOOLEAN DEFAULT TRUE,
+                    multiplier INT DEFAULT 1,
+                    message TEXT,
+                    role_rewards JSONB,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            await self.bot.db.execute(
+                """
+                CREATE TABLE IF NOT EXISTS level_roles (
+                    guild_id BIGINT,
+                    level INT,
+                    role_id BIGINT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (guild_id, level)
+                )
+                """
+            )
+        except Exception:
+            log.exception("failed ensuring level tables")
+
+    def cog_load(self) -> None:
+        self.bot.loop.create_task(self._ensure_tables())
+
     @group(
         name="level",
         description="View your current level and XP",
@@ -119,15 +179,14 @@ class Level(LevelEvents, Package):
     async def level(self, ctx: Context, *, member: discord.Member = None) -> None:
         member = member or ctx.author
         try:
+            settings = await LevelSettings.fetch(self.bot, ctx.guild)
             row = await self.bot.db.fetchrow(
-                "SELECT xp FROM levels WHERE guild_id = $1 AND user_id = $2",
-                ctx.guild.id, member.id,
+                "SELECT xp, level FROM levels WHERE guild_id = $1 AND user_id = $2",
+                ctx.guild.id,
+                member.id,
             )
-            xp = row[0] if row else 0
-            lvl = level_from_xp(xp)
-            current_level_xp = xp_for_level(lvl)
-            xp_in_level = xp - sum(xp_for_level(i) for i in range(lvl))
-            xp_needed = current_level_xp
+            xp = int(row["xp"]) if row else 0
+            lvl, xp_in_level, xp_needed = xp_into_level(xp)
 
             embed = panel_embed(
                 title=f"Level — {member.display_name}",
@@ -144,9 +203,44 @@ class Level(LevelEvents, Package):
             filled = int((xp_in_level / xp_needed) * bar_length) if xp_needed else 0
             bar = "█" * filled + "░" * (bar_length - filled)
             embed.add_field(name="Progress", value=bar, inline=False)
+            if not settings.enabled:
+                embed.set_footer(text="Leveling is currently disabled in this server")
             await ctx.send(embed=embed)
         except Exception:
+            log.exception("level command failed guild=%s user=%s", ctx.guild.id, member.id)
             await ctx.fail("Level data unavailable.")
+
+    @level.command(
+        name="enable",
+        description="Enable the leveling system",
+        aliases=["on"],
+    )
+    @has_permissions(manage_guild=True)
+    async def level_enable(self, ctx: Context) -> None:
+        """Enable XP tracking for this server. Aliases: `on`."""
+        try:
+            settings = await LevelSettings.fetch(self.bot, ctx.guild)
+            await settings.upsert(enabled=True)
+            await ctx.success("Leveling is now **enabled**.")
+        except Exception:
+            log.exception("level enable failed guild=%s", ctx.guild.id)
+            await ctx.fail("Couldn't enable leveling.")
+
+    @level.command(
+        name="disable",
+        description="Disable the leveling system",
+        aliases=["off"],
+    )
+    @has_permissions(manage_guild=True)
+    async def level_disable(self, ctx: Context) -> None:
+        """Disable XP tracking for this server. Aliases: `off`."""
+        try:
+            settings = await LevelSettings.fetch(self.bot, ctx.guild)
+            await settings.upsert(enabled=False)
+            await ctx.success("Leveling is now **disabled**.")
+        except Exception:
+            log.exception("level disable failed guild=%s", ctx.guild.id)
+            await ctx.fail("Couldn't disable leveling.")
 
     @level.command(
         name="leaderboard",
@@ -156,7 +250,7 @@ class Level(LevelEvents, Package):
     async def level_leaderboard(self, ctx: Context) -> None:
         try:
             rows = await self.bot.db.fetch(
-                "SELECT user_id, xp FROM levels WHERE guild_id = $1 ORDER BY xp DESC LIMIT 10",
+                "SELECT user_id, xp, level FROM levels WHERE guild_id = $1 ORDER BY xp DESC LIMIT 10",
                 ctx.guild.id,
             )
             if not rows:
@@ -165,10 +259,11 @@ class Level(LevelEvents, Package):
 
             entries = []
             for i, row in enumerate(rows, 1):
-                user = ctx.guild.get_member(row[0])
-                name = user.display_name if user else f"Unknown ({row[0]})"
-                lvl = level_from_xp(row[1])
-                entries.append(f"`{i}.` **{name}** — Level {lvl} ({row[1]} XP)")
+                user = ctx.guild.get_member(int(row["user_id"]))
+                name = user.display_name if user else f"Unknown ({row['user_id']})"
+                xp = int(row["xp"] or 0)
+                lvl = int(row["level"] or 0) or level_from_xp(xp)
+                entries.append(f"`{i}.` **{name}** — Level {lvl} ({xp} XP)")
 
             embed = panel_embed(
                 title=f"Leaderboard — {ctx.guild.name}",
@@ -178,6 +273,7 @@ class Level(LevelEvents, Package):
             )
             await ctx.send(embed=embed)
         except Exception:
+            log.exception("level leaderboard failed guild=%s", ctx.guild.id)
             await ctx.fail("Leaderboard unavailable.")
 
     @level.command(
@@ -197,9 +293,13 @@ class Level(LevelEvents, Package):
 
             entries = []
             for row in rows:
-                role = ctx.guild.get_role(row[0])
+                role = ctx.guild.get_role(int(row["role_id"]))
                 if role:
-                    entries.append(f"Level **{row[1]}** — {role.mention}")
+                    entries.append(f"Level **{row['level']}** — {role.mention}")
+
+            if not entries:
+                await ctx.warn("No reward roles configured.")
+                return
 
             embed = panel_embed(
                 title="Level Rewards",
@@ -209,6 +309,7 @@ class Level(LevelEvents, Package):
             )
             await ctx.send(embed=embed)
         except Exception:
+            log.exception("level roles failed guild=%s", ctx.guild.id)
             await ctx.fail("Reward roles unavailable.")
 
     @level.command(
@@ -223,11 +324,18 @@ class Level(LevelEvents, Package):
             return
         try:
             await self.bot.db.execute(
-                "INSERT INTO level_roles (guild_id, role_id, level) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
-                ctx.guild.id, role.id, level,
+                """
+                INSERT INTO level_roles (guild_id, role_id, level)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (guild_id, level) DO UPDATE SET role_id = EXCLUDED.role_id
+                """,
+                ctx.guild.id,
+                role.id,
+                level,
             )
             await ctx.success(f"{role.mention} will be awarded at level **{level}**.")
         except Exception:
+            log.exception("level add failed guild=%s", ctx.guild.id)
             await ctx.fail("Failed to add reward role.")
 
     @level.command(
@@ -241,10 +349,12 @@ class Level(LevelEvents, Package):
         try:
             await self.bot.db.execute(
                 "DELETE FROM level_roles WHERE guild_id = $1 AND role_id = $2",
-                ctx.guild.id, role.id,
+                ctx.guild.id,
+                role.id,
             )
             await ctx.success(f"Removed {role.mention} from level rewards.")
         except Exception:
+            log.exception("level remove failed guild=%s", ctx.guild.id)
             await ctx.fail("Failed to remove reward role.")
 
     @level.command(
@@ -256,10 +366,12 @@ class Level(LevelEvents, Package):
         try:
             settings = await LevelSettings.fetch(self.bot, ctx.guild)
             total = await self.bot.db.fetchval(
-                "SELECT COUNT(*) FROM levels WHERE guild_id = $1", ctx.guild.id,
+                "SELECT COUNT(*) FROM levels WHERE guild_id = $1",
+                ctx.guild.id,
             )
-            roles = await self.bot.db.fetch(
-                "SELECT COUNT(*) FROM level_roles WHERE guild_id = $1", ctx.guild.id,
+            role_count = await self.bot.db.fetchval(
+                "SELECT COUNT(*) FROM level_roles WHERE guild_id = $1",
+                ctx.guild.id,
             )
             embed = panel_embed(
                 title="Level Configuration",
@@ -267,14 +379,31 @@ class Level(LevelEvents, Package):
                 lines=[],
                 timestamp=False,
             )
-            embed.add_field(name="Enabled", value=str(bool(settings.enabled)), inline=True)
-            embed.add_field(name="Multiplier", value=str(settings.multiplier or 1), inline=True)
-            embed.add_field(name="Tracked Members", value=str(total), inline=True)
-            embed.add_field(name="Reward Roles", value=str(roles[0][0] if roles else 0), inline=True)
+            embed.add_field(
+                name="Enabled",
+                value="yes" if settings.enabled else "no",
+                inline=True,
+            )
+            embed.add_field(
+                name="Multiplier",
+                value=str(settings.multiplier or 1),
+                inline=True,
+            )
+            embed.add_field(
+                name="Tracked Members",
+                value=str(int(total or 0)),
+                inline=True,
+            )
+            embed.add_field(
+                name="Reward Roles",
+                value=str(int(role_count or 0)),
+                inline=True,
+            )
             embed.add_field(name="XP Per Message", value=str(XP_PER_MESSAGE), inline=True)
             embed.add_field(name="Cooldown", value=f"{XP_COOLDOWN}s", inline=True)
             await ctx.send(embed=embed)
         except Exception:
+            log.exception("level config failed guild=%s", ctx.guild.id)
             await ctx.fail("Configuration unavailable.")
 
 

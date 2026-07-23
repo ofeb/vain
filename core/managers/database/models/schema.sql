@@ -437,7 +437,7 @@ CREATE TABLE IF NOT EXISTS auto_reactions (
     trigger VARCHAR(255),
     response TEXT[],
     owner_id BIGINT,
-    strict BOOLEAN DEFAULT TRUE,
+    strict BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (guild_id, trigger, response)
 );
@@ -668,6 +668,16 @@ CREATE TABLE IF NOT EXISTS level_config (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS levels (
+    guild_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    xp BIGINT NOT NULL DEFAULT 0,
+    level INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, user_id)
+);
+
 CREATE TABLE IF NOT EXISTS level_roles (
     guild_id BIGINT,
     level INT,
@@ -675,6 +685,9 @@ CREATE TABLE IF NOT EXISTS level_roles (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (guild_id, level)
 );
+
+CREATE INDEX IF NOT EXISTS idx_levels_guild_xp ON levels(guild_id, xp DESC);
+CREATE INDEX IF NOT EXISTS idx_levels_user ON levels(user_id);
 
 CREATE TABLE IF NOT EXISTS bump_reminder (
     guild_id BIGINT PRIMARY KEY,

@@ -1,37 +1,94 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
-import discord
-from discord.ext import commands
-
-from core.discord.ctx import Context
+from core.discord.package import Package
 
 if TYPE_CHECKING:
-    from .. import Reaction
+    from core.discord.ctx import Context
+
+log = logging.getLogger("vain.reaction.events")
 
 
-class ReactionEvents(commands.Cog):
-    """Auto-reaction event handlers."""
+def _matches_trigger(content: str, trigger: str, *, strict: bool) -> bool:
+    """Local import-free matcher (mirrors autoresponder word boundaries)."""
+    import re
 
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
+    content = (content or "").lower().strip()
+    trigger = (trigger or "").lower().strip()
+    if not trigger:
+        return False
+    if strict:
+        return content == trigger
+    pattern = re.compile(
+        r"(?<!\w)" + re.escape(trigger) + r"(?!\w)",
+        re.IGNORECASE,
+    )
+    return pattern.search(content) is not None
 
-    @commands.Cog.listener("on_valid_message")
+
+class ReactionEvents(Package):
+    """Auto-reaction event handlers — mixed into Reaction cog."""
+
+    @Package.listener("on_valid_message")
     async def on_auto_reaction(self, ctx: Context) -> None:
-        """Handle auto-reactions on valid messages."""
-        words = [r.lower() for r in ctx.message.content.split(" ")]
-        words.append(str(ctx.channel.id))
-        records = await self.bot.db.fetch(
-            "SELECT * FROM auto_reactions WHERE guild_id = $1 AND trigger = ANY($2)",
-            ctx.guild.id,
-            words,
+        """Handle auto-reactions on valid guild messages."""
+        if ctx.guild is None or ctx.author.bot:
+            return
+        content = ctx.message.content or ""
+        if not content and not ctx.message.attachments:
+            # still allow channel-wide auto reactions (trigger = channel id)
+            pass
+
+        try:
+            records = await self.bot.db.fetch(
+                """
+                SELECT trigger, response, strict FROM auto_reactions
+                WHERE guild_id = $1
+                """,
+                ctx.guild.id,
+            )
+        except Exception:
+            log.exception("auto_reactions fetch failed guild=%s", ctx.guild.id)
+            return
+
+        if not records:
+            return
+
+        # Prefer longer triggers first (same as autoresponder)
+        records = sorted(
+            records,
+            key=lambda r: (-len(str(r["trigger"] or "")), str(r["trigger"] or "").lower()),
         )
+
+        channel_id = str(ctx.channel.id)
+        applied = 0
         for record in records:
-            for reaction in record.response:
-                await ctx.message.add_reaction(str(reaction))
+            trigger = str(record["trigger"] or "")
+            if not trigger:
+                continue
 
+            # Channel-wide: trigger is the channel id
+            if trigger == channel_id:
+                pass  # always matches this channel
+            elif not content:
+                continue
+            elif not _matches_trigger(
+                content,
+                trigger,
+                strict=bool(record.get("strict")),
+            ):
+                continue
 
-async def setup(bot: commands.Bot):
-    """Load the ReactionEvents cog."""
-    await bot.add_cog(ReactionEvents(bot))
+            for reaction in record["response"] or []:
+                try:
+                    await ctx.message.add_reaction(str(reaction))
+                    applied += 1
+                except Exception:
+                    continue
+
+            # One word-trigger match is enough; still allow channel-wide separately
+            if trigger != channel_id and applied:
+                # keep scanning only for other channel-id rows
+                break
