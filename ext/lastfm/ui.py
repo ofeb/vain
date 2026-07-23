@@ -5,7 +5,7 @@ import contextlib
 import discord
 
 from core.discord.ctx import Context
-from core.managers.values import color, emojis
+from config import color, emojis
 
 
 

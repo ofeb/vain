@@ -11,7 +11,7 @@ from discord.ext import commands
 
 from core.discord.ctx import Context
 from core.discord.hybrid import describe, group
-from core.managers.values import color
+from config import color
 from core.managers.permissions import has_permissions
 from core.tools.moderation_args import (
     is_duration_token,

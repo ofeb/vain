@@ -39,7 +39,7 @@ def main() -> None:
     log.info("starting vain-bot")
 
     from core.vain import Vain
-    from core.managers.values import token
+    from config import token
 
     if not token:
         raise RuntimeError(

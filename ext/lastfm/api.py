@@ -15,7 +15,7 @@ import aiohttp
 import discord
 
 from core.discord.ctx import Context
-from core.managers.values import api as api_values
+from config import api as api_values
 
 from .constants import LASTFM_EMBED_FOOTER_ICON_URL
 

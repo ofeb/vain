@@ -20,7 +20,7 @@ from core.discord.package import Package
 from core.discord.ctx import Context
 from core.discord.hybrid import describe, group, hybrid
 from core.managers.permissions import has_permissions
-from core.managers.values import color
+from config import color
 from colorthief import ColorThief
 
 
@@ -122,7 +122,7 @@ def build_social_repost_container(
     Uploaded videos/images use **MediaGallery** (type 12) with
     ``attachment://filename`` so Discord shows an inline player (not File type 13).
     """
-    from core.managers.values import emojis
+    from config import emojis
 
     accent = accent or 0x2A2B2F
     c = ui.Container(accent_colour=int(accent))
@@ -320,7 +320,7 @@ class SocialRepostView(ui.LayoutView):
         }
 
     def _rebuild(self) -> None:
-        from core.managers.values import emojis as _e
+        from config import emojis as _e
 
         self.clear_items()
         containers = build_social_repost_container(**self._kwargs())
@@ -533,7 +533,7 @@ def _ytdlp_download_sync(url: str, output_dir: str) -> dict:
     }
     
     try:
-        from core.managers.values import api as api_cfg
+        from config import api as api_cfg
 
         cookie = api_cfg.instagram.cookie_header()
         if cookie and ("instagram.com" in (url or "") or "instagr.am" in (url or "")):

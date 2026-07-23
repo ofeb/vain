@@ -7,7 +7,7 @@ from discord.ext import commands
 
 from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe, group
-from core.managers.values import color, emojis
+from config import color, emojis
 from core.managers.permissions import has_permissions
 
 

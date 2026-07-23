@@ -14,7 +14,7 @@ from discord.ext.commands import Command, Group, Context as CommandsContext
 from core.discord.package import Package
 from core.discord.hybrid import command_display_name, family_root, family_help_name
 
-from core.managers.values import color, emojis, bot as bot_config
+from config import color, emojis, bot as bot_config
 import asyncio
 import aiohttp
 from io import BytesIO

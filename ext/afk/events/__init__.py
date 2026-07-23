@@ -6,7 +6,7 @@ import discord
 from discord.utils import format_dt
 
 from core.discord.package import Package
-from core.managers.values import color
+from config import color
 
 from ..settings import AFK
 

@@ -12,7 +12,7 @@ from core.discord.ctx import Context
 from core.discord.hybrid import describe, hybrid
 from core.discord.package import Package
 from core.discord.views.paginate import send_pages
-from core.managers.values import color
+from config import color
 import asyncio
 from io import BytesIO
 from colorthief import ColorThief
@@ -474,7 +474,7 @@ class InformationCommands(Package):
     )
     @describe(location="City or location name")
     async def weather(self, ctx: Context, *, location: str) -> None:
-        from core.managers.values import api
+        from config import api
 
         if not api.openweathermap.strip():
             return await ctx.warn("OpenWeatherMap API key is not configured.")

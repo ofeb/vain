@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import discord
 
-from core.managers.values import color
+from config import color
 
 if TYPE_CHECKING:
     from ext.tickets import Tickets

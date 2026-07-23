@@ -10,7 +10,7 @@ from discord.ext.commands import CommandError, group
 from core.discord.package import Package
 from core.discord.views.paginate import PaginateView, needs_pagination
 from core.managers.permissions import has_permissions
-from core.managers.values import color, emojis
+from config import color, emojis
 
 
 

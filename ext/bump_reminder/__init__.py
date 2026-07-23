@@ -13,7 +13,7 @@ from .events import BumpReminderEvents
 from core.discord.ctx import Context
 from core.discord.hybrid import describe, hybrid, group
 from core.managers.permissions import has_permissions
-from core.managers.values import color
+from config import color
 
 
 

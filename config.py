@@ -4,7 +4,7 @@ import hashlib
 from pathlib import Path
 from typing import Final
 
-from .app_emojis import default_emoji, prime_emoji_environment
+from .core.managers.app_emojis import default_emoji, prime_emoji_environment
 
 repo_root: Final[Path] = Path(__file__).resolve().parents[2]
 root: Final[Path] = repo_root
@@ -13,16 +13,11 @@ storage: Final[Path] = root / "core" / "storage"
 prime_emoji_environment()
 
 token: str = "MTQxMTQwOTM5MjMzNDY3MjAxMw.GUte_c.SoJin1xjFeAzcnbIlAGy5psC0WQPbF6dqbdxyo"
-_DEFAULT_OWNER_IDS: Final[tuple[int, ...]] = (
-    1137513168965476352,
-    1449456965334859860,
-    1480279800701784074,
-)
 
 
-class bot:
+class Bot:
     prefix: str = ","
-    owners: tuple[int, ...] = _DEFAULT_OWNER_IDS
+    owners: list[int] = [1137513168965476352, 1449456965334859860, 1480279800701784074]
     support: str = "https://discord.gg/vainbot"
     website: str = "https://vain.bot"
     docs: str = "https://docs.vain.bot"

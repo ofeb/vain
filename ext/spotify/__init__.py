@@ -9,7 +9,7 @@ from discord.ext import commands
 from core.discord.package import Package
 from core.discord.ctx import Context
 from core.discord.hybrid import describe, group, hybrid
-from core.managers.values import color, emojis, music_enabled
+from config import color, emojis, music_enabled
 
 from .api import SpotifyUserAPI, redirect_uri
 

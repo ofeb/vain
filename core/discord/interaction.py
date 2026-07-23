@@ -43,7 +43,7 @@ async def _success(
     *,
     ephemeral: bool = True,
 ) -> None:
-    from core.managers.values import emojis, color as _color
+    from config import emojis, color as _color
     from core.managers.app_emojis import format_embed_emoji
 
     emoji = format_embed_emoji(self.client, emojis.approve, fallback_key="success")
@@ -63,7 +63,7 @@ async def _warning(
     *,
     ephemeral: bool = True,
 ) -> None:
-    from core.managers.values import emojis, color as _color
+    from config import emojis, color as _color
     from core.managers.app_emojis import format_embed_emoji
 
     emoji = format_embed_emoji(self.client, emojis.warn, fallback_key="warn")
@@ -83,7 +83,7 @@ async def _fail(
     *,
     ephemeral: bool = True,
 ) -> None:
-    from core.managers.values import emojis, color as _color
+    from config import emojis, color as _color
     from core.managers.app_emojis import format_embed_emoji
 
     emoji = format_embed_emoji(self.client, emojis.deny, fallback_key="deny")
@@ -103,7 +103,7 @@ async def _info(
     *,
     ephemeral: bool = True,
 ) -> None:
-    from core.managers.values import emojis, color as _color
+    from config import emojis, color as _color
     from core.managers.app_emojis import format_embed_emoji
 
     emoji = format_embed_emoji(self.client, emojis.interface.information, fallback_key="info")

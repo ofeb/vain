@@ -15,7 +15,7 @@ from core.discord.hybrid import describe, hybrid, group
 from core.discord.package import Package
 
 from .events import MiscellaneousEvents
-from core.managers.values import color
+from config import color
 from ..information.lookup import GOOGLE_FOOTER_ICON
 
 

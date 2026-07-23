@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import ast, asyncio, contextlib, copy, datetime, logging, time, traceback, discord
+import ast, asyncio, contextlib, copy, datetime, logging, time, traceback, discord, config
 
 from pathlib import Path
-from typing import Awaitable, Callable, Iterable, Optional
 from discord import app_commands
 from discord.ext import commands
+from typing import Awaitable, Callable, Iterable, Optional
 from discord.ext.commands import HybridCommand, HybridGroup
-
 
 from .patches import cmd as _command_patch  # noqa: F401
 
@@ -22,7 +21,7 @@ from .tools.embed import PreparedScript, Script, parse
 from .tools.errors import Ratelimited
 from .tools.ratelimit import global_ratelimit
 from .tools.snipe import Snipe
-from .managers.values import token, bot, color, database, redis, emojis, music_enabled
+from config import color, database, redis, emojis, music_enabled
 from .managers.filetypes import CACHE_REDIS_FILE, ensure_storage_files
 
 from .discord.interaction import patch_interaction
@@ -180,11 +179,7 @@ class Vain(commands.AutoShardedBot):
         self._seen_message_ids: set[int] = set()
         self._guild_slash_commands: list[app_commands.Command] = []
         self._guild_slash_synced = False
-        self.owners = set(bot.owners)
-        self._vain_help = VainHelp()
         self.config = {
-            "token": token,
-            "prefix": bot.prefix,
             "emojis": {
                 "success": emojis.approve,
                 "fail": emojis.deny,
@@ -196,8 +191,8 @@ class Vain(commands.AutoShardedBot):
         super().__init__(
             command_prefix=self._get_prefix,
             intents=discord.Intents.all(),
-            owner_ids=self.owners,
-            help_command=None,
+            owner_ids=config.Bot.owners,
+            help_command=VainHelp(),
             allowed_mentions=discord.AllowedMentions(
                 users=True, roles=False, everyone=False, replied_user=False
             ),
@@ -206,7 +201,6 @@ class Vain(commands.AutoShardedBot):
             chunk_guilds_at_startup=False,
             max_messages=1000,
         )
-        self._vain_help.register(self)
 
     async def remember(self, key: str, ttl: int, loader: Callable[[], Awaitable[object]]) -> object:
         """small local ttl cache for hot runtime reads"""
@@ -253,9 +247,9 @@ class Vain(commands.AutoShardedBot):
         result = await self.remember(
             f"prefix:guild:{guild_id}",
             _PREFIX_TTL,
-            lambda: self.db.fetchval(_GUILD_PREFIX_SQL, guild_id, bot.prefix),
+            lambda: self.db.fetchval(_GUILD_PREFIX_SQL, guild_id, config.Bot.prefix),
         )
-        return list(result) if result else [bot.prefix]
+        return list(result) if result else [config.Bot.prefix]
 
     async def _fetch_prefixes(self, guild_id: int, user_id: int) -> dict:
         """pull prefix data from cache or db"""
@@ -269,7 +263,7 @@ class Vain(commands.AutoShardedBot):
         )
         data = {
             "user": user_pfx,
-            "guild": guild_pfxs or [bot.prefix],
+            "guild": guild_pfxs or [config.Bot.prefix],
         }
         if self.redis:
             await self.redis.set(key, data, ex=_PREFIX_TTL)
@@ -277,7 +271,7 @@ class Vain(commands.AutoShardedBot):
 
     async def _get_prefix(self, _: "Vain", msg: discord.Message) -> Iterable[str]:
         if not msg.guild:
-            return commands.when_mentioned_or(bot.prefix)(self, msg)
+            return commands.when_mentioned_or(config.Bot.prefix)(self, msg)
         data = await self._fetch_prefixes(msg.guild.id, msg.author.id)
         guild_pfxs: list[str] = data["guild"]
         user_pfx: Optional[str] = data["user"]
@@ -286,7 +280,7 @@ class Vain(commands.AutoShardedBot):
                 return commands.when_mentioned_or(pfx)(self, msg)
         if user_pfx and msg.content.startswith(user_pfx):
             return commands.when_mentioned_or(user_pfx)(self, msg)
-        fallback = guild_pfxs[0] if guild_pfxs else bot.prefix
+        fallback = guild_pfxs[0] if guild_pfxs else config.Bot.prefix
         return commands.when_mentioned_or(fallback)(self, msg)
 
 
@@ -805,10 +799,10 @@ class Vain(commands.AutoShardedBot):
         return await self.send_embed(dest, template, user=user, **kw)
 
     async def close(self) -> None:
-        """close db redis and bot connections"""
+        """Close database, cache, and the discord bot smoothly."""
         await self.db.close()
         if self.redis:
             await self.redis.close()
         with contextlib.suppress(Exception):
             await super().close()
-        log.info("vain shut down cleanly")
+        log.info("Clean shutdown.")

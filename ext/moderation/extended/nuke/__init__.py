@@ -13,7 +13,7 @@ from core.discord.package import Package
 from core.discord.views.confirm import ConfirmView
 from core.managers.permissions import has_permissions
 from core.managers.converters import EmbedConverter
-from core.managers.values import color
+from config import color
 
 if TYPE_CHECKING:
     from core.vain import Vain

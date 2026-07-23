@@ -10,7 +10,7 @@ from discord.ext import commands
 from core.discord.ctx import Context
 from core.discord.hybrid import describe, hybrid
 from core.discord.package import Package
-from core.managers.values import color
+from config import color
 
 from .events import AFKEvents
 from .settings import AFK

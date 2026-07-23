@@ -15,7 +15,7 @@ from discord.ext.commands import CommandError
 from core.discord.package import Package
 from core.discord.ctx import Context
 from core.discord.hybrid import group, command, describe
-from core.managers.values import color
+from config import color
 import asyncio
 import aiohttp
 from colorthief import ColorThief

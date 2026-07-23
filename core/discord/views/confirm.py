@@ -11,7 +11,7 @@ import contextlib
 import discord
 from discord.ext.commands import Context
 
-from core.managers.values import color, emojis
+from config import color, emojis
 
 
 def _confirm_embed(message: str) -> discord.Embed:

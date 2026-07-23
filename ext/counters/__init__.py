@@ -9,7 +9,7 @@ from discord.ext import commands
 
 from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe, group
-from core.managers.values import color
+from config import color
 from core.managers.permissions import has_permissions
 
 

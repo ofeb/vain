@@ -108,7 +108,7 @@ def main() -> None:
     parser.add_argument("--manifest", type=Path, default=None)
     args = parser.parse_args()
 
-    from core.managers.values import token as vain_token
+    from config import token as vain_token
 
     token = vain_token
     if not token:

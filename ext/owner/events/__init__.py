@@ -7,7 +7,7 @@ import discord
 from discord.ext import tasks
 
 from core.discord.package import Package
-from core.managers.values import color
+from config import color
 import asyncio
 import aiohttp
 from io import BytesIO

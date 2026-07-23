@@ -15,7 +15,7 @@ from core.discord.package import Package
 
 from .events import TicketsEvents
 from core.managers.permissions import has_permissions
-from core.managers.values import color
+from config import color
 
 from .views import TicketControlView, TicketFormModal, TicketOpenView
 

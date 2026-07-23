@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any
 
 import discord
 
-from core.managers.values import color
+from config import color
 
 
 

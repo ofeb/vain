@@ -7,7 +7,7 @@ import discord
 from discord import ui
 from discord.utils import format_dt
 
-from core.managers.values import emojis, color
+from config import emojis, color
 
 
 

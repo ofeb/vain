@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from .values import storage
+from ...config import storage
 
 log = logging.getLogger("vain.storage")
 

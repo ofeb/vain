@@ -12,7 +12,7 @@ from discord import ui
 from discord.ext import commands
 
 from core.managers.app_emojis import format_embed_emoji
-from core.managers.values import color, emojis, lastfm_color, lastfm_color
+from config import color, emojis, lastfm_color, lastfm_color
 
 
 def body(*lines: str) -> str:

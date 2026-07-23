@@ -11,7 +11,7 @@ from core.discord.package import Package
 from core.discord.ctx import Context
 from core.discord.hybrid import describe, group, hybrid
 from core.managers.permissions import has_permissions
-from core.managers.values import color
+from config import color
 
 from .settings import Settings as LevelSettings
 

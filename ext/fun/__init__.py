@@ -13,7 +13,7 @@ from core.discord.package import Package
 from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe, linked_family
 from core.discord.views.paginate import send_pages
-from core.managers.values import color, emojis
+from config import color, emojis
 
 from .games import start_connect4, start_rps, start_ttt
 from .search import (

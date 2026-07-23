@@ -1,6 +1,6 @@
 from discord.ext.commands import group, CommandError
 from core.discord.package import Package
-from core.managers.values import bot as bot_config
+from config import bot as bot_config
 
 
 from core.managers.permissions import has_permissions

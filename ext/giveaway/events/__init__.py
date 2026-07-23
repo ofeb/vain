@@ -11,7 +11,7 @@ import discord
 from discord.ext import commands, tasks
 from discord.ext.commands import Cog
 
-from core.managers.values import color
+from config import color
 
 from ..views import (
     EntriesPaginator,

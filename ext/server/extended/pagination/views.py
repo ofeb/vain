@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 import discord
 from discord import ui
 
-from core.managers.values import emojis
+from config import emojis
 from core.tools.embed import Script, maybe_wrap_embed_script, to_code
 
 if TYPE_CHECKING:

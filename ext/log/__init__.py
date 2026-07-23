@@ -13,7 +13,7 @@ from core.discord.package import Package
 
 from .events import LogEvents
 from core.managers.permissions import has_permissions
-from core.managers.values import color, emojis
+from config import color, emojis
 
 
 

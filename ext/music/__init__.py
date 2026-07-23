@@ -12,7 +12,7 @@ import discord
 from core.discord.package import Package
 from core.discord.ctx import Context
 from core.discord.hybrid import describe, hybrid
-from core.managers.values import color, music as nl, music_enabled
+from config import color, music as nl, music_enabled
 
 from .events import MusicEvents
 from .panel import (

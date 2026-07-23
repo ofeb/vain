@@ -9,7 +9,7 @@ from urllib.parse import quote_plus, urlencode
 
 import aiohttp
 
-from core.managers.values import api as api_values
+from config import api as api_values
 
 if TYPE_CHECKING:
     from core.managers.database.client import Database

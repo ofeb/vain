@@ -155,7 +155,7 @@ class InviteTracker(Package):
     @has_permissions(manage_guild=True)
     async def invites_resetall(self, ctx: Context):
         from core.discord.views.confirm import ConfirmView
-        from core.managers.values import color as color_values
+        from config import color as color_values
         import discord as _discord
 
         view = ConfirmView(ctx)

@@ -51,7 +51,7 @@ def _default_api_key() -> str:
     if env:
         return env
     try:
-        from core.managers.values import api as api_cfg
+        from config import api as api_cfg
 
         return str(getattr(api_cfg, "vain_rest", "") or "").strip()
     except Exception:

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Optional
 
 import discord
 
-from core.managers.values import color
+from config import color
 from .connect4_board import render_connect4_board
 
 

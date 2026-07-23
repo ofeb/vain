@@ -5,7 +5,7 @@ set api key in config under Authorization.lastfm"""
 from __future__ import annotations
 from typing import Any, Dict, Optional
 import aiohttp
-from core.managers.values import api
+from config import api
 
 
 BASE = "https://ws.audioscrobbler.com/2.0/"

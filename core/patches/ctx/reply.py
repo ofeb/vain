@@ -4,7 +4,7 @@ use success fail warn functions"""
 
 import discord
 from discord.ext.commands import Context
-from core.managers.values import emojis
+from config import emojis
 
 
 def _emoji(name: str, fallback: str) -> str:

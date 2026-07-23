@@ -4,7 +4,7 @@ set api key in config under Authorization.youtube"""
 
 import aiohttp
 from typing import Optional
-from core.managers.values import api
+from config import api
 
 BASE = "https://www.googleapis.com/youtube/v3"
 

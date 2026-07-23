@@ -81,7 +81,7 @@ from core.discord.package import Package
 
 from core.discord.ctx import Context
 from core.discord.hybrid import describe, group, hybrid
-from core.managers.values import color
+from config import color
 
 SC_API_URL = "https://api-v2.soundcloud.com"
 DEFAULT_CLIENT_ID = "a3e059563d7fd3372b49b37f00a00bcf"

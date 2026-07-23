@@ -8,7 +8,7 @@ from typing import Any, Awaitable, Callable
 import discord
 
 from core.discord.ctx import Context
-from core.managers.values import lastfm_crown
+from config import lastfm_crown
 from core.tools.guild_members import collect_guild_members
 
 from .api import LastFMApiClient

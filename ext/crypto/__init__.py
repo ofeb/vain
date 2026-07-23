@@ -8,7 +8,7 @@ from discord.ext import commands
 
 from core.discord.ctx import Context
 from core.discord.hybrid import describe, hybrid
-from core.managers.values import color
+from config import color
 
 
 

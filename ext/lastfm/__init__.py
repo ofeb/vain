@@ -67,7 +67,7 @@ from core.discord.ctx import Context
 from core.discord.package import Package
 
 from .events import LastfmEvents
-from core.managers.values import emojis, api as api_values, lastfm_color as lastfm_color_config, lastfm_callback
+from config import emojis, api as api_values, lastfm_color as lastfm_color_config, lastfm_callback
 from core.tools.guild_members import collect_guild_members
 from core.tools import embed as embed_builder
 from .api import LastFMApiClient

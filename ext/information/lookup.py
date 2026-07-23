@@ -82,7 +82,7 @@ def _title_case_weather(text: str) -> str:
 
 
 async def fetch_weather(session: aiohttp.ClientSession, location: str) -> dict[str, Any]:
-    from core.managers.values import api
+    from config import api
 
     api_key = api.openweathermap.strip()
     if not api_key:

@@ -8,7 +8,7 @@ from typing import Any
 import discord
 from discord import ui
 
-from core.managers.values import color
+from config import color
 
 
 def _ends_line(end_time: datetime | None) -> str:

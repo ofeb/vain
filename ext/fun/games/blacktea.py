@@ -7,7 +7,7 @@ import discord
 from discord.ext import commands
 
 from core.discord.ctx import Context
-from core.managers.values import color
+from config import color
 
 
 

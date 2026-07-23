@@ -6,7 +6,7 @@ import discord
 from discord.ext.commands import Context
 from typing import List
 
-from core.managers.values import color, emojis
+from config import color, emojis
 
 
 
