@@ -1373,20 +1373,57 @@ class CommandHelpMenu(ui.LayoutView):
         return self.msg
 
 
-class VainHelp:
-    def __init__(self) -> None:
-        
+class VainHelp(commands.HelpCommand):
+    """Custom help UI registered as the bot's HelpCommand."""
+
+    def __init__(self, **options: Any) -> None:
+        super().__init__(
+            command_attrs={
+                "name": "help",
+                "aliases": ["h", "commands"],
+                "description": "Browse command help, categories, usage and examples.",
+                "help": "Browse command help, categories, usage and examples.",
+            },
+            verify_checks=False,
+            **options,
+        )
         self._seen: dict[int, float] = {}
 
     def register(self, bot: Vain) -> None:
-        @bot.command(
-            name="help",
-            aliases=["h", "commands"],
-            description="Browse command help, categories, usage and examples.",
-            example="help purge",
+        """Legacy hook — bot already owns this instance as help_command."""
+        bot._vain_help = self  # type: ignore[attr-defined]
+
+    async def command_callback(
+        self,
+        ctx: CommandsContext,
+        /,
+        *,
+        command: str | None = None,
+    ) -> None:
+        """Entry point for `,help` / `,h` / `,commands`."""
+        await self.invoke(ctx, command)  # type: ignore[arg-type]
+
+    async def send_bot_help(self, mapping: Any) -> None:
+        await self.invoke(self.context, None)  # type: ignore[arg-type]
+
+    async def send_command_help(self, command: Command) -> None:
+        await self._send_cmd(self.context, command)  # type: ignore[arg-type]
+
+    async def send_group_help(self, group: Group) -> None:
+        owner = self.context.author.id in getattr(self.context.bot, "owners", ())
+        await self._send_group(
+            self.context,  # type: ignore[arg-type]
+            group,
+            targets=self._family_targets(self.context.bot, group, owner=owner),  # type: ignore[arg-type]
         )
-        async def _help(ctx: Context, *, command: str | None = None) -> None:
-            await self.invoke(ctx, command)
+
+    async def send_cog_help(self, cog: commands.Cog) -> None:
+        await self._send_cog(self.context, cog)  # type: ignore[arg-type]
+
+    async def send_error_message(self, error: str) -> None:
+        destination = self.get_destination()
+        with contextlib.suppress(Exception):
+            await destination.send(error)
 
     async def invoke(self, ctx: Context, query: str | None = None) -> None:
         bot = ctx.bot

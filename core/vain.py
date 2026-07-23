@@ -201,6 +201,8 @@ class Vain(commands.AutoShardedBot):
             chunk_guilds_at_startup=False,
             max_messages=1000,
         )
+        
+        self._vain_help = self.help_command
 
     async def remember(self, key: str, ttl: int, loader: Callable[[], Awaitable[object]]) -> object:
         """small local ttl cache for hot runtime reads"""
