@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import io
 import logging
 import random
@@ -95,19 +96,43 @@ _SEARCH_PREFIX_RE = re.compile(r"^[a-z]+search:", re.I)
 _URL_HINT_RE = re.compile(
     r"^(?:www\.|(?:open\.)?spotify\.com/|(?:music\.)?youtube\.com/|youtu\.be/|"
     r"soundcloud\.com/|(?:www\.)?deezer\.com/|music\.apple\.com/|"
-    r"music\.youtube\.com/)",
+    r"music\.youtube\.com/|(?:listen\.)?tidal\.com/|bandcamp\.com/)",
     re.I,
 )
 _PLATFORM_RE = re.compile(
     r"(?:open\.)?spotify\.com/|"
+    r"spotify:|"
     r"(?:www\.)?deezer\.com/|"
     r"music\.apple\.com/|"
     r"soundcloud\.com/|"
     r"music\.youtube\.com/|"
     r"(?:www\.)?youtube\.com/|"
-    r"youtu\.be/",
+    r"youtu\.be/|"
+    r"(?:listen\.)?tidal\.com/|"
+    r"[\w-]+\.bandcamp\.com/",
     re.I,
 )
+
+_COLLECTION_RE = re.compile(
+    r"(?:"
+    r"/playlist(?:[/?#]|$)|"
+    r"/album(?:[/?#]|$)|"
+    r"/sets?/|"
+    r"/mix(?:es)?(?:[/?#]|$)|"
+    r"[?&]list=|"
+    r"spotify:(?:playlist|album):|"
+    r"spotify\.com/(?:playlist|album)/|"
+    r"deezer\.com/(?:[a-z]{2}/)?(?:playlist|album|mix)/|"
+    r"music\.apple\.com/[^?\s]+/(?:playlist|album)/|"
+    r"(?:listen\.)?tidal\.com/(?:browse/)?(?:playlist|album)/|"
+    r"soundcloud\.com/[^?\s]+/sets/|"
+    r"music\.youtube\.com/playlist|"
+    r"youtube\.com/playlist"
+    r")",
+    re.I,
+)
+_MAX_COLLECTION_TRACKS = 100
+_RESOLVE_CONCURRENCY = 6
 _VIDEO_NOISE_RE = re.compile(
     r"\b(official\s*(music\s*)?video|official\s*video|music\s*video|vevo|"
     r"lyric\s*video|visualizer|mv|4k|8k|hd|remaster(ed)?)\b",
@@ -141,7 +166,7 @@ try:
                 node = _resolve_pool_node()
             super().__init__(client, channel, node=node)
             self._sync_endpoint()
-            # Ensure this player is tracked on the node immediately
+            
             try:
                 self._node._players[self._guild.id] = self  # type: ignore[attr-defined]
             except Exception:
@@ -152,7 +177,7 @@ try:
             if sid:
                 self._player_endpoint_uri = f"sessions/{sid}/players"
             else:
-                # Keep a sentinel so we never silently hit sessions/None/...
+                
                 self._player_endpoint_uri = "sessions/pending/players"
 
         def voice_ready(self) -> bool:
@@ -175,7 +200,7 @@ try:
             session_id = vs.get("sessionId")
             if not token or not endpoint or not session_id:
                 return None
-            # Discord sometimes prefixes endpoint with wss:// — strip it
+            
             endpoint = str(endpoint).removeprefix("wss://").removeprefix("ws://")
             data = {
                 "token": str(token),
@@ -204,7 +229,7 @@ try:
                 return True
             except Exception as exc:
                 msg = str(exc).lower()
-                # 404 player not found on some NodeLink builds: retry with PUT
+                
                 if "404" in msg or "player not found" in msg or "session" in msg:
                     try:
                         self._sync_endpoint()
@@ -241,7 +266,7 @@ try:
                 ):
                     self._sync_endpoint()
                     voice_ok = True
-                    # Best-effort create player early; failure is OK
+                    
                     await self._force_voice_update()
                     return True
                 await asyncio.sleep(0.15)
@@ -270,7 +295,7 @@ try:
                 self._voice_state.update({"sessionId": sid})
             channel_id = data.get("channel_id")
             if not channel_id:
-                # Bot left voice — don't hard-disconnect mid-handshake
+                
                 return
             channel = self.guild.get_channel(int(channel_id))
             if channel is None:
@@ -382,7 +407,7 @@ try:
             pos = int(start or 0)
             payloads: list[dict] = []
 
-            # Lavalink v4 / NodeLink preferred form
+            
             modern: dict = {
                 "track": {"encoded": encoded},
                 "position": pos,
@@ -394,7 +419,7 @@ try:
                 modern["endTime"] = int(end)
             payloads.append(modern)
 
-            # Legacy Lavalink form (some forks still expect this)
+            
             legacy: dict = {
                 "encodedTrack": encoded,
                 "position": str(pos),
@@ -406,7 +431,7 @@ try:
                 legacy["endTime"] = str(int(end))
             payloads.append(legacy)
 
-            # Also try modern without volume (some strict validators)
+            
             modern_min = {
                 "track": {"encoded": encoded},
                 "voice": voice,
@@ -463,7 +488,7 @@ try:
             except Exception:
                 pass
 
-            # Best-effort pre-create; play payload will create if this 404s
+            
             await self._force_voice_update()
 
             encoded = await self._resolve_encoded(track)
@@ -482,7 +507,7 @@ try:
 
             self._current = track
             last_exc: Exception | None = None
-            # Prefer replace so a missing player is created (noReplace=true can 404)
+            
             attempts: list[tuple[str, dict, bool | None]] = []
             for data in payloads:
                 attempts.append(("PATCH", data, bool(ignore_if_playing)))
@@ -525,7 +550,7 @@ try:
                             exc,
                         )
                         if "session not found" in msg:
-                            # Session died — wait for node reconnect
+                            
                             await asyncio.sleep(1.2)
                             self._sync_endpoint()
                             break
@@ -719,38 +744,58 @@ class Music(MusicEvents, Package):
             return next(iter(nodes.values()))
         return None
 
+    def _apply_nodelink_headers(self, node) -> None:
+        """Inject NodeLink endpoint/auth headers so player PATCH is not 403'd."""
+        if node is None:
+            return
+        headers = getattr(node, "_headers", None)
+        if not isinstance(headers, dict):
+            return
+        
+        headers.setdefault("Authorization", nl.password)
+        code = str(getattr(nl, "endpoint_code", "") or "").strip()
+        if code:
+            
+            headers["X-NodeLink-Code"] = code
+            headers["X-Endpoint-Code"] = code
+            headers["Endpoint-Code"] = code
+            headers["code"] = code
+        try:
+            node._headers = headers  # type: ignore[attr-defined]
+        except Exception:
+            pass
+
     async def _connect_node(self) -> bool:
         if not music_enabled or not HAS_LYRA:
             return False
         if _node_ready(self._node):
+            self._apply_nodelink_headers(self._node)
             return True
         if not self.bot.is_ready():
-            
             pass
 
         async with self._node_lock:
             if _node_ready(self._node):
+                self._apply_nodelink_headers(self._node)
                 return True
 
             ident = nl.identifier()
             node = None
 
-            
             try:
                 node = lyra.NodePool.get_node(identifier=ident)
             except (NoNodesAvailable, KeyError):
                 node = None
 
-            
             if node is None:
                 node = self._pool_node_raw(ident)
 
             if node is not None:
+                self._apply_nodelink_headers(node)
                 try:
                     if not getattr(node, "is_connected", False):
                         await node.connect(reconnect=True)
                     elif not getattr(node, "_available", False):
-                        
                         try:
                             await node.connect(reconnect=True)
                         except Exception:
@@ -760,11 +805,11 @@ class Music(MusicEvents, Package):
                     node = None
                 else:
                     if await self._wait_node_ready(node):
+                        self._apply_nodelink_headers(node)
                         self._node = node
                         log.info("nodelink ready (existing node %s)", ident)
                         return True
 
-            
             log.info("connecting to nodelink at %s:%s", nl.host, nl.port)
             try:
                 node = await asyncio.wait_for(
@@ -801,13 +846,14 @@ class Music(MusicEvents, Package):
                 node = None
 
             if node is not None and await self._wait_node_ready(node, timeout=12.0):
+                self._apply_nodelink_headers(node)
                 self._node = node
                 log.info("nodelink ready at %s:%s", nl.host, nl.port)
                 return True
 
-            
             try:
                 node = lyra.NodePool.get_node()
+                self._apply_nodelink_headers(node)
                 self._node = node
                 log.info("nodelink ready (fallback pool node)")
                 return True
@@ -945,13 +991,43 @@ class Music(MusicEvents, Package):
         return player
 
     def _normalize_query(self, query: str) -> str:
-        query = query.strip()
+        query = query.strip().strip("<>")
         if not query:
             return query
         if query.startswith("//"):
-            return f"https:{query}"
+            query = f"https:{query}"
         if _URL_HINT_RE.match(query) and not query.startswith(("http://", "https://", "spotify:")):
-            return f"https://{query}"
+            query = f"https://{query}"
+        return query
+
+    def _clean_media_url(self, query: str) -> str:
+        """Strip tracking params; keep YouTube list= for playlists."""
+        query = self._normalize_query(query)
+        if not query:
+            return query
+        low = query.lower()
+        if low.startswith("spotify:") or "spotify.com" in low:
+            return query.split("?")[0].split("&")[0]
+        if "deezer.com" in low or "music.apple.com" in low or "tidal.com" in low:
+            return query.split("?")[0]
+        if "soundcloud.com" in low:
+            return query.split("?")[0]
+        if "youtube.com" in low or "youtu.be" in low or "music.youtube.com" in low:
+            
+            try:
+                from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+
+                parsed = urlparse(query)
+                qs = parse_qs(parsed.query)
+                keep = {}
+                if "list" in qs:
+                    keep["list"] = qs["list"][0]
+                if "v" in qs:
+                    keep["v"] = qs["v"][0]
+                new_q = urlencode(keep)
+                return urlunparse(parsed._replace(query=new_q))
+            except Exception:
+                return query.split("&si=")[0].split("&utm_")[0]
         return query
 
     def _parse_play_flags(self, query: str, *, next: bool) -> tuple[str, bool]:
@@ -1125,7 +1201,12 @@ class Music(MusicEvents, Package):
 
     def _is_platform_url(self, query: str) -> bool:
         q = query.lower()
-        return bool(_PLATFORM_RE.search(q))
+        return bool(_PLATFORM_RE.search(q)) or q.startswith("spotify:")
+
+    def _is_collection_url(self, query: str) -> bool:
+        """True for playlist/album/set/mix URLs across supported platforms."""
+        q = self._clean_media_url(query)
+        return bool(_COLLECTION_RE.search(q))
 
     def _platform_name(self, query: str) -> str:
         q = query.lower()
@@ -1137,6 +1218,10 @@ class Music(MusicEvents, Package):
             return "apple music"
         if "soundcloud.com" in q:
             return "soundcloud"
+        if "tidal.com" in q:
+            return "tidal"
+        if "bandcamp.com" in q:
+            return "bandcamp"
         if "music.youtube.com" in q:
             return "youtube music"
         if "youtube.com" in q or "youtu.be" in q:
@@ -1213,48 +1298,215 @@ class Music(MusicEvents, Package):
         artist: str,
         source_url: str | None = None,
         platform: str | None = None,
+        isrc: str | None = None,
     ):
-        """Search YouTube Music / YouTube for an audio (non-VEVO) match."""
+        """Search YouTube Music / YouTube for an audio (non-VEVO) match.
+
+        Always plays via YT Music when possible; `platform` is only the
+        display provider label (spotify / deezer / apple music / …).
+        """
         clean_title, clean_artist = self._clean_title_artist(title, artist)
         pick = f"{clean_title} {clean_artist}".strip()
-        queries = []
+        queries: list[str] = []
+        if isrc:
+            queries.append(str(isrc).strip())
         if clean_artist and clean_title:
             queries.append(f"{clean_title} {clean_artist}")
             queries.append(f"{clean_artist} - {clean_title}")
+            queries.append(f"{clean_title} {clean_artist} audio")
         if clean_title:
             queries.append(clean_title)
-        queries.append(f"{pick} audio")
+        if pick:
+            queries.append(f"{pick} audio")
 
+        
         for source in ("ytmsearch", "ytsearch"):
             for q in queries:
-                track = await self._load_query(f"{source}:{q}", pick_query=pick)
+                if not q:
+                    continue
+                track = await self._load_query(f"{source}:{q}", pick_query=pick or q)
                 if track is None:
                     continue
                 self._bind_meta(
                     track,
-                    display_title=clean_title or title,
-                    display_author=clean_artist or artist,
+                    display_title=clean_title or title or getattr(track, "title", None),
+                    display_author=clean_artist or artist or getattr(track, "author", None),
                     source_url=source_url,
                     platform=platform,
+                    
                     from_search=source_url is None,
                 )
                 log.info(
-                    "resolved via %s → %s — %s",
+                    "resolved via %s → %s — %s (provider=%s)",
                     source,
                     track.title,
                     track.author,
+                    platform or "search",
                 )
                 return track
         return None
 
+    def _seed_isrc(self, track) -> str | None:
+        isrc = _safe_attr(track, "isrc") if HAS_LYRA else getattr(track, "isrc", None)
+        if isrc:
+            return str(isrc)
+        info = getattr(track, "info", None) or {}
+        if isinstance(info, dict) and info.get("isrc"):
+            return str(info["isrc"])
+        return None
+
+    async def _resolve_seed_to_playable(
+        self,
+        seed,
+        *,
+        source_url: str | None,
+        platform: str | None,
+    ):
+        """Turn a platform metadata track into a YT Music–playable track."""
+        title = getattr(seed, "title", None) or "unknown"
+        artist = getattr(seed, "author", None) or ""
+        isrc = self._seed_isrc(seed)
+        src = self._track_source(seed)
+
+        
+        if src in {"youtube", "youtubemusic", "ytm", "ytmusic"} and not (
+            _VIDEO_NOISE_RE.search(title or "")
+            or "vevo" in (artist or "").lower()
+        ):
+            
+            if platform in {None, "youtube", "youtube music", "link"}:
+                self._bind_meta(
+                    seed,
+                    display_title=title,
+                    display_author=artist,
+                    source_url=source_url,
+                    platform=platform or "youtube music",
+                    from_search=False,
+                )
+                return seed
+
+        resolved = await self._resolve_to_youtube_audio(
+            title=title,
+            artist=artist,
+            source_url=source_url,
+            platform=platform,
+            isrc=isrc,
+        )
+        if resolved is not None:
+            return resolved
+
+        
+        if _safe_attr(seed, "track_id") or getattr(seed, "track_id", None):
+            self._bind_meta(
+                seed,
+                display_title=title,
+                display_author=artist,
+                source_url=source_url,
+                platform=platform,
+                from_search=False,
+            )
+            return seed
+        return None
+
+    async def _load_platform_collection(
+        self,
+        url: str,
+        *,
+        platform: str | None = None,
+    ) -> list:
+        """Load playlist/album metadata from a provider, resolve each song via YTM."""
+        cleaned = self._clean_media_url(url)
+        platform = platform or self._platform_name(cleaned)
+        log.info("loading %s collection: %s", platform, cleaned)
+
+        try:
+            raw = await asyncio.wait_for(self._load_all_tracks(cleaned), timeout=45.0)
+        except asyncio.TimeoutError:
+            log.warning("collection load timed out for %s", cleaned)
+            raw = []
+        except Exception:
+            log.exception("collection load failed for %s", cleaned)
+            raw = []
+
+        if not raw:
+            
+            if cleaned != url:
+                try:
+                    raw = await asyncio.wait_for(
+                        self._load_all_tracks(self._normalize_query(url)),
+                        timeout=45.0,
+                    )
+                except Exception:
+                    raw = []
+
+        if not raw:
+            log.warning("no tracks from %s collection %s", platform, cleaned)
+            return []
+
+        total = len(raw)
+        if total > _MAX_COLLECTION_TRACKS:
+            log.info(
+                "truncating %s collection %s → %s tracks (was %s)",
+                platform,
+                cleaned,
+                _MAX_COLLECTION_TRACKS,
+                total,
+            )
+            raw = raw[:_MAX_COLLECTION_TRACKS]
+
+        sem = asyncio.Semaphore(_RESOLVE_CONCURRENCY)
+        resolved: list = []
+
+        async def _one(seed, index: int):
+            async with sem:
+                try:
+                    track = await self._resolve_seed_to_playable(
+                        seed,
+                        source_url=cleaned,
+                        platform=platform,
+                    )
+                    return index, track
+                except Exception as exc:
+                    log.debug(
+                        "resolve failed [%s] %s — %s: %s",
+                        index,
+                        getattr(seed, "title", "?"),
+                        getattr(seed, "author", "?"),
+                        exc,
+                    )
+                    return index, None
+
+        pairs = await asyncio.gather(
+            *[_one(seed, i) for i, seed in enumerate(raw)],
+            return_exceptions=False,
+        )
+        pairs.sort(key=lambda x: x[0])
+        for _, track in pairs:
+            if track is not None:
+                resolved.append(track)
+
+        log.info(
+            "collection %s → %s/%s playable via ytm (provider label=%s)",
+            cleaned,
+            len(resolved),
+            len(raw),
+            platform,
+        )
+        return resolved
+
     async def _first_track(self, query: str):
         if self._node is None:
-            return None
-        query = self._normalize_query(query.strip())
+            if not await self._connect_node():
+                return None
+        query = self._clean_media_url(query.strip()) if query else ""
         if not query:
             return None
 
         
+        if self._is_collection_url(query):
+            tracks = await self._load_platform_collection(query)
+            return tracks[0] if tracks else None
+
         if self._is_direct_query(query) and (
             query.startswith(("http://", "https://", "spotify:"))
             or self._is_platform_url(query)
@@ -1262,50 +1514,23 @@ class Music(MusicEvents, Package):
             platform = self._platform_name(query)
             seeded = await self._load_query(query)
             if seeded is not None:
-                
-                src = self._track_source(seeded)
-                if src in {"youtube", "youtubemusic", "ytm"} and not (
-                    _VIDEO_NOISE_RE.search(seeded.title or "")
-                    or "vevo" in (seeded.author or "").lower()
-                ):
-                    self._bind_meta(
-                        seeded,
-                        display_title=seeded.title,
-                        display_author=seeded.author,
-                        source_url=query,
-                        platform=platform,
-                        from_search=False,
-                    )
-                    return seeded
-
-                resolved = await self._resolve_to_youtube_audio(
-                    title=seeded.title or query,
-                    artist=seeded.author or "",
-                    source_url=query,
-                    platform=platform,
-                )
-                if resolved is not None:
-                    return resolved
-                
-                self._bind_meta(
+                return await self._resolve_seed_to_playable(
                     seeded,
-                    display_title=seeded.title,
-                    display_author=seeded.author,
                     source_url=query,
                     platform=platform,
-                    from_search=False,
                 )
-                return seeded
             
             return await self._resolve_to_youtube_audio(
-                title=query, artist="", source_url=None, platform=None
+                title=query,
+                artist="",
+                source_url=query,
+                platform=platform,
             )
 
-        
         if _SEARCH_PREFIX_RE.match(query):
             track = await self._load_query(query, pick_query=query.split(":", 1)[-1])
             if track:
-                self._bind_meta(track, from_search=True)
+                self._bind_meta(track, from_search=True, platform="youtube music")
             return track
 
         for source in nl.search_sources:
@@ -1322,6 +1547,7 @@ class Music(MusicEvents, Package):
                 display_title=title,
                 display_author=artist,
                 from_search=True,
+                platform="youtube music" if source.startswith("yt") else None,
             )
             return track
 
@@ -1390,20 +1616,22 @@ class Music(MusicEvents, Package):
 
         if platform:
             header = f"playing **{platform}**"
+            provider_line = f"> -# provider: **{platform}** · audio: **youtube music**"
         else:
             header = "now playing"
+            provider_line = "> -# source: **youtube music**"
 
         song_line = (
             f"[**{title}** — **{artist}**]({link})"
             if link
             else f"**{title}** — **{artist}**"
         )
-        
+
         emb = discord.Embed(
             color=color.base,
             description=compose(
                 body(header, song_line),
-                caption("> -# source: **youtube music**"),
+                caption(provider_line),
             ),
         )
 
@@ -1547,25 +1775,9 @@ class Music(MusicEvents, Package):
             return await inter.followup.send("nothing playing — use `,play` first", ephemeral=True)
 
         tracks: list = []
-        normalized = self._normalize_query(query)
-        if self._is_direct_query(normalized) and (
-            "playlist" in normalized.lower()
-            or "album" in normalized.lower()
-            or "/sets/" in normalized.lower()
-        ):
-            raw = await self._load_all_tracks(normalized)
-            if raw:
-                platform = self._platform_name(normalized)
-                for t in raw:
-                    self._bind_meta(
-                        t,
-                        display_title=getattr(t, "title", None),
-                        display_author=getattr(t, "author", None),
-                        source_url=normalized,
-                        platform=platform,
-                        from_search=False,
-                    )
-                tracks = raw
+        normalized = self._clean_media_url(query)
+        if self._is_collection_url(normalized):
+            tracks = await self._load_platform_collection(normalized)
         if not tracks:
             t = await self._first_track(query)
             if t is None:
@@ -1715,27 +1927,66 @@ class Music(MusicEvents, Package):
         if player is None:
             return
 
-        
-        normalized = self._normalize_query(query)
+        normalized = self._clean_media_url(query)
         tracks: list = []
-        if self._is_direct_query(normalized) and (
-            "playlist" in normalized.lower()
-            or "album" in normalized.lower()
-            or "/sets/" in normalized.lower()
-        ):
-            raw = await self._load_all_tracks(normalized)
-            if raw:
-                platform = self._platform_name(normalized)
-                for t in raw:
-                    self._bind_meta(
-                        t,
-                        display_title=getattr(t, "title", None),
-                        display_author=getattr(t, "author", None),
-                        source_url=normalized,
-                        platform=platform,
-                        from_search=False,
+        platform = self._platform_name(normalized) if self._is_platform_url(normalized) else None
+
+        
+        if self._is_collection_url(normalized):
+            platform = platform or self._platform_name(normalized)
+            loading = None
+            try:
+                loading = await ctx.send(
+                    embed=discord.Embed(
+                        color=color.base,
+                        description=compose(
+                            body(
+                                f"loading **{platform}** collection",
+                                "resolving tracks through **youtube music**…",
+                            ),
+                        ),
                     )
-                tracks = raw
+                )
+            except Exception:
+                pass
+            await self.music_log(
+                title="Collection load started",
+                description=f"`{normalized[:500]}`",
+                guild=ctx.guild,
+                user=ctx.author,
+                fields=[("Provider", platform or "?")],
+            )
+            tracks = await self._load_platform_collection(
+                normalized,
+                platform=platform,
+            )
+            if loading is not None:
+                with contextlib.suppress(Exception):
+                    await loading.delete()
+            if tracks:
+                await self.music_log(
+                    title="Collection ready",
+                    description=f"**{len(tracks)}** tracks from **{platform}** (audio via youtube music)",
+                    guild=ctx.guild,
+                    user=ctx.author,
+                )
+            else:
+                await self.music_log(
+                    title="Collection empty / failed",
+                    description=(
+                        f"No playable tracks from `{normalized[:400]}`.\n"
+                        "If this is Spotify/Apple/Deezer, ensure NodeLink has the "
+                        "matching source plugin enabled so metadata can load."
+                    ),
+                    guild=ctx.guild,
+                    user=ctx.author,
+                    error=True,
+                    fields=[("Provider", platform or "?")],
+                )
+                return await ctx.warn(
+                    f"couldn't load that **{platform}** playlist/album — "
+                    "no tracks resolved (check NodeLink source plugins)"
+                )
 
         if not tracks:
             track = await self._first_track(query)
@@ -1882,9 +2133,17 @@ class Music(MusicEvents, Package):
                 except Exception as exc2:
                     state.current = None
                     log.exception("play retry failed: %s", exc2)
+                    hint = ""
+                    err_l = str(exc2).lower()
+                    if "403" in err_l or "forbidden" in err_l:
+                        hint = (
+                            "\n\n**NodeLink 403:** set `cluster.endpoint.allowExternalPatch: true` "
+                            "in your NodeLink config (`default.txt`) and restart NodeLink. "
+                            "Player PATCH is blocked when external patches are disabled."
+                        )
                     await self.music_log(
                         title="Play failed after retry",
-                        description=f"```{exc2}```",
+                        description=f"```{exc2}```{hint}",
                         guild=ctx.guild,
                         user=ctx.author,
                         error=True,
@@ -1900,8 +2159,17 @@ class Music(MusicEvents, Package):
                                 "Player channel",
                                 str(getattr(getattr(player, "channel", None), "id", None)),
                             ),
+                            (
+                                "Fix if 403",
+                                "default.txt → allowExternalPatch: true, restart NodeLink",
+                            ),
                         ],
                     )
+                    if "403" in err_l or "forbidden" in err_l:
+                        return await ctx.fail(
+                            "couldn't start playback — **NodeLink blocked player updates (403)**. "
+                            "Set `allowExternalPatch: true` in NodeLink config and restart NodeLink."
+                        )
                     return await ctx.fail(
                         f"couldn't start playback — check nodelink/lavalink logs ({exc2})"
                     )
@@ -1926,13 +2194,15 @@ class Music(MusicEvents, Package):
             )
             if len(tracks) > 1:
                 try:
+                    plat = platform or self._meta(first).get("platform") or "queue"
                     await ctx.send(
                         embed=discord.Embed(
                             color=color.base,
                             description=compose(
                                 body(
-                                    "playlist loaded",
-                                    f"**{len(tracks) - 1}** more tracks queued",
+                                    f"**{plat}** collection loaded",
+                                    f"**{len(tracks)}** tracks · audio via **youtube music**",
+                                    f"**{len(tracks) - 1}** more queued after this one",
                                 ),
                             ),
                         )
