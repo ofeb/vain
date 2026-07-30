@@ -1,11 +1,11 @@
-discord.py>=2.4.0
+git+https://github.com/nxyyhaha/dcspoof
+git+https://github.com/Rapptz/discord.py
 jishaku
 aiohttp
 colorthief
 async-timeout
 asyncpg
 fast-string-match
-git+https://github.com/nxyyhaha/dcspoof
 humanize
 loguru
 orjson
@@ -25,4 +25,4 @@ xxhash
 yt-dlp
 imageio-ffmpeg
 lava-lyra
-discord-chat-exporter
+#discord-chat-exporter

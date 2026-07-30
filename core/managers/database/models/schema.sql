@@ -1415,3 +1415,104 @@ CREATE TABLE IF NOT EXISTS aliases (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (guild_id, alias)
 );
+
+CREATE TABLE IF NOT EXISTS fake_permissions (
+    guild_id BIGINT NOT NULL,
+    role_id BIGINT NOT NULL,
+    permissions TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, role_id)
+);
+
+CREATE SCHEMA IF NOT EXISTS moderation;
+
+CREATE TABLE IF NOT EXISTS moderation.caps (
+    guild_id BIGINT PRIMARY KEY,
+    channel_ids BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    threshold INT NOT NULL DEFAULT 70,
+    action VARCHAR(16) NOT NULL DEFAULT 'delete',
+    exempt_roles BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS moderation.spam (
+    guild_id BIGINT PRIMARY KEY,
+    channel_ids BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    threshold INT NOT NULL DEFAULT 5,
+    action VARCHAR(16) NOT NULL DEFAULT 'delete',
+    exempt_roles BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS moderation.links (
+    guild_id BIGINT PRIMARY KEY,
+    channel_ids BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    action VARCHAR(16) NOT NULL DEFAULT 'delete',
+    whitelist TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    exempt_roles BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS moderation.invites (
+    guild_id BIGINT PRIMARY KEY,
+    channel_ids BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    action VARCHAR(16) NOT NULL DEFAULT 'delete',
+    exempt_roles BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS moderation.spoilers (
+    guild_id BIGINT PRIMARY KEY,
+    channel_ids BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    threshold INT NOT NULL DEFAULT 5,
+    action VARCHAR(16) NOT NULL DEFAULT 'delete',
+    exempt_roles BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS moderation.music (
+    guild_id BIGINT PRIMARY KEY,
+    channel_ids BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    action VARCHAR(16) NOT NULL DEFAULT 'delete',
+    exempt_roles BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS moderation.mention (
+    guild_id BIGINT PRIMARY KEY,
+    channel_ids BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    threshold INT NOT NULL DEFAULT 5,
+    action VARCHAR(16) NOT NULL DEFAULT 'delete',
+    exempt_roles BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS moderation.emoji (
+    guild_id BIGINT PRIMARY KEY,
+    channel_ids BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    threshold INT NOT NULL DEFAULT 5,
+    action VARCHAR(16) NOT NULL DEFAULT 'delete',
+    exempt_roles BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS moderation.regex (
+    guild_id BIGINT NOT NULL,
+    regex TEXT NOT NULL,
+    action VARCHAR(16) NOT NULL DEFAULT 'delete',
+    exempt_roles BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, regex)
+);
+
+CREATE TABLE IF NOT EXISTS moderation.regex_exempt (
+    guild_id BIGINT PRIMARY KEY,
+    exempt_roles BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS pokemon.users (
+    user_id BIGINT PRIMARY KEY,
+    username TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
