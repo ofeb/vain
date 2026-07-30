@@ -22,8 +22,6 @@ from .panel import (
     render_now_playing_card,
 )
 
-
-
 def compose(*parts: str) -> str:
     return "\n".join(part for part in parts if part)
 
@@ -85,10 +83,7 @@ def panel_embed(
         embed.timestamp = discord.utils.utcnow()
     return embed
 
-
-
-log = logging.getLogger("Vain.music")
-
+log = logging.getLogger("vain/music")
 
 MUSIC_LOG_CHANNEL_ID = 1523010752045256724
 
@@ -166,7 +161,7 @@ try:
                 node = _resolve_pool_node()
             super().__init__(client, channel, node=node)
             self._sync_endpoint()
-            
+
             try:
                 self._node._players[self._guild.id] = self  # type: ignore[attr-defined]
             except Exception:
@@ -177,7 +172,7 @@ try:
             if sid:
                 self._player_endpoint_uri = f"sessions/{sid}/players"
             else:
-                
+
                 self._player_endpoint_uri = "sessions/pending/players"
 
         def voice_ready(self) -> bool:
@@ -200,7 +195,7 @@ try:
             session_id = vs.get("sessionId")
             if not token or not endpoint or not session_id:
                 return None
-            
+
             endpoint = str(endpoint).removeprefix("wss://").removeprefix("ws://")
             data = {
                 "token": str(token),
@@ -229,7 +224,7 @@ try:
                 return True
             except Exception as exc:
                 msg = str(exc).lower()
-                
+
                 if "404" in msg or "player not found" in msg or "session" in msg:
                     try:
                         self._sync_endpoint()
@@ -266,7 +261,7 @@ try:
                 ):
                     self._sync_endpoint()
                     voice_ok = True
-                    
+
                     await self._force_voice_update()
                     return True
                 await asyncio.sleep(0.15)
@@ -295,7 +290,7 @@ try:
                 self._voice_state.update({"sessionId": sid})
             channel_id = data.get("channel_id")
             if not channel_id:
-                
+
                 return
             channel = self.guild.get_channel(int(channel_id))
             if channel is None:
@@ -319,7 +314,6 @@ try:
                 info = {}
             source = str(info.get("sourceName", "") or "").lower().replace(" ", "")
 
-            
             playable_sources = {
                 "youtube",
                 "youtubemusic",
@@ -339,11 +333,10 @@ try:
                 oid = _safe_attr(original, "track_id")
                 if oid:
                     return str(oid)
-            
+
             if encoded and source not in {"spotify", "applemusic", "deezer"}:
                 return str(encoded)
 
-            
             queries: list[str] = []
             isrc = _safe_attr(track, "isrc")
             st = _safe_attr(search_type, "value") if search_type is not None else None
@@ -407,7 +400,6 @@ try:
             pos = int(start or 0)
             payloads: list[dict] = []
 
-            
             modern: dict = {
                 "track": {"encoded": encoded},
                 "position": pos,
@@ -419,7 +411,6 @@ try:
                 modern["endTime"] = int(end)
             payloads.append(modern)
 
-            
             legacy: dict = {
                 "encodedTrack": encoded,
                 "position": str(pos),
@@ -431,7 +422,6 @@ try:
                 legacy["endTime"] = str(int(end))
             payloads.append(legacy)
 
-            
             modern_min = {
                 "track": {"encoded": encoded},
                 "voice": voice,
@@ -488,7 +478,6 @@ try:
             except Exception:
                 pass
 
-            
             await self._force_voice_update()
 
             encoded = await self._resolve_encoded(track)
@@ -507,7 +496,7 @@ try:
 
             self._current = track
             last_exc: Exception | None = None
-            
+
             attempts: list[tuple[str, dict, bool | None]] = []
             for data in payloads:
                 attempts.append(("PATCH", data, bool(ignore_if_playing)))
@@ -550,7 +539,7 @@ try:
                             exc,
                         )
                         if "session not found" in msg:
-                            
+
                             await asyncio.sleep(1.2)
                             self._sync_endpoint()
                             break
@@ -577,30 +566,27 @@ except ImportError:
     VainPlayer = None
     NoNodesAvailable = NodeCreationError = NodeRestException = TrackLoadError = Exception
 
-
 def _resolve_pool_node():
-    """Pick a lava_lyra node for players — prefer our identifier, then any available."""
     if not HAS_LYRA:
         raise NoNodesAvailable("lava_lyra is not installed")
     ident = nl.identifier()
-    
+
     try:
         return lyra.NodePool.get_node(identifier=ident)
     except (NoNodesAvailable, KeyError):
         pass
-    
+
     try:
         return lyra.NodePool.get_node()
     except NoNodesAvailable:
         pass
-    
+
     nodes = getattr(lyra.NodePool, "_nodes", {}) or {}
     if ident in nodes:
         return nodes[ident]
     if nodes:
         return next(iter(nodes.values()))
     raise NoNodesAvailable("There are no nodes available.")
-
 
 def _node_ready(node) -> bool:
     if node is None:
@@ -615,7 +601,6 @@ def _node_ready(node) -> bool:
     session = getattr(node, "_session_id", None)
     return available and connected and bool(session)
 
-
 def _safe_attr(obj, name: str, default=None):
     """Read attrs on lava_lyra Track safely (slots raise if unset; getattr default can fail)."""
     try:
@@ -625,7 +610,6 @@ def _safe_attr(obj, name: str, default=None):
             return getattr(obj, name, default)
         except Exception:
             return default
-
 
 class GuildQueue:
     __slots__ = (
@@ -654,7 +638,6 @@ class GuildQueue:
         self.play_message_id: int | None = None
         self.session_started_at: float = 0.0
         self.panel_art_bytes: bytes | None = None
-
 
 class Music(MusicEvents, Package):
     PRESETS = (
@@ -726,9 +709,9 @@ class Music(MusicEvents, Package):
         while asyncio.get_event_loop().time() < deadline:
             if _node_ready(node):
                 return True
-            
+
             if getattr(node, "is_connected", False) and getattr(node, "_session_id", None):
-                
+
                 try:
                     node._available = True  # type: ignore[attr-defined]
                 except Exception:
@@ -754,11 +737,11 @@ class Music(MusicEvents, Package):
         headers = getattr(node, "_headers", None)
         if not isinstance(headers, dict):
             return
-        
+
         headers.setdefault("Authorization", nl.password)
         code = str(getattr(nl, "endpoint_code", "") or "").strip()
         if code:
-            
+
             headers["X-NodeLink-Code"] = code
             headers["X-Endpoint-Code"] = code
             headers["Endpoint-Code"] = code
@@ -963,7 +946,7 @@ class Music(MusicEvents, Package):
                 return None
 
         player = ctx.voice_client
-        
+
         if isinstance(player, VainPlayer) or hasattr(player, "wait_until_ready"):
             ok = await player.wait_until_ready(timeout=10.0)
             if not ok:
@@ -1016,7 +999,7 @@ class Music(MusicEvents, Package):
         if "soundcloud.com" in low:
             return query.split("?")[0]
         if "youtube.com" in low or "youtu.be" in low or "music.youtube.com" in low:
-            
+
             try:
                 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
@@ -1030,7 +1013,7 @@ class Music(MusicEvents, Package):
                 new_q = urlencode(keep)
                 return urlunparse(parsed._replace(query=new_q))
             except Exception:
-                return query.split("&si=")[0].split("&utm_")[0]
+                return query
         return query
 
     def _parse_play_flags(self, query: str, *, next: bool) -> tuple[str, bool]:
@@ -1083,7 +1066,7 @@ class Music(MusicEvents, Package):
         if " - " in clean_title:
             left, right = clean_title.split(" - ", 1)
             if left.strip() and right.strip():
-                
+
                 if not artist or left.strip().lower() == artist.lower():
                     artist, clean_title = left.strip(), right.strip()
                 else:
@@ -1113,7 +1096,6 @@ class Music(MusicEvents, Package):
             if hits == len(q_tokens):
                 score += 40
 
-        
         if _VIDEO_NOISE_RE.search(title) or "vevo" in author:
             score -= 80
         if "topic" in author or " - topic" in author:
@@ -1127,7 +1109,6 @@ class Music(MusicEvents, Package):
         elif source == "soundcloud":
             score -= 30
 
-        
         length = int(getattr(track, "length", 0) or 0)
         if 60_000 <= length <= 8 * 60_000:
             score += 10
@@ -1143,7 +1124,7 @@ class Music(MusicEvents, Package):
         if not tracks:
             return None
         if not pick_query or len(tracks) == 1:
-            
+
             ranked = sorted(
                 tracks,
                 key=lambda t: self._score_track(pick_query or (t.title or ""), t),
@@ -1167,11 +1148,10 @@ class Music(MusicEvents, Package):
         if node is None:
             return None
         try:
-            
-            
+
             return await node.get_tracks(query, search_type=None)
         except TypeError:
-            
+
             try:
                 return await node.get_tracks(query)
             except TrackLoadError as e:
@@ -1180,12 +1160,6 @@ class Music(MusicEvents, Package):
             except Exception as e:
                 log.debug("unexpected load error for %r: %s", query, e)
                 return None
-        except TrackLoadError as e:
-            log.debug("track load failed for %r: %s", query, e)
-            return None
-        except Exception as e:
-            log.debug("unexpected load error for %r: %s", query, e)
-            return None
 
     async def _load_query(self, query: str, *, pick_query: str | None = None):
         results = await self._load_results(query)
@@ -1207,7 +1181,6 @@ class Music(MusicEvents, Package):
         return bool(_PLATFORM_RE.search(q)) or q.startswith("spotify:")
 
     def _is_collection_url(self, query: str) -> bool:
-        """True for playlist/album/set/mix URLs across supported platforms."""
         q = self._clean_media_url(query)
         return bool(_COLLECTION_RE.search(q))
 
@@ -1238,7 +1211,7 @@ class Music(MusicEvents, Package):
         if "music.youtube.com" in uri:
             return uri
         if "youtube.com" in uri or "youtu.be" in uri:
-            
+
             if "watch?v=" in uri:
                 vid = uri.split("watch?v=", 1)[-1].split("&", 1)[0]
                 return f"https://music.youtube.com/watch?v={vid}"
@@ -1267,7 +1240,7 @@ class Music(MusicEvents, Package):
         platform: str | None = None,
         from_search: bool = False,
     ) -> None:
-        
+
         key = self._track_key(track)
         self._track_meta[key] = {
             "display_title": display_title or getattr(track, "title", None) or "unknown",
@@ -1322,7 +1295,6 @@ class Music(MusicEvents, Package):
         if pick:
             queries.append(f"{pick} audio")
 
-        
         for source in ("ytmsearch", "ytsearch"):
             for q in queries:
                 if not q:
@@ -1336,7 +1308,7 @@ class Music(MusicEvents, Package):
                     display_author=clean_artist or artist or getattr(track, "author", None),
                     source_url=source_url,
                     platform=platform,
-                    
+
                     from_search=source_url is None,
                 )
                 log.info(
@@ -1371,12 +1343,11 @@ class Music(MusicEvents, Package):
         isrc = self._seed_isrc(seed)
         src = self._track_source(seed)
 
-        
         if src in {"youtube", "youtubemusic", "ytm", "ytmusic"} and not (
             _VIDEO_NOISE_RE.search(title or "")
             or "vevo" in (artist or "").lower()
         ):
-            
+
             if platform in {None, "youtube", "youtube music", "link"}:
                 self._bind_meta(
                     seed,
@@ -1398,7 +1369,6 @@ class Music(MusicEvents, Package):
         if resolved is not None:
             return resolved
 
-        
         if _safe_attr(seed, "track_id") or getattr(seed, "track_id", None):
             self._bind_meta(
                 seed,
@@ -1432,7 +1402,7 @@ class Music(MusicEvents, Package):
             raw = []
 
         if not raw:
-            
+
             if cleaned != url:
                 try:
                     raw = await asyncio.wait_for(
@@ -1505,7 +1475,6 @@ class Music(MusicEvents, Package):
         if not query:
             return None
 
-        
         if self._is_collection_url(query):
             tracks = await self._load_platform_collection(query)
             return tracks[0] if tracks else None
@@ -1522,7 +1491,7 @@ class Music(MusicEvents, Package):
                     source_url=query,
                     platform=platform,
                 )
-            
+
             return await self._resolve_to_youtube_audio(
                 title=query,
                 artist="",
@@ -1556,8 +1525,6 @@ class Music(MusicEvents, Package):
 
         log.info("no results for %r (tried %s)", query, ", ".join(nl.search_sources))
         return None
-
-    
 
     @staticmethod
     def _fmt_ms(ms: int | float | None) -> str:
@@ -1706,9 +1673,7 @@ class Music(MusicEvents, Package):
         player = guild.voice_client if guild else None
         if player is None:
             return
-        
-        if state.current is None:
-            return
+
         channel = (
             self.bot.get_channel(state.text_channel_id)
             if state.text_channel_id
@@ -1747,7 +1712,7 @@ class Music(MusicEvents, Package):
             return
 
         await self._set_vc_status(player, track)
-        
+
         state.panel_art_bytes = None
 
         if state.control_message_id:
@@ -1762,7 +1727,6 @@ class Music(MusicEvents, Package):
             guild_id, track, player, reuse_art=True
         )
 
-        
         kwargs: dict = {
             "embed": emb,
             "view": view,
@@ -1778,7 +1742,7 @@ class Music(MusicEvents, Package):
             view.message = msg
             self._start_panel_refresh(guild_id)
         except TypeError:
-            
+
             kwargs.pop("silent", None)
             try:
                 msg = await channel.send(**kwargs)
@@ -1787,8 +1751,6 @@ class Music(MusicEvents, Package):
                 self._start_panel_refresh(guild_id)
             except Exception:
                 log.exception("failed to send control panel guild=%s", guild_id)
-        except Exception:
-            log.exception("failed to send control panel guild=%s", guild_id)
 
     async def _stop_and_leave(self, guild_id: int, player) -> None:
         self._cancel_panel_refresh(guild_id)
@@ -1820,7 +1782,7 @@ class Music(MusicEvents, Package):
             return None
 
         q_low = q.lower()
-        
+
         for i, tr in enumerate(state.tracks):
             title, artist, link, _ = self._display_bits(tr)
             blob = f"{title} {artist} {link} {getattr(tr, 'uri', '') or ''}".lower()
@@ -1830,7 +1792,7 @@ class Music(MusicEvents, Package):
                 return i
             if title.lower() == q_low or f"{title} - {artist}".lower() == q_low:
                 return i
-        
+
         tokens = [t for t in re.split(r"\s+", q_low) if len(t) >= 2]
         best_i, best_score = None, 0
         for i, tr in enumerate(state.tracks):
@@ -1936,7 +1898,7 @@ class Music(MusicEvents, Package):
             state.panel_art_bytes = None
             self._cancel_panel_refresh(guild_id)
             await self._set_vc_status(player, None)
-            
+
             import time as _time
 
             age = _time.time() - (state.session_started_at or 0.0)
@@ -2031,7 +1993,6 @@ class Music(MusicEvents, Package):
         tracks: list = []
         platform = self._platform_name(normalized) if self._is_platform_url(normalized) else None
 
-        
         if self._is_collection_url(normalized):
             platform = platform or self._platform_name(normalized)
             loading = None
@@ -2152,7 +2113,7 @@ class Music(MusicEvents, Package):
             state.current = first
             if len(tracks) > 1:
                 state.tracks.extend(tracks[1:])
-            
+
             await asyncio.sleep(0.6)
             if hasattr(player, "wait_until_ready"):
                 ok = await player.wait_until_ready(timeout=15.0)
@@ -2224,7 +2185,7 @@ class Music(MusicEvents, Package):
                     player._current = None
                 except Exception:
                     pass
-                
+
                 await asyncio.sleep(1.0)
                 if hasattr(player, "wait_until_ready"):
                     await player.wait_until_ready(timeout=10.0)
@@ -2364,7 +2325,7 @@ class Music(MusicEvents, Package):
             color=color.base,
             title=f"Queue — {ctx.guild.name}",
         )
-        
+
         return await ctx.paginate(
             embed,
             lines,
@@ -2427,12 +2388,12 @@ class Music(MusicEvents, Package):
         if player is None or not getattr(player, "is_playing", False):
             return await ctx.warn("nothing playing")
         state = self._queue(ctx.guild.id)
-        
+
         try:
             await player.stop()
         except Exception as exc:
             return await ctx.warn(f"couldn't skip: {exc}")
-        
+
         await self._play_next(ctx.guild.id, player, force=True)
         if state.current:
             await ctx.success("skipped")
@@ -2516,7 +2477,7 @@ class Music(MusicEvents, Package):
 
         idx = self._queue_match_index(state, target)
         if idx is not None:
-            
+
             chosen = state.tracks[idx]
             state.tracks = state.tracks[idx + 1 :]
             state.tracks.insert(0, chosen)
@@ -2528,7 +2489,6 @@ class Music(MusicEvents, Package):
             await self._play_next(ctx.guild.id, player, force=True)
             return await ctx.success(f"jumped to **{title}** — **{artist}**")
 
-        
         track = await self._first_track(target)
         if track is None:
             return await ctx.warn("couldn't find that track in queue or search")
@@ -2570,7 +2530,6 @@ class Music(MusicEvents, Package):
                 f"priority set · **{title}** — **{artist}** plays next"
             )
 
-        
         track = await self._first_track(target)
         if track is None:
             return await ctx.warn("couldn't find that track")
@@ -2615,7 +2574,7 @@ class Music(MusicEvents, Package):
             except Exception:
                 pass
         self.queues.pop(ctx.guild.id, None)
-        
+
         if len(self._track_meta) > 200:
             self._track_meta.clear()
         await ctx.success("disconnected")
@@ -2631,7 +2590,6 @@ class Music(MusicEvents, Package):
             return await ctx.info("no active preset")
         await ctx.info(f"active: **{active}**")
 
-
 def _make_preset_command(preset_name: str):
     async def _preset_cmd(self, ctx: Context, setting: str | None = None) -> None:
         await self._set_preset(ctx, preset_name, setting)
@@ -2645,10 +2603,8 @@ def _make_preset_command(preset_name: str):
         describe(setting="on or off")(_preset_cmd)
     )
 
-
 for _preset_name in Music.PRESETS:
     _make_preset_command(_preset_name)
-
 
 async def setup(bot: Vain):
     if not music_enabled:

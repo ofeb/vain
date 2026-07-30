@@ -1,6 +1,16 @@
 from __future__ import annotations
 
-import ast, asyncio, contextlib, copy, datetime, logging, time, traceback, discord, config
+import ast
+import asyncio
+import contextlib
+import copy
+import datetime
+import logging
+import time
+import traceback
+
+import discord
+import config
 
 from pathlib import Path
 from discord import app_commands
@@ -108,7 +118,7 @@ def _discover_extensions(ext_dir: str = "ext") -> tuple[str, ...]:
                     continue
                 if _has_setup_entry(py_file):
                     found.append(".".join(py_file.relative_to(Path(".")).with_suffix("").parts))
-            
+
             for sub in sorted(child.iterdir()):
                 if not sub.is_dir() or sub.name.startswith("_") or sub.name in _SKIP_DIRS:
                     continue
@@ -188,7 +198,7 @@ class Vain(commands.AutoShardedBot):
             },
         }
 
-        
+
         owner_list = list(
             getattr(config.Bot, "owners", None)
             or getattr(config.bot, "owners", None)
@@ -215,7 +225,7 @@ class Vain(commands.AutoShardedBot):
         ids: set[int] = set(self.owner_ids or ())
         if getattr(self, "owner_id", None):
             ids.add(int(self.owner_id))
-        
+
         for oid in getattr(config.Bot, "owners", None) or getattr(config.bot, "owners", None) or []:
             ids.add(int(oid))
         return ids
@@ -333,11 +343,6 @@ class Vain(commands.AutoShardedBot):
         await self.db.connect()
         log.info("database connected (%.1fs)", time.perf_counter() - started)
 
-        log.info("running schema migration")
-        migration_started = time.perf_counter()
-        await self._run_schema_migration()
-        log.info("schema migration finished (%.1fs)", time.perf_counter() - migration_started)
-
         if redis.enabled:
             log.info("connecting redis at %s", redis.url)
             try:
@@ -368,22 +373,6 @@ class Vain(commands.AutoShardedBot):
         await self._sync_global_commands()
         log.info("global slash sync finished (%.1fs)", time.perf_counter() - sync_started)
         log.info("setup_hook complete (%.1fs total)", time.perf_counter() - started)
-
-    async def _run_schema_migration(self) -> None:
-        """Execute schema.sql to ensure all tables exist"""
-        schema_path = Path(__file__).parent / "managers" / "database" / "models" / "schema.sql"
-        if not schema_path.exists():
-            log.warning(f"schema.sql not found at {schema_path}")
-            return
-
-        try:
-            schema = schema_path.read_text(encoding="utf-8")
-            log.info("applying schema.sql (%d bytes)", len(schema))
-            async with self.db.pool.acquire() as conn:
-                await conn.execute(schema)
-            log.info("schema migration completed successfully")
-        except Exception as e:
-            log.warning(f"schema migration failed: {e}")
 
     async def _load_extensions(self) -> None:
         extensions = _discover_extensions("ext")
@@ -550,7 +539,7 @@ class Vain(commands.AutoShardedBot):
             if bool(blacklisted):
                 raise commands.CheckFailure("youre **blacklisted** from using this bot")
 
-        
+
         if ctx.command is not None and ctx.guild is not None and not is_help and not owner:
             cmd_name = ctx.command.qualified_name.lower()
             rows = await self.remember(
@@ -566,7 +555,7 @@ class Vain(commands.AutoShardedBot):
                     )
                     raise commands.CheckFailure(f"only {mentions} can use `{cmd_name}`")
 
-        
+
         if ctx.command is not None and ctx.guild is not None and not is_help:
             cmd_name = ctx.command.qualified_name.lower()
             disabled = await self.remember(
@@ -749,14 +738,14 @@ class Vain(commands.AutoShardedBot):
                 )
             return
 
-        
+
         if isinstance(err, commands.CommandError):
             msg = str(err).strip() or "you **can't** do that"
             with contextlib.suppress(discord.HTTPException, Exception):
                 await ctx.fail(msg)
             return
 
-        
+
         self._error_counter += 1
         error_id = str(self._error_counter)
         tb_text = "".join(traceback.format_exception(type(err), err, err.__traceback__))

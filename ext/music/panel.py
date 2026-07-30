@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 if TYPE_CHECKING:
     from . import Music
 
-log = logging.getLogger("vain.music.panel")
+log = logging.getLogger("vain/music/panel")
 
 
 def _fmt_ms(ms: int | float | None) -> str:

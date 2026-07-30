@@ -12,13 +12,14 @@ storage: Final[Path] = root / "core" / "storage"
 
 prime_emoji_environment()
 
-token: str = "MTQxMTQwOTM5MjMzNDY3MjAxMw.GUte_c.SoJin1xjFeAzcnbIlAGy5psC0WQPbF6dqbdxyo"
+
 
 
 class Bot:
     prefix: str = ","
     owners: list[int] = [1137513168965476352, 1449456965334859860, 1480279800701784074]
-    support: str = "https://discord.gg/vainbot"
+    token: str = "MTQxMTQwOTM5MjMzNDY3MjAxMw.GUte_c.SoJin1xjFeAzcnbIlAGy5psC0WQPbF6dqbdxyo"
+    support: str = "https://discord.gg/vains"
     website: str = "https://vain.bot"
     docs: str = "https://docs.vain.bot"
     status: str = "online"
@@ -105,8 +106,6 @@ class redis:
 class api:
     google_perspective: str = ""
     openweathermap: str = "caa6d1f353a1f24663e101a62cbdc148"
-    
-    
     vain_rest: str = (
         "sk-15fa10dc8354be314cf148002cfd1cc83443f6c26d6af77b1fb65aaf63276da6"
     )
@@ -147,8 +146,6 @@ class api:
         api_key: str = ""
 
     class instagram:
-        
-        
         COOKIES: list[dict[str, str]] = []
         USERNAME: str = ""
         PASSWORD: str = ""
@@ -186,9 +183,6 @@ class music:
     host: str = "127.0.0.1"
     port: int = 2009
     password: str = "youshallnotpass"
-    
-    
-    
     search_sources: tuple[str, ...] = (
         "ytmsearch",
         "ytsearch",

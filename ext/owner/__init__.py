@@ -99,7 +99,7 @@ async def get_bot_dominant_color(bot) -> int:
 if TYPE_CHECKING:
     from core.vain import Vain
 
-log = logging.getLogger("vain.owner")
+log = logging.getLogger("vain/owner")
 
 
 class Owner(Package):
@@ -148,13 +148,6 @@ class Owner(Package):
         raise CommandError(
             f"Could not resolve `{argument}` as a user — use a mention or ID"
         )
-
-    
-
-    
-    
-    
-    
 
     @command(
         name="reload",

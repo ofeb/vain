@@ -388,7 +388,7 @@ class ServerCommands(Package):
 
     @hybrid(
         name="serverinfo",
-        description="View detailed information about the current server including members, boosts, channels, features and design",
+        description="View detailed information about the current server",
         aliases=["si", "server", "guildinfo", "gi"],
         usage="",
         example=",serverinfo",

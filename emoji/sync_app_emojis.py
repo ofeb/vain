@@ -4,13 +4,13 @@ import argparse
 import base64
 import json
 import mimetypes
-import os
 import re
 import subprocess
 import tempfile
 from pathlib import Path
 from urllib.request import Request, urlopen
 
+from config import Bot
 
 API_BASE = "https://discord.com/api/v10"
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -108,11 +108,9 @@ def main() -> None:
     parser.add_argument("--manifest", type=Path, default=None)
     args = parser.parse_args()
 
-    from config import token as vain_token
-
-    token = vain_token
+    token = Bot.token
     if not token:
-        raise SystemExit("VAIN_TOKEN, DISCORD_TOKEN, or TOKEN is required")
+        raise SystemExit("bot token is required, set in config.py")
 
     emoji_dir = args.emoji_dir.resolve()
     if not emoji_dir.is_dir():
@@ -120,7 +118,8 @@ def main() -> None:
 
     manifest_path = args.manifest or (emoji_dir / "app_emojis.json")
     app_id = _application_id(token)
-    existing = _request_json(f"{API_BASE}/applications/{app_id}/emojis", token=token)
+    existing = _request_json(
+        f"{API_BASE}/applications/{app_id}/emojis", token=token)
     existing_items = {
         str(item["name"]): item
         for item in existing.get("items", [])
@@ -166,7 +165,8 @@ def main() -> None:
             if upload_path != image_path:
                 upload_path.unlink(missing_ok=True)
 
-    manifest_path.write_text(json.dumps(uploaded, indent=2) + "\n", encoding="utf-8")
+    manifest_path.write_text(json.dumps(
+        uploaded, indent=2) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

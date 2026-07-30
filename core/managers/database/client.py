@@ -134,10 +134,6 @@ class Database:
             log.warning("database %s missing, creating", name)
             await asyncio.to_thread(self._create_db, name, user, pw, host, port)
             self.pool = await self._make_pool()
-        try:
-            await self.execute("CREATE EXTENSION IF NOT EXISTS timescaledb;")
-        except Exception as e:
-            log.warning(f"timescaledb not available: {e}")
         await self._run_schema()
         log.info("postgres pool ready")
         return self.pool

@@ -16,7 +16,6 @@ python-dateutil
 python-dotenv
 redis
 TagScriptEngine
-timescaledb
 tuuid
 udownloader
 ujson

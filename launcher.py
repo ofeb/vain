@@ -1,9 +1,14 @@
 from __future__ import annotations
 
-import logging
+import logging, os, sys
 import os
 import sys
+
 from pathlib import Path
+from dcspoof import mode
+
+from core.vain import Vain
+from config import Bot
 
 RUNTIME_ROOT = Path(__file__).resolve().parent
 
@@ -36,19 +41,15 @@ def main() -> None:
     configure_logging()
 
     log = logging.getLogger("vain")
-    log.info("starting vain-bot")
-
-    from core.vain import Vain
-    from config import token
+    log.info("starting vain.bot")
+    token = Bot.token
 
     if not token:
         raise RuntimeError(
-            "Bot token is not set. Set token in core/managers/values.py."
+            "Bot token is not set. Set token in config."
         )
 
-    import dcspoof
-
-    dcspoof.mode("ios")
+    mode("ios")
 
     log.info("launching discord client")
     Vain().run(token, reconnect=True)
