@@ -170,7 +170,7 @@ class FilterCommands(Package):
             else [c.id for c in ctx.guild.text_channels]
         )
         await self.db.execute(
-            """INSERT INTO moderation.caps (guild_id, channel_ids, threshold, action) VALUES($1, $2, $3, $4) ON CONFLICT(guild_id) DO UPDATE SET channel_ids = excluded.channel_ids, threshold = excluded.threshold, action = excluded.action""",
+            """INSERT INTO moderation.spam (guild_id, channel_ids, threshold, action) VALUES($1, $2, $3, $4) ON CONFLICT(guild_id) DO UPDATE SET channel_ids = excluded.channel_ids, threshold = excluded.threshold, action = excluded.action""",
             ctx.guild.id, channels, flags.threshold, flags.punishment,
         )
         state = "ENABLED" if setting else "DISABLED"
