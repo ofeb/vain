@@ -1,3 +1,7 @@
+CREATE SCHEMA IF NOT EXISTS moderation;
+CREATE SCHEMA IF NOT EXISTS roleplay;
+CREATE SCHEMA IF NOT EXISTS pokemon;
+
 CREATE TABLE IF NOT EXISTS guilds (
     guild_id BIGINT PRIMARY KEY,
     prefix VARCHAR(10) DEFAULT ';',
@@ -190,16 +194,6 @@ CREATE TABLE IF NOT EXISTS webhooks (
     PRIMARY KEY (guild_id, identifier)
 );
 
-ALTER TABLE webhooks
-    ADD COLUMN IF NOT EXISTS identifier TEXT;
-
-UPDATE webhooks
-SET identifier = COALESCE(identifier, name)
-WHERE identifier IS NULL;
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_webhooks_guild_identifier
-    ON webhooks(guild_id, identifier);
-
 CREATE UNIQUE INDEX IF NOT EXISTS idx_webhooks_guild_name
     ON webhooks(guild_id, name);
 
@@ -348,15 +342,6 @@ CREATE TABLE IF NOT EXISTS booster_roles (
     role_limit INT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-
-ALTER TABLE booster_roles
-    ADD COLUMN IF NOT EXISTS base_id BIGINT;
-
-ALTER TABLE booster_roles
-    ADD COLUMN IF NOT EXISTS award_id BIGINT;
-
-ALTER TABLE booster_roles
-    ADD COLUMN IF NOT EXISTS role_limit INT;
 
 CREATE TABLE IF NOT EXISTS custom_roles (
     guild_id BIGINT NOT NULL,
@@ -600,18 +585,6 @@ CREATE TABLE IF NOT EXISTS voicemaster_channels (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (channel_id)
 );
-
-ALTER TABLE voicemaster_configuration
-    ADD COLUMN IF NOT EXISTS interface_id BIGINT,
-    ADD COLUMN IF NOT EXISTS private_category_id BIGINT,
-    ADD COLUMN IF NOT EXISTS send_interface BOOLEAN NOT NULL DEFAULT TRUE,
-    ADD COLUMN IF NOT EXISTS default_name TEXT,
-    ADD COLUMN IF NOT EXISTS join_role_id BIGINT;
-
-ALTER TABLE voicemaster_channels
-    ADD COLUMN IF NOT EXISTS role_id BIGINT,
-    ADD COLUMN IF NOT EXISTS music_mode BOOLEAN NOT NULL DEFAULT FALSE,
-    ADD COLUMN IF NOT EXISTS status TEXT;
 
 CREATE TABLE IF NOT EXISTS tictactoe (
     user_id BIGINT PRIMARY KEY,
@@ -906,25 +879,6 @@ CREATE TABLE IF NOT EXISTS invocation (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (guild_id, command)
 );
-
-ALTER TABLE invocation ADD COLUMN IF NOT EXISTS dm_enabled BOOLEAN NOT NULL DEFAULT TRUE;
-ALTER TABLE invocation ADD COLUMN IF NOT EXISTS message_enabled BOOLEAN NOT NULL DEFAULT TRUE;
-
--- server_settings columns added after initial CREATE TABLE IF NOT EXISTS
-ALTER TABLE server_settings ADD COLUMN IF NOT EXISTS antinuke_log_channel_id BIGINT;
-ALTER TABLE server_settings ADD COLUMN IF NOT EXISTS antiraid_log_channel_id BIGINT;
-ALTER TABLE server_settings ADD COLUMN IF NOT EXISTS jail_message TEXT;
-ALTER TABLE server_settings ADD COLUMN IF NOT EXISTS jail_remove_roles BOOLEAN NOT NULL DEFAULT TRUE;
-
--- giveaway_settings customization columns
-ALTER TABLE giveaway_settings ADD COLUMN IF NOT EXISTS dm_on_win BOOLEAN NOT NULL DEFAULT FALSE;
-ALTER TABLE giveaway_settings ADD COLUMN IF NOT EXISTS dm_script TEXT;
-ALTER TABLE giveaway_settings ADD COLUMN IF NOT EXISTS embed_script TEXT;
-ALTER TABLE giveaway_settings ADD COLUMN IF NOT EXISTS button_label TEXT;
-ALTER TABLE giveaway_settings ADD COLUMN IF NOT EXISTS button_emoji TEXT;
-ALTER TABLE giveaway_settings ADD COLUMN IF NOT EXISTS show_entries BOOLEAN NOT NULL DEFAULT TRUE;
-ALTER TABLE giveaway_settings ADD COLUMN IF NOT EXISTS join_type TEXT NOT NULL DEFAULT 'button';
-ALTER TABLE giveaway_settings ADD COLUMN IF NOT EXISTS join_reaction TEXT;
 
 CREATE TABLE IF NOT EXISTS silenced (
     guild_id BIGINT NOT NULL,
@@ -1296,7 +1250,7 @@ CREATE INDEX IF NOT EXISTS idx_tickets_guild_user ON tickets(guild_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_tickets_guild_status ON tickets(guild_id, status);
 CREATE INDEX IF NOT EXISTS idx_ticket_transcripts_guild ON ticket_transcripts(guild_id);
 
-CREATE SCHEMA IF NOT EXISTS roleplay;
+
 
 CREATE TABLE IF NOT EXISTS roleplay.actions (
     action TEXT NOT NULL,
@@ -1424,7 +1378,7 @@ CREATE TABLE IF NOT EXISTS fake_permissions (
     PRIMARY KEY (guild_id, role_id)
 );
 
-CREATE SCHEMA IF NOT EXISTS moderation;
+
 
 CREATE TABLE IF NOT EXISTS moderation.caps (
     guild_id BIGINT PRIMARY KEY,
