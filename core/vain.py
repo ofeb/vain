@@ -35,10 +35,12 @@ from config import color, database, redis, emojis, music_enabled
 from .managers.filetypes import CACHE_REDIS_FILE, ensure_storage_files
 
 from .discord.interaction import patch_interaction
+
 patch_interaction()
 
 
 from .tools.convert.channel import patch_discord_channel_converters
+
 patch_discord_channel_converters()
 
 log = logging.getLogger("vain")
@@ -84,7 +86,10 @@ def _has_setup_entry(path: Path) -> bool:
         return False
 
     for node in tree.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "setup":
+        if (
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name == "setup"
+        ):
             return True
         if isinstance(node, ast.ImportFrom):
             if any(alias.name == "setup" for alias in node.names):
@@ -117,23 +122,32 @@ def _discover_extensions(ext_dir: str = "ext") -> tuple[str, ...]:
                 if py_file.stem.startswith("_") or py_file.stem in _SKIP_DIRS:
                     continue
                 if _has_setup_entry(py_file):
-                    found.append(".".join(py_file.relative_to(Path(".")).with_suffix("").parts))
+                    found.append(
+                        ".".join(py_file.relative_to(Path(".")).with_suffix("").parts)
+                    )
 
             for sub in sorted(child.iterdir()):
-                if not sub.is_dir() or sub.name.startswith("_") or sub.name in _SKIP_DIRS:
+                if (
+                    not sub.is_dir()
+                    or sub.name.startswith("_")
+                    or sub.name in _SKIP_DIRS
+                ):
                     continue
                 if (sub / "__init__.py").exists() and _has_setup_entry(sub):
                     found.append(".".join(sub.relative_to(Path(".")).parts))
             continue
         if child.suffix == ".py" and child.stem != "__init__":
             if _has_setup_entry(child):
-                found.append(".".join(child.relative_to(Path(".")).with_suffix("").parts))
+                found.append(
+                    ".".join(child.relative_to(Path(".")).with_suffix("").parts)
+                )
 
     found.sort()
     if not music_enabled:
         found = [ext for ext in found if ext != "ext.music"]
     log.debug(f"discovered {len(found)} extensions: {', '.join(found)}")
     return tuple(found)
+
 
 _BLACKLIST_SQL = """
     SELECT 1 FROM blacklist
@@ -174,6 +188,7 @@ _RESTRICTIONS_SQL = """
     WHERE guild_id = $1 AND command = $2
 """
 
+
 class Vain(commands.AutoShardedBot):
     def __init__(self) -> None:
         self.color: int = color.base
@@ -187,8 +202,6 @@ class Vain(commands.AutoShardedBot):
         self.watcher: Optional[Watcher] = None
         self.started_at = datetime.datetime.now(datetime.timezone.utc)
         self._seen_message_ids: set[int] = set()
-        self._guild_slash_commands: list[app_commands.Command] = []
-        self._guild_slash_synced = False
         self.config = {
             "emojis": {
                 "success": emojis.approve,
@@ -197,7 +210,6 @@ class Vain(commands.AutoShardedBot):
                 "loading": emojis.loading,
             },
         }
-
 
         owner_list = list(
             getattr(config.Bot, "owners", None)
@@ -226,11 +238,17 @@ class Vain(commands.AutoShardedBot):
         if getattr(self, "owner_id", None):
             ids.add(int(self.owner_id))
 
-        for oid in getattr(config.Bot, "owners", None) or getattr(config.bot, "owners", None) or []:
+        for oid in (
+            getattr(config.Bot, "owners", None)
+            or getattr(config.bot, "owners", None)
+            or []
+        ):
             ids.add(int(oid))
         return ids
 
-    async def remember(self, key: str, ttl: int, loader: Callable[[], Awaitable[object]]) -> object:
+    async def remember(
+        self, key: str, ttl: int, loader: Callable[[], Awaitable[object]]
+    ) -> object:
         """small local ttl cache for hot runtime reads"""
         cached = await self.object_cache.get(key)
         if cached is not None:
@@ -257,7 +275,9 @@ class Vain(commands.AutoShardedBot):
         if keys:
             await self.forget(*keys)
 
-    async def invalidate_command_access_cache(self, guild_id: int, command_name: str) -> None:
+    async def invalidate_command_access_cache(
+        self, guild_id: int, command_name: str
+    ) -> None:
         qualified = command_name.lower()
         await self.forget(
             f"restrict:{guild_id}:{qualified}",
@@ -311,26 +331,24 @@ class Vain(commands.AutoShardedBot):
         fallback = guild_pfxs[0] if guild_pfxs else config.Bot.prefix
         return commands.when_mentioned_or(fallback)(self, msg)
 
-
     def _is_slash(self, cmd: commands.Command) -> bool:
         return (
             isinstance(cmd, (HybridCommand, HybridGroup))
             and bool(getattr(cmd, "app_command", None))
             and cmd.parent is None
-            and not getattr(getattr(cmd, "cog", None), "__cog_is_app_commands_group__", False)
+            and not getattr(
+                getattr(cmd, "cog", None), "__cog_is_app_commands_group__", False
+            )
         )
 
     def add_command(self, cmd: commands.Command, /) -> None:
         commands.GroupMixin.add_command(self, cmd)
         if not self._is_slash(cmd):
             return
-        ac = cmd.app_command
-        if getattr(ac, "guild_only", False):
-            if ac not in self._guild_slash_commands:
-                self._guild_slash_commands.append(ac)
-            return
-        with contextlib.suppress(app_commands.CommandAlreadyRegistered, app_commands.CommandLimitReached):
-            self.tree.add_command(ac)
+        with contextlib.suppress(
+            app_commands.CommandAlreadyRegistered, app_commands.CommandLimitReached
+        ):
+            self.tree.add_command(cmd.app_command)
 
     async def setup_hook(self) -> None:
         """connect db redis and load all extensions"""
@@ -362,7 +380,9 @@ class Vain(commands.AutoShardedBot):
         extensions_started = time.perf_counter()
         await self.load_extension("jishaku")
         await self._load_extensions()
-        log.info("extensions finished (%.1fs)", time.perf_counter() - extensions_started)
+        log.info(
+            "extensions finished (%.1fs)", time.perf_counter() - extensions_started
+        )
 
         from ext.server.extended.pagination.views import register_stored_paginations
 
@@ -371,95 +391,32 @@ class Vain(commands.AutoShardedBot):
         log.info("syncing global slash commands")
         sync_started = time.perf_counter()
         await self._sync_global_commands()
-        log.info("global slash sync finished (%.1fs)", time.perf_counter() - sync_started)
+        log.info(
+            "global slash sync finished (%.1fs)", time.perf_counter() - sync_started
+        )
         log.info("setup_hook complete (%.1fs total)", time.perf_counter() - started)
 
     async def _load_extensions(self) -> None:
         extensions = _discover_extensions("ext")
-        log.info("=" * 60)
-        log.info("EXTENSION DISCOVERY — %d extensions found", len(extensions))
-        for ext in extensions:
-            log.info("  discovered: %s", ext)
-        log.info("=" * 60)
-
-        failed: list[str] = []
-        loaded: list[str] = []
         results = await asyncio.gather(
-            *[self._try_load(ext, loaded, failed) for ext in extensions],
+            *[self._try_load(ext) for ext in extensions],
             return_exceptions=True,
         )
 
-        log.info("=" * 60)
-        log.info("EXTENSION SUMMARY — %d/%d loaded", len(loaded), len(extensions))
-        if loaded:
-            log.info("  LOADED:")
-            for ext in loaded:
-                log.info("    [OK]  %s", ext)
+        loaded = sum(1 for r in results if r is True)
+        failed = sum(1 for r in results if isinstance(r, Exception))
         if failed:
-            log.warning("  FAILED:")
-            for ext in failed:
-                log.warning("    [!!] %s", ext)
-        log.info("=" * 60)
+            log.warning("%d/%d extensions failed to load", failed, len(extensions))
 
-        self._log_all_commands()
-
-    async def _try_load(self, ext: str, loaded: list[str], failed: list[str]) -> bool:
-        started = time.perf_counter()
+    async def _try_load(self, ext: str) -> bool:
+        ext_name = ext.split(".")[-1]
         try:
-            log.info("[LOAD] %s ...", ext)
             await self.load_extension(ext)
-            elapsed = time.perf_counter() - started
-            log.info("[OK]   %s (%.1fs)", ext, elapsed)
-
-            cog = self.get_cog(ext.split(".")[-1].title().replace("_", ""))
-            if cog:
-                cmds = list(cog.walk_commands())
-                log.info("       %s → %d commands registered", ext, len(cmds))
-                for cmd in sorted(cmds, key=lambda c: c.qualified_name):
-                    aliases = f" (aliases: {', '.join(cmd.aliases)})" if cmd.aliases else ""
-                    log.info("         • %s%s", cmd.qualified_name, aliases)
-
-            loaded.append(ext)
+            log.info("(+) %s", ext_name)
             return True
         except Exception as e:
-            elapsed = time.perf_counter() - started
-            log.error("[FAIL] %s (%.1fs): %s", ext, elapsed, e)
-            log.exception("       traceback for %s:", ext)
-            failed.append(ext)
+            log.warning("(-) %s (%s)", ext_name, e)
             return False
-
-    def _log_all_commands(self) -> None:
-        """dump every registered command and listener after all cogs are loaded"""
-        all_cmds = sorted(self.commands, key=lambda c: c.qualified_name)
-        log.info("=" * 60)
-        log.info("ALL REGISTERED COMMANDS — %d total", len(all_cmds))
-        current_cog = None
-        for cmd in all_cmds:
-            cog_name = cmd.cog_name or "No Cog"
-            if cog_name != current_cog:
-                current_cog = cog_name
-                log.info("  [%s]", cog_name)
-            aliases = f" (aliases: {', '.join(cmd.aliases)})" if cmd.aliases else ""
-            log.info("    • %s%s", cmd.qualified_name, aliases)
-
-        all_listeners = []
-        for event_name, funcs in self.extra_events.items():
-            for func in funcs:
-                cog_name = getattr(func, '__self__', None)
-                if cog_name is not None:
-                    cog_name = type(cog_name).__name__
-                else:
-                    cog_name = "Bot"
-                all_listeners.append((event_name, cog_name, func.__name__))
-        all_listeners.sort()
-        log.info("ALL REGISTERED LISTENERS — %d total", len(all_listeners))
-        current_event = None
-        for event_name, cog_name, func_name in all_listeners:
-            if event_name != current_event:
-                current_event = event_name
-                log.info("  [%s]", event_name)
-            log.info("    • %s.%s", cog_name, func_name)
-        log.info("=" * 60)
 
     async def _sync_global_commands(self) -> None:
         try:
@@ -467,21 +424,6 @@ class Vain(commands.AutoShardedBot):
             log.info(f"synced {len(synced)} global slash commands")
         except Exception as e:
             log.exception(f"slash sync failed: {e}")
-
-    async def _sync_guild_commands(self, guild: Optional[discord.Guild] = None) -> None:
-        if not self._guild_slash_commands:
-            return
-        targets = [guild] if guild else list(self.guilds)
-        await asyncio.gather(*[self._sync_one_guild(g) for g in targets], return_exceptions=True)
-
-    async def _sync_one_guild(self, guild: discord.Guild) -> None:
-        for ac in self._guild_slash_commands:
-            with contextlib.suppress(app_commands.CommandAlreadyRegistered, app_commands.CommandLimitReached):
-                self.tree.add_command(ac, guild=guild)
-        try:
-            await self.tree.sync(guild=guild)
-        except Exception as e:
-            log.warning(f"guild sync failed for {guild.name}: {e}")
 
     async def get_context(self, origin, /, *, cls=Context) -> Context:
         if isinstance(origin, discord.Message):
@@ -539,8 +481,12 @@ class Vain(commands.AutoShardedBot):
             if bool(blacklisted):
                 raise commands.CheckFailure("youre **blacklisted** from using this bot")
 
-
-        if ctx.command is not None and ctx.guild is not None and not is_help and not owner:
+        if (
+            ctx.command is not None
+            and ctx.guild is not None
+            and not is_help
+            and not owner
+        ):
             cmd_name = ctx.command.qualified_name.lower()
             rows = await self.remember(
                 f"restrict:{ctx.guild.id}:{cmd_name}",
@@ -555,7 +501,6 @@ class Vain(commands.AutoShardedBot):
                     )
                     raise commands.CheckFailure(f"only {mentions} can use `{cmd_name}`")
 
-
         if ctx.command is not None and ctx.guild is not None and not is_help:
             cmd_name = ctx.command.qualified_name.lower()
             disabled = await self.remember(
@@ -565,7 +510,9 @@ class Vain(commands.AutoShardedBot):
             )
             if disabled:
                 blocked = self._blocked_ids(
-                    disabled.get("object_ids") if isinstance(disabled, dict) else getattr(disabled, "object_ids", None)
+                    disabled.get("object_ids")
+                    if isinstance(disabled, dict)
+                    else getattr(disabled, "object_ids", None)
                 )
                 if ctx.author.id in blocked:
                     raise commands.CheckFailure(
@@ -578,7 +525,11 @@ class Vain(commands.AutoShardedBot):
 
         if ctx.guild is not None:
             me = ctx.channel.permissions_for(ctx.guild.me)
-            need = ("send_messages",) if is_help else ("send_messages", "embed_links", "attach_files")
+            need = (
+                ("send_messages",)
+                if is_help
+                else ("send_messages", "embed_links", "attach_files")
+            )
             missing = [p for p in need if not getattr(me, p)]
             if missing:
                 raise commands.BotMissingPermissions(missing)
@@ -609,7 +560,9 @@ class Vain(commands.AutoShardedBot):
         except commands.CommandError as e:
             raise app_commands.CheckFailure(str(e)) from e
 
-    async def _cooldown_reply(self, inter: discord.Interaction, retry_after: float) -> None:
+    async def _cooldown_reply(
+        self, inter: discord.Interaction, retry_after: float
+    ) -> None:
         ctx = await self.get_context(inter, cls=Context)
         emoji = await ctx._get_emoji("cooldown")
         color_value = await ctx._get_color("cooldown")
@@ -620,16 +573,26 @@ class Vain(commands.AutoShardedBot):
                 f"**{retry_after:.2f} seconds** before using any command again"
             ),
         )
-        send = inter.followup.send if inter.response.is_done() else inter.response.send_message
+        send = (
+            inter.followup.send
+            if inter.response.is_done()
+            else inter.response.send_message
+        )
         with contextlib.suppress(discord.HTTPException):
             await send(embed=embed, ephemeral=True)
 
-    async def _slash_error(self, inter: discord.Interaction, err: app_commands.AppCommandError) -> None:
+    async def _slash_error(
+        self, inter: discord.Interaction, err: app_commands.AppCommandError
+    ) -> None:
         """handle slash command errors"""
         orig = getattr(err, "original", err)
         if isinstance(orig, discord.NotFound):
             return
-        send = inter.followup.send if inter.response.is_done() else inter.response.send_message
+        send = (
+            inter.followup.send
+            if inter.response.is_done()
+            else inter.response.send_message
+        )
         msg = str(err) or "something went wrong"
         if isinstance(orig, Ratelimited):
             await self._cooldown_reply(inter, orig.retry_after)
@@ -640,7 +603,9 @@ class Vain(commands.AutoShardedBot):
         with contextlib.suppress(discord.HTTPException):
             await send(content=msg, ephemeral=True)
 
-    def _resolve_slash_command(self, inter: discord.Interaction) -> Optional[commands.Command]:
+    def _resolve_slash_command(
+        self, inter: discord.Interaction
+    ) -> Optional[commands.Command]:
         """walk interaction data to find the matching prefix command"""
         data = inter.data
         if not data or inter.type is not discord.InteractionType.application_command:
@@ -674,14 +639,14 @@ class Vain(commands.AutoShardedBot):
     async def on_ready(self) -> None:
         assert self.user
         log.info(f"online as {self.user} in {len(self.guilds)} guilds")
-        if not self._guild_slash_synced:
-            await self._sync_guild_commands()
-            self._guild_slash_synced = True
 
-        await self.change_presence(status=discord.Status.online, activity=discord.CustomActivity(name="🔗 discord.gg/vainbot"))
+        await self.change_presence(
+            status=discord.Status.online,
+            activity=discord.CustomActivity(name="🔗 discord.gg/vains"),
+        )
 
     async def on_guild_join(self, guild: discord.Guild) -> None:
-        await self._sync_guild_commands(guild=guild)
+        pass
 
     async def on_message(self, msg: discord.Message) -> None:
         if msg.author.bot or not self.is_ready():
@@ -693,7 +658,9 @@ class Vain(commands.AutoShardedBot):
                 silenced = await self.remember(
                     f"silenced:{msg.guild.id}:{msg.author.id}",
                     _MESSAGE_STATE_TTL,
-                    lambda: self.db.fetchval(_SILENCED_SQL, msg.guild.id, msg.author.id),
+                    lambda: self.db.fetchval(
+                        _SILENCED_SQL, msg.guild.id, msg.author.id
+                    ),
                 )
                 if bool(silenced):
                     with contextlib.suppress(discord.HTTPException):
@@ -711,7 +678,9 @@ class Vain(commands.AutoShardedBot):
                 self.dispatch("valid_message", ctx)
         await self.invoke(ctx)
 
-    async def on_message_edit(self, before: discord.Message, after: discord.Message) -> None:
+    async def on_message_edit(
+        self, before: discord.Message, after: discord.Message
+    ) -> None:
         if before.content == after.content or after.author.bot or not self.is_ready():
             return
         ctx = await self.get_context(after)
@@ -738,13 +707,11 @@ class Vain(commands.AutoShardedBot):
                 )
             return
 
-
         if isinstance(err, commands.CommandError):
             msg = str(err).strip() or "you **can't** do that"
             with contextlib.suppress(discord.HTTPException, Exception):
                 await ctx.fail(msg)
             return
-
 
         self._error_counter += 1
         error_id = str(self._error_counter)
@@ -754,7 +721,11 @@ class Vain(commands.AutoShardedBot):
             oldest = min(self._error_store.keys(), key=lambda k: int(k))
             del self._error_store[oldest]
 
-        log.exception("unhandled error in %s: %s", getattr(ctx.command, "qualified_name", "?"), err)
+        log.exception(
+            "unhandled error in %s: %s",
+            getattr(ctx.command, "qualified_name", "?"),
+            err,
+        )
         with contextlib.suppress(discord.HTTPException, Exception):
             await ctx.fail(f"something went wrong (error #{error_id})")
 
@@ -767,12 +738,16 @@ class Vain(commands.AutoShardedBot):
                    VALUES ($1, $2, $3, 1)
                    ON CONFLICT (guild_id, user_id, command_name)
                    DO UPDATE SET uses = command_usage.uses + 1""",
-                ctx.guild.id, ctx.author.id, ctx.command.qualified_name,
+                ctx.guild.id,
+                ctx.author.id,
+                ctx.command.qualified_name,
             )
 
     @staticmethod
     def _unwrap(err: Exception) -> Exception:
-        while isinstance(err, (commands.CommandInvokeError, commands.HybridCommandError)):
+        while isinstance(
+            err, (commands.CommandInvokeError, commands.HybridCommandError)
+        ):
             err = err.original
         if isinstance(err, commands.ConversionError):
             return err.original or err
