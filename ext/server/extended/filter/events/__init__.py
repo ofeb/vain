@@ -48,11 +48,9 @@ SPAM_WINDOW = 5.0
 class FilterEvents(Package):
     """enforce the configured chat filters (caps, links, invites, spam, etc.)"""
 
-    def __init__(self, bot) -> None:
-        super().__init__(bot)
-        self._cache: dict[tuple[int, str], tuple[float, list]] = {}
-        self._regex_cache: dict[int, tuple[float, list]] = {}
-        self._spam: dict[tuple[int, int], list[float]] = defaultdict(list)
+    _cache: dict[tuple[int, str], tuple[float, list]] = {}
+    _regex_cache: dict[int, tuple[float, list]] = {}
+    _spam: dict[tuple[int, int], list[float]] = defaultdict(list)
 
     # ---------- config helpers ----------
 
