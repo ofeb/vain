@@ -15,47 +15,7 @@ from lib.classes.embed import Script
 
 from core.managers.permissions import has_permissions
 
-
-def compose(*parts: str) -> str:
-    return "\n".join(part for part in parts if part)
-
-def body(*lines: str) -> str:
-    return "\n".join(f"> {line}" for line in lines if line)
-
-def caption(text: str) -> str:
-    return f"-# {text}"
-
-def panel_embed(
-    *,
-    color: int | None = None,
-    title: str | None = None,
-    author: str | None = None,
-    author_icon: str | None = None,
-    lines: list[str] | None = None,
-    footer: str | None = None,
-    timestamp: bool = True,
-    thumbnail: str | None = None,
-    url: str | None = None,
-) -> discord.Embed:
-    description = compose(
-        body(*(lines or [])),
-        caption(footer) if footer else None,
-    )
-    embed = discord.Embed(color=color, description=description or None, url=url)
-    if title:
-        embed.title = title
-    if author:
-        if author_icon:
-            embed.set_author(name=author, icon_url=author_icon)
-        else:
-            embed.set_author(name=author)
-    if thumbnail:
-        embed.set_thumbnail(url=thumbnail)
-    if timestamp:
-        embed.timestamp = discord.utils.utcnow()
-    return embed
-
-
+from core.discord.views.embed import panel_embed
 
 SPACE_RE = re.compile(r"\s+")
 DISCORD_NAME_RE = re.compile("discord", re.IGNORECASE)
@@ -64,7 +24,6 @@ FORBIDDEN_NAME_RE = re.compile(r"[@#:`]")
 WEBHOOK_NAME_MAX = 80
 IDENTIFIER_ALPHABET = string.ascii_lowercase + string.digits
 
-
 def _sanitize_webhook_name(name: str) -> str:
     cleaned = FORBIDDEN_NAME_RE.sub("", name)
     cleaned = DISCORD_NAME_RE.sub("discrd", cleaned)
@@ -72,7 +31,6 @@ def _sanitize_webhook_name(name: str) -> str:
     if cleaned.casefold() in {"everyone", "here"}:
         cleaned = f"{cleaned}-hook"
     return cleaned[:WEBHOOK_NAME_MAX]
-
 
 class WebhookCommands(Package):
     """server webhook management."""

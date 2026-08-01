@@ -16,70 +16,7 @@ from config import color
 
 from .settings import Settings as LevelSettings
 
-
-
-def compose(*parts: str) -> str:
-    return "\n".join(part for part in parts if part)
-
-def body(*lines: str) -> str:
-    return "\n".join(f"> {line}" for line in lines if line)
-
-def caption(text: str) -> str:
-    return f"-# {text}"
-
-def c2(
-    *,
-    color: int,
-    message: str,
-    title: str | None = None,
-    footer: str | None = None,
-    author: str | None = None,
-    timestamp: bool = True,
-) -> discord.Embed:
-    description = compose(
-        body(message),
-        caption(footer) if footer else None,
-    )
-    embed = discord.Embed(color=color, description=description)
-    if title:
-        embed.title = title
-    if author:
-        embed.set_author(name=author)
-    if timestamp:
-        embed.timestamp = discord.utils.utcnow()
-    return embed
-
-def panel_embed(
-    *,
-    color: int | None = None,
-    title: str | None = None,
-    author: str | None = None,
-    author_icon: str | None = None,
-    lines: list[str] | None = None,
-    footer: str | None = None,
-    timestamp: bool = True,
-    thumbnail: str | None = None,
-    url: str | None = None,
-) -> discord.Embed:
-    description = compose(
-        body(*(lines or [])),
-        caption(footer) if footer else None,
-    )
-    embed = discord.Embed(color=color, description=description or None, url=url)
-    if title:
-        embed.title = title
-    if author:
-        if author_icon:
-            embed.set_author(name=author, icon_url=author_icon)
-        else:
-            embed.set_author(name=author)
-    if thumbnail:
-        embed.set_thumbnail(url=thumbnail)
-    if timestamp:
-        embed.timestamp = discord.utils.utcnow()
-    return embed
-
-
+from core.discord.views.embed import panel_embed
 
 if TYPE_CHECKING:
     from core.vain import Vain
@@ -94,7 +31,6 @@ LEVEL_MULTIPLIER = 50
 def xp_for_level(level: int) -> int:
     return LEVEL_BASE + (level * LEVEL_MULTIPLIER)
 
-
 def level_from_xp(xp: int) -> int:
     level = 0
     remaining = max(0, int(xp or 0))
@@ -102,7 +38,6 @@ def level_from_xp(xp: int) -> int:
         remaining -= xp_for_level(level)
         level += 1
     return level
-
 
 def xp_into_level(xp: int) -> tuple[int, int, int]:
     """Return (level, xp_progress_in_level, xp_needed_for_next)."""
@@ -114,9 +49,7 @@ def xp_into_level(xp: int) -> tuple[int, int, int]:
     needed = xp_for_level(level)
     return level, remaining, needed
 
-
 from .events import LevelEvents
-
 
 class Level(LevelEvents, Package):
     """XP tracking, level roles, and leaderboards."""
@@ -405,7 +338,6 @@ class Level(LevelEvents, Package):
         except Exception:
             log.exception("level config failed guild=%s", ctx.guild.id)
             await ctx.fail("Configuration unavailable.")
-
 
 async def setup(bot: Vain):
     await bot.add_cog(Level(bot))

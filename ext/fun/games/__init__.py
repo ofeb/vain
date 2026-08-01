@@ -10,48 +10,7 @@ import discord
 from config import color
 from .connect4_board import render_connect4_board
 
-
-
-def body(*lines: str) -> str:
-    return "\n".join(f"> {line}" for line in lines if line)
-
-def compose(*parts: str) -> str:
-    return "\n".join(part for part in parts if part)
-
-def caption(text: str) -> str:
-    return f"-# {text}"
-
-def c2(
-    *,
-    color: int,
-    message: str,
-    title: str | None = None,
-    footer: str | None = None,
-    author: str | None = None,
-    timestamp: bool = True,
-) -> discord.Embed:
-    description = compose(
-        body(message),
-        caption(footer) if footer else None,
-    )
-    embed = discord.Embed(color=color, description=description)
-    if title:
-        embed.title = title
-    if author:
-        embed.set_author(name=author)
-    if timestamp:
-        embed.timestamp = discord.utils.utcnow()
-    return embed
-
-def reply_embed(
-    *,
-    color: int,
-    message: str,
-    subtitle: str | None = None,
-) -> discord.Embed:
-    return c2(color=color, message=message, footer=subtitle, timestamp=False)
-
-
+from core.discord.views.embed import compose, body, c2, reply_embed
 
 if TYPE_CHECKING:
     from core.vain import Vain
@@ -65,22 +24,17 @@ ZWSP = "\u200b"
 BOT_NAME = "vain"
 BOT_OPPONENT = "Me"
 
-
 def _is_bot_opponent(user: discord.User, bot: Vain) -> bool:
     return user.bot and user.id == bot.user.id
-
 
 def _opponent_label(user: discord.User, bot: Vain) -> str:
     return BOT_OPPONENT if _is_bot_opponent(user, bot) else user.display_name
 
-
 def _bot_win_status() -> str:
     return f"**{BOT_OPPONENT}** wins!"
 
-
 def _bot_thinking_line(*, emoji: str) -> str:
     return f"{emoji} **{BOT_NAME}** is thinking..."
-
 
 async def _warn_interaction(ctx: "Context", interaction: discord.Interaction, message: str) -> None:
     emoji = await ctx._get_emoji("warn")
@@ -91,7 +45,6 @@ async def _warn_interaction(ctx: "Context", interaction: discord.Interaction, me
     )
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-
 async def _resolve_user(
     ctx: "Context",
     user: discord.User | discord.Member | int,
@@ -99,7 +52,6 @@ async def _resolve_user(
     if isinstance(user, discord.User):
         return user
     return await ctx.bot.fetch_user(int(user))
-
 
 async def _validate_opponent(ctx: "Context", opponent: discord.User) -> str | None:
     if opponent.id == ctx.author.id:
@@ -128,14 +80,12 @@ async def _validate_opponent(ctx: "Context", opponent: discord.User) -> str | No
                 return "That member isn't in this server."
     return None
 
-
 def _rps_winner(a: str, b: str) -> int:
     if a == b:
         return 0
     if RPS_BEATS[a] == b:
         return 1
     return 2
-
 
 async def _end_game(message: discord.Message | None, text: str) -> None:
     if message is None:
@@ -148,7 +98,6 @@ async def _end_game(message: discord.Message | None, text: str) -> None:
             await message.edit(embed=embed, view=None)
         else:
             await message.edit(content=text, view=None)
-
 
 class RPSView(discord.ui.View):
     def __init__(
@@ -317,7 +266,6 @@ class RPSView(discord.ui.View):
             f"Rock paper scissors between {self.player1.mention} and {p2} ended due to inactivity.",
         )
 
-
 class TicTacToeButton(discord.ui.Button["TicTacToeView"]):
     def __init__(self, x: int, y: int) -> None:
         super().__init__(style=discord.ButtonStyle.secondary, label=ZWSP, row=y, custom_id=f"ttt:{x}:{y}")
@@ -346,7 +294,6 @@ class TicTacToeButton(discord.ui.Button["TicTacToeView"]):
         if not await view.interaction_check(interaction):
             return
         await view.handle_click(interaction, self.x, self.y)
-
 
 class TicTacToeView(discord.ui.View):
     def __init__(
@@ -613,7 +560,6 @@ class TicTacToeView(discord.ui.View):
             f"{self._header()}\n\nGame ended due to inactivity.",
         )
 
-
 class Connect4Button(discord.ui.Button["Connect4View"]):
     def __init__(self, column: int) -> None:
         super().__init__(
@@ -631,7 +577,6 @@ class Connect4Button(discord.ui.Button["Connect4View"]):
         if not await view.interaction_check(interaction):
             return
         await view.play_column(interaction, self.column)
-
 
 class Connect4View(discord.ui.View):
     ROWS = 6
@@ -880,7 +825,6 @@ class Connect4View(discord.ui.View):
             f"**{self.player1.display_name}** vs **{p2}**\n\nGame ended due to inactivity.",
         )
 
-
 async def start_rps(
     ctx: "Context",
     *,
@@ -899,7 +843,6 @@ async def start_rps(
     view = RPSView(ctx=ctx, player1=ctx.author, player2=opponent, rounds=rounds, bot=ctx.bot)
     msg = await ctx.send(embed=view._embed(), view=view)
     view.message = msg
-
 
 async def start_ttt(
     ctx: "Context",
@@ -924,7 +867,6 @@ async def start_ttt(
     )
     msg = await ctx.send(content=view._content(starting=True), view=view)
     view.message = msg
-
 
 async def start_connect4(
     ctx: "Context",

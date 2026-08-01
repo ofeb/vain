@@ -16,52 +16,10 @@ from core.tools.human.text import ordinal
 
 from .media import fetch_action_gif
 
-
-
-def compose(*parts: str) -> str:
-    return "\n".join(part for part in parts if part)
-
-def body(*lines: str) -> str:
-    return "\n".join(f"> {line}" for line in lines if line)
-
-def caption(text: str) -> str:
-    return f"-# {text}"
-
-def c2(
-    *,
-    color: int,
-    message: str,
-    title: str | None = None,
-    footer: str | None = None,
-    author: str | None = None,
-    timestamp: bool = True,
-) -> discord.Embed:
-    description = compose(
-        body(message),
-        caption(footer) if footer else None,
-    )
-    embed = discord.Embed(color=color, description=description)
-    if title:
-        embed.title = title
-    if author:
-        embed.set_author(name=author)
-    if timestamp:
-        embed.timestamp = discord.utils.utcnow()
-    return embed
-
-def reply_embed(
-    *,
-    color: int,
-    message: str,
-    subtitle: str | None = None,
-) -> discord.Embed:
-    return c2(color=color, message=message, footer=subtitle, timestamp=False)
-
-
+from core.discord.views.embed import reply_embed
 
 if TYPE_CHECKING:
     from core.vain import Vain
-
 
 def _extract_dominant_color(gif_bytes: bytes) -> int | None:
     try:
@@ -224,7 +182,6 @@ PAST_TENSE: dict[str, str] = {
     "yes": "Said yes to",
 }
 
-
 class RoleplayBackView(discord.ui.View):
     def __init__(self, action: str, original_author_id: int, target_id: int):
         super().__init__(timeout=300)
@@ -299,7 +256,6 @@ class RoleplayBackView(discord.ui.View):
         if self.message:
             with contextlib.suppress(discord.HTTPException):
                 await self.message.edit(view=self)
-
 
 class RoleplayCommands(Package):
     """Themed member-to-member reaction commands."""
@@ -403,7 +359,6 @@ class RoleplayCommands(Package):
         ][:25]
         return [app_commands.Choice(name=name, value=name) for name in matches]
 
-
 def _make_prefix_action(name: str):
     """Prefix-only roleplay action (,slap / ,highfive). Slash uses /roleplay only."""
 
@@ -420,19 +375,15 @@ def _make_prefix_action(name: str):
 
     return action
 
-
 for _name in ROLEPLAY_ACTIONS:
     if _name in PREFIX_ACTION_SKIP:
         continue
     setattr(RoleplayCommands, _name, _make_prefix_action(_name))
 
-
-
 from core.discord.mixin import _Meta
 from core.discord.package import Package
 
 from .events import RoleplayEvents
-
 
 class Roleplay(
     RoleplayCommands,
@@ -442,7 +393,6 @@ class Roleplay(
 ):
     def __init__(self, bot):
         Package.__init__(self, bot)
-
 
 async def setup(bot: Vain) -> None:
     await bot.add_cog(Roleplay(bot))

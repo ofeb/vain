@@ -4,6 +4,7 @@ from core.discord.package import Package
 
 from ..extended.autoresponder.events import AutoresponderEvents
 from ..extended.boost.events import BoostEvents
+from ..extended.filter.events import FilterEvents
 from ..extended.goodbye.events import GoodbyeEvents
 from ..extended.settings.events import SettingsEvents
 from ..extended.stickymessage.events import StickymessageEvents
@@ -19,6 +20,7 @@ class ServerEvents(
     SuggestEvents,
     SettingsEvents,
     BoostEvents,
+    FilterEvents,
     Package,
 ):
     """Server-wide event listeners."""

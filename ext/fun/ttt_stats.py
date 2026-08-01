@@ -6,19 +6,10 @@ import discord
 
 from config import color
 
-
-
-def body(*lines: str) -> str:
-    return "\n".join(f"> {line}" for line in lines if line)
-
-def compose(*parts: str) -> str:
-    return "\n".join(part for part in parts if part)
-
-
+from core.discord.views.embed import compose, body
 
 if TYPE_CHECKING:
     from core.vain import Vain
-
 
 def is_group_chat(channel: discord.abc.MessageableChannel | None) -> bool:
     if channel is None:
@@ -37,14 +28,12 @@ def is_group_chat(channel: discord.abc.MessageableChannel | None) -> bool:
             return True
     return False
 
-
 def is_direct_message(channel: discord.abc.MessageableChannel | None) -> bool:
     if channel is None:
         return False
     if isinstance(channel, discord.DMChannel) and not is_group_chat(channel):
         return True
     return getattr(channel, "type", None) == discord.ChannelType.private
-
 
 def scope_ids(
     channel: discord.abc.MessageableChannel | None,
@@ -59,11 +48,9 @@ def scope_ids(
         return None, channel.id
     return None, None
 
-
 def group_channel_id(channel: discord.abc.MessageableChannel | None) -> int | None:
     _guild_id, channel_id = scope_ids(channel, None)
     return channel_id
-
 
 def guild_scope_id(
     channel: discord.abc.MessageableChannel | None,
@@ -71,7 +58,6 @@ def guild_scope_id(
 ) -> int | None:
     guild_id, _channel_id = scope_ids(channel, guild)
     return guild_id
-
 
 async def _bump_global(db: Any, user_id: int, column: str) -> None:
     await db.execute(
@@ -81,7 +67,6 @@ async def _bump_global(db: Any, user_id: int, column: str) -> None:
         """,
         user_id,
     )
-
 
 async def _bump_guild(db: Any, guild_id: int, user_id: int, column: str) -> None:
     await db.execute(
@@ -93,7 +78,6 @@ async def _bump_guild(db: Any, guild_id: int, user_id: int, column: str) -> None
         user_id,
     )
 
-
 async def _bump_channel(db: Any, channel_id: int, user_id: int, column: str) -> None:
     await db.execute(
         f"""
@@ -103,7 +87,6 @@ async def _bump_channel(db: Any, channel_id: int, user_id: int, column: str) -> 
         channel_id,
         user_id,
     )
-
 
 async def _bump(
     db: Any,
@@ -122,7 +105,6 @@ async def _bump(
         await _bump_guild(db, guild_id, user_id, column)
     if channel_id is not None:
         await _bump_channel(db, channel_id, user_id, column)
-
 
 async def record_ttt_game(
     bot: Vain,
@@ -213,7 +195,6 @@ async def record_ttt_game(
             bot_id=bot_id,
         )
 
-
 async def fetch_ttt_stats(db: Any, user_id: int) -> dict[str, int]:
     row = await db.fetchrow(
         "SELECT wins, losses, ties FROM tictactoe WHERE user_id = $1",
@@ -226,7 +207,6 @@ async def fetch_ttt_stats(db: Any, user_id: int) -> dict[str, int]:
         "losses": int(row["losses"] or 0),
         "ties": int(row["ties"] or 0),
     }
-
 
 async def fetch_ttt_leaderboard(
     db: Any,
@@ -275,7 +255,6 @@ async def fetch_ttt_leaderboard(
         )
     return [{"user_id": int(row["user_id"]), "wins": int(row["wins"] or 0)} for row in rows]
 
-
 def default_leaderboard_scope(channel: discord.abc.MessageableChannel | None) -> str:
     if is_group_chat(channel):
         return "group"
@@ -284,7 +263,6 @@ def default_leaderboard_scope(channel: discord.abc.MessageableChannel | None) ->
     if channel is not None and getattr(channel, "guild", None) is None and not is_direct_message(channel):
         return "group"
     return "global"
-
 
 async def leaderboard_rows(
     db: Any,
@@ -304,7 +282,6 @@ async def leaderboard_rows(
         return await fetch_ttt_leaderboard(db, guild_id=guild_id)
     return await fetch_ttt_leaderboard(db)
 
-
 async def user_display(bot: Vain, user_id: int) -> str:
     if bot.user and user_id == bot.user.id:
         return f"{bot.user.display_name}#0"
@@ -319,7 +296,6 @@ async def user_display(bot: Vain, user_id: int) -> str:
     if user.discriminator and user.discriminator != "0":
         return f"{user.name}#{user.discriminator}"
     return f"{user.display_name}#0"
-
 
 def build_stats_embed(author: discord.User, stats: dict[str, int]) -> discord.Embed:
     wins = stats["wins"]
@@ -341,7 +317,6 @@ def build_stats_embed(author: discord.User, stats: dict[str, int]) -> discord.Em
     )
     embed.set_author(name=author.display_name, icon_url=author.display_avatar.url)
     return embed
-
 
 async def build_leaderboard_pages(
     bot: Vain,

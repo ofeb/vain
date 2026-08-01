@@ -11,52 +11,10 @@ import aiohttp
 import discord
 from PIL import Image
 
-
-
+from core.discord.views.embed import panel_embed
 
 def label_line(label: str, value: str) -> str:
     return f"**{label}**: {value}"
-
-def compose(*parts: str) -> str:
-    return "\n".join(part for part in parts if part)
-
-def body(*lines: str) -> str:
-    return "\n".join(f"> {line}" for line in lines if line)
-
-def caption(text: str) -> str:
-    return f"-# {text}"
-
-def panel_embed(
-    *,
-    color: int | None = None,
-    title: str | None = None,
-    author: str | None = None,
-    author_icon: str | None = None,
-    lines: list[str] | None = None,
-    footer: str | None = None,
-    timestamp: bool = True,
-    thumbnail: str | None = None,
-    url: str | None = None,
-) -> discord.Embed:
-    description = compose(
-        body(*(lines or [])),
-        caption(footer) if footer else None,
-    )
-    embed = discord.Embed(color=color, description=description or None, url=url)
-    if title:
-        embed.title = title
-    if author:
-        if author_icon:
-            embed.set_author(name=author, icon_url=author_icon)
-        else:
-            embed.set_author(name=author)
-    if thumbnail:
-        embed.set_thumbnail(url=thumbnail)
-    if timestamp:
-        embed.timestamp = discord.utils.utcnow()
-    return embed
-
-
 
 WEATHER_COLOR = 0xD4B8D0
 DEFINE_COLOR = 0xBBA0D2
@@ -76,10 +34,8 @@ _GITHUB_HEADERS = {
     "User-Agent": "Vain-bot",
 }
 
-
 def _title_case_weather(text: str) -> str:
     return " ".join(word.capitalize() for word in text.split())
-
 
 async def fetch_weather(session: aiohttp.ClientSession, location: str) -> dict[str, Any]:
     from config import api
@@ -94,7 +50,6 @@ async def fetch_weather(session: aiohttp.ClientSession, location: str) -> dict[s
             message = data.get("message", "Could not fetch weather for that location.")
             raise ValueError(str(message))
         return data
-
 
 def build_weather_embed(data: dict[str, Any], author: discord.User) -> discord.Embed:
     weather = data["weather"][0]
@@ -136,7 +91,6 @@ def build_weather_embed(data: dict[str, Any], author: discord.User) -> discord.E
         thumbnail=f"https://openweathermap.org/img/w/{icon}.png" if icon else None,
     )
 
-
 async def fetch_dictionary(session: aiohttp.ClientSession, word: str) -> dict[str, Any]:
     url = f"https://api.dictionaryapi.dev/api/v2/entries/en/{word.strip().lower()}"
     async with session.get(url) as resp:
@@ -148,7 +102,6 @@ async def fetch_dictionary(session: aiohttp.ClientSession, word: str) -> dict[st
         if not payload:
             raise ValueError(f"No definition found for **{word}**.")
         return payload[0]
-
 
 def build_define_embed(entry: dict[str, Any], author: discord.User) -> discord.Embed:
     word = entry.get("word", "unknown")
@@ -180,7 +133,6 @@ def build_define_embed(entry: dict[str, Any], author: discord.User) -> discord.E
         timestamp=False,
     )
 
-
 async def fetch_urban_dictionary(session: aiohttp.ClientSession, word: str) -> list[dict[str, Any]]:
     params = {"term": word.strip()}
     async with session.get("https://api.urbandictionary.com/v0/define", params=params) as resp:
@@ -192,14 +144,12 @@ async def fetch_urban_dictionary(session: aiohttp.ClientSession, word: str) -> l
             raise ValueError(f"No Urban Dictionary results for **{word}**.")
         return results
 
-
 def _clean_ud_text(text: str, *, limit: int = 900) -> str:
     cleaned = re.sub(r"\[([^\]]+)\]", r"\1", text or "")
     cleaned = cleaned.replace("\r\n", "\n").strip()
     if len(cleaned) > limit:
         cleaned = cleaned[: limit - 3].rstrip() + "..."
     return cleaned
-
 
 def build_urban_embed(
     entry: dict[str, Any],
@@ -235,13 +185,11 @@ def build_urban_embed(
     )
     return embed
 
-
 def normalize_cashtag(username: str) -> str:
     tag = username.strip().lstrip("$").strip()
     if not tag or not re.fullmatch(r"[A-Za-z0-9._-]+", tag):
         raise ValueError("Provide a valid **Cash App** cashtag.")
     return tag
-
 
 def _parse_profile_html(html: str) -> dict[str, Any]:
     match = re.search(r"var profile = (\{.*?\});", html, re.S)
@@ -249,13 +197,11 @@ def _parse_profile_html(html: str) -> dict[str, Any]:
         raise ValueError("Could not find that **Cash App** profile.")
     return json.loads(match.group(1))
 
-
 def _hex_to_int(value: str) -> int:
     cleaned = value.strip().lstrip("#")
     if len(cleaned) == 3:
         cleaned = "".join(ch * 2 for ch in cleaned)
     return int(cleaned, 16)
-
 
 def _is_vibrant(rgb: tuple[int, int, int]) -> bool:
     r, g, b = rgb
@@ -267,7 +213,6 @@ def _is_vibrant(rgb: tuple[int, int, int]) -> bool:
     if mx and (mx - mn) / mx < 0.45:
         return False
     return True
-
 
 def _dominant_rgb_from_image(data: bytes) -> tuple[int, int, int] | None:
     with Image.open(BytesIO(data)).convert("RGB") as img:
@@ -283,7 +228,6 @@ def _dominant_rgb_from_image(data: bytes) -> tuple[int, int, int] | None:
             idx = counts[0][1]
             return (palette[idx * 3], palette[idx * 3 + 1], palette[idx * 3 + 2])
     return None
-
 
 async def _avatar_embed_color(
     session: aiohttp.ClientSession,
@@ -311,7 +255,6 @@ async def _avatar_embed_color(
 
     return CASHAPP_GREEN
 
-
 async def fetch_cashapp_profile(session: aiohttp.ClientSession, username: str) -> dict[str, Any]:
     tag = normalize_cashtag(username)
     url = f"https://cash.app/{tag}"
@@ -325,7 +268,6 @@ async def fetch_cashapp_profile(session: aiohttp.ClientSession, username: str) -
     profile["_cashtag"] = tag
     profile["_embed_color"] = await _avatar_embed_color(session, profile)
     return profile
-
 
 def build_cashapp_embed(profile: dict[str, Any], author: discord.User) -> discord.Embed:
     tag = profile["_cashtag"]
@@ -350,11 +292,9 @@ def build_cashapp_embed(profile: dict[str, Any], author: discord.User) -> discor
     embed.set_footer(text="-# CashApp", icon_url=CASHAPP_FOOTER_ICON)
     return embed
 
-
 def _format_github_repo_date(iso: str) -> str:
     dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
     return dt.strftime("%m/%d/%y")
-
 
 def _github_info_lines(user: dict[str, Any]) -> list[str]:
     lines: list[str] = []
@@ -370,7 +310,6 @@ def _github_info_lines(user: dict[str, Any]) -> list[str]:
         lines.append(f"🌎 [{location}](http://maps.google.com/?q={quote(location)})")
     return lines
 
-
 def _format_github_repos(login: str, repos: list[dict[str, Any]], *, limit: int = 3) -> str:
     rows: list[str] = []
     for repo in repos[:limit]:
@@ -380,7 +319,6 @@ def _format_github_repos(login: str, repos: list[dict[str, Any]], *, limit: int 
         url = repo.get("html_url") or f"https://github.com/{login}/{name}"
         rows.append(f"[`⭐ {stars}, {updated} {name}`]({url})")
     return "\n".join(rows)
-
 
 async def fetch_github_profile(session: aiohttp.ClientSession, username: str) -> dict[str, Any]:
     login = username.strip().lstrip("@")
@@ -407,7 +345,6 @@ async def fetch_github_profile(session: aiohttp.ClientSession, username: str) ->
 
     user["_repos"] = repos
     return user
-
 
 def build_github_embed(user: dict[str, Any], author: discord.User) -> discord.Embed:
     login = user.get("login") or "unknown"

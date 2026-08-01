@@ -14,76 +14,12 @@ from core.discord.ctx import Context
 from core.discord.hybrid import describe, hybrid
 from config import color
 
-
-
-def compose(*parts: str) -> str:
-    return "\n".join(part for part in parts if part)
-
-def body(*lines: str) -> str:
-    return "\n".join(f"> {line}" for line in lines if line)
-
-def caption(text: str) -> str:
-    return f"-# {text}"
-
-def c2(
-    *,
-    color: int,
-    message: str,
-    title: str | None = None,
-    footer: str | None = None,
-    author: str | None = None,
-    timestamp: bool = True,
-) -> discord.Embed:
-    description = compose(
-        body(message),
-        caption(footer) if footer else None,
-    )
-    embed = discord.Embed(color=color, description=description)
-    if title:
-        embed.title = title
-    if author:
-        embed.set_author(name=author)
-    if timestamp:
-        embed.timestamp = discord.utils.utcnow()
-    return embed
-
-def panel_embed(
-    *,
-    color: int | None = None,
-    title: str | None = None,
-    author: str | None = None,
-    author_icon: str | None = None,
-    lines: list[str] | None = None,
-    footer: str | None = None,
-    timestamp: bool = True,
-    thumbnail: str | None = None,
-    url: str | None = None,
-) -> discord.Embed:
-    description = compose(
-        body(*(lines or [])),
-        caption(footer) if footer else None,
-    )
-    embed = discord.Embed(color=color, description=description or None, url=url)
-    if title:
-        embed.title = title
-    if author:
-        if author_icon:
-            embed.set_author(name=author, icon_url=author_icon)
-        else:
-            embed.set_author(name=author)
-    if thumbnail:
-        embed.set_thumbnail(url=thumbnail)
-    if timestamp:
-        embed.timestamp = discord.utils.utcnow()
-    return embed
-
-
+from core.discord.views.embed import panel_embed
 
 if TYPE_CHECKING:
     from core.vain import Vain
 
 log = logging.getLogger("Vain.fortnite")
-
 
 @dataclass(slots=True)
 class FortniteCosmetic:
@@ -93,7 +29,6 @@ class FortniteCosmetic:
     rarity: str
     image_url: str
     price: int | None = None
-
 
 class Fortnite(Package):
     def __init__(self, bot: Vain):
@@ -298,7 +233,6 @@ class Fortnite(Package):
     )
     async def fortniteshop(self, ctx: Context) -> None:
         await self.fortnite_itemshop(ctx)
-
 
 async def setup(bot: Vain):
     await bot.add_cog(Fortnite(bot))

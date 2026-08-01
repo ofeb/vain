@@ -8,52 +8,10 @@ import discord
 
 from core.discord.package import Package
 
-
-
+from core.discord.views.embed import panel_embed
 
 def label_line(label: str, value: str) -> str:
     return f"**{label}**: {value}"
-
-def compose(*parts: str) -> str:
-    return "\n".join(part for part in parts if part)
-
-def body(*lines: str) -> str:
-    return "\n".join(f"> {line}" for line in lines if line)
-
-def caption(text: str) -> str:
-    return f"-# {text}"
-
-def panel_embed(
-    *,
-    color: int | None = None,
-    title: str | None = None,
-    author: str | None = None,
-    author_icon: str | None = None,
-    lines: list[str] | None = None,
-    footer: str | None = None,
-    timestamp: bool = True,
-    thumbnail: str | None = None,
-    url: str | None = None,
-) -> discord.Embed:
-    description = compose(
-        body(*(lines or [])),
-        caption(footer) if footer else None,
-    )
-    embed = discord.Embed(color=color, description=description or None, url=url)
-    if title:
-        embed.title = title
-    if author:
-        if author_icon:
-            embed.set_author(name=author, icon_url=author_icon)
-        else:
-            embed.set_author(name=author)
-    if thumbnail:
-        embed.set_thumbnail(url=thumbnail)
-    if timestamp:
-        embed.timestamp = discord.utils.utcnow()
-    return embed
-
-
 
 def _channel_type_label(channel: discord.abc.GuildChannel) -> str:
     if isinstance(channel, discord.VoiceChannel):
@@ -67,7 +25,6 @@ def _channel_type_label(channel: discord.abc.GuildChannel) -> str:
     if isinstance(channel, discord.StageChannel):
         return "Stage channel"
     return str(channel.type).replace("_", " ").title() + " channel"
-
 
 async def _get_audit_entry(
     guild: discord.Guild,
@@ -85,7 +42,6 @@ async def _get_audit_entry(
         pass
     return None
 
-
 def _format_overwrite_changes(
     old: Optional[discord.PermissionOverwrite],
     new: Optional[discord.PermissionOverwrite],
@@ -101,7 +57,6 @@ def _format_overwrite_changes(
             new_str = str(new_val) if new_val is not None else "inherit"
             changes.append(label_line(label, f"`{old_str}` → `{new_str}`"))
     return changes
-
 
 PERMISSION_NAMES = {
     "create_instant_invite": "Create Invite",
@@ -152,7 +107,6 @@ PERMISSION_NAMES = {
     "create_expressions": "Create Expressions",
     "send_voice_messages": "Send Voice Messages",
 }
-
 
 class LogEvents:
     _BULK_THRESHOLD: int = 3

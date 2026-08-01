@@ -7,49 +7,7 @@ from discord.ext import commands
 
 from config import color
 
-
-
-
-def compose(*parts: str) -> str:
-    return "\n".join(part for part in parts if part)
-
-def body(*lines: str) -> str:
-    return "\n".join(f"> {line}" for line in lines if line)
-
-def caption(text: str) -> str:
-    return f"-# {text}"
-
-def c2(
-    *,
-    color: int,
-    message: str,
-    title: str | None = None,
-    footer: str | None = None,
-    author: str | None = None,
-    timestamp: bool = True,
-) -> discord.Embed:
-    description = compose(
-        body(message),
-        caption(footer) if footer else None,
-    )
-    embed = discord.Embed(color=color, description=description)
-    if title:
-        embed.title = title
-    if author:
-        embed.set_author(name=author)
-    if timestamp:
-        embed.timestamp = discord.utils.utcnow()
-    return embed
-
-def reply_embed(
-    *,
-    color: int,
-    message: str,
-    subtitle: str | None = None,
-) -> discord.Embed:
-    return c2(color=color, message=message, footer=subtitle, timestamp=False)
-
-
+from core.discord.views.embed import reply_embed
 
 class TicTacToeButton(discord.ui.Button):
     def __init__(self, x: int, y: int, label: str):
@@ -141,7 +99,6 @@ class TicTacToeButton(discord.ui.Button):
             view=self.view,
             allowed_mentions=discord.AllowedMentions.none(),
         )
-
 
 class TicTacToe(discord.ui.View):
     def __init__(

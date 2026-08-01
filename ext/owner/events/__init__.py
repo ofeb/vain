@@ -13,9 +13,10 @@ import aiohttp
 from io import BytesIO
 from colorthief import ColorThief
 
+from core.discord.views.embed import panel_embed
+
 if TYPE_CHECKING:
     from core.vain import Vain
-
 
 DEVLOG_GUILD_IGNORE: set[int] = {
     1424433148892287108,
@@ -28,50 +29,8 @@ DEVLOG_GUILD_IGNORE: set[int] = {
     1136858318900564029,
 }
 
-
 class OwnerEvents(Package):
     """Bot join/leave logging and periodic tasks"""
-
-
-
-def compose(*parts: str) -> str:
-    return "\n".join(part for part in parts if part)
-
-def body(*lines: str) -> str:
-    return "\n".join(f"> {line}" for line in lines if line)
-
-def caption(text: str) -> str:
-    return f"-# {text}"
-
-def panel_embed(
-    *,
-    color: int | None = None,
-    title: str | None = None,
-    author: str | None = None,
-    author_icon: str | None = None,
-    lines: list[str] | None = None,
-    footer: str | None = None,
-    timestamp: bool = True,
-    thumbnail: str | None = None,
-    url: str | None = None,
-) -> discord.Embed:
-    description = compose(
-        body(*(lines or [])),
-        caption(footer) if footer else None,
-    )
-    embed = discord.Embed(color=color, description=description or None, url=url)
-    if title:
-        embed.title = title
-    if author:
-        if author_icon:
-            embed.set_author(name=author, icon_url=author_icon)
-        else:
-            embed.set_author(name=author)
-    if thumbnail:
-        embed.set_thumbnail(url=thumbnail)
-    if timestamp:
-        embed.timestamp = discord.utils.utcnow()
-    return embed
 
 async def get_dominant_color(url: str, fallback: int = 0x5865F2) -> int:
     """Fetch image and return dominant color using colorthief."""
@@ -102,8 +61,6 @@ async def get_bot_dominant_color(bot) -> int:
     if bot.user and bot.user.display_avatar:
         return await get_dominant_color(str(bot.user.display_avatar.url))
     return 0x5865F2
-
-
 
     @Package.listener()
     async def on_guild_join(self, guild: discord.Guild) -> None:

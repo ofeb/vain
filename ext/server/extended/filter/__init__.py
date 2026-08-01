@@ -1,8 +1,12 @@
 from typing import Optional, Union
 from discord.ext.commands import group, CommandError
 from discord import (
-    Embed, TextChannel,
-    AutoModTrigger, AutoModRuleTriggerType, AutoModRuleEventType, AutoModRuleAction,
+    Embed,
+    TextChannel,
+    AutoModTrigger,
+    AutoModRuleTriggerType,
+    AutoModRuleEventType,
+    AutoModRuleAction,
 )
 from core.managers.permissions import has_permissions
 from core.discord.package import Package
@@ -16,26 +20,31 @@ LINK_REGEX = r"(http|ftp|https):\/\/(?!open\.spotify\.com|tenor\.com)([\w_-]+(?:
 
 class MultipleWords:
     """placeholder for word list converter"""
+
     pass
 
 
 class MultipleLinks:
     """placeholder for link list converter"""
+
     pass
 
 
 class MultipleInvites:
     """placeholder for invite list converter"""
+
     pass
 
 
 class MultipleRoles:
     """placeholder for role list converter"""
+
     pass
 
 
 class RegexPattern:
     """placeholder for regex converter"""
+
     pass
 
 
@@ -57,8 +66,11 @@ class FilterCommands(Package):
     async def filter_reset(self, ctx):
         """clear word filter"""
         rule = next(
-            (r for r in await ctx.guild.fetch_automod_rules()
-             if r.creator_id == self.bot.user.id and not r.trigger.regex_patterns),
+            (
+                r
+                for r in await ctx.guild.fetch_automod_rules()
+                if r.creator_id == self.bot.user.id and not r.trigger.regex_patterns
+            ),
             None,
         )
         if not rule:
@@ -91,13 +103,23 @@ class FilterCommands(Package):
         if not channel:
             channel = "all"
         channels = (
-            [channel.id] if isinstance(channel, TextChannel)
+            [channel.id]
+            if isinstance(channel, TextChannel)
             else [c.id for c in ctx.guild.text_channels]
         )
-        await self.db.execute(
-            """INSERT INTO moderation.caps (guild_id, channel_ids, threshold, action) VALUES($1, $2, $3, $4) ON CONFLICT(guild_id) DO UPDATE SET channel_ids = excluded.channel_ids, threshold = excluded.threshold, action = excluded.action""",
-            ctx.guild.id, channels, flags.threshold, flags.punishment,
-        )
+        if setting:
+            await self.db.execute(
+                """INSERT INTO moderation.caps (guild_id, channel_ids, threshold, action) VALUES($1, $2, $3, $4) ON CONFLICT(guild_id) DO UPDATE SET channel_ids = excluded.channel_ids, threshold = excluded.threshold, action = excluded.action""",
+                ctx.guild.id,
+                channels,
+                flags.threshold,
+                flags.punishment,
+            )
+        else:
+            await self.db.execute(
+                """DELETE FROM moderation.caps WHERE guild_id = $1""",
+                ctx.guild.id,
+            )
         state = "ENABLED" if setting else "DISABLED"
         return await ctx.success(f"caps filter **{state}**")
 
@@ -126,7 +148,8 @@ class FilterCommands(Package):
         valid = [ctx.guild.get_role(rid) for rid in current if ctx.guild.get_role(rid)]
         await self.db.execute(
             """UPDATE moderation.caps SET exempt_roles = $1 WHERE guild_id = $2""",
-            [r.id for r in valid], ctx.guild.id,
+            [r.id for r in valid],
+            ctx.guild.id,
         )
         return await ctx.success(
             f"exempt roles updated: {human_join([r.mention for r in valid], final='and')}"
@@ -142,11 +165,16 @@ class FilterCommands(Package):
         )
         if not row or not row.roles:
             raise CommandError("no roles exempted from caps filter")
-        roles = [ctx.guild.get_role(rid) for rid in row.roles if ctx.guild.get_role(rid)]
+        roles = [
+            ctx.guild.get_role(rid) for rid in row.roles if ctx.guild.get_role(rid)
+        ]
         embed = Embed(title="Caps Exempt Roles").set_author(
             name=str(ctx.author), icon_url=ctx.author.display_avatar.url
         )
-        return await ctx.paginate(embed, [f"`{i}` {r.mention} (`{r.id}`)" for i, r in enumerate(roles, start=1)])
+        return await ctx.paginate(
+            embed,
+            [f"`{i}` {r.mention} (`{r.id}`)" for i, r in enumerate(roles, start=1)],
+        )
 
     @filter_.group(
         name="spam",
@@ -166,13 +194,23 @@ class FilterCommands(Package):
     ):
         """toggle spam filter"""
         channels = (
-            [channel.id] if isinstance(channel, TextChannel)
+            [channel.id]
+            if isinstance(channel, TextChannel)
             else [c.id for c in ctx.guild.text_channels]
         )
-        await self.db.execute(
-            """INSERT INTO moderation.spam (guild_id, channel_ids, threshold, action) VALUES($1, $2, $3, $4) ON CONFLICT(guild_id) DO UPDATE SET channel_ids = excluded.channel_ids, threshold = excluded.threshold, action = excluded.action""",
-            ctx.guild.id, channels, flags.threshold, flags.punishment,
-        )
+        if setting:
+            await self.db.execute(
+                """INSERT INTO moderation.spam (guild_id, channel_ids, threshold, action) VALUES($1, $2, $3, $4) ON CONFLICT(guild_id) DO UPDATE SET channel_ids = excluded.channel_ids, threshold = excluded.threshold, action = excluded.action""",
+                ctx.guild.id,
+                channels,
+                flags.threshold,
+                flags.punishment,
+            )
+        else:
+            await self.db.execute(
+                """DELETE FROM moderation.spam WHERE guild_id = $1""",
+                ctx.guild.id,
+            )
         state = "ENABLED" if setting else "DISABLED"
         return await ctx.success(
             f"{state} spam filter across **{len(channels)}** channel(s). threshold: **{flags.threshold}** msgs/5s. punishment: {flags.punishment}"
@@ -203,7 +241,8 @@ class FilterCommands(Package):
         valid = [ctx.guild.get_role(rid) for rid in current if ctx.guild.get_role(rid)]
         await self.db.execute(
             """UPDATE moderation.spam SET exempt_roles = $1 WHERE guild_id = $2""",
-            [r.id for r in valid], ctx.guild.id,
+            [r.id for r in valid],
+            ctx.guild.id,
         )
         return await ctx.success(
             f"exempt roles: {human_join([r.mention for r in valid], final='and')}"
@@ -219,11 +258,16 @@ class FilterCommands(Package):
         )
         if not row or not row.roles:
             raise CommandError("no roles exempted from spam filter")
-        roles = [ctx.guild.get_role(rid) for rid in row.roles if ctx.guild.get_role(rid)]
+        roles = [
+            ctx.guild.get_role(rid) for rid in row.roles if ctx.guild.get_role(rid)
+        ]
         embed = Embed(title="Spam Exempt Roles").set_author(
             name=str(ctx.author), icon_url=ctx.author.display_avatar.url
         )
-        return await ctx.paginate(embed, [f"`{i}` {r.mention} (`{r.id}`)" for i, r in enumerate(roles, start=1)])
+        return await ctx.paginate(
+            embed,
+            [f"`{i}` {r.mention} (`{r.id}`)" for i, r in enumerate(roles, start=1)],
+        )
 
     @filter_.command(
         name="add",
@@ -238,8 +282,11 @@ class FilterCommands(Package):
         if any(len(w) > 60 or len(w) < 1 for w in word_list):
             raise CommandError("each word must be 1–60 characters")
         rule = next(
-            (r for r in await ctx.guild.fetch_automod_rules()
-             if r.creator_id == self.bot.user.id and not r.trigger.regex_patterns),
+            (
+                r
+                for r in await ctx.guild.fetch_automod_rules()
+                if r.creator_id == self.bot.user.id and not r.trigger.regex_patterns
+            ),
             None,
         )
         if not rule:
@@ -294,15 +341,26 @@ class FilterCommands(Package):
     ):
         """toggle link filter"""
         channels = (
-            [channel.id] if isinstance(channel, TextChannel)
+            [channel.id]
+            if isinstance(channel, TextChannel)
             else [c.id for c in ctx.guild.text_channels]
         )
-        await self.db.execute(
-            """INSERT INTO moderation.links (guild_id, channel_ids, action) VALUES($1, $2, $3) ON CONFLICT(guild_id) DO UPDATE SET channel_ids = excluded.channel_ids, action = excluded.action""",
-            ctx.guild.id, channels, flags.punishment,
-        )
+        if setting:
+            await self.db.execute(
+                """INSERT INTO moderation.links (guild_id, channel_ids, action) VALUES($1, $2, $3) ON CONFLICT(guild_id) DO UPDATE SET channel_ids = excluded.channel_ids, action = excluded.action""",
+                ctx.guild.id,
+                channels,
+                flags.punishment,
+            )
+        else:
+            await self.db.execute(
+                """DELETE FROM moderation.links WHERE guild_id = $1""",
+                ctx.guild.id,
+            )
         state = "ENABLED" if setting else "DISABLED"
-        return await ctx.success(f"{state} link filter across **{len(channels)}** channel(s)")
+        return await ctx.success(
+            f"{state} link filter across **{len(channels)}** channel(s)"
+        )
 
     @filter_links.group(
         name="exempt",
@@ -329,7 +387,8 @@ class FilterCommands(Package):
         valid = [ctx.guild.get_role(rid) for rid in current if ctx.guild.get_role(rid)]
         await self.db.execute(
             """UPDATE moderation.links SET exempt_roles = $1 WHERE guild_id = $2""",
-            [r.id for r in valid], ctx.guild.id,
+            [r.id for r in valid],
+            ctx.guild.id,
         )
         return await ctx.success(
             f"exempt roles: {human_join([r.mention for r in valid], final='and')}"
@@ -345,11 +404,16 @@ class FilterCommands(Package):
         )
         if not row or not row.roles:
             raise CommandError("no roles exempted from link filter")
-        roles = [ctx.guild.get_role(rid) for rid in row.roles if ctx.guild.get_role(rid)]
+        roles = [
+            ctx.guild.get_role(rid) for rid in row.roles if ctx.guild.get_role(rid)
+        ]
         embed = Embed(title="Links Exempt Roles").set_author(
             name=str(ctx.author), icon_url=ctx.author.display_avatar.url
         )
-        return await ctx.paginate(embed, [f"`{i}` {r.mention} (`{r.id}`)" for i, r in enumerate(roles, start=1)])
+        return await ctx.paginate(
+            embed,
+            [f"`{i}` {r.mention} (`{r.id}`)" for i, r in enumerate(roles, start=1)],
+        )
 
     @filter_links.command(
         name="whitelist",
@@ -370,7 +434,8 @@ class FilterCommands(Package):
         updated = list(set(row.whitelist or []) | set(link_list))
         await self.db.execute(
             """UPDATE moderation.links SET whitelist = $1 WHERE guild_id = $2""",
-            updated, ctx.guild.id,
+            updated,
+            ctx.guild.id,
         )
         return await ctx.success(f"whitelisted: {human_join(link_list, final='and')}")
 
@@ -392,15 +457,26 @@ class FilterCommands(Package):
     ):
         """toggle invite filter"""
         channels = (
-            [channel.id] if isinstance(channel, TextChannel)
+            [channel.id]
+            if isinstance(channel, TextChannel)
             else [c.id for c in ctx.guild.text_channels]
         )
-        await self.db.execute(
-            """INSERT INTO moderation.invites (guild_id, channel_ids, action) VALUES($1, $2, $3) ON CONFLICT(guild_id) DO UPDATE SET channel_ids = excluded.channel_ids, action = excluded.action""",
-            ctx.guild.id, channels, flags.punishment,
+        if setting:
+            await self.db.execute(
+                """INSERT INTO moderation.invites (guild_id, channel_ids, action) VALUES($1, $2, $3) ON CONFLICT(guild_id) DO UPDATE SET channel_ids = excluded.channel_ids, action = excluded.action""",
+                ctx.guild.id,
+                channels,
+                flags.punishment,
+            )
+        else:
+            await self.db.execute(
+                """DELETE FROM moderation.invites WHERE guild_id = $1""",
+                ctx.guild.id,
+            )
+        state = "Enabled" if setting else "Disabled"
+        return await ctx.success(
+            f"{state} invite filter across **{len(channels)}** channel(s)"
         )
-        state = "ENABLED" if setting else "DISABLED"
-        return await ctx.success(f"{state} invite filter across **{len(channels)}** channel(s)")
 
     @filter_invites.group(
         name="exempt",
@@ -426,7 +502,8 @@ class FilterCommands(Package):
         valid = [ctx.guild.get_role(rid) for rid in current if ctx.guild.get_role(rid)]
         await self.db.execute(
             """UPDATE moderation.invites SET exempt_roles = $1 WHERE guild_id = $2""",
-            [r.id for r in valid], ctx.guild.id,
+            [r.id for r in valid],
+            ctx.guild.id,
         )
         return await ctx.success(
             f"exempt roles: {human_join([r.mention for r in valid], final='and')}"
@@ -450,9 +527,12 @@ class FilterCommands(Package):
         updated = list(set(row.whitelist or []) | set(inv_list))
         await self.db.execute(
             """UPDATE moderation.invites SET whitelist = $1 WHERE guild_id = $2""",
-            updated, ctx.guild.id,
+            updated,
+            ctx.guild.id,
         )
-        return await ctx.success(f"whitelisted invites: {human_join(inv_list, final='and')}")
+        return await ctx.success(
+            f"whitelisted invites: {human_join(inv_list, final='and')}"
+        )
 
     @filter_invites_exempt.command(name="list", aliases=["ls", "show", "view"])
     @has_permissions(manage_guild=True)
@@ -464,11 +544,16 @@ class FilterCommands(Package):
         )
         if not row or not row.roles:
             raise CommandError("no roles exempted from invite filter")
-        roles = [ctx.guild.get_role(rid) for rid in row.roles if ctx.guild.get_role(rid)]
+        roles = [
+            ctx.guild.get_role(rid) for rid in row.roles if ctx.guild.get_role(rid)
+        ]
         embed = Embed(title="Invite Exempt Roles").set_author(
             name=str(ctx.author), icon_url=ctx.author.display_avatar.url
         )
-        return await ctx.paginate(embed, [f"`{i}` {r.mention} (`{r.id}`)" for i, r in enumerate(roles, start=1)])
+        return await ctx.paginate(
+            embed,
+            [f"`{i}` {r.mention} (`{r.id}`)" for i, r in enumerate(roles, start=1)],
+        )
 
     @filter_.command(
         name="list",
@@ -479,8 +564,11 @@ class FilterCommands(Package):
     async def filter_list(self, ctx):
         """list filtered words"""
         rule = next(
-            (r for r in await ctx.guild.fetch_automod_rules()
-             if r.creator_id == self.bot.user.id and not r.trigger.regex_patterns),
+            (
+                r
+                for r in await ctx.guild.fetch_automod_rules()
+                if r.creator_id == self.bot.user.id and not r.trigger.regex_patterns
+            ),
             None,
         )
         if not rule:
@@ -489,7 +577,9 @@ class FilterCommands(Package):
         embed = Embed(title="Filtered Words").set_author(
             name=str(ctx.author), icon_url=ctx.author.display_avatar.url
         )
-        return await ctx.paginate(embed, [f"`{i}` {w}" for i, w in enumerate(words, start=1)])
+        return await ctx.paginate(
+            embed, [f"`{i}` {w}" for i, w in enumerate(words, start=1)]
+        )
 
     @filter_.command(
         name="remove",
@@ -501,8 +591,11 @@ class FilterCommands(Package):
         """remove filtered words"""
         word_list = words if isinstance(words, list) else [words]
         rule = next(
-            (r for r in await ctx.guild.fetch_automod_rules()
-             if r.creator_id == self.bot.user.id and not r.trigger.regex_patterns),
+            (
+                r
+                for r in await ctx.guild.fetch_automod_rules()
+                if r.creator_id == self.bot.user.id and not r.trigger.regex_patterns
+            ),
             None,
         )
         if not rule:
@@ -515,7 +608,9 @@ class FilterCommands(Package):
                 kf.remove(target)
                 dropped.append(w.lower())
         await rule.edit(
-            trigger=AutoModTrigger(type=AutoModRuleTriggerType.keyword, keyword_filter=kf),
+            trigger=AutoModTrigger(
+                type=AutoModRuleTriggerType.keyword, keyword_filter=kf
+            ),
             reason=f"filter edited by {ctx.author}",
         )
         return await ctx.success(
@@ -538,15 +633,27 @@ class FilterCommands(Package):
     ):
         """toggle spoiler filter"""
         channels = (
-            [channel.id] if isinstance(channel, TextChannel)
+            [channel.id]
+            if isinstance(channel, TextChannel)
             else [c.id for c in ctx.guild.text_channels]
         )
-        await self.db.execute(
-            """INSERT INTO moderation.spoilers (guild_id, channel_ids, threshold, action) VALUES($1, $2, $3, $4) ON CONFLICT(guild_id) DO UPDATE SET channel_ids = excluded.channel_ids, threshold = excluded.threshold, action = excluded.action""",
-            ctx.guild.id, channels, flags.threshold, flags.punishment,
-        )
+        if setting:
+            await self.db.execute(
+                """INSERT INTO moderation.spoilers (guild_id, channel_ids, threshold, action) VALUES($1, $2, $3, $4) ON CONFLICT(guild_id) DO UPDATE SET channel_ids = excluded.channel_ids, threshold = excluded.threshold, action = excluded.action""",
+                ctx.guild.id,
+                channels,
+                flags.threshold,
+                flags.punishment,
+            )
+        else:
+            await self.db.execute(
+                """DELETE FROM moderation.spoilers WHERE guild_id = $1""",
+                ctx.guild.id,
+            )
         state = "ENABLED" if setting else "DISABLED"
-        return await ctx.success(f"{state} spoiler filter. threshold: **{flags.threshold}**")
+        return await ctx.success(
+            f"{state} spoiler filter. threshold: **{flags.threshold}**"
+        )
 
     @filter_spoilers.group(
         name="exempt",
@@ -567,7 +674,8 @@ class FilterCommands(Package):
         valid = [ctx.guild.get_role(rid) for rid in current if ctx.guild.get_role(rid)]
         await self.db.execute(
             """UPDATE moderation.spoilers SET exempt_roles = $1 WHERE guild_id = $2""",
-            [r.id for r in valid], ctx.guild.id,
+            [r.id for r in valid],
+            ctx.guild.id,
         )
         return await ctx.success(
             f"exempt: {human_join([r.mention for r in valid], final='and')}"
@@ -583,9 +691,16 @@ class FilterCommands(Package):
         )
         if not row or not row.roles:
             raise CommandError("no roles exempted from spoiler filter")
-        roles = [ctx.guild.get_role(rid) for rid in row.roles if ctx.guild.get_role(rid)]
-        embed = Embed(title="Spoiler Exempt Roles").set_author(name=str(ctx.author), icon_url=ctx.author.display_avatar.url)
-        return await ctx.paginate(embed, [f"`{i}` {r.mention} (`{r.id}`)" for i, r in enumerate(roles, start=1)])
+        roles = [
+            ctx.guild.get_role(rid) for rid in row.roles if ctx.guild.get_role(rid)
+        ]
+        embed = Embed(title="Spoiler Exempt Roles").set_author(
+            name=str(ctx.author), icon_url=ctx.author.display_avatar.url
+        )
+        return await ctx.paginate(
+            embed,
+            [f"`{i}` {r.mention} (`{r.id}`)" for i, r in enumerate(roles, start=1)],
+        )
 
     @filter_.group(
         name="musicfiles",
@@ -603,15 +718,26 @@ class FilterCommands(Package):
     ):
         """toggle music file filter"""
         channels = (
-            [channel.id] if isinstance(channel, TextChannel)
+            [channel.id]
+            if isinstance(channel, TextChannel)
             else [c.id for c in ctx.guild.text_channels]
         )
-        await self.db.execute(
-            """INSERT INTO moderation.music (guild_id, channel_ids, action) VALUES($1, $2, $3) ON CONFLICT(guild_id) DO UPDATE SET channel_ids = excluded.channel_ids, action = excluded.action""",
-            ctx.guild.id, channels, flags.punishment,
-        )
+        if setting:
+            await self.db.execute(
+                """INSERT INTO moderation.music (guild_id, channel_ids, action) VALUES($1, $2, $3) ON CONFLICT(guild_id) DO UPDATE SET channel_ids = excluded.channel_ids, action = excluded.action""",
+                ctx.guild.id,
+                channels,
+                flags.punishment,
+            )
+        else:
+            await self.db.execute(
+                """DELETE FROM moderation.music WHERE guild_id = $1""",
+                ctx.guild.id,
+            )
         state = "ENABLED" if setting else "DISABLED"
-        return await ctx.success(f"{state} music file filter across **{len(channels)}** channel(s)")
+        return await ctx.success(
+            f"{state} music file filter across **{len(channels)}** channel(s)"
+        )
 
     @filter_musicfile.group(
         name="exempt",
@@ -632,7 +758,8 @@ class FilterCommands(Package):
         valid = [ctx.guild.get_role(rid) for rid in current if ctx.guild.get_role(rid)]
         await self.db.execute(
             """UPDATE moderation.music SET exempt_roles = $1 WHERE guild_id = $2""",
-            [r.id for r in valid], ctx.guild.id,
+            [r.id for r in valid],
+            ctx.guild.id,
         )
         return await ctx.success(
             f"exempt: {human_join([r.mention for r in valid], final='and')}"
@@ -648,9 +775,16 @@ class FilterCommands(Package):
         )
         if not row or not row.roles:
             raise CommandError("no roles exempted from music file filter")
-        roles = [ctx.guild.get_role(rid) for rid in row.roles if ctx.guild.get_role(rid)]
-        embed = Embed(title="Music File Exempt Roles").set_author(name=str(ctx.author), icon_url=ctx.author.display_avatar.url)
-        return await ctx.paginate(embed, [f"`{i}` {r.mention} (`{r.id}`)" for i, r in enumerate(roles, start=1)])
+        roles = [
+            ctx.guild.get_role(rid) for rid in row.roles if ctx.guild.get_role(rid)
+        ]
+        embed = Embed(title="Music File Exempt Roles").set_author(
+            name=str(ctx.author), icon_url=ctx.author.display_avatar.url
+        )
+        return await ctx.paginate(
+            embed,
+            [f"`{i}` {r.mention} (`{r.id}`)" for i, r in enumerate(roles, start=1)],
+        )
 
     @filter_.group(
         name="massmention",
@@ -670,15 +804,27 @@ class FilterCommands(Package):
     ):
         """toggle mass mention filter"""
         channels = (
-            [channel.id] if isinstance(channel, TextChannel)
+            [channel.id]
+            if isinstance(channel, TextChannel)
             else [c.id for c in ctx.guild.text_channels]
         )
-        await self.db.execute(
-            """INSERT INTO moderation.mention (guild_id, channel_ids, threshold, action) VALUES($1, $2, $3, $4) ON CONFLICT(guild_id) DO UPDATE SET channel_ids = excluded.channel_ids, threshold = excluded.threshold, action = excluded.action""",
-            ctx.guild.id, channels, flags.threshold, flags.punishment,
-        )
+        if setting:
+            await self.db.execute(
+                """INSERT INTO moderation.mention (guild_id, channel_ids, threshold, action) VALUES($1, $2, $3, $4) ON CONFLICT(guild_id) DO UPDATE SET channel_ids = excluded.channel_ids, threshold = excluded.threshold, action = excluded.action""",
+                ctx.guild.id,
+                channels,
+                flags.threshold,
+                flags.punishment,
+            )
+        else:
+            await self.db.execute(
+                """DELETE FROM moderation.mention WHERE guild_id = $1""",
+                ctx.guild.id,
+            )
         state = "ENABLED" if setting else "DISABLED"
-        return await ctx.success(f"{state} mass mention filter. threshold: **{flags.threshold}**")
+        return await ctx.success(
+            f"{state} mass mention filter. threshold: **{flags.threshold}**"
+        )
 
     @filter_massmention.group(
         name="exempt",
@@ -699,7 +845,8 @@ class FilterCommands(Package):
         valid = [ctx.guild.get_role(rid) for rid in current if ctx.guild.get_role(rid)]
         await self.db.execute(
             """UPDATE moderation.mention SET exempt_roles = $1 WHERE guild_id = $2""",
-            [r.id for r in valid], ctx.guild.id,
+            [r.id for r in valid],
+            ctx.guild.id,
         )
         return await ctx.success(
             f"exempt: {human_join([r.mention for r in valid], final='and')}"
@@ -715,9 +862,16 @@ class FilterCommands(Package):
         )
         if not row or not row.roles:
             raise CommandError("no roles exempted from mass mention filter")
-        roles = [ctx.guild.get_role(rid) for rid in row.roles if ctx.guild.get_role(rid)]
-        embed = Embed(title="Mass Mention Exempt Roles").set_author(name=str(ctx.author), icon_url=ctx.author.display_avatar.url)
-        return await ctx.paginate(embed, [f"`{i}` {r.mention} (`{r.id}`)" for i, r in enumerate(roles, start=1)])
+        roles = [
+            ctx.guild.get_role(rid) for rid in row.roles if ctx.guild.get_role(rid)
+        ]
+        embed = Embed(title="Mass Mention Exempt Roles").set_author(
+            name=str(ctx.author), icon_url=ctx.author.display_avatar.url
+        )
+        return await ctx.paginate(
+            embed,
+            [f"`{i}` {r.mention} (`{r.id}`)" for i, r in enumerate(roles, start=1)],
+        )
 
     @filter_.group(
         name="emoji",
@@ -737,15 +891,27 @@ class FilterCommands(Package):
     ):
         """toggle emoji filter"""
         channels = (
-            [channel.id] if isinstance(channel, TextChannel)
+            [channel.id]
+            if isinstance(channel, TextChannel)
             else [c.id for c in ctx.guild.text_channels]
         )
-        await self.db.execute(
-            """INSERT INTO moderation.emoji (guild_id, channel_ids, threshold, action) VALUES($1, $2, $3, $4) ON CONFLICT(guild_id) DO UPDATE SET channel_ids = excluded.channel_ids, threshold = excluded.threshold, action = excluded.action""",
-            ctx.guild.id, channels, flags.threshold, flags.punishment,
-        )
+        if setting:
+            await self.db.execute(
+                """INSERT INTO moderation.emoji (guild_id, channel_ids, threshold, action) VALUES($1, $2, $3, $4) ON CONFLICT(guild_id) DO UPDATE SET channel_ids = excluded.channel_ids, threshold = excluded.threshold, action = excluded.action""",
+                ctx.guild.id,
+                channels,
+                flags.threshold,
+                flags.punishment,
+            )
+        else:
+            await self.db.execute(
+                """DELETE FROM moderation.emoji WHERE guild_id = $1""",
+                ctx.guild.id,
+            )
         state = "ENABLED" if setting else "DISABLED"
-        return await ctx.success(f"{state} emoji filter. threshold: **{flags.threshold}**")
+        return await ctx.success(
+            f"{state} emoji filter. threshold: **{flags.threshold}**"
+        )
 
     @filter_emoji.group(
         name="exempt",
@@ -766,7 +932,8 @@ class FilterCommands(Package):
         valid = [ctx.guild.get_role(rid) for rid in current if ctx.guild.get_role(rid)]
         await self.db.execute(
             """UPDATE moderation.emoji SET exempt_roles = $1 WHERE guild_id = $2""",
-            [r.id for r in valid], ctx.guild.id,
+            [r.id for r in valid],
+            ctx.guild.id,
         )
         return await ctx.success(
             f"exempt: {human_join([r.mention for r in valid], final='and')}"
@@ -782,9 +949,16 @@ class FilterCommands(Package):
         )
         if not row or not row.roles:
             raise CommandError("no roles exempted from emoji filter")
-        roles = [ctx.guild.get_role(rid) for rid in row.roles if ctx.guild.get_role(rid)]
-        embed = Embed(title="Emoji Exempt Roles").set_author(name=str(ctx.author), icon_url=ctx.author.display_avatar.url)
-        return await ctx.paginate(embed, [f"`{i}` {r.mention} (`{r.id}`)" for i, r in enumerate(roles, start=1)])
+        roles = [
+            ctx.guild.get_role(rid) for rid in row.roles if ctx.guild.get_role(rid)
+        ]
+        embed = Embed(title="Emoji Exempt Roles").set_author(
+            name=str(ctx.author), icon_url=ctx.author.display_avatar.url
+        )
+        return await ctx.paginate(
+            embed,
+            [f"`{i}` {r.mention} (`{r.id}`)" for i, r in enumerate(roles, start=1)],
+        )
 
     @filter_.group(
         name="regex",
@@ -802,19 +976,25 @@ class FilterCommands(Package):
             raise CommandError(f"invalid regex: {e}")
         existing = await self.db.fetchrow(
             """SELECT * FROM moderation.regex WHERE guild_id = $1 AND regex = $2""",
-            ctx.guild.id, pattern,
+            ctx.guild.id,
+            pattern,
         )
         if existing:
             await self.db.execute(
                 """DELETE FROM moderation.regex WHERE guild_id = $1 AND regex = $2""",
-                ctx.guild.id, pattern,
+                ctx.guild.id,
+                pattern,
             )
             return await ctx.success(f"`{pattern}` removed from regex filter")
         await self.db.execute(
             """INSERT INTO moderation.regex (guild_id, regex, action) VALUES($1, $2, $3) ON CONFLICT(guild_id, regex) DO UPDATE SET action = excluded.action""",
-            ctx.guild.id, pattern, flags.punishment,
+            ctx.guild.id,
+            pattern,
+            flags.punishment,
         )
-        return await ctx.success(f"added regex `{pattern}`. punishment: **{flags.punishment}**")
+        return await ctx.success(
+            f"added regex `{pattern}`. punishment: **{flags.punishment}**"
+        )
 
     @filter_regex.command(name="list", aliases=["ls", "show", "view"])
     @has_permissions(manage_guild=True)
@@ -827,8 +1007,12 @@ class FilterCommands(Package):
         if not rows:
             raise CommandError("no regex patterns configured")
         patterns = [r.regex for r in rows]
-        embed = Embed(title="Regex Patterns").set_author(name=str(ctx.author), icon_url=ctx.author.display_avatar.url)
-        return await ctx.paginate(embed, [f"`{i}` **{p}**" for i, p in enumerate(patterns, start=1)])
+        embed = Embed(title="Regex Patterns").set_author(
+            name=str(ctx.author), icon_url=ctx.author.display_avatar.url
+        )
+        return await ctx.paginate(
+            embed, [f"`{i}` **{p}**" for i, p in enumerate(patterns, start=1)]
+        )
 
     @filter_regex.group(
         name="exempt",
@@ -841,15 +1025,17 @@ class FilterCommands(Package):
         """exempt from regex"""
         current = (
             await self.db.fetchval(
-                """SELECT exempt_roles FROM moderation.regex_exempt WHERE guild_id = $1""",
+                """SELECT exempt_roles FROM moderation.regex WHERE guild_id = $1 LIMIT 1""",
                 ctx.guild.id,
-            ) or []
+            )
+            or []
         )
         updated = list(set(current + [r.id for r in roles]))
         valid = [ctx.guild.get_role(rid) for rid in updated if ctx.guild.get_role(rid)]
         await self.db.execute(
             """UPDATE moderation.regex SET exempt_roles = $1 WHERE guild_id = $2""",
-            [r.id for r in valid], ctx.guild.id,
+            [r.id for r in valid],
+            ctx.guild.id,
         )
         return await ctx.success(
             f"exempt: {human_join([r.mention for r in valid], final='and')}"
@@ -861,12 +1047,18 @@ class FilterCommands(Package):
         """list regex exempt roles"""
         current = (
             await self.db.fetchval(
-                """SELECT exempt_roles FROM moderation.regex_exempt WHERE guild_id = $1""",
+                """SELECT exempt_roles FROM moderation.regex WHERE guild_id = $1 LIMIT 1""",
                 ctx.guild.id,
-            ) or []
+            )
+            or []
         )
         if not current:
             raise CommandError("no roles exempted from regex filter")
         roles = [ctx.guild.get_role(rid) for rid in current if ctx.guild.get_role(rid)]
-        embed = Embed(title="Regex Exempt Roles").set_author(name=str(ctx.author), icon_url=ctx.author.display_avatar.url)
-        return await ctx.paginate(embed, [f"`{i}` {r.mention} (`{r.id}`)" for i, r in enumerate(roles, start=1)])
+        embed = Embed(title="Regex Exempt Roles").set_author(
+            name=str(ctx.author), icon_url=ctx.author.display_avatar.url
+        )
+        return await ctx.paginate(
+            embed,
+            [f"`{i}` {r.mention} (`{r.id}`)" for i, r in enumerate(roles, start=1)],
+        )

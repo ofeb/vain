@@ -12,45 +12,12 @@ from core.tools.convert import MemberConvert, RoleConvert, StatusConvert
 
 from core.managers.permissions import has_permissions
 
-
-def compose(*parts: str) -> str:
-    return "\n".join(part for part in parts if part)
-
-def body(*lines: str) -> str:
-    return "\n".join(f"> {line}" for line in lines if line)
-
-def caption(text: str) -> str:
-    return f"-# {text}"
-
-def c2(
-    *,
-    color: int,
-    message: str,
-    title: str | None = None,
-    footer: str | None = None,
-    author: str | None = None,
-    timestamp: bool = True,
-) -> discord.Embed:
-    description = compose(
-        body(message),
-        caption(footer) if footer else None,
-    )
-    embed = discord.Embed(color=color, description=description)
-    if title:
-        embed.title = title
-    if author:
-        embed.set_author(name=author)
-    if timestamp:
-        embed.timestamp = discord.utils.utcnow()
-    return embed
-
-
+from core.discord.views.embed import compose, body, caption, c2
 
 DEFAULT_UPVOTE = "\u2705"
 DEFAULT_DOWNVOTE = "\u274c"
 SUGGEST_SEPARATOR = " • "
 CUSTOM_EMOJI_RE = re.compile(r"^<a?:[A-Za-z0-9_~]{2,32}:[0-9]{15,25}>$")
-
 
 def _status_label(status: str) -> str:
     labels = {
@@ -62,7 +29,6 @@ def _status_label(status: str) -> str:
         "denied": "Denied",
     }
     return labels.get(status, "Pending")
-
 
 class SuggestCommands(Package):
     """suggestion management with public and review flows."""

@@ -18,44 +18,10 @@ from .events import MiscellaneousEvents
 from config import color
 from ..information.lookup import GOOGLE_FOOTER_ICON
 
-
-
-def compose(*parts: str) -> str:
-    return "\n".join(part for part in parts if part)
-
-def body(*lines: str) -> str:
-    return "\n".join(f"> {line}" for line in lines if line)
-
-def caption(text: str) -> str:
-    return f"-# {text}"
-
-def c2(
-    *,
-    color: int,
-    message: str,
-    title: str | None = None,
-    footer: str | None = None,
-    author: str | None = None,
-    timestamp: bool = True,
-) -> discord.Embed:
-    description = compose(
-        body(message),
-        caption(footer) if footer else None,
-    )
-    embed = discord.Embed(color=color, description=description)
-    if title:
-        embed.title = title
-    if author:
-        embed.set_author(name=author)
-    if timestamp:
-        embed.timestamp = discord.utils.utcnow()
-    return embed
-
-
+from core.discord.views.embed import compose, body, caption, c2
 
 if TYPE_CHECKING:
     from core.vain import Vain
-
 
 class Miscellaneous(MiscellaneousEvents, Package):
     def __init__(self, bot: Vain):

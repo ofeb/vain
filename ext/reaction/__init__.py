@@ -15,49 +15,7 @@ from core.managers.permissions import has_permissions
 
 from .events import ReactionEvents
 
-
-def compose(*parts: str) -> str:
-    return "\n".join(part for part in parts if part)
-
-
-def body(*lines: str) -> str:
-    return "\n".join(f"> {line}" for line in lines if line)
-
-
-def caption(text: str) -> str:
-    return f"-# {text}"
-
-
-def panel_embed(
-    *,
-    color: int | None = None,
-    title: str | None = None,
-    author: str | None = None,
-    author_icon: str | None = None,
-    lines: list[str] | None = None,
-    footer: str | None = None,
-    timestamp: bool = True,
-    thumbnail: str | None = None,
-    url: str | None = None,
-) -> discord.Embed:
-    description = compose(
-        body(*(lines or [])),
-        caption(footer) if footer else None,
-    )
-    embed = discord.Embed(color=color, description=description or None, url=url)
-    if title:
-        embed.title = title
-    if author:
-        if author_icon:
-            embed.set_author(name=author, icon_url=author_icon)
-        else:
-            embed.set_author(name=author)
-    if thumbnail:
-        embed.set_thumbnail(url=thumbnail)
-    if timestamp:
-        embed.timestamp = discord.utils.utcnow()
-    return embed
-
+from core.discord.views.embed import panel_embed
 
 def matches_trigger(content: str, trigger: str, *, strict: bool) -> bool:
     """Same matching rules as autoresponder.
@@ -77,18 +35,15 @@ def matches_trigger(content: str, trigger: str, *, strict: bool) -> bool:
     )
     return pattern.search(content) is not None
 
-
 def parse_emojis(raw: str) -> list[str]:
     """Split a space-separated emoji payload into a list."""
     parts = [p.strip() for p in (raw or "").split() if p.strip()]
     return parts
 
-
 log = logging.getLogger("vain.reaction")
 
 if TYPE_CHECKING:
     from core.vain import Vain
-
 
 class Reaction(ReactionEvents, Package):
     """Auto-reaction management — same idea as autoresponder, but only emojis."""
@@ -457,7 +412,6 @@ class Reaction(ReactionEvents, Package):
             f"Reaction Trigger `{trigger_word}` author is `{str(user)}`",
             emoji="ℹ️",
         )
-
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Reaction(bot))

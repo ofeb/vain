@@ -12,52 +12,10 @@ from core.discord.views.paginate import PaginateView, needs_pagination
 from core.managers.permissions import has_permissions
 from config import color, emojis
 
-
-
-def body(*lines: str) -> str:
-    return "\n".join(f"> {line}" for line in lines if line)
-
-def caption(text: str) -> str:
-    return f"-# {text}"
-
-def compose(*parts: str) -> str:
-    return "\n".join(part for part in parts if part)
-
-def c2(
-    *,
-    color: int,
-    message: str,
-    title: str | None = None,
-    footer: str | None = None,
-    author: str | None = None,
-    timestamp: bool = True,
-) -> discord.Embed:
-    description = compose(
-        body(message),
-        caption(footer) if footer else None,
-    )
-    embed = discord.Embed(color=color, description=description)
-    if title:
-        embed.title = title
-    if author:
-        embed.set_author(name=author)
-    if timestamp:
-        embed.timestamp = discord.utils.utcnow()
-    return embed
-
-def reply_embed(
-    *,
-    color: int,
-    message: str,
-    subtitle: str | None = None,
-) -> discord.Embed:
-    return c2(color=color, message=message, footer=subtitle, timestamp=False)
-
-
+from core.discord.views.embed import compose, body, caption, reply_embed
 
 if TYPE_CHECKING:
     from core.discord.ctx import Context
-
 
 class StealPaginateView(PaginateView):
     def __init__(self, ctx: Context, pages: list[discord.Embed], emojis_to_steal: list):
@@ -106,7 +64,6 @@ class StealPaginateView(PaginateView):
                 ephemeral=True,
             )
 
-
 def _parse_emoji(text: str) -> list[dict]:
     results = []
     custom_pattern = r"<a?:([a-zA-Z0-9_]+):(\d+)>"
@@ -118,7 +75,6 @@ def _parse_emoji(text: str) -> list[dict]:
         url = f"https://cdn.discordapp.com/emojis/{emoji_id}.{ext}?size=128"
         results.append({"name": name, "id": emoji_id, "url": url, "animated": animated})
     return results
-
 
 class Steal(Package):
     """steal emojis from messages"""

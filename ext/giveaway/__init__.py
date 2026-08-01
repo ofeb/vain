@@ -21,61 +21,16 @@ from core.tools.moderation_args import (
 from .events import GiveawayEvents
 from .views import build_giveaway_panel
 
-
 _INVISIBLE_RE = re.compile(r"[\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff]")
-
 
 def _clean_token(token: str) -> str:
     return _INVISIBLE_RE.sub("", (token or "")).strip()
 
-def compose(*parts: str) -> str:
-    return "\n".join(part for part in parts if part)
-
-def body(*lines: str) -> str:
-    return "\n".join(f"> {line}" for line in lines if line)
-
-def caption(text: str) -> str:
-    return f"-# {text}"
-
-def panel_embed(
-    *,
-    color: int | None = None,
-    title: str | None = None,
-    author: str | None = None,
-    author_icon: str | None = None,
-    lines: list[str] | None = None,
-    footer: str | None = None,
-    timestamp: bool = True,
-    thumbnail: str | None = None,
-    url: str | None = None,
-) -> discord.Embed:
-    description = compose(
-        body(*(lines or [])),
-        caption(footer) if footer else None,
-    )
-    embed = discord.Embed(color=color, description=description or None, url=url)
-    if title:
-        embed.title = title
-    if author:
-        if author_icon:
-            embed.set_author(name=author, icon_url=author_icon)
-        else:
-            embed.set_author(name=author)
-    if thumbnail:
-        embed.set_thumbnail(url=thumbnail)
-    if timestamp:
-        embed.timestamp = discord.utils.utcnow()
-    return embed
-
-
-
 if TYPE_CHECKING:
     from typing import List
 
-
 def shorten(text: str, length: int):
     return text[:length] + "..." if len(text) > length else text
-
 
 def _parse_duration_value(argument: str) -> int | None:
     """Parse a duration token into seconds, or None if invalid/unparseable."""
@@ -89,7 +44,6 @@ def _parse_duration_value(argument: str) -> int | None:
     if seconds is None or seconds <= 0:
         return None
     return seconds
-
 
 class DurationSeconds(commands.Converter):
     """Accept raw seconds or human tokens like ``1h``, ``30m``, ``2d``."""
@@ -108,7 +62,6 @@ class DurationSeconds(commands.Converter):
             raise commands.BadArgument("Duration cannot exceed **1 year**.")
         return seconds
 
-
 async def _resolve_channel(ctx: Context, token: str) -> discord.abc.Messageable | None:
     """Resolve channel by mention, id, or name (``txt``, ``#txt``, mangled paste)."""
     from core.tools.convert.channel import resolve_channel
@@ -117,7 +70,6 @@ async def _resolve_channel(ctx: Context, token: str) -> discord.abc.Messageable 
     if ch is not None:
         return ch  # type: ignore[return-value]
     return None
-
 
 async def _parse_start_args(
     ctx: Context, raw: str
@@ -192,7 +144,6 @@ async def _parse_start_args(
         raise commands.BadArgument("Winner count must be at least **1**")
 
     return channel, seconds, winners, prize
-
 
 class Giveaway(commands.Cog):
     """Giveaway management system."""
@@ -1028,7 +979,6 @@ class Giveaway(commands.Cog):
     @has_permissions(manage_guild=True)
     async def dmonwin_script(self, ctx: Context, *, script: str = None) -> None:
         await self.customize_dmonwin_script(ctx, script=script)
-
 
 async def setup(bot: commands.Bot):
     """Load the Giveaway cog + events."""

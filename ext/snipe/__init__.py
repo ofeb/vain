@@ -13,52 +13,10 @@ from config import color, emojis
 from core.managers.permissions import has_permissions
 from core.tools.snipe import SnipeError
 
-
-
-def compose(*parts: str) -> str:
-    return "\n".join(part for part in parts if part)
-
-def body(*lines: str) -> str:
-    return "\n".join(f"> {line}" for line in lines if line)
-
-def caption(text: str) -> str:
-    return f"-# {text}"
-
-def c2(
-    *,
-    color: int,
-    message: str,
-    title: str | None = None,
-    footer: str | None = None,
-    author: str | None = None,
-    timestamp: bool = True,
-) -> discord.Embed:
-    description = compose(
-        body(message),
-        caption(footer) if footer else None,
-    )
-    embed = discord.Embed(color=color, description=description)
-    if title:
-        embed.title = title
-    if author:
-        embed.set_author(name=author)
-    if timestamp:
-        embed.timestamp = discord.utils.utcnow()
-    return embed
-
-def reply_embed(
-    *,
-    color: int,
-    message: str,
-    subtitle: str | None = None,
-) -> discord.Embed:
-    return c2(color=color, message=message, footer=subtitle, timestamp=False)
-
-
+from core.discord.views.embed import c2, reply_embed
 
 if TYPE_CHECKING:
     from .events import SnipeEvents
-
 
 class SnipePaginateView(PaginateView):
     def __init__(self, ctx: Context, pages: list[discord.Embed], snipe_type: str, snipe_store):
@@ -103,7 +61,6 @@ class SnipePaginateView(PaginateView):
             payload["view"] = None
         await interaction.response.edit_message(**payload)
 
-
 def _format_when(ts_raw) -> tuple[str, datetime.datetime]:
     if isinstance(ts_raw, (int, float)):
         ts = datetime.datetime.fromtimestamp(ts_raw, tz=datetime.timezone.utc)
@@ -114,7 +71,6 @@ def _format_when(ts_raw) -> tuple[str, datetime.datetime]:
     absolute = discord.utils.format_dt(ts, style="F")
     relative = discord.utils.format_dt(ts, style="R")
     return f"{absolute} · {relative}", ts
-
 
 def _build_snipe_embed(snipe: dict, index: int, total: int, snipe_type: str) -> discord.Embed:
     content = snipe.get("content") or ""
@@ -161,7 +117,6 @@ def _build_snipe_embed(snipe: dict, index: int, total: int, snipe_type: str) -> 
 
     return embed
 
-
 async def _send_snipe_pages(
     ctx: Context,
     *,
@@ -187,7 +142,6 @@ async def _send_snipe_pages(
     view = SnipePaginateView(ctx, pages, kind, store)
     view.index = min(max(index - 1, 0), len(pages) - 1)
     await view.start()
-
 
 class Snipe(commands.Cog):
     """Message sniping system."""
@@ -364,7 +318,6 @@ class Snipe(commands.Cog):
             await ctx.success(f"Deleted snipe at index `{index}`")
         except SnipeError:
             await ctx.fail(f"No snipe found at index `{index}`")
-
 
 async def setup(bot: commands.Bot):
     from .events import SnipeEvents

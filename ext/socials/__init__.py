@@ -23,40 +23,10 @@ from core.managers.permissions import has_permissions
 from config import color
 from colorthief import ColorThief
 
+from core.discord.views.embed import body, caption, c2
 
 _TIKTOK_FOOTER_ICON = "https://cdn-icons-png.flaticon.com/512/3046/3046121.png"
 _INSTAGRAM_FOOTER_ICON = "https://cdn-icons-png.flaticon.com/512/2111/2111463.png"
-def compose(*parts: str) -> str:
-    return "\n".join(part for part in parts if part)
-
-def body(*lines: str) -> str:
-    return "\n".join(f"> {line}" for line in lines if line)
-
-def caption(text: str) -> str:
-    return f"-# {text}"
-
-def c2(
-    *,
-    color: int,
-    message: str,
-    title: str | None = None,
-    footer: str | None = None,
-    author: str | None = None,
-    timestamp: bool = True,
-) -> discord.Embed:
-    description = compose(
-        body(message),
-        caption(footer) if footer else None,
-    )
-    embed = discord.Embed(color=color, description=description)
-    if title:
-        embed.title = title
-    if author:
-        embed.set_author(name=author)
-    if timestamp:
-        embed.timestamp = discord.utils.utcnow()
-    return embed
-
 def _linkify_caption(caption: str, platform: str) -> str:
     """Turn #hashtags into markdown links (heist-style)."""
     text = (caption or "").replace("```", "`\u200b`\u200b`").strip()
@@ -384,10 +354,8 @@ class SocialRepostView(ui.LayoutView):
         except Exception:
             pass
 
-
 def _rgb_to_int(r: int, g: int, b: int) -> int:
     return (int(r) << 16) + (int(g) << 8) + int(b)
-
 
 def _color_vibrance(rgb: tuple[int, int, int]) -> float:
     """Higher = more saturated / vivid (prefer over muddy greys)."""
@@ -397,7 +365,6 @@ def _color_vibrance(rgb: tuple[int, int, int]) -> float:
         return 0.0
     sat = (mx - mn) / mx
     return sat * mx
-
 
 def _pick_accent_from_palette(
     dominant: tuple[int, int, int],
@@ -420,7 +387,6 @@ def _pick_accent_from_palette(
         r, g, b = min(r + 70, 255), min(g + 70, 255), min(b + 70, 255)
     return (r, g, b)
 
-
 def _colorthief_from_bytes(data: bytes) -> int | None:
     if not data or len(data) < 64:
         return None
@@ -438,7 +404,6 @@ def _colorthief_from_bytes(data: bytes) -> int | None:
         return _rgb_to_int(r, g, b)
     except Exception:
         return None
-
 
 async def get_dominant_color(
     url: str,
@@ -470,12 +435,10 @@ async def get_dominant_color(
     except Exception:
         return fallback
 
-
 async def get_bot_dominant_color(bot) -> int:
     if bot.user and bot.user.display_avatar:
         return await get_dominant_color(str(bot.user.display_avatar.url))
     return 0x5865F2
-
 
 async def get_repost_accent_color(
     bot,
@@ -507,8 +470,6 @@ async def get_repost_accent_color(
             return color
     return bot_color
 
-
-
 from core.networks.media.compress import discord_upload_limit, fit_for_discord
 from core.networks.social import Instagram, TikTok, is_instagram_url, is_tiktok_url
 from core.networks.social.models import SocialPost
@@ -517,7 +478,6 @@ if TYPE_CHECKING:
     from core.vain import Vain
 
 FONT_PATH = str(Path(__file__).resolve().parents[2] / "var" / "caption.otf")
-
 
 def _ytdlp_download_sync(url: str, output_dir: str) -> dict:
     """Run yt-dlp synchronously to download media."""
@@ -567,7 +527,6 @@ def _ytdlp_download_sync(url: str, output_dir: str) -> dict:
             "uploader": info.get("uploader", ""),
             "thumbnail": info.get("thumbnail", ""),
         }
-
 
 class Socials(Package):
     """Social media feeds and notifications."""
@@ -1258,7 +1217,6 @@ class Socials(Package):
             )
             file = discord.File(io.BytesIO(image_data), filename="quote.png")
             await ctx.send(file=file)
-
 
 async def setup(bot: Vain):
     from .builders import register_builders

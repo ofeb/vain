@@ -20,49 +20,9 @@ import asyncio
 import aiohttp
 from colorthief import ColorThief
 
+from core.discord.views.embed import panel_embed
 
 _TB_DISPLAY_LIMIT = 3900
-
-
-
-def compose(*parts: str) -> str:
-    return "\n".join(part for part in parts if part)
-
-def body(*lines: str) -> str:
-    return "\n".join(f"> {line}" for line in lines if line)
-
-def caption(text: str) -> str:
-    return f"-# {text}"
-
-def panel_embed(
-    *,
-    color: int | None = None,
-    title: str | None = None,
-    author: str | None = None,
-    author_icon: str | None = None,
-    lines: list[str] | None = None,
-    footer: str | None = None,
-    timestamp: bool = True,
-    thumbnail: str | None = None,
-    url: str | None = None,
-) -> discord.Embed:
-    description = compose(
-        body(*(lines or [])),
-        caption(footer) if footer else None,
-    )
-    embed = discord.Embed(color=color, description=description or None, url=url)
-    if title:
-        embed.title = title
-    if author:
-        if author_icon:
-            embed.set_author(name=author, icon_url=author_icon)
-        else:
-            embed.set_author(name=author)
-    if thumbnail:
-        embed.set_thumbnail(url=thumbnail)
-    if timestamp:
-        embed.timestamp = discord.utils.utcnow()
-    return embed
 
 async def get_dominant_color(url: str, fallback: int = 0x5865F2) -> int:
     """Fetch image and return dominant color using colorthief."""
@@ -94,13 +54,10 @@ async def get_bot_dominant_color(bot) -> int:
         return await get_dominant_color(str(bot.user.display_avatar.url))
     return 0x5865F2
 
-
-
 if TYPE_CHECKING:
     from core.vain import Vain
 
 log = logging.getLogger("vain/owner")
-
 
 class Owner(Package):
     """Bot owner tools, reload, management, debug, and traceback."""
@@ -490,7 +447,6 @@ class Owner(Package):
 
         await self._send_traceback_layout(ctx, key=str(key), tb_text=tb_text)
 
-
     @group(
         name="botedit",
         description="Edit bot appearance",
@@ -745,12 +701,9 @@ class Owner(Package):
         except discord.Forbidden:
             await ctx.fail("Cannot DM you — check your privacy settings")
 
-
-
 from discord.ext import commands
 
 from .events import OwnerEvents
-
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(Owner(bot))

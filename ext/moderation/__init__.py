@@ -27,85 +27,10 @@ from core.tools.moderation_logs import (
 
 from core.managers.permissions import has_permissions
 
+from core.discord.views.embed import panel_embed, reply_embed
 
 def label_line(label: str, value: str) -> str:
     return f"**{label}**: {value}"
-
-
-def compose(*parts: str) -> str:
-    return "\n".join(part for part in parts if part)
-
-
-def body(*lines: str) -> str:
-    return "\n".join(f"> {line}" for line in lines if line)
-
-
-def caption(text: str) -> str:
-    return f"-# {text}"
-
-
-def panel_embed(
-    *,
-    color: int | None = None,
-    title: str | None = None,
-    author: str | None = None,
-    author_icon: str | None = None,
-    lines: list[str] | None = None,
-    footer: str | None = None,
-    timestamp: bool = True,
-    thumbnail: str | None = None,
-    url: str | None = None,
-) -> discord.Embed:
-    description = compose(
-        body(*(lines or [])),
-        caption(footer) if footer else None,
-    )
-    embed = discord.Embed(color=color, description=description or None, url=url)
-    if title:
-        embed.title = title
-    if author:
-        if author_icon:
-            embed.set_author(name=author, icon_url=author_icon)
-        else:
-            embed.set_author(name=author)
-    if thumbnail:
-        embed.set_thumbnail(url=thumbnail)
-    if timestamp:
-        embed.timestamp = discord.utils.utcnow()
-    return embed
-
-
-def c2(
-    *,
-    color: int,
-    message: str,
-    title: str | None = None,
-    footer: str | None = None,
-    author: str | None = None,
-    timestamp: bool = True,
-) -> discord.Embed:
-    description = compose(
-        body(message),
-        caption(footer) if footer else None,
-    )
-    embed = discord.Embed(color=color, description=description)
-    if title:
-        embed.title = title
-    if author:
-        embed.set_author(name=author)
-    if timestamp:
-        embed.timestamp = discord.utils.utcnow()
-    return embed
-
-
-def reply_embed(
-    *,
-    color: int,
-    message: str,
-    subtitle: str | None = None,
-) -> discord.Embed:
-    return c2(color=color, message=message, footer=subtitle, timestamp=False)
-
 
 class _BoostConfirmView(discord.ui.View):
     """Approve/Decline confirmation when targeting a booster."""
@@ -151,7 +76,6 @@ class _BoostConfirmView(discord.ui.View):
         with contextlib.suppress(discord.HTTPException):
             await msg.delete()
         return bool(self.value)
-
 
 class ModerationCommands(Package):
     """standalone moderation commands"""
@@ -2340,7 +2264,6 @@ class ModerationCommands(Package):
                 int(entry["role_id"]),
             )
 
-
 from discord.ext import commands
 
 from core.discord.mixin import _Meta
@@ -2359,7 +2282,6 @@ from .extended.revokefiles import Revokefiles
 from .extended.restrictcommand import Restrictcommand
 from .extended.stickyrole import Stickyrole
 from .extended.forcenickname import Forcenickname
-
 
 class Moderation(
     ModerationCommands,
@@ -2381,7 +2303,6 @@ class Moderation(
     metaclass=_Meta,
 ):
     """main moderation extension — all subcommands combined"""
-
 
 async def setup(bot) -> None:
     """load moderation extension"""

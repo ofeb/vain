@@ -11,57 +11,14 @@ from core.discord.hybrid import hybrid, describe, group
 from config import color, emojis
 from .settings import Settings as ClownboardSettings
 
-
-
-def compose(*parts: str) -> str:
-    return "\n".join(part for part in parts if part)
-
-def body(*lines: str) -> str:
-    return "\n".join(f"> {line}" for line in lines if line)
-
-def caption(text: str) -> str:
-    return f"-# {text}"
-
-def c2(
-    *,
-    color: int,
-    message: str,
-    title: str | None = None,
-    footer: str | None = None,
-    author: str | None = None,
-    timestamp: bool = True,
-) -> discord.Embed:
-    description = compose(
-        body(message),
-        caption(footer) if footer else None,
-    )
-    embed = discord.Embed(color=color, description=description)
-    if title:
-        embed.title = title
-    if author:
-        embed.set_author(name=author)
-    if timestamp:
-        embed.timestamp = discord.utils.utcnow()
-    return embed
-
-def reply_embed(
-    *,
-    color: int,
-    message: str,
-    subtitle: str | None = None,
-) -> discord.Embed:
-    return c2(color=color, message=message, footer=subtitle, timestamp=False)
-
-
+from core.discord.views.embed import body, c2, reply_embed
 
 if TYPE_CHECKING:
     from .events import ClownboardEvents
 
-
 def _toggle_emoji(enabled: bool) -> str:
     """Map a boolean to success/fail emoji."""
     return emojis.approve if enabled else emojis.deny
-
 
 class HexColor(commands.Converter):
     """Resolve color-like argument to hex string."""
@@ -69,7 +26,6 @@ class HexColor(commands.Converter):
     async def convert(self, ctx: Context, argument: str) -> str:
         colour = await commands.ColourConverter().convert(ctx, argument)
         return format(colour.value, "06x")
-
 
 def requires_clownboard():
     """Ensure clownboard is configured before subcommand runs."""
@@ -81,7 +37,6 @@ def requires_clownboard():
             f"**clownboard** hasn't been setup using `{ctx.prefix}clownboard set`"
         )
     return commands.check(predicate)
-
 
 class ResetConfirm(discord.ui.View):
     """Approve/decline prompt for resetting clownboard."""
@@ -138,7 +93,6 @@ class ResetConfirm(discord.ui.View):
             await self.message.delete()
         self.value = False
         self.stop()
-
 
 class Clownboard(commands.Cog):
     """Showcase the worst messages in your server."""
@@ -443,7 +397,6 @@ class Clownboard(commands.Cog):
             str(emoji),
         )
         await ctx.success(f"successfully set the clownboard emoji as {str(emoji)}")
-
 
 async def setup(bot: commands.Bot):
     """Load the Clownboard cog."""

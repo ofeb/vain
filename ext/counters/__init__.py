@@ -12,52 +12,10 @@ from core.discord.hybrid import hybrid, describe, group
 from config import color
 from core.managers.permissions import has_permissions
 
-
-
-def compose(*parts: str) -> str:
-    return "\n".join(part for part in parts if part)
-
-def body(*lines: str) -> str:
-    return "\n".join(f"> {line}" for line in lines if line)
-
-def caption(text: str) -> str:
-    return f"-# {text}"
-
-def panel_embed(
-    *,
-    color: int | None = None,
-    title: str | None = None,
-    author: str | None = None,
-    author_icon: str | None = None,
-    lines: list[str] | None = None,
-    footer: str | None = None,
-    timestamp: bool = True,
-    thumbnail: str | None = None,
-    url: str | None = None,
-) -> discord.Embed:
-    description = compose(
-        body(*(lines or [])),
-        caption(footer) if footer else None,
-    )
-    embed = discord.Embed(color=color, description=description or None, url=url)
-    if title:
-        embed.title = title
-    if author:
-        if author_icon:
-            embed.set_author(name=author, icon_url=author_icon)
-        else:
-            embed.set_author(name=author)
-    if thumbnail:
-        embed.set_thumbnail(url=thumbnail)
-    if timestamp:
-        embed.timestamp = discord.utils.utcnow()
-    return embed
-
-
+from core.discord.views.embed import panel_embed
 
 if TYPE_CHECKING:
     from .events import CountersEvents
-
 
 CHANNEL_OPTIONS = {
     ChannelType.stage_voice: ["stage", "s", "st"],
@@ -75,11 +33,9 @@ COUNTER_OPTIONS = {
     "boosts": ["boosts", "bsts", "bst"],
 }
 
-
 class RemovalActionType(Enum):
     delete = auto()
     remove = auto()
-
 
 class ChannelTypeConverter(commands.Converter):
     async def convert(self, ctx: Context, argument: str):
@@ -89,7 +45,6 @@ class ChannelTypeConverter(commands.Converter):
                     return key
         raise commands.CommandError(f"{argument} was not a proper channel type")
 
-
 class CounterOption(commands.Converter):
     async def convert(self, ctx: Context, argument: str):
         for key, values in COUNTER_OPTIONS.items():
@@ -97,7 +52,6 @@ class CounterOption(commands.Converter):
                 if argument.lower() == value.lower():
                     return key
         raise commands.CommandError(f"{argument} was not a proper counter type")
-
 
 class RemovalAction(commands.Converter):
     async def convert(self, ctx: Context, argument: str) -> RemovalActionType:
@@ -108,7 +62,6 @@ class RemovalAction(commands.Converter):
         elif argument.lower() in rem:
             return RemovalActionType.remove
         raise commands.CommandError(f"{argument} was not a proper removal action")
-
 
 class Counters(commands.Cog):
     """Channel counter management system."""
@@ -238,7 +191,6 @@ class Counters(commands.Cog):
             rows.append(f"`{i}` <#{counter['channel_id']}> - **{counter['counter_type']}**")
         embed = panel_embed(title="Counters", color=color.base, lines=rows, timestamp=False)
         await ctx.send(embed=embed)
-
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Counters(bot))

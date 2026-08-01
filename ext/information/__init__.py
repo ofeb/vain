@@ -17,48 +17,10 @@ import asyncio
 from io import BytesIO
 from colorthief import ColorThief
 
+from core.discord.views.embed import body, caption, panel_embed, reply_embed
 
 def label_line(label: str, value: str) -> str:
     return f"**{label}**: {value}"
-
-def compose(*parts: str) -> str:
-    return "\n".join(part for part in parts if part)
-
-def body(*lines: str) -> str:
-    return "\n".join(f"> {line}" for line in lines if line)
-
-def caption(text: str) -> str:
-    return f"-# {text}"
-
-def panel_embed(
-    *,
-    color: int | None = None,
-    title: str | None = None,
-    author: str | None = None,
-    author_icon: str | None = None,
-    lines: list[str] | None = None,
-    footer: str | None = None,
-    timestamp: bool = True,
-    thumbnail: str | None = None,
-    url: str | None = None,
-) -> discord.Embed:
-    description = compose(
-        body(*(lines or [])),
-        caption(footer) if footer else None,
-    )
-    embed = discord.Embed(color=color, description=description or None, url=url)
-    if title:
-        embed.title = title
-    if author:
-        if author_icon:
-            embed.set_author(name=author, icon_url=author_icon)
-        else:
-            embed.set_author(name=author)
-    if thumbnail:
-        embed.set_thumbnail(url=thumbnail)
-    if timestamp:
-        embed.timestamp = discord.utils.utcnow()
-    return embed
 
 def panel_container(
     *,
@@ -124,36 +86,6 @@ def layout_from_items(
 def panel_layout(**kwargs: Any) -> ui.LayoutView:
     return layout_from_items([panel_container(**kwargs)])
 
-def c2(
-    *,
-    color: int,
-    message: str,
-    title: str | None = None,
-    footer: str | None = None,
-    author: str | None = None,
-    timestamp: bool = True,
-) -> discord.Embed:
-    description = compose(
-        body(message),
-        caption(footer) if footer else None,
-    )
-    embed = discord.Embed(color=color, description=description)
-    if title:
-        embed.title = title
-    if author:
-        embed.set_author(name=author)
-    if timestamp:
-        embed.timestamp = discord.utils.utcnow()
-    return embed
-
-def reply_embed(
-    *,
-    color: int,
-    message: str,
-    subtitle: str | None = None,
-) -> discord.Embed:
-    return c2(color=color, message=message, footer=subtitle, timestamp=False)
-
 async def get_dominant_color(url: str, fallback: int = 0x5865F2) -> int:
     """Fetch image and return dominant color using colorthief."""
     if not url:
@@ -184,8 +116,6 @@ async def get_bot_dominant_color(bot) -> int:
         return await get_dominant_color(str(bot.user.display_avatar.url))
     return 0x5865F2
 
-
-
 from .lookup import (
     build_cashapp_embed,
     build_define_embed,
@@ -203,7 +133,6 @@ if TYPE_CHECKING:
     from core.vain import Vain
 
 _CONTEXTS = dict(guilds=True, dms=True, groupchats=True)
-
 
 class InformationCommands(Package):
     """base mixin for standalone information commands."""
@@ -608,7 +537,6 @@ class InformationCommands(Package):
                 f"Please wait **{error.retry_after:.2f} seconds** before using this command again"
             )
 
-
 from discord.ext import commands
 
 from core.discord.mixin import _Meta
@@ -620,7 +548,6 @@ from .extended.birthday import Birthday
 from .extended.timezone import Timezone
 from .extended.roblox import Roblox
 from .extended.snapchat import Snapchat
-
 
 class Information(
     InformationCommands,
@@ -635,7 +562,6 @@ class Information(
     metaclass=_Meta,
 ):
     """main information extension — all subcommands combined"""
-
 
 async def setup(bot) -> None:
     """load information extension"""
