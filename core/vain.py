@@ -36,6 +36,8 @@ from .managers.filetypes import CACHE_REDIS_FILE, ensure_storage_files
 
 from .discord.interaction import patch_interaction
 
+from .discord.views.embed import reply_embed
+
 patch_interaction()
 
 
@@ -44,31 +46,6 @@ from .tools.convert.channel import patch_discord_channel_converters
 patch_discord_channel_converters()
 
 log = logging.getLogger("vain")
-
-
-def _compose(*parts: str) -> str:
-    return "\n".join(part for part in parts if part)
-
-
-def _body(*lines: str) -> str:
-    return "\n".join(f"> {line}" for line in lines if line)
-
-
-def _caption(text: str) -> str:
-    return f"-# {text}"
-
-
-def reply_embed(
-    *,
-    color: int,
-    message: str,
-    subtitle: str | None = None,
-) -> discord.Embed:
-    description = _compose(
-        _body(message),
-        _caption(subtitle) if subtitle else None,
-    )
-    return discord.Embed(color=color, description=description)
 
 
 _SKIP_DIRS = frozenset({"models", "__pycache__"})

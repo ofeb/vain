@@ -9,7 +9,7 @@ from discord.ext.commands import Context
 
 from config import color, emojis
 
-
+from core.discord.views.embed import reply_embed
 
 def _accent_from_embed(embed: discord.Embed) -> int | None:
     colour = embed.colour or embed.color
@@ -157,45 +157,6 @@ def embed_to_container(
 
     return container
 
-def compose(*parts: str) -> str:
-    return "\n".join(part for part in parts if part)
-
-def body(*lines: str) -> str:
-    return "\n".join(f"> {line}" for line in lines if line)
-
-def caption(text: str) -> str:
-    return f"-# {text}"
-
-def c2(
-    *,
-    color: int,
-    message: str,
-    title: str | None = None,
-    footer: str | None = None,
-    author: str | None = None,
-    timestamp: bool = True,
-) -> discord.Embed:
-    description = compose(
-        body(message),
-        caption(footer) if footer else None,
-    )
-    embed = discord.Embed(color=color, description=description)
-    if title:
-        embed.title = title
-    if author:
-        embed.set_author(name=author)
-    if timestamp:
-        embed.timestamp = discord.utils.utcnow()
-    return embed
-
-def reply_embed(
-    *,
-    color: int,
-    message: str,
-    subtitle: str | None = None,
-) -> discord.Embed:
-    return c2(color=color, message=message, footer=subtitle, timestamp=False)
-
 def _link_buttons_from_view(view: ui.View | None) -> list[ui.Button]:
     if view is None or isinstance(view, ui.LayoutView):
         return []
@@ -244,21 +205,16 @@ def embed_to_layout(
     )
     return layout_from_items([container], timeout=timeout)
 
-
-
 Page = Union[discord.Embed, str]
-
 
 def needs_pagination(pages: list[Page]) -> bool:
     return len(pages) > 1
-
 
 def _warning_embed(user: discord.abc.User, message: str) -> discord.Embed:
     return reply_embed(
         color=color.warn,
         message=f"{emojis.warn} {user.mention}: {message}",
     )
-
 
 class SkipToPageModal(discord.ui.Modal, title="Skip to page"):
     def __init__(self, pager: "PaginateView") -> None:
@@ -298,7 +254,6 @@ class SkipToPageModal(discord.ui.Modal, title="Skip to page"):
         self.pager.index = page_number - 1
         self.pager._rebuild()
         await interaction.response.edit_message(view=self.pager)
-
 
 class PaginateView(discord.ui.LayoutView):
     """Paginated embeds as Components V2 containers with divider layout."""
@@ -432,7 +387,6 @@ class PaginateView(discord.ui.LayoutView):
         self._rebuild()
         self.message = await message.edit(view=self, embed=None, content=None)
         return self.message
-
 
 async def send_pages(
     ctx: Context,

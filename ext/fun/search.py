@@ -8,16 +8,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 import aiohttp
 import discord
 
-
-
-
-def body(*lines: str) -> str:
-    return "\n".join(f"> {line}" for line in lines if line)
-
-def compose(*parts: str) -> str:
-    return "\n".join(part for part in parts if part)
-
-
+from core.discord.views.embed import compose, body
 
 DDG_ICON = "https://vain.bot/img/duckduckgo.png"
 GOOGLE_ICON = "https://vain.bot/img/google.png"
@@ -26,14 +17,12 @@ _RESULTS_PER_PAGE = 3
 _FETCH_LIMIT = 12
 _IMAGE_LIMIT = 50
 
-
 def _unwrap_ddg_url(url: str) -> str:
     if "duckduckgo.com/l/" not in url:
         return url
     parsed = urlparse(url)
     uddg = parse_qs(parsed.query).get("uddg", [None])[0]
     return unquote(uddg) if uddg else url
-
 
 def _parse_ddg_html(html: str) -> list[dict[str, str]]:
     results: list[dict[str, str]] = []
@@ -65,7 +54,6 @@ def _parse_ddg_html(html: str) -> list[dict[str, str]]:
             results.append({"title": title, "url": url, "snippet": snippet})
     return results
 
-
 async def fetch_ddg_results(session: aiohttp.ClientSession, query: str) -> list[dict[str, str]]:
     results: list[dict[str, str]] = []
     offset = 0
@@ -88,7 +76,6 @@ async def fetch_ddg_results(session: aiohttp.ClientSession, query: str) -> list[
         if len(batch) < 10:
             break
     return results[:_FETCH_LIMIT]
-
 
 def build_ddg_search_pages(
     results: list[dict[str, str]],
@@ -117,7 +104,6 @@ def build_ddg_search_pages(
         pages.append(embed)
     return pages
 
-
 def _parse_bing_images(html: str) -> list[str]:
     urls = re.findall(r'murl&quot;:&quot;(https?://[^&]+?)&quot;', html)
     cleaned: list[str] = []
@@ -128,7 +114,6 @@ def _parse_bing_images(html: str) -> list[str]:
             seen.add(url)
             cleaned.append(url)
     return cleaned
-
 
 async def _fetch_ddg_images(session: aiohttp.ClientSession, query: str, limit: int) -> list[str]:
     async with session.get(
@@ -172,7 +157,6 @@ async def _fetch_ddg_images(session: aiohttp.ClientSession, query: str, limit: i
             break
     return images[:limit]
 
-
 async def _fetch_bing_images(session: aiohttp.ClientSession, query: str, limit: int) -> list[str]:
     images: list[str] = []
     seen: set[str] = set()
@@ -200,7 +184,6 @@ async def _fetch_bing_images(session: aiohttp.ClientSession, query: str, limit: 
         offset += 35
     return images[:limit]
 
-
 async def fetch_image_results(session: aiohttp.ClientSession, query: str, *, limit: int = _IMAGE_LIMIT) -> list[str]:
     images = await _fetch_ddg_images(session, query, limit)
     if len(images) < limit:
@@ -214,7 +197,6 @@ async def fetch_image_results(session: aiohttp.ClientSession, query: str, *, lim
             if len(images) >= limit:
                 break
     return images[:limit]
-
 
 def build_image_search_pages(
     images: list[str],

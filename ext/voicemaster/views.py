@@ -9,82 +9,10 @@ from discord.utils import format_dt
 
 from config import emojis, color
 
-
-
-def compose(*parts: str) -> str:
-    return "\n".join(part for part in parts if part)
-
-def body(*lines: str) -> str:
-    return "\n".join(f"> {line}" for line in lines if line)
-
-def caption(text: str) -> str:
-    return f"-# {text}"
-
-def panel_embed(
-    *,
-    color: int | None = None,
-    title: str | None = None,
-    author: str | None = None,
-    author_icon: str | None = None,
-    lines: list[str] | None = None,
-    footer: str | None = None,
-    timestamp: bool = True,
-    thumbnail: str | None = None,
-    url: str | None = None,
-) -> discord.Embed:
-    description = compose(
-        body(*(lines or [])),
-        caption(footer) if footer else None,
-    )
-    embed = discord.Embed(color=color, description=description or None, url=url)
-    if title:
-        embed.title = title
-    if author:
-        if author_icon:
-            embed.set_author(name=author, icon_url=author_icon)
-        else:
-            embed.set_author(name=author)
-    if thumbnail:
-        embed.set_thumbnail(url=thumbnail)
-    if timestamp:
-        embed.timestamp = discord.utils.utcnow()
-    return embed
-
-def c2(
-    *,
-    color: int,
-    message: str,
-    title: str | None = None,
-    footer: str | None = None,
-    author: str | None = None,
-    timestamp: bool = True,
-) -> discord.Embed:
-    description = compose(
-        body(message),
-        caption(footer) if footer else None,
-    )
-    embed = discord.Embed(color=color, description=description)
-    if title:
-        embed.title = title
-    if author:
-        embed.set_author(name=author)
-    if timestamp:
-        embed.timestamp = discord.utils.utcnow()
-    return embed
-
-def reply_embed(
-    *,
-    color: int,
-    message: str,
-    subtitle: str | None = None,
-) -> discord.Embed:
-    return c2(color=color, message=message, footer=subtitle, timestamp=False)
-
-
+from core.discord.views.embed import panel_embed, reply_embed
 
 if TYPE_CHECKING:
     from . import VoiceMaster
-
 
 PANEL_EMOJIS: dict[str, str] = {
     "lock": emojis.interface.lock,
@@ -114,7 +42,6 @@ ACTIVITY_TYPES: list[dict[str, str]] = [
     {"id": "947957217959759964", "name": "Bobble League", "emoji": "⚽"},
 ]
 
-
 async def _reply(
     interaction: discord.Interaction,
     embed: discord.Embed,
@@ -129,7 +56,6 @@ async def _reply(
         await interaction.response.defer(ephemeral=True)
     await interaction.followup.send(**kwargs)
 
-
 def _message_embed(
     interaction: discord.Interaction,
     text: str,
@@ -143,7 +69,6 @@ def _message_embed(
         message=f"{prefix}{interaction.user.mention}: {text}",
     )
 
-
 def _approve(
     interaction: discord.Interaction,
     text: str,
@@ -151,7 +76,6 @@ def _approve(
     emoji: str = emojis.approve,
 ) -> discord.Embed:
     return _message_embed(interaction, text, color_value=color.approve, emoji=emoji)
-
 
 def _warn(
     interaction: discord.Interaction,
@@ -161,7 +85,6 @@ def _warn(
 ) -> discord.Embed:
     return _message_embed(interaction, text, color_value=color.warn, emoji=emoji)
 
-
 def _neutral(
     interaction: discord.Interaction,
     text: str,
@@ -170,7 +93,6 @@ def _neutral(
     color_value: int = color.neutral,
 ) -> discord.Embed:
     return _message_embed(interaction, text, color_value=color_value, emoji=emoji)
-
 
 class DisconnectMembers(ui.Select):
     """Dropdown that disconnects selected members from the owner's channel."""
@@ -221,7 +143,6 @@ class DisconnectMembers(ui.Select):
             ephemeral=True,
         )
 
-
 class ActivitySelection(ui.Select):
     """Dropdown that launches an embedded activity via a channel invite."""
 
@@ -267,7 +188,6 @@ class ActivitySelection(ui.Select):
             f"[Click here to join the activity!]({invite})",
             ephemeral=True,
         )
-
 
 class VoiceInterface(ui.View):
     """The persistent VoiceMaster button panel."""

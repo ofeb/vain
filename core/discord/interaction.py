@@ -15,14 +15,7 @@ from typing import Optional
 
 import discord
 
-
-
-
-
-def body(*lines: str) -> str:
-    return "\n".join(f"> {line}" for line in lines if line)
-
-
+from core.discord.views.embed import body
 
 def _build_embed(
     interaction: discord.Interaction,
@@ -35,7 +28,6 @@ def _build_embed(
         color=color,
         description=body(f"{emoji} {interaction.user.mention}: {message}"),
     )
-
 
 async def _success(
     self: discord.Interaction,
@@ -56,7 +48,6 @@ async def _success(
     with contextlib.suppress(discord.HTTPException):
         await send(embed=embed, ephemeral=ephemeral)
 
-
 async def _warning(
     self: discord.Interaction,
     message: str,
@@ -75,7 +66,6 @@ async def _warning(
     )
     with contextlib.suppress(discord.HTTPException):
         await send(embed=embed, ephemeral=ephemeral)
-
 
 async def _fail(
     self: discord.Interaction,
@@ -96,7 +86,6 @@ async def _fail(
     with contextlib.suppress(discord.HTTPException):
         await send(embed=embed, ephemeral=ephemeral)
 
-
 async def _info(
     self: discord.Interaction,
     message: str,
@@ -115,7 +104,6 @@ async def _info(
     )
     with contextlib.suppress(discord.HTTPException):
         await send(embed=embed, ephemeral=ephemeral)
-
 
 def patch_interaction() -> None:
     """call once at startup to add styled response methods to Interaction"""

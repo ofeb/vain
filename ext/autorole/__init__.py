@@ -14,52 +14,10 @@ from core.managers.permissions import has_permissions
 
 from .settings import Settings as AutoroleSettings
 
-
-
-def compose(*parts: str) -> str:
-    return "\n".join(part for part in parts if part)
-
-def body(*lines: str) -> str:
-    return "\n".join(f"> {line}" for line in lines if line)
-
-def caption(text: str) -> str:
-    return f"-# {text}"
-
-def panel_embed(
-    *,
-    color: int | None = None,
-    title: str | None = None,
-    author: str | None = None,
-    author_icon: str | None = None,
-    lines: list[str] | None = None,
-    footer: str | None = None,
-    timestamp: bool = True,
-    thumbnail: str | None = None,
-    url: str | None = None,
-) -> discord.Embed:
-    description = compose(
-        body(*(lines or [])),
-        caption(footer) if footer else None,
-    )
-    embed = discord.Embed(color=color, description=description or None, url=url)
-    if title:
-        embed.title = title
-    if author:
-        if author_icon:
-            embed.set_author(name=author, icon_url=author_icon)
-        else:
-            embed.set_author(name=author)
-    if thumbnail:
-        embed.set_thumbnail(url=thumbnail)
-    if timestamp:
-        embed.timestamp = discord.utils.utcnow()
-    return embed
-
-
+from core.discord.views.embed import panel_embed
 
 if TYPE_CHECKING:
     from .events import AutoroleEvents
-
 
 EMOJI_REGEX = re.compile(
     r"<(?P<animated>a?):(?P<name>[a-zA-Z0-9_]{2,32}):(?P<id>[0-9]{18,22})>"
@@ -67,7 +25,6 @@ EMOJI_REGEX = re.compile(
 DEFAULT_EMOJIS = re.compile(
     r"[\U0001F300-\U0001F5FF]|[\U0001F600-\U0001F64F]|[\U0001F680-\U0001F6FF]|[\U0001F700-\U0001F77F]|[\U0001F780-\U0001F7FF]|[\U0001F800-\U0001F8FF]|[\U0001F900-\U0001F9FF]|[\U0001FA00-\U0001FA6F]|[\U0001FA70-\U0001FAFF]|[\U00002702-\U000027B0]|[\U000024C2-\U0001F251]|[\U0001F910-\U0001F9C0]|[\U0001F3A0-\U0001F3FF]"
 )
-
 
 class Autorole(commands.Cog):
     """Automatic role assignment system."""
@@ -493,7 +450,6 @@ class Autorole(commands.Cog):
             role.id,
         )
         await ctx.success(f"Successfully added that reaction role to [this message]({message.jump_url})")
-
 
 async def setup(bot: commands.Bot):
     """Load the Autorole cog."""

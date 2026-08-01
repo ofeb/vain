@@ -15,44 +15,10 @@ from config import color
 from .events import AFKEvents
 from .settings import AFK
 
+from core.discord.views.embed import c2
+
 if TYPE_CHECKING:
     from core.vain import Vain
-
-
-def compose(*parts: str) -> str:
-    return "\n".join(part for part in parts if part)
-
-
-def body(*lines: str) -> str:
-    return "\n".join(f"> {line}" for line in lines if line)
-
-
-def caption(text: str) -> str:
-    return f"-# {text}"
-
-
-def c2(
-    *,
-    color: int,
-    message: str,
-    title: str | None = None,
-    footer: str | None = None,
-    author: str | None = None,
-    timestamp: bool = True,
-) -> discord.Embed:
-    description = compose(
-        body(message),
-        caption(footer) if footer else None,
-    )
-    embed = discord.Embed(color=color, description=description)
-    if title:
-        embed.title = title
-    if author:
-        embed.set_author(name=author)
-    if timestamp:
-        embed.timestamp = discord.utils.utcnow()
-    return embed
-
 
 class Away(AFKEvents, Package):
     """Away-from-keyboard commands."""
@@ -81,9 +47,7 @@ class Away(AFKEvents, Package):
         )
         await ctx.send(embed=embed)
 
-
 async def setup(bot: "Vain") -> None:
     await bot.add_cog(Away(bot))
-
 
 __all__ = ["Away", "setup", "c2"]

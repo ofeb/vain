@@ -1411,6 +1411,7 @@ CREATE TABLE IF NOT EXISTS moderation.invites (
     guild_id BIGINT PRIMARY KEY,
     channel_ids BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
     action VARCHAR(16) NOT NULL DEFAULT 'delete',
+    whitelist TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
     exempt_roles BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -1457,12 +1458,6 @@ CREATE TABLE IF NOT EXISTS moderation.regex (
     exempt_roles BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (guild_id, regex)
-);
-
-CREATE TABLE IF NOT EXISTS moderation.regex_exempt (
-    guild_id BIGINT PRIMARY KEY,
-    exempt_roles BIGINT[] NOT NULL DEFAULT ARRAY[]::BIGINT[],
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS pokemon.users (

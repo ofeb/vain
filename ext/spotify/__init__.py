@@ -13,70 +13,7 @@ from config import color, emojis, music_enabled
 
 from .api import SpotifyUserAPI, redirect_uri
 
-
-
-def compose(*parts: str) -> str:
-    return "\n".join(part for part in parts if part)
-
-def body(*lines: str) -> str:
-    return "\n".join(f"> {line}" for line in lines if line)
-
-def caption(text: str) -> str:
-    return f"-# {text}"
-
-def c2(
-    *,
-    color: int,
-    message: str,
-    title: str | None = None,
-    footer: str | None = None,
-    author: str | None = None,
-    timestamp: bool = True,
-) -> discord.Embed:
-    description = compose(
-        body(message),
-        caption(footer) if footer else None,
-    )
-    embed = discord.Embed(color=color, description=description)
-    if title:
-        embed.title = title
-    if author:
-        embed.set_author(name=author)
-    if timestamp:
-        embed.timestamp = discord.utils.utcnow()
-    return embed
-
-def panel_embed(
-    *,
-    color: int | None = None,
-    title: str | None = None,
-    author: str | None = None,
-    author_icon: str | None = None,
-    lines: list[str] | None = None,
-    footer: str | None = None,
-    timestamp: bool = True,
-    thumbnail: str | None = None,
-    url: str | None = None,
-) -> discord.Embed:
-    description = compose(
-        body(*(lines or [])),
-        caption(footer) if footer else None,
-    )
-    embed = discord.Embed(color=color, description=description or None, url=url)
-    if title:
-        embed.title = title
-    if author:
-        if author_icon:
-            embed.set_author(name=author, icon_url=author_icon)
-        else:
-            embed.set_author(name=author)
-    if thumbnail:
-        embed.set_thumbnail(url=thumbnail)
-    if timestamp:
-        embed.timestamp = discord.utils.utcnow()
-    return embed
-
-
+from core.discord.views.embed import body, panel_embed
 
 if TYPE_CHECKING:
     from core.vain import Vain
@@ -88,16 +25,13 @@ TOP_DURATIONS = {
     "all": "long_term",
 }
 
-
 def _format_ms(ms: int) -> str:
     minutes, seconds = divmod(ms // 1000, 60)
     return f"{minutes}:{seconds:02d}"
 
-
 def _track_line(index: int, track: dict) -> str:
     artists = ", ".join(a["name"] for a in track.get("artists", []))
     return f"`{index}.` **{track['name']}** — {artists} ({_format_ms(track.get('duration_ms', 0))})"
-
 
 class Spotify(Package):
     """Spotify search and playback controls."""
@@ -650,7 +584,6 @@ class Spotify(Package):
             discord.ui.Button(style=discord.ButtonStyle.link, emoji="🟢", label="Spotify", url=url)
         )
         await ctx.send(embed=embed, view=view)
-
 
 async def setup(bot: Vain):
     await bot.add_cog(Spotify(bot))

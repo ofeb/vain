@@ -14,9 +14,7 @@ from discord.ext import commands
 from core.managers.app_emojis import format_embed_emoji
 from config import color, emojis, lastfm_color, lastfm_color
 
-
-def body(*lines: str) -> str:
-    return "\n".join(f"> {line}" for line in lines if line)
+from core.discord.views.embed import body
 
 def _link_buttons_from_view(view: ui.View | None) -> list[ui.Button]:
     if view is None or isinstance(view, ui.LayoutView):
@@ -235,9 +233,6 @@ def view_has_interactive_controls(view: ui.View | ui.LayoutView | None) -> bool:
             return True
     return False
 
-
-
-
 class Cache:
     """lightweight in memory key value cache.
     supports ttl expiry and set operations.
@@ -288,7 +283,6 @@ class Cache:
             return window - (now - bucket[0])
         bucket.append(now)
         return None
-
 
 class Context(commands.Context):
     """extended bot context with reply helpers.
