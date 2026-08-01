@@ -8,7 +8,7 @@ from config import database
 
 
 async def main() -> None:
-    conn = await asyncpg.connect(database.dsn2)
+    conn = await asyncpg.connect(database.dsn)
     try:
         await conn.execute(
             "ALTER TABLE moderation.invites ADD COLUMN IF NOT EXISTS whitelist TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]"
