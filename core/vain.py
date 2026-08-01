@@ -25,7 +25,6 @@ from .discord.help import VainHelp
 from .discord.hybrid import rewrite_linked_prefix
 from .managers.database.client import Database
 from .managers.redis import VainCache, FileVainCache, RedisClient
-from .managers.watch import Watcher
 from .managers.guard import Guard
 from .tools.embed import PreparedScript, Script, parse
 from .tools.errors import Ratelimited
@@ -176,7 +175,6 @@ class Vain(commands.AutoShardedBot):
         self.snipes = Snipe(self)
         self._error_store: dict[str, str] = {}
         self._error_counter: int = 0
-        self.watcher: Optional[Watcher] = None
         self.started_at = datetime.datetime.now(datetime.timezone.utc)
         self._seen_message_ids: set[int] = set()
         self.config = {
