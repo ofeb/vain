@@ -7,13 +7,12 @@ from typing import TYPE_CHECKING, Optional
 import discord
 from discord import Embed, TextChannel
 from discord.ext import tasks
-from discord.ext.commands import group, CommandError
+from discord.ext.commands import group, CommandError, TextChannelConverter
 from humanize import naturaldelta
 
 from core.discord.package import Package
 from core.discord.views.confirm import ConfirmView
 from core.managers.permissions import has_permissions
-from core.managers.converters import EmbedConverter
 from core.tools.moderation_args import parse_duration_seconds, is_duration_token
 from config import color
 
@@ -27,7 +26,7 @@ _DEFAULT_MESSAGE = "first"
 _NUKE_VARIABLES = [
     "`{nuke.interval}` — scheduled interval for this channel (autonuke only)",
     "`{nuke.threshold}` — same as interval (seconds as human duration)",
-    "`{nuke.reconfigured}` — list of systems re-pointed after the clone (welcome, leave, boost, logs, …)",
+    "`{nuke.reconfigured}` — systems re-pointed after the clone (welcome, leave, boost, logs, …)",
     "`{nuke.channel}` — the new channel mention after the nuke",
     "`{nuke.channel.name}` — new channel name",
     "`{nuke.channel.id}` — new channel id",
@@ -109,7 +108,6 @@ class Nuke(Package):
         except (discord.NotFound, discord.HTTPException, discord.Forbidden):
             pass
 
-        # Prefer category sibling match if available
         if category is not None:
             matches = [c for c in category.text_channels if c.name == old_name]
             if matches:
@@ -148,18 +146,10 @@ class Nuke(Package):
             kwargs["member"] = author
 
         try:
-            # Prefer full embed-script pipeline; fall back to plain content
-            if script.strip().startswith("{") or "$v" in script or "{embed" in script.lower() or "{container" in script.lower():
-                await self.bot.send_embed(new_channel, script, **kwargs)
-            else:
-                # simple text / variable substitution via Script when possible
-                try:
-                    await self.bot.send_embed(new_channel, script, **kwargs)
-                except Exception:
-                    await new_channel.send(content=script[:2000])
-        except (discord.NotFound, discord.HTTPException, Exception):
+            await self.bot.send_embed(new_channel, script, **kwargs)
+        except Exception:
             try:
-                await new_channel.send(content=_DEFAULT_MESSAGE)
+                await new_channel.send(content=(script or _DEFAULT_MESSAGE)[:2000])
             except (discord.NotFound, discord.HTTPException):
                 pass
 
@@ -204,7 +194,7 @@ class Nuke(Package):
             ("auto_responders", "denied_channel_ids", True),
             ("trackers", "channel_ids", True),
             ("invite_config", "channel_id", False),
-            ("nuke", "channel_id", False),  # keep scheduled row on the new channel
+            ("nuke", "channel_id", False),
             ("vanity", "channel_id", False),
             ("guild_tag", "channel_id", False),
             ("sticky_message", "channel_id", False),
@@ -263,6 +253,7 @@ class Nuke(Package):
             except (discord.NotFound, discord.HTTPException):
                 return
 
+        old_id = channel.id
         new_channel = await self._perform_nuke(
             channel,
             reason=f"Nuked by {ctx.author}",
@@ -271,11 +262,10 @@ class Nuke(Package):
         if new_channel is None:
             return await ctx.fail("Failed to nuke that channel (missing permissions?)")
 
-        # If the command was run in the channel that got deleted, don't reply there
-        if ctx.channel.id == channel.id:
+        if ctx.channel.id == old_id:
             return
         try:
-            await ctx.success(f"Nuked {channel.name} → {new_channel.mention}")
+            await ctx.success(f"Nuked → {new_channel.mention}")
         except (discord.NotFound, discord.HTTPException):
             pass
 
@@ -299,11 +289,7 @@ class Nuke(Package):
             await self._set_default_message(ctx.guild.id, _DEFAULT_MESSAGE)
             return await ctx.success(f"Reset default nuke message to `{_DEFAULT_MESSAGE}`")
 
-        # Accept EmbedConverter-style scripts transparently
-        script = message
-        if hasattr(message, "script"):
-            script = message.script
-
+        script = message.script if hasattr(message, "script") else message
         await self._set_default_message(ctx.guild.id, script)
         preview = script if len(script) <= 200 else script[:200] + "…"
         return await ctx.success(f"Default nuke message set to:\n```\n{preview}\n```")
@@ -356,50 +342,33 @@ class Nuke(Package):
         guild default nuke message (from `,nuke script`) is used.
         """
         tokens = args.split() if args else []
-        channel: TextChannel = ctx.channel  # type: ignore
+        channel: TextChannel = ctx.channel  # type: ignore[assignment]
         interval_seconds: int | None = None
         script_tokens: list[str] = []
 
         i = 0
-        # optional leading channel mention / id / name
         if tokens:
             try:
-                maybe = await commands.TextChannelConverter().convert(ctx, tokens[0])  # type: ignore[name-defined]
-                channel = maybe
+                channel = await TextChannelConverter().convert(ctx, tokens[0])
                 i = 1
             except Exception:
-                # try converter from discord
-                try:
-                    from discord.ext.commands import TextChannelConverter
+                pass
 
-                    maybe = await TextChannelConverter().convert(ctx, tokens[0])
-                    channel = maybe
-                    i = 1
-                except Exception:
-                    pass
-
-        # find duration token
         while i < len(tokens):
             tok = tokens[i]
             if is_duration_token(tok):
                 interval_seconds = parse_duration_seconds(tok)
                 i += 1
                 break
-            # also accept bare seconds as int
             if tok.isdigit() and int(tok) > 0:
                 interval_seconds = int(tok)
                 i += 1
                 break
             script_tokens.append(tok)
             i += 1
-        else:
-            # duration may have been omitted if script came first then duration later
-            pass
 
-        # remaining tokens after duration are the script
         script_tokens.extend(tokens[i:])
 
-        # if duration still missing, scan script_tokens for a duration and pull it out
         if interval_seconds is None:
             for idx, tok in enumerate(list(script_tokens)):
                 if is_duration_token(tok):
@@ -538,7 +507,6 @@ class Nuke(Package):
                 if threshold < 60:
                     continue
                 if last is not None:
-                    # normalize naive/aware
                     if getattr(last, "tzinfo", None) is not None:
                         last = last.replace(tzinfo=None)
                     elapsed = (now - last).total_seconds()
@@ -561,8 +529,6 @@ class Nuke(Package):
                     )
                     if new_channel is None:
                         continue
-                    # last_nuke + channel_id already updated via update_channels (nuke table)
-                    # but ensure last_nuke is fresh on the new channel row
                     await self.db.execute(
                         """UPDATE nuke SET last_nuke = $1
                            WHERE guild_id = $2 AND channel_id = $3""",
