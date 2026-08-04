@@ -9,9 +9,8 @@ from core.vain import Vain
 
 logger = getLogger("vain.server.extended.stickymessage.settings")
 
-
 class Settings:
-    """All `sticky_message` rows for one guild (channel_id, code, last_message)."""
+    """All `sticky_message` rows for one guild (channel_id, code, limits, interval)."""
 
     bot: Vain
     guild: Guild
@@ -108,23 +107,18 @@ class Settings:
             await self.add(**kwargs)
         return self
 
-
 async def fetch(bot: Vain, guild: Guild) -> Settings:
     return await Settings.fetch(bot, guild)
 
-
 async def fetch_all(bot: Vain, guild: Guild) -> list[dict[str, Any]]:
     return await Settings.fetch_all(bot, guild)
-
 
 async def upsert(bot: Vain, guild: Guild, **kwargs: Any) -> Settings:
     settings = await Settings.fetch(bot, guild)
     return await settings.upsert(**kwargs)
 
-
 async def insert(bot: Vain, guild: Guild, **kwargs: Any) -> Settings:
     settings = await Settings.fetch(bot, guild)
     return await settings.insert(**kwargs)
-
 
 __all__ = ["Settings", "fetch", "fetch_all", "upsert", "insert"]

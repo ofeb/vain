@@ -8,7 +8,6 @@ from .. import StickymessageCommands
 
 log = logging.getLogger("vain.stickymessage")
 
-
 class StickymessageEvents(Package):
     @Package.listener("on_valid_message")
     async def _sticky_listener(self, ctx) -> None:
