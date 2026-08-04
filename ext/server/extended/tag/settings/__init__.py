@@ -233,7 +233,7 @@ class Settings:
             )
             return msg
         except HTTPException as exc:
-            logger.warning("tag dispatch failed guild=%s: %s", self.guild.id, exc)
+            logger.warning("tag dispatch failed guild=%s: %s", self.guild.id, exp)
             return None
         except Exception as exc:
             logger.exception("tag dispatch error guild=%s: %s", self.guild.id, exp)
