@@ -4,26 +4,26 @@ from asyncpg import UniqueViolationError
 from asyncio import sleep, Lock
 from collections import defaultdict
 from typing import Optional
+
 from core.discord.package import Package
 from core.managers.converters import EmbedConverter
 from lib.classes.flags.guilds import Parameters
-
-
 from core.managers.permissions import has_permissions
+
+
 class GoodbyeCommands(Package):
     """goodbye message setup commands"""
 
     def __init__(self, bot):
-        """init with locks"""
         super().__init__(bot)
         self.leave_locks = defaultdict(Lock)
 
     @group(
         name="goodbye",
         aliases=["bye", "gb"],
-        example=",goodbye add #bye See ya {user}!",
         invoke_without_command=True,
-        description="Manage goodbye messages for when members leave the server",
+        description="Manage messages sent when a member leaves the server",
+        example=",goodbye add #bye See ya {user}!",
     )
     @has_permissions(manage_guild=True)
     async def goodbye(self, ctx) -> Message:
@@ -32,11 +32,11 @@ class GoodbyeCommands(Package):
 
     @goodbye.command(
         name="add",
-        example=",goodbye add #bye See ya {user}!  |  ,goodbye add Bye {user.mention}!",
         aliases=["create", "set"],
         flags=Parameters,
         description="Add a goodbye message to a channel (defaults to current channel)",
         usage="[channel] <script> [--self_destruct <seconds>]",
+        example=",goodbye add #bye See ya {user}!",
     )
     @has_permissions(manage_guild=True)
     async def goodbye_add(
@@ -72,10 +72,10 @@ class GoodbyeCommands(Package):
     @goodbye.command(
         name="edit",
         aliases=["change", "update"],
-        example=",goodbye edit #bye Farewell {user}!  |  ,goodbye edit See you later {user.mention}!",
         flags=Parameters,
         description="Edit the goodbye script for a channel (defaults to current channel)",
         usage="[channel] <script> [--self_destruct <seconds>]",
+        example=",goodbye edit #bye Farewell {user}!",
     )
     @has_permissions(manage_guild=True)
     async def goodbye_edit(
@@ -111,10 +111,10 @@ class GoodbyeCommands(Package):
 
     @goodbye.command(
         name="remove",
-        example=",goodbye remove #general  |  ,goodbye remove",
         aliases=["delete", "del"],
         description="Remove a goodbye message from a channel (defaults to current channel)",
         usage="[channel]",
+        example=",goodbye remove #general",
     )
     @has_permissions(manage_guild=True)
     async def goodbye_remove(self, ctx, channel: Optional[TextChannel] = None) -> Message:
@@ -131,10 +131,10 @@ class GoodbyeCommands(Package):
 
     @goodbye.command(
         name="view",
-        example=",goodbye view #general  |  ,goodbye view",
         aliases=["check"],
         description="Preview the goodbye message for a channel (defaults to current channel)",
         usage="[channel]",
+        example=",goodbye view #general",
     )
     @has_permissions(manage_guild=True)
     async def goodbye_view(self, ctx, channel: Optional[TextChannel] = None) -> Message:
@@ -151,8 +151,8 @@ class GoodbyeCommands(Package):
 
     @goodbye.command(
         name="list",
-        example=",goodbye list",
         description="List all goodbye channels in this server",
+        example=",goodbye list",
     )
     @has_permissions(manage_guild=True)
     async def goodbye_list(self, ctx) -> Message:
@@ -173,8 +173,8 @@ class GoodbyeCommands(Package):
     @goodbye.command(
         name="variables",
         aliases=["vars"],
-        example=",goodbye variables",
         description="Show available template variables for goodbye scripts",
+        example=",goodbye variables",
     )
     @has_permissions(manage_guild=True)
     async def goodbye_variables(self, ctx) -> Message:
@@ -185,36 +185,27 @@ class GoodbyeCommands(Package):
         )
 
     async def on_member_remove(self, member: Member) -> None:
-        """fire on member leave"""
         if await self.db.get_antiraid_state(member.guild.id):
             return
 
         invite_info = {}
         try:
-            invite_tracker = self.bot.get_cog("InviteTracker")
-            if invite_tracker:
-                config = await invite_tracker._get_config(member.guild.id)
-                if config.get("enabled"):
-                    invites_data = await self.db.fetchrow(
-                        """SELECT inviter_id, code FROM invite_uses
-                           WHERE guild_id = $1
-                           ORDER BY uses DESC LIMIT 1""",
-                        member.guild.id,
-                    )
-                    if invites_data and invites_data["inviter_id"]:
-                        inviter = member.guild.get_member(invites_data["inviter_id"])
-                        if inviter:
-                            count_data = await self.db.fetchrow(
-                                "SELECT * FROM invite_counts WHERE guild_id = $1 AND user_id = $2",
-                                member.guild.id,
-                                inviter.id,
-                            )
-                            total = (count_data["invites"] - count_data["fake"] + count_data["bonus"]) if count_data else 0
-                            invite_info = {
-                                "inviter": inviter,
-                                "invites": str(total),
-                                "code": invites_data["code"],
-                            }
+            invites_data = await self.bot.db.fetchrow(
+                """SELECT * FROM invite_tracker WHERE guild_id = $1 AND user_id = $2""",
+                member.guild.id,
+                member.id,
+            )
+            if invites_data:
+                inviter = member.guild.get_member(invites_data["inviter_id"]) or await self.bot.fetch_user(
+                    invites_data["inviter_id"]
+                )
+                if inviter:
+                    invite_info = {
+                        "inviter": inviter,
+                        "invite": {
+                            "code": invites_data["code"],
+                        }
+                    }
         except Exception:
             pass
 
