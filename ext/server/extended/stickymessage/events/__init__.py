@@ -12,5 +12,5 @@ log = logging.getLogger("vain.stickymessage")
 class StickymessageEvents(Package):
     @Package.listener("on_valid_message")
     async def _sticky_listener(self, ctx) -> None:
-        log.debug("[STICKY] on_valid_message fired in %s", ctx.channel)
+        log.debug("[STICKY] on_valid_message fired in %s", getattr(ctx, "channel", None))
         await StickymessageCommands.on_valid_message(self, ctx)
