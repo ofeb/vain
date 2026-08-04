@@ -65,7 +65,6 @@ class Transcript:
         body = "\n".join(lines)
         identifier = token_urlsafe(10)
 
-        # persist for later lookup if needed
         await bot.db.execute(
             """
             INSERT INTO tickets.transcript (id, guild_id, channel_id, user_id, messages)
@@ -76,7 +75,7 @@ class Transcript:
             guild.id,
             channel.id,
             ticket["user_id"],
-            "[]",  # full message dump kept in the text file for simplicity
+            "[]",
         )
 
         transcript = cls(
@@ -87,7 +86,6 @@ class Transcript:
             content=body,
         )
 
-        # deliver
         file = File(
             io.BytesIO(body.encode("utf-8")),
             filename=f"transcript-{channel.name}-{identifier}.txt",
@@ -106,7 +104,7 @@ class Transcript:
                 if user:
                     with suppress(HTTPException):
                         await user.send(embed=embed, file=file)
-                        # re-create file object because it gets closed
+
                         file = File(
                             io.BytesIO(body.encode("utf-8")),
                             filename=f"transcript-{channel.name}-{identifier}.txt",
