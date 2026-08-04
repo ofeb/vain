@@ -1,57 +1,48 @@
--- Ticket system schema
--- Safe to run multiple times (IF NOT EXISTS)
-
-CREATE SCHEMA IF NOT EXISTS tickets;
-
-CREATE TABLE IF NOT EXISTS tickets.settings (
-    guild_id                BIGINT PRIMARY KEY,
-    channel_id              BIGINT DEFAULT 0,
-    message_id              BIGINT DEFAULT 0,
-    max_tickets             INT,
-    inactivity_timeout      INT,                    -- seconds
-    staff_role_ids          BIGINT[] DEFAULT '{}',
-    blacklisted_ids         BIGINT[] DEFAULT '{}',
-    transcript_destinations TEXT[] DEFAULT '{}'     -- channel ids as text or 'dm'
+-- Tickets schema auto-synced on cog load
+CREATE TABLE IF NOT EXISTS ticket_config (
+    guild_id BIGINT PRIMARY KEY,
+    channel_id BIGINT,
+    message_id BIGINT,
+    max_tickets INT DEFAULT 1,
+    inactivity_timeout INT,
+    staff_role_ids JSONB DEFAULT '[]',
+    blacklisted_ids JSONB DEFAULT '[]',
+    transcript_destinations JSONB DEFAULT '[]'
 );
 
-CREATE TABLE IF NOT EXISTS tickets.open (
-    id          TEXT NOT NULL,                      -- button/dropdown identifier
-    guild_id    BIGINT NOT NULL,
-    channel_id  BIGINT NOT NULL UNIQUE,
-    user_id     BIGINT NOT NULL,
-    opened_at   TIMESTAMPTZ DEFAULT NOW(),
-    PRIMARY KEY (id, guild_id, user_id)
+CREATE TABLE IF NOT EXISTS tickets (
+    id TEXT PRIMARY KEY,
+    guild_id BIGINT NOT NULL,
+    channel_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    closed BOOLEAN DEFAULT FALSE
 );
 
-CREATE TABLE IF NOT EXISTS tickets.button (
-    id          TEXT NOT NULL,
-    guild_id    BIGINT NOT NULL,
+CREATE TABLE IF NOT EXISTS ticket_buttons (
+    id TEXT PRIMARY KEY,
+    guild_id BIGINT NOT NULL,
     category_id BIGINT,
-    template    TEXT,                               -- optional open message script
-    topic       TEXT,
-    style       TEXT DEFAULT 'green',
-    emoji       TEXT,
-    label       TEXT DEFAULT 'Open Ticket',
-    PRIMARY KEY (guild_id, id)
+    template TEXT,
+    topic TEXT,
+    style TEXT DEFAULT 'blurple',
+    emoji TEXT,
+    label TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS tickets.dropdown (
-    id          TEXT NOT NULL,
-    guild_id    BIGINT NOT NULL,
-    placeholder TEXT DEFAULT 'Select a category…',
-    options     JSONB DEFAULT '[]',                 -- list of {id, label, emoji, description, category_id, template, topic}
-    PRIMARY KEY (guild_id, id)
+CREATE TABLE IF NOT EXISTS ticket_dropdowns (
+    id TEXT PRIMARY KEY,
+    guild_id BIGINT NOT NULL,
+    placeholder TEXT DEFAULT 'Select an option'
 );
 
-CREATE TABLE IF NOT EXISTS tickets.transcript (
-    id          TEXT PRIMARY KEY,
-    guild_id    BIGINT NOT NULL,
-    channel_id  BIGINT NOT NULL,
-    user_id     BIGINT NOT NULL,
-    messages    JSONB DEFAULT '[]',
-    created_at  TIMESTAMPTZ DEFAULT NOW()
+CREATE TABLE IF NOT EXISTS ticket_dropdown_options (
+    id TEXT PRIMARY KEY,
+    dropdown_id TEXT NOT NULL REFERENCES ticket_dropdowns(id) ON DELETE CASCADE,
+    label TEXT NOT NULL,
+    emoji TEXT,
+    description TEXT,
+    category_id BIGINT,
+    template TEXT,
+    topic TEXT
 );
-
-CREATE INDEX IF NOT EXISTS idx_tickets_open_guild ON tickets.open (guild_id);
-CREATE INDEX IF NOT EXISTS idx_tickets_open_channel ON tickets.open (channel_id);
-CREATE INDEX IF NOT EXISTS idx_tickets_transcript_guild ON tickets.transcript (guild_id);
