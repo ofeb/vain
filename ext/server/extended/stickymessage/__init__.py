@@ -21,7 +21,7 @@ from core.tools.moderation_args import (
 from humanize import naturaldelta
 
 _DEFAULT_MESSAGE_LIMIT = 5
-_DEFAULT_INTERVAL_SECONDS = 300  # 5 minutes
+_DEFAULT_INTERVAL_SECONDS = 300
 
 
 def _now_naive() -> datetime:
@@ -142,7 +142,7 @@ class StickymessageCommands(Package):
     async def stickymessage(self, ctx):
         return await ctx.send_help(ctx.command)
 
-    @stickymessage.command(name="add", aliases=["set", "create"], description="Add a sticky message to a channel", example=",stickymessage add #general Stay on topic! 5 5m  |  ,sm add hello 10 1h", usage="[channel] <script> [message_limit] [interval]")
+    @stickymessage.command(name="add", aliases=["set", "create"], description="Add a sticky message to a channel", example=",stickymessage add #general Stay on topic! 5 5m", usage="[channel] <script> [message_limit] [interval]")
     @has_permissions(manage_guild=True)
     async def stickymessage_add(self, ctx, *, args: str = ""):
         channel, script, message_limit, interval_seconds = await self._resolve_add(ctx, args)
@@ -160,7 +160,7 @@ class StickymessageCommands(Package):
             f"Sticky set in {channel.mention}\n• every **{message_limit}** message(s)\n• or after **{naturaldelta(interval_seconds)}** if the limit isn't met{extra}"
         )
 
-    @stickymessage.command(name="edit", aliases=["update"], description="Edit a sticky's script, message limit, and/or interval", example=",stickymessage edit #general New text 10 10m  |  ,sm edit hello 5", usage="[channel] <script> [message_limit] [interval]")
+    @stickymessage.command(name="edit", aliases=["update"], description="Edit a sticky's script, message limit, and/or interval", example=",stickymessage edit #general New text 10 10m", usage="[channel] <script> [message_limit] [interval]")
     @has_permissions(manage_guild=True)
     async def stickymessage_edit(self, ctx, *, args: str = ""):
         channel, script, message_limit, interval_seconds = await self._resolve_add(ctx, args)
@@ -176,7 +176,7 @@ class StickymessageCommands(Package):
         await self._repost(channel, script, user=ctx.author)
         return await ctx.success(f"Updated sticky in {channel.mention}\n• every **{message_limit}** message(s)\n• or after **{naturaldelta(interval_seconds)}**")
 
-    @stickymessage.command(name="interval", aliases=["changeinterval", "ci"], description="Change the auto-send interval for a sticky", example=",stickymessage interval #general 10m  |  ,sm ci 1h", usage="[channel] <interval>")
+    @stickymessage.command(name="interval", aliases=["changeinterval", "ci"], description="Change the auto-send interval for a sticky", example=",stickymessage interval #general 10m", usage="[channel] <interval>")
     @has_permissions(manage_guild=True)
     async def stickymessage_interval(self, ctx, *, args: str = ""):
         tokens = args.split() if args else []
@@ -201,7 +201,7 @@ class StickymessageCommands(Package):
         await self.db.execute("UPDATE sticky_message SET interval_seconds = $1 WHERE guild_id = $2 AND channel_id = $3", seconds, ctx.guild.id, channel.id)
         return await ctx.success(f"Sticky interval for {channel.mention} set to **{naturaldelta(seconds)}** (`{format_duration_token(seconds)}`)")
 
-    @stickymessage.command(name="messagelimit", aliases=["changemessagelimit", "cml", "limit"], description="Change how many messages trigger a sticky re-post", example=",stickymessage messagelimit #general 10  |  ,sm cml 5", usage="[channel] <limit>")
+    @stickymessage.command(name="messagelimit", aliases=["changemessagelimit", "cml", "limit"], description="Change how many messages trigger a sticky re-post", example=",stickymessage messagelimit #general 10", usage="[channel] <limit>")
     @has_permissions(manage_guild=True)
     async def stickymessage_messagelimit(self, ctx, *, args: str = ""):
         tokens = args.split() if args else []
@@ -227,7 +227,7 @@ class StickymessageCommands(Package):
         self._msg_counts[channel.id] = 0
         return await ctx.success(f"Sticky message limit for {channel.mention} set to **{limit}**")
 
-    @stickymessage.command(name="view", aliases=["preview", "show"], description="View the sticky message for a channel", example=",stickymessage view #general  |  ,sm view", usage="[channel]")
+    @stickymessage.command(name="view", aliases=["preview", "show"], description="View the sticky message for a channel", example=",stickymessage view #general", usage="[channel]")
     @has_permissions(manage_guild=True)
     async def stickymessage_view(self, ctx, channel: Optional[TextChannel] = None):
         channel = channel or ctx.channel
@@ -254,7 +254,7 @@ class StickymessageCommands(Package):
             lines.append(f"`{i}` {label} — every **{e['message_limit']}** msgs / **{naturaldelta(e['interval_seconds'])}**")
         return await ctx.paginate(Embed(title="Sticky Messages", color=self.bot.color).set_author(name=str(ctx.author), icon_url=ctx.author.display_avatar.url), lines)
 
-    @stickymessage.command(name="remove", aliases=["delete", "del", "rm"], description="Remove a sticky message from a channel", example=",stickymessage remove #general  |  ,sm remove", usage="[channel]")
+    @stickymessage.command(name="remove", aliases=["delete", "del", "rm"], description="Remove a sticky message from a channel", example=",stickymessage remove #general", usage="[channel]")
     @has_permissions(manage_guild=True)
     async def stickymessage_remove(self, ctx, channel: Optional[TextChannel] = None):
         channel = channel or ctx.channel
