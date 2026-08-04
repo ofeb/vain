@@ -3,6 +3,7 @@ from discord import Embed, TextChannel, Message, Member
 from asyncpg import UniqueViolationError
 from asyncio import sleep, Lock
 from collections import defaultdict
+from typing import Optional
 from core.discord.package import Package
 from core.managers.converters import EmbedConverter
 from lib.classes.flags.guilds import Parameters
@@ -19,9 +20,10 @@ class GoodbyeCommands(Package):
 
     @group(
         name="goodbye",
-        usage="(subcommand) <args> --params",
-        example="goodbye add #bye See ya {user}",
+        aliases=["leave", "bye"],
+        example=",goodbye add #bye See ya {user}!",
         invoke_without_command=True,
+        description="Manage goodbye / leave messages",
     )
     @has_permissions(manage_guild=True)
     async def goodbye(self, ctx) -> Message:
@@ -30,16 +32,20 @@ class GoodbyeCommands(Package):
 
     @goodbye.command(
         name="add",
-        usage="(channel) (message) --params",
-        example="#goodbye See ya! {user}",
-        aliases=["create"],
+        example=",goodbye add #bye See ya {user}!  |  ,goodbye add Bye {user.mention}!",
+        aliases=["create", "set"],
         flags=Parameters,
+        description="Add a goodbye message to a channel (defaults to current channel)",
+        usage="[channel] <script> [--self_destruct <seconds>]",
     )
     @has_permissions(manage_guild=True)
     async def goodbye_add(
-        self, ctx, channel: TextChannel, *, message: EmbedConverter
+        self, ctx, channel: Optional[TextChannel] = None, *, message: EmbedConverter
     ) -> Message:
         """add a goodbye channel"""
+        channel = channel or ctx.channel
+        if not isinstance(channel, TextChannel):
+            return await ctx.warn("You can only set goodbye messages in text channels")
         timer = ctx.flags.get("self_destruct")
         if timer:
             if timer < 6:
@@ -56,7 +62,7 @@ class GoodbyeCommands(Package):
             )
         except UniqueViolationError:
             return await ctx.fail(
-                f"already a goodbye message in {channel.mention}, remove it first"
+                f"already a goodbye message in {channel.mention}, remove it first or use `{ctx.clean_prefix}goodbye edit`"
             )
         extra = f"\nmessages will delete after `{timer}` seconds" if timer else ""
         return await ctx.success(
@@ -64,13 +70,56 @@ class GoodbyeCommands(Package):
         )
 
     @goodbye.command(
-        name="remove",
-        example=",goodbye remove #general",
-        aliases=["delete", "del"],
+        name="edit",
+        aliases=["change", "update"],
+        example=",goodbye edit #bye Farewell {user}!  |  ,goodbye edit See you later {user.mention}!",
+        flags=Parameters,
+        description="Edit the goodbye script for a channel (defaults to current channel)",
+        usage="[channel] <script> [--self_destruct <seconds>]",
     )
     @has_permissions(manage_guild=True)
-    async def goodbye_remove(self, ctx, *, channel: TextChannel) -> Message:
+    async def goodbye_edit(
+        self, ctx, channel: Optional[TextChannel] = None, *, message: EmbedConverter
+    ) -> Message:
+        """edit an existing goodbye message script"""
+        channel = channel or ctx.channel
+        timer = ctx.flags.get("self_destruct")
+        if timer:
+            if timer < 6:
+                return await ctx.warn("self-destruct timer must be at least `6` seconds")
+            if timer > 60:
+                return await ctx.warn("self-destruct timer must stay under `60` seconds")
+        exists = await self.db.fetchval(
+            """SELECT 1 FROM leave_messages WHERE guild_id = $1 AND channel_id = $2""",
+            ctx.guild.id,
+            channel.id,
+        )
+        if not exists:
+            return await ctx.fail(
+                f"no goodbye message for {channel.mention} — use `{ctx.clean_prefix}goodbye add` first"
+            )
+        await self.db.execute(
+            """UPDATE leave_messages SET message = $1, self_destruct = $2
+               WHERE guild_id = $3 AND channel_id = $4""",
+            message.script,
+            timer,
+            ctx.guild.id,
+            channel.id,
+        )
+        extra = f"\nmessages will delete after `{timer}` seconds" if timer else ""
+        return await ctx.success(f"updated goodbye message for {channel.mention}{extra}")
+
+    @goodbye.command(
+        name="remove",
+        example=",goodbye remove #general  |  ,goodbye remove",
+        aliases=["delete", "del"],
+        description="Remove a goodbye message from a channel (defaults to current channel)",
+        usage="[channel]",
+    )
+    @has_permissions(manage_guild=True)
+    async def goodbye_remove(self, ctx, channel: Optional[TextChannel] = None) -> Message:
         """remove a goodbye channel"""
+        channel = channel or ctx.channel
         deleted = await self.db.fetchval(
             """DELETE FROM leave_messages WHERE guild_id = $1 AND channel_id = $2 RETURNING channel_id;""",
             ctx.guild.id,
@@ -82,12 +131,15 @@ class GoodbyeCommands(Package):
 
     @goodbye.command(
         name="view",
-        example=",goodbye view #general",
+        example=",goodbye view #general  |  ,goodbye view",
         aliases=["check"],
+        description="Preview the goodbye message for a channel (defaults to current channel)",
+        usage="[channel]",
     )
     @has_permissions(manage_guild=True)
-    async def goodbye_view(self, ctx, *, channel: TextChannel) -> Message:
+    async def goodbye_view(self, ctx, channel: Optional[TextChannel] = None) -> Message:
         """preview goodbye message"""
+        channel = channel or ctx.channel
         msg = await self.db.fetchval(
             """SELECT message FROM leave_messages WHERE guild_id = $1 AND channel_id = $2;""",
             ctx.guild.id,
@@ -97,7 +149,11 @@ class GoodbyeCommands(Package):
             return await ctx.fail(f"no goodbye message for {channel.mention}")
         return await self.bot.send_embed(ctx, msg, member=ctx.author)
 
-    @goodbye.command(name="list")
+    @goodbye.command(
+        name="list",
+        example=",goodbye list",
+        description="List all goodbye channels in this server",
+    )
     @has_permissions(manage_guild=True)
     async def goodbye_list(self, ctx) -> Message:
         """list all goodbye channels"""
@@ -114,7 +170,12 @@ class GoodbyeCommands(Package):
             return await ctx.search("no goodbye channels set up")
         return await ctx.paginate(Embed(title="Goodbye Channels"), channels)
 
-    @goodbye.command(name="variables", aliases=["vars"])
+    @goodbye.command(
+        name="variables",
+        aliases=["vars"],
+        example=",goodbye variables",
+        description="Show available template variables for goodbye scripts",
+    )
     @has_permissions(manage_guild=True)
     async def goodbye_variables(self, ctx) -> Message:
         """show available template vars"""
@@ -128,7 +189,6 @@ class GoodbyeCommands(Package):
         if await self.db.get_antiraid_state(member.guild.id):
             return
 
-        
         invite_info = {}
         try:
             invite_tracker = self.bot.get_cog("InviteTracker")
