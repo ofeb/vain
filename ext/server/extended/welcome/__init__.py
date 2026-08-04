@@ -1,29 +1,32 @@
-from discord.ext.commands import group
-from discord import Embed, TextChannel, Message, Member, AllowedMentions
-from asyncpg import UniqueViolationError
-from asyncio import sleep, Lock
+from __future__ import annotations
+
+from asyncio import Lock, sleep
 from collections import defaultdict
 from typing import Optional
+
+from asyncpg import UniqueViolationError
+from discord import Embed, Member, Message, TextChannel
+from discord.ext.commands import group
+
 from core.discord.package import Package
 from core.managers.converters import EmbedConverter
+from core.managers.permissions import has_permissions
 from lib.classes.flags.guilds import Parameters
 
 
-from core.managers.permissions import has_permissions
 class WelcomeCommands(Package):
     """welcome message setup commands"""
 
     def __init__(self, bot):
-        """init with locks"""
         super().__init__(bot)
         self.join_locks = defaultdict(Lock)
 
     @group(
         name="welcome",
-        example=",welcome add #hi Hi {user.mention}! --self_destruct 10",
         aliases=["welc"],
+        example=",welcome add #welcome Welcome {user.mention}!",
         invoke_without_command=True,
-        description="Manage welcome messages",
+        description="Manage welcome messages for when members join the server",
     )
     @has_permissions(manage_guild=True)
     async def welcome(self, ctx) -> Message:
@@ -32,7 +35,7 @@ class WelcomeCommands(Package):
 
     @welcome.command(
         name="add",
-        example=",welcome add #hi Hi {user.mention}! --self_destruct 10  |  ,welcome add Welcome {user.mention}!",
+        example=",welcome add #welcome Welcome {user.mention}!  |  ,welcome add Hey {user.mention}!",
         aliases=["create", "set"],
         flags=Parameters,
         description="Add a welcome message to a channel (defaults to current channel)",
@@ -62,7 +65,7 @@ class WelcomeCommands(Package):
             )
         except UniqueViolationError:
             return await ctx.fail(
-                f"there's already a welcome message for {channel.mention}, remove it first or use `{ctx.clean_prefix}welcome edit`"
+                f"already a welcome message in {channel.mention}, remove it first or use `{ctx.clean_prefix}welcome edit`"
             )
         extra = f"\nmessages will delete after `{timer}` seconds" if timer else ""
         return await ctx.success(
@@ -72,7 +75,7 @@ class WelcomeCommands(Package):
     @welcome.command(
         name="edit",
         aliases=["change", "update"],
-        example=",welcome edit #hi Welcome back {user.mention}!  |  ,welcome edit Hi {user.mention}!",
+        example=",welcome edit #welcome Welcome back {user.mention}!  |  ,welcome edit Hey {user.mention}!",
         flags=Parameters,
         description="Edit the welcome script for a channel (defaults to current channel)",
         usage="[channel] <script> [--self_destruct <seconds>]",
@@ -184,66 +187,16 @@ class WelcomeCommands(Package):
             emoji=":information_source:",
         )
 
-    async def _ping_on_join(self, member: Member):
-        """ping member on join"""
-        try:
-            ids = await self.bot.db.fetchval(
-                """SELECT channel_ids FROM pingonjoin WHERE guild_id = $1""",
-                member.guild.id,
-            )
-        except Exception:
-            return
-        if not ids:
-            return
-        for cid in ids:
-            ch = member.guild.get_channel(cid)
-            if not ch:
-                continue
-            await ch.send(
-                f"{member.mention}", allowed_mentions=AllowedMentions(users=True)
-            )
-
-    async def on_member_agree(self, member: Member) -> None:
-        """send welcome on join"""
+    async def on_member_join(self, member: Member) -> None:
         if await self.db.get_antiraid_state(member.guild.id):
             return
 
-        invite_info = {}
-        try:
-            invite_tracker = self.bot.get_cog("InviteTracker")
-            if invite_tracker:
-                config = await invite_tracker._get_config(member.guild.id)
-                if config.get("enabled"):
-                    invites_data = await self.db.fetchrow(
-                        """SELECT inviter_id, code FROM invite_uses
-                           WHERE guild_id = $1
-                           ORDER BY uses DESC LIMIT 1""",
-                        member.guild.id,
-                    )
-                    if invites_data and invites_data["inviter_id"]:
-                        inviter = member.guild.get_member(invites_data["inviter_id"])
-                        if inviter:
-                            count_data = await self.db.fetchrow(
-                                "SELECT * FROM invite_counts WHERE guild_id = $1 AND user_id = $2",
-                                member.guild.id,
-                                inviter.id,
-                            )
-                            total = (count_data["invites"] - count_data["fake"] + count_data["bonus"]) if count_data else 0
-                            invite_info = {
-                                "inviter": inviter,
-                                "invites": str(total),
-                                "code": invites_data["code"],
-                            }
-        except Exception:
-            pass
-
         rate = await self.bot.object_cache.ratelimited(
-            f"welcome_messages:{member.guild.id}", 1, 5
+            f"join_messages:{member.guild.id}", 1, 5
         )
         if rate != 0:
             await sleep(5)
-        async with self.join_locks[f"welcome_messages:{member.guild.id}"]:
-            await self._ping_on_join(member)
+        async with self.join_locks[f"join_messages:{member.guild.id}"]:
             for row in await self.bot.db.fetch(
                 """SELECT * FROM join_messages WHERE guild_id = $1;""",
                 member.guild.id,
@@ -253,7 +206,7 @@ class WelcomeCommands(Package):
                     continue
                 try:
                     builder = await self.create_embed(
-                        row.message, member=member, user=member, **invite_info
+                        row.message, member=member, user=member
                     )
                 except Exception:
                     continue
