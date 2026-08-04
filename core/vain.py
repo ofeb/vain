@@ -714,6 +714,7 @@ class Vain(commands.AutoShardedBot):
                    ON CONFLICT (guild_id, user_id, command_name)
                    DO UPDATE SET uses = command_usage.uses + 1""",
                 ctx.guild.id,
+                ctx.author.id,
                 ctx.command.qualified_name,
             )
 
