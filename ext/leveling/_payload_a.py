@@ -1,1 +1,1 @@
-PART_A = """PLACEHOLDER"""
+# reserved for full rewrite payload
