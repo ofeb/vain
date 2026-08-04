@@ -37,7 +37,7 @@ class BoostCommands(Package):
 
     @boosts.command(
         name="add",
-        example=",boosts add #general thanks {user.mention}!  |  ,boosts add Thanks for the boost {user.mention}!",
+        example=",boosts add #general thanks {user.mention}!",
         aliases=["create", "set"],
         flags=Parameters,
         description="Add a boost message to a channel (defaults to current channel)",
@@ -77,7 +77,7 @@ class BoostCommands(Package):
     @boosts.command(
         name="edit",
         aliases=["change", "update"],
-        example=",boosts edit #general thanks {user.mention} for the boost!  |  ,boosts edit Thanks {user.mention}!",
+        example=",boosts edit #general thanks {user.mention} for the boost!",
         flags=Parameters,
         description="Edit the boost script for a channel (defaults to current channel)",
         usage="[channel] <script> [--self_destruct <seconds>]",
@@ -116,7 +116,7 @@ class BoostCommands(Package):
 
     @boosts.command(
         name="remove",
-        example=",boosts remove #general  |  ,boosts remove",
+        example=",boosts remove #general",
         aliases=["delete", "del"],
         description="Remove a boost message from a channel (defaults to current channel)",
         usage="[channel]",
@@ -136,7 +136,7 @@ class BoostCommands(Package):
 
     @boosts.command(
         name="view",
-        example=",boosts view #general  |  ,boosts view",
+        example=",boosts view #general",
         aliases=["check"],
         description="Preview the boost message for a channel (defaults to current channel)",
         usage="[channel]",
