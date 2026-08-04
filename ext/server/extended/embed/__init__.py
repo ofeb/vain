@@ -13,6 +13,7 @@ from core.managers.permissions import has_permissions
 from config import color
 
 from core.discord.views.embed import body, c2
+from core.tools.embed import Script, BadEmbed, ParseError, maybe_wrap_embed_script
 
 if TYPE_CHECKING:
     from core.vain import Vain
@@ -42,6 +43,8 @@ class EmbedCommands(Package):
         name = name.lower().strip()
         if not re.fullmatch(r"[a-z0-9_-]{1,50}", name):
             return await ctx.warn("Name must be **1-50** characters: letters, numbers, `_`, `-`.")
+        # Normalize {embed}/{container} prefix for consistent storage
+        script = maybe_wrap_embed_script(script)
         await self.db.execute(
             """
             INSERT INTO saved_embeds (guild_id, name, script, author_id)
@@ -71,6 +74,7 @@ class EmbedCommands(Package):
         )
         if not row:
             return await ctx.warn(f"No embed template named **`{name}`**.")
+        script = maybe_wrap_embed_script(script)
         await self.db.execute(
             """
             UPDATE saved_embeds
@@ -143,7 +147,7 @@ class EmbedCommands(Package):
         if not msg.embeds:
             return await ctx.warn("That message has no embeds.")
         code = self._embed_to_code(msg.embeds[0])
-        if len(code) > 2000:
+        if len(code) > 1900:
             return await ctx.warn("Embed code is too long to send here.")
         await ctx.send(embed=c2(
             color=color.base,
@@ -176,6 +180,31 @@ class EmbedCommands(Package):
     async def editembed(self, ctx: Context, name: str, *, script: str) -> None:
         await self.embed_edit(ctx, name, script=script)
 
+    async def _send_embed_script(self, ctx: Context, script: str) -> None:
+        """Parse and send an embed or container script (respects {embed}/{container})."""
+        try:
+            builder = Script(script, user=ctx.author)
+            payload = await builder.data(
+                sendable=True,
+                user=ctx.author,
+                member=ctx.author,
+                guild=ctx.guild,
+                channel=ctx.channel,
+            )
+            if not payload:
+                return await ctx.warn("Script produced no content.")
+            # Prefer destination.send so LayoutView (containers) works cleanly
+            kwargs = dict(payload)
+            # Avoid double-wrapping raw_embed for normal embeds when the bot supports it
+            if kwargs.get("embed") is not None:
+                kwargs.setdefault("raw_embed", True)
+            await ctx.send(**kwargs)
+        except (BadEmbed, ParseError) as exc:
+            msg = getattr(exc, "message", None) or str(exc)
+            return await ctx.warn(f"Invalid embed script: {msg}")
+        except Exception as exc:
+            return await ctx.warn(f"Failed to render script: `{exc}`")
+
     def _parse_message_link(self, link: str) -> tuple[int, int]:
         pattern = r"discord(?:app)?\.com/channels/(\d+)/(\d+)/(\d+)"
         match = re.search(pattern, link)
@@ -184,29 +213,35 @@ class EmbedCommands(Package):
         return int(match.group(2)), int(match.group(3))
 
     def _embed_to_code(self, embed: discord.Embed) -> str:
-        lines = ["{embed}"]
+        """Convert a discord.Embed back to vain script format ($v + &&)."""
+        parts: list[str] = ["{embed}"]
         if embed.title:
-            lines.append(f"{{title: {embed.title}}}")
+            parts.append(f"$v{{title: {embed.title}}}")
         if embed.description:
-            lines.append(f"{{description: {embed.description}}}")
+            parts.append(f"$v{{description: {embed.description}}}")
         if embed.color:
-            lines.append(f"{{color: #{embed.color.value:06x}}}")
+            parts.append(f"$v{{color: #{embed.color.value:06x}}}")
+        if embed.url:
+            parts.append(f"$v{{url: {embed.url}}}")
+        if embed.timestamp:
+            parts.append("$v{timestamp}")
         if embed.author and embed.author.name:
-            author_text = embed.author.name
-            if embed.author.url:
-                author_text += f" | {embed.author.url}"
+            section = f"author: {embed.author.name}"
             if embed.author.icon_url:
-                author_text += f" | {embed.author.icon_url}"
-            lines.append(f"{{author: {author_text}}}")
+                section += f" && {embed.author.icon_url}"
+            if embed.author.url:
+                section += f" && {embed.author.url}"
+            parts.append(f"$v{{{section}}}")
         if embed.footer and embed.footer.text:
-            footer_text = embed.footer.text
+            section = f"footer: {embed.footer.text}"
             if embed.footer.icon_url:
-                footer_text += f" | {embed.footer.icon_url}"
-            lines.append(f"{{footer: {footer_text}}}")
-        if embed.image:
-            lines.append(f"{{image: {embed.image.url}}}")
-        if embed.thumbnail:
-            lines.append(f"{{thumbnail: {embed.thumbnail.url}}}")
+                section += f" && {embed.footer.icon_url}"
+            parts.append(f"$v{{{section}}}")
+        if embed.image and embed.image.url:
+            parts.append(f"$v{{image: {embed.image.url}}}")
+        if embed.thumbnail and embed.thumbnail.url:
+            parts.append(f"$v{{thumbnail: {embed.thumbnail.url}}}")
         for field in embed.fields:
-            lines.append(f"{{field: {field.name} | {field.value or ''} | {str(field.inline).lower()}}}")
-        return "\n".join(lines)
+            inline = " && inline" if field.inline else ""
+            parts.append(f"$v{{field: {field.name} && {field.value or ''}{inline}}}")
+        return "".join(parts)
