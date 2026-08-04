@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 from asyncio import Lock, sleep
 from collections import defaultdict
+from typing import Optional
 
 from asyncpg import UniqueViolationError
 import discord
@@ -24,10 +25,10 @@ class BoostCommands(Package):
 
     @group(
         name="boosts",
-        usage="(subcommand) <args> --params",
-        example="boosts add #general thanks {user.mention}!",
+        example=",boosts add #general thanks {user.mention}!",
         aliases=["boost"],
         invoke_without_command=True,
+        description="Manage boost messages",
     )
     @has_permissions(manage_guild=True)
     async def boosts(self, ctx) -> Message:
@@ -36,14 +37,20 @@ class BoostCommands(Package):
 
     @boosts.command(
         name="add",
-        usage="(channel) (message) --params",
-        example="#general thanks {user.mention}!",
-        aliases=["create"],
+        example=",boosts add #general thanks {user.mention}!  |  ,boosts add Thanks for the boost {user.mention}!",
+        aliases=["create", "set"],
         flags=Parameters,
+        description="Add a boost message to a channel (defaults to current channel)",
+        usage="[channel] <script> [--self_destruct <seconds>]",
     )
     @has_permissions(manage_guild=True)
-    async def boosts_add(self, ctx, channel: TextChannel, *, message: EmbedConverter) -> Message:
+    async def boosts_add(
+        self, ctx, channel: Optional[TextChannel] = None, *, message: EmbedConverter
+    ) -> Message:
         """add a boost channel"""
+        channel = channel or ctx.channel
+        if not isinstance(channel, TextChannel):
+            return await ctx.warn("You can only set boost messages in text channels")
         timer = ctx.flags.get("self_destruct")
         if timer:
             if timer < 6:
@@ -61,21 +68,63 @@ class BoostCommands(Package):
             )
         except UniqueViolationError:
             return await ctx.fail(
-                f"there's already a boost message for {channel.mention}, remove it first"
+                f"there's already a boost message for {channel.mention}, remove it first or use `{ctx.clean_prefix}boosts edit`"
             )
 
         extra = f"\nmessages will delete after `{timer}` seconds" if timer else ""
         return await ctx.success(f"boost message set for {channel.mention}{extra}")
 
     @boosts.command(
-        name="remove",
-        usage="(channel)",
-        example=",boosts remove #general",
-        aliases=["delete", "del"],
+        name="edit",
+        aliases=["change", "update"],
+        example=",boosts edit #general thanks {user.mention} for the boost!  |  ,boosts edit Thanks {user.mention}!",
+        flags=Parameters,
+        description="Edit the boost script for a channel (defaults to current channel)",
+        usage="[channel] <script> [--self_destruct <seconds>]",
     )
     @has_permissions(manage_guild=True)
-    async def boosts_remove(self, ctx, *, channel: TextChannel) -> Message:
+    async def boosts_edit(
+        self, ctx, channel: Optional[TextChannel] = None, *, message: EmbedConverter
+    ) -> Message:
+        """edit an existing boost message script"""
+        channel = channel or ctx.channel
+        timer = ctx.flags.get("self_destruct")
+        if timer:
+            if timer < 6:
+                return await ctx.warn("self-destruct timer must be at least `6` seconds")
+            if timer > 60:
+                return await ctx.warn("self-destruct timer must stay under `60` seconds")
+        exists = await self.db.fetchval(
+            """SELECT 1 FROM boost_messages WHERE guild_id = $1 AND channel_id = $2""",
+            ctx.guild.id,
+            channel.id,
+        )
+        if not exists:
+            return await ctx.fail(
+                f"no boost message for {channel.mention} — use `{ctx.clean_prefix}boosts add` first"
+            )
+        await self.db.execute(
+            """UPDATE boost_messages SET message = $1, self_destruct = $2
+               WHERE guild_id = $3 AND channel_id = $4""",
+            message.script,
+            timer,
+            ctx.guild.id,
+            channel.id,
+        )
+        extra = f"\nmessages will delete after `{timer}` seconds" if timer else ""
+        return await ctx.success(f"updated boost message for {channel.mention}{extra}")
+
+    @boosts.command(
+        name="remove",
+        example=",boosts remove #general  |  ,boosts remove",
+        aliases=["delete", "del"],
+        description="Remove a boost message from a channel (defaults to current channel)",
+        usage="[channel]",
+    )
+    @has_permissions(manage_guild=True)
+    async def boosts_remove(self, ctx, channel: Optional[TextChannel] = None) -> Message:
         """remove a boost channel"""
+        channel = channel or ctx.channel
         deleted = await self.db.fetchval(
             """DELETE FROM boost_messages WHERE guild_id = $1 AND channel_id = $2 RETURNING channel_id;""",
             ctx.guild.id,
@@ -87,13 +136,15 @@ class BoostCommands(Package):
 
     @boosts.command(
         name="view",
-        usage="(channel)",
-        example=",boosts view #general",
+        example=",boosts view #general  |  ,boosts view",
         aliases=["check"],
+        description="Preview the boost message for a channel (defaults to current channel)",
+        usage="[channel]",
     )
     @has_permissions(manage_guild=True)
-    async def boosts_view(self, ctx, *, channel: TextChannel) -> Message:
+    async def boosts_view(self, ctx, channel: Optional[TextChannel] = None) -> Message:
         """preview boost message"""
+        channel = channel or ctx.channel
         msg = await self.db.fetchval(
             """SELECT message FROM boost_messages WHERE guild_id = $1 AND channel_id = $2;""",
             ctx.guild.id,
@@ -103,7 +154,11 @@ class BoostCommands(Package):
             return await ctx.fail(f"no boost message for {channel.mention}")
         return await self.bot.send_embed(ctx, msg, member=ctx.author)
 
-    @boosts.command(name="list")
+    @boosts.command(
+        name="list",
+        example=",boosts list",
+        description="List all boost channels in this server",
+    )
     @has_permissions(manage_guild=True)
     async def boosts_list(self, ctx) -> Message:
         """list all boost channels"""
@@ -120,7 +175,12 @@ class BoostCommands(Package):
             return await ctx.search("no boost channels set up")
         return await ctx.paginate(Embed(title="Boost Channels"), channels)
 
-    @boosts.command(name="variables", aliases=["vars"])
+    @boosts.command(
+        name="variables",
+        aliases=["vars"],
+        example=",boosts variables",
+        description="Show available template variables for boost scripts",
+    )
     @has_permissions(manage_guild=True)
     async def boosts_variables(self, ctx) -> Message:
         """show available template vars"""
