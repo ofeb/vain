@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Optional
 
 import discord
 from discord import Embed, TextChannel
+from discord.ext import tasks
 from discord.ext.commands import group, CommandError
 from humanize import naturaldelta
 
@@ -13,76 +14,161 @@ from core.discord.package import Package
 from core.discord.views.confirm import ConfirmView
 from core.managers.permissions import has_permissions
 from core.managers.converters import EmbedConverter
+from core.tools.moderation_args import parse_duration_seconds, is_duration_token
 from config import color
 
 if TYPE_CHECKING:
     from core.vain import Vain
 
+# channel_id = 0 stores the guild-wide default nuke message/script
+_DEFAULT_CHANNEL_ID = 0
+_DEFAULT_MESSAGE = "first"
+
+_NUKE_VARIABLES = [
+    "`{nuke.interval}` — scheduled interval for this channel (autonuke only)",
+    "`{nuke.threshold}` — same as interval (seconds as human duration)",
+    "`{nuke.reconfigured}` — list of systems re-pointed after the clone (welcome, leave, boost, logs, …)",
+    "`{nuke.channel}` — the new channel mention after the nuke",
+    "`{nuke.channel.name}` — new channel name",
+    "`{nuke.channel.id}` — new channel id",
+    "`{nuke.old}` — old channel name before the nuke",
+    "`{channel}` / `{channel.mention}` — new channel",
+    "`{guild}` / `{guild.name}` — the server",
+    "`{user}` / `{user.mention}` — member who triggered a manual nuke (manual only)",
+]
+
 
 class Nuke(Package):
-    """nuke management"""
+    """nuke management — one-shot channel clone+delete and scheduled autonuke"""
 
-    @group(
-        name="nuke",
-        description="Clone the current channel",
-        invoke_without_command=True,
-    )
-    @has_permissions(administrator=True)
-    async def nuke(self, ctx):
-        """Nuke (clone + delete) the current channel after confirmation."""
-        view = ConfirmView(ctx, timeout=30.0)
-        embed = Embed(
-            color=color.base,
-            description=(
-                f"> This will **nuke** {ctx.channel.mention}.\n"
-                f"> Are you sure you want to do this?\n"
-                f"> -# the channel will be cloned then deleted"
-            ),
+    def __init__(self, bot: Vain):
+        super().__init__(bot)
+        self._nuke_lock = asyncio.Lock()
+
+    async def cog_load(self) -> None:
+        if not self._autonuke_loop.is_running():
+            self._autonuke_loop.start()
+
+    async def cog_unload(self) -> None:
+        if self._autonuke_loop.is_running():
+            self._autonuke_loop.cancel()
+
+    # ------------------------------------------------------------------
+    # helpers
+    # ------------------------------------------------------------------
+
+    async def _get_default_message(self, guild_id: int) -> str:
+        row = await self.db.fetchval(
+            "SELECT message FROM nuke WHERE guild_id = $1 AND channel_id = $2",
+            guild_id,
+            _DEFAULT_CHANNEL_ID,
         )
-        if not await view.prompt(embed=embed):
-            
-            try:
-                return await ctx.warn("Nuke **cancelled**")
-            except (discord.NotFound, discord.HTTPException):
-                return
+        return row or _DEFAULT_MESSAGE
 
-        channel_info = [ctx.channel.category, ctx.channel.position]
-        old_channel = ctx.channel
-        await old_channel.clone(reason=f"Nuked by {str(ctx.author)}")
-        try:
-            await old_channel.delete(reason=f"Nuked by {str(ctx.author)}")
-        except (discord.NotFound, discord.HTTPException):
-            pass
+    async def _set_default_message(self, guild_id: int, message: str) -> None:
+        await self.db.execute(
+            """INSERT INTO nuke (guild_id, channel_id, last_nuke, nuke_threshold, message)
+               VALUES ($1, $2, $3, $4, $5)
+               ON CONFLICT (guild_id, channel_id)
+               DO UPDATE SET message = excluded.message""",
+            guild_id,
+            _DEFAULT_CHANNEL_ID,
+            datetime.now(timezone.utc).replace(tzinfo=None),
+            0,
+            message,
+        )
 
-        new_channel = None
-        if channel_info[0] is not None:
-            new_channel = channel_info[0].text_channels[-1]
-        else:
-            matches = [
-                c
-                for c in ctx.guild.text_channels
-                if c.name == old_channel.name
-            ]
-            new_channel = max(matches, key=lambda c: c.id) if matches else None
-        if new_channel is None:
-            return
+    async def _perform_nuke(
+        self,
+        channel: TextChannel,
+        *,
+        reason: str,
+        message: str | None = None,
+        author: discord.abc.User | None = None,
+        interval: int | None = None,
+    ) -> TextChannel | None:
+        """Clone + delete ``channel``, re-point DB refs, post message, return new channel."""
+        guild = channel.guild
+        category = channel.category
+        position = channel.position
+        old_name = channel.name
+        old_id = channel.id
+
         try:
-            await new_channel.edit(position=channel_info[1])
+            new_channel = await channel.clone(reason=reason)
+        except (discord.Forbidden, discord.HTTPException):
+            return None
+
+        try:
+            await channel.delete(reason=reason)
         except (discord.NotFound, discord.HTTPException, discord.Forbidden):
             pass
-        asyncio.ensure_future(self.update_channels(old_channel, new_channel))
+
         try:
-            await new_channel.send(content="first")
-        except (discord.NotFound, discord.HTTPException):
+            await new_channel.edit(position=position)
+        except (discord.NotFound, discord.HTTPException, discord.Forbidden):
             pass
 
-    async def update_channels(self, old: TextChannel, new: TextChannel) -> None:
-        old_id = old.id
-        new_id = new.id
-        guild_id = old.guild.id
+        # Prefer category sibling match if available
+        if category is not None:
+            matches = [c for c in category.text_channels if c.name == old_name]
+            if matches:
+                new_channel = max(matches, key=lambda c: c.id)
 
-        
-        
+        await self.update_channels_by_id(old_id, new_channel.id, guild.id)
+
+        script = message if message is not None else await self._get_default_message(guild.id)
+        if not script:
+            script = _DEFAULT_MESSAGE
+
+        reconfigured = (
+            "welcome, leave, boost, logs, jail, tickets, starboard, "
+            "clownboard, giveaways, counters, suggest, and related systems"
+        )
+        kwargs = {
+            "guild": guild,
+            "channel": new_channel,
+            "nuke": {
+                "interval": naturaldelta(interval) if interval else "n/a",
+                "threshold": naturaldelta(interval) if interval else "n/a",
+                "reconfigured": reconfigured,
+                "channel": new_channel,
+                "old": old_name,
+            },
+            "nuke.interval": naturaldelta(interval) if interval else "n/a",
+            "nuke.threshold": naturaldelta(interval) if interval else "n/a",
+            "nuke.reconfigured": reconfigured,
+            "nuke.channel": new_channel.mention,
+            "nuke.channel.name": new_channel.name,
+            "nuke.channel.id": str(new_channel.id),
+            "nuke.old": old_name,
+        }
+        if author is not None:
+            kwargs["user"] = author
+            kwargs["member"] = author
+
+        try:
+            # Prefer full embed-script pipeline; fall back to plain content
+            if script.strip().startswith("{") or "$v" in script or "{embed" in script.lower() or "{container" in script.lower():
+                await self.bot.send_embed(new_channel, script, **kwargs)
+            else:
+                # simple text / variable substitution via Script when possible
+                try:
+                    await self.bot.send_embed(new_channel, script, **kwargs)
+                except Exception:
+                    await new_channel.send(content=script[:2000])
+        except (discord.NotFound, discord.HTTPException, Exception):
+            try:
+                await new_channel.send(content=_DEFAULT_MESSAGE)
+            except (discord.NotFound, discord.HTTPException):
+                pass
+
+        return new_channel
+
+    async def update_channels(self, old: TextChannel, new: TextChannel) -> None:
+        await self.update_channels_by_id(old.id, new.id, old.guild.id)
+
+    async def update_channels_by_id(self, old_id: int, new_id: int, guild_id: int) -> None:
         tables = [
             ("guilds", "welcome_channel_id", False),
             ("guilds", "leave_channel_id", False),
@@ -118,94 +204,375 @@ class Nuke(Package):
             ("auto_responders", "denied_channel_ids", True),
             ("trackers", "channel_ids", True),
             ("invite_config", "channel_id", False),
+            ("nuke", "channel_id", False),  # keep scheduled row on the new channel
+            ("vanity", "channel_id", False),
+            ("guild_tag", "channel_id", False),
+            ("sticky_message", "channel_id", False),
+            ("pingonjoin", "channel_ids", True),
         ]
 
         for table, column, is_array in tables:
-            if is_array:
-                await self.db.execute(
-                    f"UPDATE {table} SET {column} = array_replace({column}, $1, $2) WHERE guild_id = $3 AND $1 = ANY({column})",
-                    old_id,
-                    new_id,
-                    guild_id,
-                )
-            else:
-                await self.db.execute(
-                    f"UPDATE {table} SET {column} = $2 WHERE guild_id = $3 AND {column} = $1",
-                    old_id,
-                    new_id,
-                    guild_id,
-                )
+            try:
+                if is_array:
+                    await self.db.execute(
+                        f"UPDATE {table} SET {column} = array_replace({column}, $1, $2) "
+                        f"WHERE guild_id = $3 AND $1 = ANY({column})",
+                        old_id,
+                        new_id,
+                        guild_id,
+                    )
+                else:
+                    await self.db.execute(
+                        f"UPDATE {table} SET {column} = $2 WHERE guild_id = $3 AND {column} = $1",
+                        old_id,
+                        new_id,
+                        guild_id,
+                    )
+            except Exception:
+                continue
 
-    @nuke.command(
-        name="list",
-        aliases=["ls", "show", "view"],
-        description="View all scheduled nukes",
+    # ------------------------------------------------------------------
+    # nuke (one-shot)
+    # ------------------------------------------------------------------
+
+    @group(
+        name="nuke",
+        description="Clone and delete a channel (optionally schedule via autonuke)",
+        invoke_without_command=True,
+        example=",nuke  |  ,nuke #general",
     )
     @has_permissions(administrator=True)
-    async def nuke_list(self, ctx):
-        if not (
-            rows := await self.db.fetch(
-                """SELECT channel_id, nuke_threshold FROM nuke WHERE guild_id = $1""",
-                ctx.guild.id,
-            )
-        ):
-            raise CommandError("No scheduled nuking channels found")
+    async def nuke(self, ctx, channel: Optional[TextChannel] = None):
+        """Nuke (clone + delete) a channel after confirmation. Defaults to current channel."""
+        channel = channel or ctx.channel
+        if not isinstance(channel, TextChannel):
+            raise CommandError("You can only nuke text channels")
 
-        embed = Embed(title="Scheduled Nukes", color=self.color)
+        view = ConfirmView(ctx, timeout=30.0)
+        embed = Embed(
+            color=color.base,
+            description=(
+                f"> This will **nuke** {channel.mention}.\n"
+                f"> Are you sure you want to do this?\n"
+                f"> -# the channel will be cloned then deleted"
+            ),
+        )
+        if not await view.prompt(embed=embed):
+            try:
+                return await ctx.warn("Nuke **cancelled**")
+            except (discord.NotFound, discord.HTTPException):
+                return
+
+        new_channel = await self._perform_nuke(
+            channel,
+            reason=f"Nuked by {ctx.author}",
+            author=ctx.author,
+        )
+        if new_channel is None:
+            return await ctx.fail("Failed to nuke that channel (missing permissions?)")
+
+        # If the command was run in the channel that got deleted, don't reply there
+        if ctx.channel.id == channel.id:
+            return
+        try:
+            await ctx.success(f"Nuked {channel.name} → {new_channel.mention}")
+        except (discord.NotFound, discord.HTTPException):
+            pass
+
+    @nuke.command(
+        name="script",
+        aliases=["message", "embed", "msg"],
+        description="Set the default message/embed script posted after a nuke",
+        example=",nuke script first  |  ,nuke script {embed}$v{description: channel nuked}",
+    )
+    @has_permissions(administrator=True)
+    async def nuke_script(self, ctx, *, message: Optional[str] = None):
+        """Set (or clear) the default nuke message / embed script for this server."""
+        if message is None or not message.strip():
+            current = await self._get_default_message(ctx.guild.id)
+            return await ctx.normal(
+                f"Current default nuke message:\n```\n{current[:1500]}\n```\n"
+                f"Use `,nuke script <message>` to change it, or `,nuke script reset` to restore `first`."
+            )
+
+        if message.strip().lower() in {"reset", "clear", "default", "none"}:
+            await self._set_default_message(ctx.guild.id, _DEFAULT_MESSAGE)
+            return await ctx.success(f"Reset default nuke message to `{_DEFAULT_MESSAGE}`")
+
+        # Accept EmbedConverter-style scripts transparently
+        script = message
+        if hasattr(message, "script"):
+            script = message.script
+
+        await self._set_default_message(ctx.guild.id, script)
+        preview = script if len(script) <= 200 else script[:200] + "…"
+        return await ctx.success(f"Default nuke message set to:\n```\n{preview}\n```")
+
+    @nuke.command(
+        name="variables",
+        aliases=["vars", "variable"],
+        description="Show variables available in nuke / autonuke embed scripts",
+    )
+    @has_permissions(administrator=True)
+    async def nuke_variables(self, ctx):
+        embed = Embed(
+            title="Nuke / Autonuke Variables",
+            color=self.color,
+            description=(
+                "Use these inside custom embed scripts for `,nuke` and `,autonuke`.\n"
+                "Also see: https://vain.bot/resources/scripting/variables"
+            ),
+        )
+        embed.set_author(name=str(ctx.author), icon_url=ctx.author.display_avatar.url)
+        return await ctx.paginate(embed, _NUKE_VARIABLES)
+
+    # ------------------------------------------------------------------
+    # autonuke group (scheduled)
+    # ------------------------------------------------------------------
+
+    @group(
+        name="autonuke",
+        aliases=["anuke"],
+        description="Schedule automatic channel nukes",
+        invoke_without_command=True,
+        example=",autonuke add #general 2h  |  ,anuke list",
+    )
+    @has_permissions(administrator=True)
+    async def autonuke(self, ctx):
+        return await ctx.send_help(ctx.command)
+
+    @autonuke.command(
+        name="add",
+        aliases=["create", "cr", "c", "a", "set"],
+        description="Schedule a channel to be nuked on an interval",
+        example=",autonuke add #general 2h  |  ,autonuke add 1h {embed}$v{description: wiped}",
+    )
+    @has_permissions(administrator=True)
+    async def autonuke_add(self, ctx, *, args: str = ""):
+        """Schedule autonuke.
+
+        Usage: autonuke add [channel] <interval> [custom embed script]
+        Channel defaults to the current channel. If no script is given, the
+        guild default nuke message (from `,nuke script`) is used.
+        """
+        tokens = args.split() if args else []
+        channel: TextChannel = ctx.channel  # type: ignore
+        interval_seconds: int | None = None
+        script_tokens: list[str] = []
+
+        i = 0
+        # optional leading channel mention / id / name
+        if tokens:
+            try:
+                maybe = await commands.TextChannelConverter().convert(ctx, tokens[0])  # type: ignore[name-defined]
+                channel = maybe
+                i = 1
+            except Exception:
+                # try converter from discord
+                try:
+                    from discord.ext.commands import TextChannelConverter
+
+                    maybe = await TextChannelConverter().convert(ctx, tokens[0])
+                    channel = maybe
+                    i = 1
+                except Exception:
+                    pass
+
+        # find duration token
+        while i < len(tokens):
+            tok = tokens[i]
+            if is_duration_token(tok):
+                interval_seconds = parse_duration_seconds(tok)
+                i += 1
+                break
+            # also accept bare seconds as int
+            if tok.isdigit() and int(tok) > 0:
+                interval_seconds = int(tok)
+                i += 1
+                break
+            script_tokens.append(tok)
+            i += 1
+        else:
+            # duration may have been omitted if script came first then duration later
+            pass
+
+        # remaining tokens after duration are the script
+        script_tokens.extend(tokens[i:])
+
+        # if duration still missing, scan script_tokens for a duration and pull it out
+        if interval_seconds is None:
+            for idx, tok in enumerate(list(script_tokens)):
+                if is_duration_token(tok):
+                    interval_seconds = parse_duration_seconds(tok)
+                    script_tokens.pop(idx)
+                    break
+                if tok.isdigit() and int(tok) > 0:
+                    interval_seconds = int(tok)
+                    script_tokens.pop(idx)
+                    break
+
+        if interval_seconds is None or interval_seconds < 60:
+            raise CommandError(
+                "Provide an interval of at least **60 seconds** "
+                "(e.g. `2h`, `30m`, `1d`)"
+            )
+
+        if not isinstance(channel, TextChannel):
+            raise CommandError("You can only schedule text channels")
+
+        custom_script = " ".join(script_tokens).strip() or None
+        if custom_script is None:
+            message = await self._get_default_message(ctx.guild.id)
+        else:
+            message = custom_script
+
+        await self.db.execute(
+            """INSERT INTO nuke (guild_id, channel_id, last_nuke, nuke_threshold, message)
+               VALUES ($1, $2, $3, $4, $5)
+               ON CONFLICT (guild_id, channel_id)
+               DO UPDATE SET last_nuke = excluded.last_nuke,
+                             nuke_threshold = excluded.nuke_threshold,
+                             message = excluded.message""",
+            ctx.guild.id,
+            channel.id,
+            datetime.now(timezone.utc).replace(tzinfo=None),
+            int(interval_seconds),
+            message,
+        )
+        preview = message if len(message) <= 120 else message[:120] + "…"
+        return await ctx.success(
+            f"Scheduled **autonuke** for {channel.mention} every "
+            f"**{naturaldelta(interval_seconds)}**\n"
+            f"message: `{preview}`"
+        )
+
+    @autonuke.command(
+        name="remove",
+        aliases=["delete", "del", "rem", "r", "d"],
+        description="Remove a scheduled autonuke",
+        example=",autonuke remove #text  |  ,autonuke remove",
+    )
+    @has_permissions(administrator=True)
+    async def autonuke_remove(self, ctx, channel: Optional[TextChannel] = None):
+        channel = channel or ctx.channel
+        data = await self.db.fetchrow(
+            """DELETE FROM nuke
+               WHERE guild_id = $1 AND channel_id = $2 AND channel_id <> $3
+               RETURNING *""",
+            ctx.guild.id,
+            channel.id,
+            _DEFAULT_CHANNEL_ID,
+        )
+        if not data:
+            raise CommandError("No scheduled autonuke found for this channel")
+        return await ctx.success(f"Removed {channel.mention} from **autonuke**")
+
+    @autonuke.command(
+        name="list",
+        aliases=["ls", "show", "view"],
+        description="View all scheduled autonukes",
+    )
+    @has_permissions(administrator=True)
+    async def autonuke_list(self, ctx):
+        rows = await self.db.fetch(
+            """SELECT channel_id, nuke_threshold, message, last_nuke
+               FROM nuke
+               WHERE guild_id = $1 AND channel_id <> $2""",
+            ctx.guild.id,
+            _DEFAULT_CHANNEL_ID,
+        )
+        if not rows:
+            raise CommandError("No scheduled autonuke channels found")
+
+        embed = Embed(title="Scheduled Autonukes", color=self.color)
         embed.set_author(name=str(ctx.author), icon_url=ctx.author.display_avatar.url)
         values = []
         i = 0
         for row in rows:
-            if channel := ctx.guild.get_channel(row["channel_id"]):
-                i += 1
-                values.append(
-                    f"`{i}` {channel.mention} - {naturaldelta(row['nuke_threshold'])}"
-                )
+            ch = ctx.guild.get_channel(row["channel_id"])
+            if not ch:
+                continue
+            i += 1
+            msg = row["message"] or _DEFAULT_MESSAGE
+            short = msg if len(msg) <= 40 else msg[:40] + "…"
+            values.append(
+                f"`{i}` {ch.mention} — every **{naturaldelta(row['nuke_threshold'])}**\n"
+                f"-# message: `{short}`"
+            )
+        if not values:
+            raise CommandError("No scheduled autonuke channels found")
         return await ctx.paginate(embed, values)
 
-    @nuke.command(
-        name="remove",
-        aliases=["delete", "del", "rem", "r", "d"],
-        description="Remove scheduled nuke for a channel",
-        example=",nuke remove #text",
+    @autonuke.command(
+        name="variables",
+        aliases=["vars", "variable"],
+        description="Show variables available in nuke / autonuke embed scripts",
     )
     @has_permissions(administrator=True)
-    async def nuke_remove(self, ctx, *, channel: TextChannel):
-        if not (
-            data := await self.db.fetchrow(
-                """DELETE FROM nuke WHERE guild_id = $1 AND channel_id = $2 RETURNING *""",
-                ctx.guild.id,
-                channel.id,
-            )
-        ):
-            raise CommandError("No scheduled nuke found for this channel")
-        return await ctx.success(
-            f"Removed {channel.mention} from the **scheduled nukes**"
-        )
+    async def autonuke_variables(self, ctx):
+        return await self.nuke_variables(ctx)
 
-    @nuke.command(
-        name="add",
-        aliases=["create", "cr", "c", "a"],
-        description="Schedule nuke for a channel (yes. this will reclone the channel)",
-        example=",nuke add #general 2h hey sexy ass people",
-    )
-    @has_permissions(administrator=True)
-    async def nuke_add(
-        self,
-        ctx,
-        channel: TextChannel,
-        interval: int,
-        *,
-        message: Optional[str] = "first",
-    ):
-        await self.db.execute(
-            """INSERT INTO nuke (guild_id, channel_id, last_nuke, nuke_threshold, message) VALUES($1, $2, $3, $4, $5) ON CONFLICT(guild_id, channel_id) DO UPDATE SET last_nuke = excluded.last_nuke, nuke_threshold = excluded.nuke_threshold, message = excluded.message""",
-            ctx.guild.id,
-            channel.id,
-            datetime.now(),
-            int(interval),
-            message,
-        )
-        return await ctx.success(
-            f"Added {channel.mention} as a **scheduled nuke** to be nuked every **{naturaldelta(interval)}**\nwith message: `{message}`"
-        )
+    # ------------------------------------------------------------------
+    # background loop
+    # ------------------------------------------------------------------
+
+    @tasks.loop(seconds=60.0)
+    async def _autonuke_loop(self) -> None:
+        if getattr(self.db, "pool", None) is None:
+            return
+        try:
+            rows = await self.db.fetch(
+                """SELECT guild_id, channel_id, last_nuke, nuke_threshold, message
+                   FROM nuke
+                   WHERE channel_id <> $1 AND nuke_threshold > 0""",
+                _DEFAULT_CHANNEL_ID,
+            )
+        except Exception:
+            return
+
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        for row in rows:
+            try:
+                last = row["last_nuke"]
+                threshold = int(row["nuke_threshold"] or 0)
+                if threshold < 60:
+                    continue
+                if last is not None:
+                    # normalize naive/aware
+                    if getattr(last, "tzinfo", None) is not None:
+                        last = last.replace(tzinfo=None)
+                    elapsed = (now - last).total_seconds()
+                    if elapsed < threshold:
+                        continue
+
+                guild = self.bot.get_guild(row["guild_id"])
+                if guild is None:
+                    continue
+                channel = guild.get_channel(row["channel_id"])
+                if channel is None or not isinstance(channel, TextChannel):
+                    continue
+
+                async with self._nuke_lock:
+                    new_channel = await self._perform_nuke(
+                        channel,
+                        reason="Autonuke scheduled interval",
+                        message=row["message"] or _DEFAULT_MESSAGE,
+                        interval=threshold,
+                    )
+                    if new_channel is None:
+                        continue
+                    # last_nuke + channel_id already updated via update_channels (nuke table)
+                    # but ensure last_nuke is fresh on the new channel row
+                    await self.db.execute(
+                        """UPDATE nuke SET last_nuke = $1
+                           WHERE guild_id = $2 AND channel_id = $3""",
+                        now,
+                        guild.id,
+                        new_channel.id,
+                    )
+            except Exception:
+                continue
+
+    @_autonuke_loop.before_loop
+    async def _before_autonuke_loop(self) -> None:
+        await self.bot.wait_until_ready()
