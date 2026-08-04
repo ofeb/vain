@@ -154,6 +154,7 @@ class Settings:
         self.record = data
 
     async def dispatch(self, member: Member) -> Message | None:
+        """Send notification. Respects ``{embed}$v`` / ``{container}$v`` with auto-fallback."""
         channel = self.channel
         if not channel:
             logger.warning(
@@ -173,7 +174,12 @@ class Settings:
             except Exception:
                 pass
 
-        from core.tools.embed import Script
+        from core.tools.embed import (
+            Script,
+            is_container_script,
+            is_embed_script,
+            maybe_wrap_embed_script,
+        )
 
         pg = getattr(member, "primary_guild", None)
         tag = getattr(pg, "tag", None) if pg else None
@@ -205,7 +211,8 @@ class Settings:
             if not rendered.strip():
                 rendered = f"thank you {member.mention} for repping the server tag"
 
-            if "{embed}" in template.lower() or "$v{" in template:
+            normalized = maybe_wrap_embed_script(rendered)
+            if is_embed_script(normalized) or is_container_script(normalized):
                 return await script.send(
                     channel,
                     user=member,
@@ -229,7 +236,7 @@ class Settings:
             logger.warning("tag dispatch failed guild=%s: %s", self.guild.id, exc)
             return None
         except Exception as exc:
-            logger.exception("tag dispatch error guild=%s: %s", self.guild.id, exc)
+            logger.exception("tag dispatch error guild=%s: %s", self.guild.id, exp)
             try:
                 return await channel.send(
                     content=f"thank you {member.mention} for repping the server tag",
@@ -276,5 +283,4 @@ def member_repping_tag(member: Member, guild: Guild, *, strict: bool = False) ->
     except (TypeError, ValueError):
         return False
     enabled = info.get("identity_enabled")
-    
     return enabled is not False

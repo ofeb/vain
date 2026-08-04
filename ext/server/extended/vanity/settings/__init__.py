@@ -275,12 +275,12 @@ class Settings:
                 "vanity dispatch HTTP failed guild=%s channel=%s: %s",
                 self.guild.id,
                 getattr(channel, "id", None),
-                exp,
+                exc,
             )
             return None
-        except Exception as exp:
+        except Exception as exc:
             logger.exception(
-                "vanity dispatch error guild=%s: %s", self.guild.id, exp
+                "vanity dispatch error guild=%s: %s", self.guild.id, exc
             )
             try:
                 return await channel.send(
