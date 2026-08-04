@@ -31,7 +31,6 @@ async def sync_ticket_schema(bot: Any) -> None:
             try:
                 await conn.execute(stmt)
             except Exception as exc:
-                # log but continue – partial schema is still useful
                 logger.warning("Schema statement failed: %s\n%s", exc, stmt[:120])
 
     logger.info("Ticket database schema synchronized (%d statements)", len(statements))
