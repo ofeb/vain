@@ -17,7 +17,7 @@ class PrefixCommands(Package):
         stored = await self.db.fetchval(
             """SELECT prefixes FROM config WHERE guild_id = $1""", ctx.guild.id
         ) or [bot_config.prefix]
-        await ctx.pin(
+        await ctx.normal(
             f"**{ctx.guild.name}** uses {', '.join(f'`{p}`' for p in stored)} as prefix"
         )
 
@@ -105,7 +105,7 @@ class PrefixCommands(Package):
             await ctx.bot.invalidate_prefix_cache(guild_id=ctx.guild.id)
             return await ctx.success(f"removed prefix `{prefix}`")
         else:
-                return await ctx.warn("no custom prefix set to remove")
+            return await ctx.warn("no custom prefix set to remove")
 
     @prefix.group(
         name="self",
