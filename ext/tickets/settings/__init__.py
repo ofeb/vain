@@ -1,244 +1,210 @@
 from __future__ import annotations
 
-from logging import getLogger
-from typing import Any, TypedDict, cast
+from contextlib import suppress
+from typing import Any, Literal, Optional, TypedDict, cast
 
-from discord import Guild
+from discord import Guild, HTTPException, Member, Message, Role, TextChannel, Thread
 
-from core.vain import Vain
 
-logger = getLogger('vain.tickets.settings')
+class Ticket(TypedDict):
+    id: str
+    guild_id: int
+    channel_id: int
+    user_id: int
+
+
+class TicketButton(TypedDict, total=False):
+    id: str
+    guild_id: int
+    category_id: Optional[int]
+    template: Optional[str]
+    topic: Optional[str]
+    style: str
+    emoji: Optional[str]
+    label: str
+
+
+class TicketDropdownOption(TypedDict, total=False):
+    id: str
+    label: str
+    emoji: Optional[str]
+    description: Optional[str]
+    category_id: Optional[int]
+    template: Optional[str]
+    topic: Optional[str]
+
+
+class TicketDropdown(TypedDict):
+    id: str
+    guild_id: int
+    placeholder: str
+    options: list[TicketDropdownOption]
 
 
 class Record(TypedDict, total=False):
-    """DB row for `ticket_settings`."""
-
     guild_id: int
-    log_channel_id: Any | None
-    transcript_channel_id: Any | None
-    category_id: Any | None
-    support_role_ids: list[Any]
-    greeting_message: Any | None
-    close_message: Any | None
-    creator_can_close: bool
-    claim_enabled: bool
-    max_open_per_user: int
-    channel_name_format: str
-    blacklist_user_ids: list[Any]
-    transcript_admin_ids: list[Any]
-    ticket_counter: int
-    counter_enabled: bool
-    config: dict[str, Any]
+    channel_id: int
+    message_id: int
+    max_tickets: Optional[int]
+    inactivity_timeout: Optional[int]
+    staff_role_ids: list[int]
+    blacklisted_ids: list[int]
+    transcript_destinations: list[str]
+
+
+def _default_record(guild_id: int = 0) -> Record:
+    return {
+        "guild_id": guild_id,
+        "channel_id": 0,
+        "message_id": 0,
+        "max_tickets": None,
+        "inactivity_timeout": None,
+        "staff_role_ids": [],
+        "blacklisted_ids": [],
+        "transcript_destinations": [],
+    }
 
 
 class Settings:
-    """Guild settings for `ticket_settings`."""
+    """Per-guild ticket configuration with light in-memory cache."""
 
-    bot: Vain
-    guild: Guild
-    record: dict[str, Any]
+    __slots__ = ("bot", "guild", "record")
 
-    def __init__(self, bot: Vain, guild: Guild, record: dict[str, Any]) -> None:
+    def __init__(self, bot: Any, guild: Guild, record: Record) -> None:
         self.bot = bot
         self.guild = guild
         self.record = dict(record)
 
     def __bool__(self) -> bool:
-        return self.record.get('category_id') is not None
+        return bool(self.record.get("channel_id"))
 
     @property
-    def log_channel_id(self) -> Any | None:
-        return self.record.get('log_channel_id')
+    def channel(self) -> Optional[TextChannel]:
+        cid = self.record.get("channel_id") or 0
+        if not cid:
+            return None
+        ch = self.guild.get_channel(cid)
+        return ch if isinstance(ch, TextChannel) else None
 
     @property
-    def transcript_channel_id(self) -> Any | None:
-        return self.record.get('transcript_channel_id')
+    def staff_roles(self) -> list[Role]:
+        return [
+            role
+            for rid in (self.record.get("staff_role_ids") or [])
+            if (role := self.guild.get_role(rid))
+        ]
 
     @property
-    def category_id(self) -> Any | None:
-        return self.record.get('category_id')
+    def blacklisted(self) -> list[Role | Member]:
+        out: list[Role | Member] = []
+        for tid in self.record.get("blacklisted_ids") or []:
+            if role := self.guild.get_role(tid):
+                out.append(role)
+            elif member := self.guild.get_member(tid):
+                out.append(member)
+        return out
 
     @property
-    def support_role_ids(self) -> list[Any]:
-        return list(self.record.get('support_role_ids') or [])
+    def transcript_destinations(self) -> list[TextChannel | Thread | Literal["dm"]]:
+        dests: list[TextChannel | Thread | Literal["dm"]] = []
+        for d in self.record.get("transcript_destinations") or []:
+            if d == "dm":
+                dests.append("dm")
+                continue
+            try:
+                ch = self.guild.get_channel_or_thread(int(d))
+                if isinstance(ch, (TextChannel, Thread)):
+                    dests.append(ch)
+            except (ValueError, TypeError):
+                continue
+        return dests
 
-    @property
-    def greeting_message(self) -> Any | None:
-        return self.record.get('greeting_message')
+    def is_blacklisted(self, member: Member) -> bool:
+        if member in self.blacklisted:
+            return True
+        return any(r in member.roles for r in self.blacklisted if isinstance(r, Role))
 
-    @property
-    def close_message(self) -> Any | None:
-        return self.record.get('close_message')
+    def is_staff(self, member: Member) -> bool:
+        if member.guild_permissions.manage_channels:
+            return True
+        return any(r in member.roles for r in self.staff_roles)
 
-    @property
-    def creator_can_close(self) -> bool:
-        return bool(self.record.get('creator_can_close', True))
+    async def fetch_message(self) -> Optional[Message]:
+        ch = self.channel
+        mid = self.record.get("message_id") or 0
+        if not ch or not mid:
+            return None
+        with suppress(HTTPException, AttributeError):
+            return await ch.fetch_message(mid)
+        return None
 
-    @property
-    def claim_enabled(self) -> bool:
-        return bool(self.record.get('claim_enabled', True))
-
-    @property
-    def max_open_per_user(self) -> int:
-        return int(self.record.get('max_open_per_user', 1) or 0)
-
-    @property
-    def channel_name_format(self) -> str:
-        return self.record.get('channel_name_format', 'ticket-{user}')
-
-    @property
-    def blacklist_user_ids(self) -> list[Any]:
-        return list(self.record.get('blacklist_user_ids') or [])
-
-    @property
-    def transcript_admin_ids(self) -> list[Any]:
-        return list(self.record.get('transcript_admin_ids') or [])
-
-    @property
-    def ticket_counter(self) -> int:
-        return int(self.record.get('ticket_counter', 0) or 0)
-
-    @property
-    def counter_enabled(self) -> bool:
-        return bool(self.record.get('counter_enabled', False))
-
-    @property
-    def config(self) -> dict[str, Any]:
-        return dict(self.record.get('config') or {})
-
-    @staticmethod
-    def _default_config() -> dict[str, Any]:
-        return {
-            "guild_id": 0,
-            'log_channel_id': None,
-            'transcript_channel_id': None,
-            'category_id': None,
-            'support_role_ids': [],
-            'greeting_message': None,
-            'close_message': None,
-            'creator_can_close': True,
-            'claim_enabled': True,
-            'max_open_per_user': 1,
-            'channel_name_format': 'ticket-{user}',
-            'blacklist_user_ids': [],
-            'transcript_admin_ids': [],
-            'ticket_counter': 0,
-            'counter_enabled': False,
-            'config': {},
-        }
-
-    @classmethod
-    async def fetch(cls, bot: Vain, guild: Guild) -> Settings:
-        row = await bot.db.fetchrow(
-            "SELECT * FROM ticket_settings WHERE guild_id = $1",
-            guild.id,
-        )
-        if row is None:
-            data = cls._default_config()
-            data["guild_id"] = guild.id
-            return cls(bot, guild, data)
-        return cls(bot, guild, dict(row))
-
-    @classmethod
-    async def exists(cls, bot: Vain, guild: Guild) -> bool:
-        return bool(
-            await bot.db.fetchval(
-                "SELECT EXISTS(SELECT 1 FROM ticket_settings WHERE guild_id = $1)",
-                guild.id,
-            )
-        )
-
-    async def upsert(self, revalidate: bool = True, **kwargs: Any) -> Settings:
-        values = {
-            "guild_id": self.guild.id,
-            'log_channel_id': kwargs.get('log_channel_id', self.log_channel_id),
-            'transcript_channel_id': kwargs.get('transcript_channel_id', self.transcript_channel_id),
-            'category_id': kwargs.get('category_id', self.category_id),
-            'support_role_ids': kwargs.get('support_role_ids', self.support_role_ids),
-            'greeting_message': kwargs.get('greeting_message', self.greeting_message),
-            'close_message': kwargs.get('close_message', self.close_message),
-            'creator_can_close': kwargs.get('creator_can_close', self.creator_can_close),
-            'claim_enabled': kwargs.get('claim_enabled', self.claim_enabled),
-            'max_open_per_user': kwargs.get('max_open_per_user', self.max_open_per_user),
-            'channel_name_format': kwargs.get('channel_name_format', self.channel_name_format),
-            'blacklist_user_ids': kwargs.get('blacklist_user_ids', self.blacklist_user_ids),
-            'transcript_admin_ids': kwargs.get('transcript_admin_ids', self.transcript_admin_ids),
-            'ticket_counter': kwargs.get('ticket_counter', self.ticket_counter),
-            'counter_enabled': kwargs.get('counter_enabled', self.counter_enabled),
-            'config': kwargs.get('config', self.config),
-        }
-        query = """
-        INSERT INTO ticket_settings (guild_id, log_channel_id, transcript_channel_id, category_id, support_role_ids, greeting_message, close_message, creator_can_close, claim_enabled, max_open_per_user, channel_name_format, blacklist_user_ids, transcript_admin_ids, ticket_counter, counter_enabled, config)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-        ON CONFLICT (guild_id) DO UPDATE SET
-            log_channel_id = EXCLUDED.log_channel_id,
-            transcript_channel_id = EXCLUDED.transcript_channel_id,
-            category_id = EXCLUDED.category_id,
-            support_role_ids = EXCLUDED.support_role_ids,
-            greeting_message = EXCLUDED.greeting_message,
-            close_message = EXCLUDED.close_message,
-            creator_can_close = EXCLUDED.creator_can_close,
-            claim_enabled = EXCLUDED.claim_enabled,
-            max_open_per_user = EXCLUDED.max_open_per_user,
-            channel_name_format = EXCLUDED.channel_name_format,
-            blacklist_user_ids = EXCLUDED.blacklist_user_ids,
-            transcript_admin_ids = EXCLUDED.transcript_admin_ids,
-            ticket_counter = EXCLUDED.ticket_counter,
-            counter_enabled = EXCLUDED.counter_enabled,
-            config = EXCLUDED.config
-        RETURNING *
-        """
-        record = await self.bot.db.fetchrow(
-            query,
-            values['guild_id'],
-            values['log_channel_id'],
-            values['transcript_channel_id'],
-            values['category_id'],
-            values['support_role_ids'],
-            values['greeting_message'],
-            values['close_message'],
-            values['creator_can_close'],
-            values['claim_enabled'],
-            values['max_open_per_user'],
-            values['channel_name_format'],
-            values['blacklist_user_ids'],
-            values['transcript_admin_ids'],
-            values['ticket_counter'],
-            values['counter_enabled'],
-            values['config'],
-        )
-        if record is not None:
-            self.record = dict(record)
-        else:
-            self.record = values
-        if revalidate:
-            logger.debug("upsert ticket_settings guild=%s keys=%s", self.guild.id, list(kwargs))
-        return self
-
-    async def insert(self, **kwargs: Any) -> Settings:
-        return await self.upsert(**kwargs)
-
-    async def delete(self) -> None:
-        await self.bot.db.execute(
-            "DELETE FROM ticket_settings WHERE guild_id = $1",
+    async def fetch_button(self, identifier: str) -> Optional[TicketButton]:
+        row = await self.bot.db.fetchrow(
+            "SELECT * FROM tickets.button WHERE guild_id = $1 AND id = $2",
             self.guild.id,
+            identifier,
         )
-        data = self._default_config()
-        data["guild_id"] = self.guild.id
-        self.record = data
+        return dict(row) if row else None
 
+    async def fetch_dropdown_option(
+        self, identifier: str, option_id: str
+    ) -> Optional[TicketDropdownOption]:
+        row = await self.bot.db.fetchrow(
+            "SELECT options FROM tickets.dropdown WHERE guild_id = $1 AND id = $2",
+            self.guild.id,
+            identifier,
+        )
+        if not row:
+            return None
+        for opt in row["options"] or []:
+            if opt.get("id") == option_id:
+                return opt
+        return None
 
-async def fetch(bot: Vain, guild: Guild) -> Settings:
-    return await Settings.fetch(bot, guild)
+    @classmethod
+    async def fetch(cls, bot: Any, guild: Guild) -> Settings:
+        row = await bot.db.fetchrow(
+            "SELECT * FROM tickets.settings WHERE guild_id = $1", guild.id
+        )
+        if row:
+            # normalize arrays that may come as None
+            data = dict(row)
+            data["staff_role_ids"] = list(data.get("staff_role_ids") or [])
+            data["blacklisted_ids"] = list(data.get("blacklisted_ids") or [])
+            data["transcript_destinations"] = list(
+                data.get("transcript_destinations") or []
+            )
+            return cls(bot, guild, data)
+        return cls(bot, guild, _default_record(guild.id))
 
+    async def upsert(self, **kwargs) -> Settings:
+        # merge kwargs into current record
+        for k, v in kwargs.items():
+            self.record[k] = v
 
-async def upsert(bot: Vain, guild: Guild, **kwargs: Any) -> Settings:
-    settings = await Settings.fetch(bot, guild)
-    return await settings.upsert(**kwargs)
-
-
-async def insert(bot: Vain, guild: Guild, **kwargs: Any) -> Settings:
-    return await upsert(bot, guild, **kwargs)
-
-
-__all__ = ["Settings", "Record", "fetch", "upsert", "insert"]
+        await self.bot.db.execute(
+            """
+            INSERT INTO tickets.settings (
+                guild_id, channel_id, message_id, max_tickets,
+                inactivity_timeout, staff_role_ids, blacklisted_ids,
+                transcript_destinations
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+            ON CONFLICT (guild_id) DO UPDATE SET
+                channel_id              = EXCLUDED.channel_id,
+                message_id              = EXCLUDED.message_id,
+                max_tickets             = EXCLUDED.max_tickets,
+                inactivity_timeout      = EXCLUDED.inactivity_timeout,
+                staff_role_ids          = EXCLUDED.staff_role_ids,
+                blacklisted_ids         = EXCLUDED.blacklisted_ids,
+                transcript_destinations = EXCLUDED.transcript_destinations
+            """,
+            self.guild.id,
+            self.record.get("channel_id") or 0,
+            self.record.get("message_id") or 0,
+            self.record.get("max_tickets"),
+            self.record.get("inactivity_timeout"),
+            self.record.get("staff_role_ids") or [],
+            self.record.get("blacklisted_ids") or [],
+            self.record.get("transcript_destinations") or [],
+        )
+        return self
