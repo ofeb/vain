@@ -3,6 +3,7 @@ from discord import Embed, TextChannel, Message, Member, AllowedMentions
 from asyncpg import UniqueViolationError
 from asyncio import sleep, Lock
 from collections import defaultdict
+from typing import Optional
 from core.discord.package import Package
 from core.managers.converters import EmbedConverter
 from lib.classes.flags.guilds import Parameters
@@ -22,6 +23,7 @@ class WelcomeCommands(Package):
         example=",welcome add #hi Hi {user.mention}! --self_destruct 10",
         aliases=["welc"],
         invoke_without_command=True,
+        description="Manage welcome messages",
     )
     @has_permissions(manage_guild=True)
     async def welcome(self, ctx) -> Message:
@@ -30,15 +32,20 @@ class WelcomeCommands(Package):
 
     @welcome.command(
         name="add",
-        example=",welcome add #hi Hi {user.mention}! --self_destruct 10",
+        example=",welcome add #hi Hi {user.mention}! --self_destruct 10  |  ,welcome add Welcome {user.mention}!",
         aliases=["create", "set"],
         flags=Parameters,
+        description="Add a welcome message to a channel (defaults to current channel)",
+        usage="[channel] <script> [--self_destruct <seconds>]",
     )
     @has_permissions(manage_guild=True)
     async def welcome_add(
-        self, ctx, channel: TextChannel, *, message: EmbedConverter
+        self, ctx, channel: Optional[TextChannel] = None, *, message: EmbedConverter
     ) -> Message:
         """add a welcome channel"""
+        channel = channel or ctx.channel
+        if not isinstance(channel, TextChannel):
+            return await ctx.warn("You can only set welcome messages in text channels")
         timer = ctx.flags.get("self_destruct")
         if timer:
             if timer < 6:
@@ -55,7 +62,7 @@ class WelcomeCommands(Package):
             )
         except UniqueViolationError:
             return await ctx.fail(
-                f"there's already a welcome message for {channel.mention}, remove it first"
+                f"there's already a welcome message for {channel.mention}, remove it first or use `{ctx.clean_prefix}welcome edit`"
             )
         extra = f"\nmessages will delete after `{timer}` seconds" if timer else ""
         return await ctx.success(
@@ -63,13 +70,56 @@ class WelcomeCommands(Package):
         )
 
     @welcome.command(
-        name="remove",
-        example=",welcome remove #general",
-        aliases=["delete", "del"],
+        name="edit",
+        aliases=["change", "update"],
+        example=",welcome edit #hi Welcome back {user.mention}!  |  ,welcome edit Hi {user.mention}!",
+        flags=Parameters,
+        description="Edit the welcome script for a channel (defaults to current channel)",
+        usage="[channel] <script> [--self_destruct <seconds>]",
     )
     @has_permissions(manage_guild=True)
-    async def welcome_remove(self, ctx, *, channel: TextChannel) -> Message:
+    async def welcome_edit(
+        self, ctx, channel: Optional[TextChannel] = None, *, message: EmbedConverter
+    ) -> Message:
+        """edit an existing welcome message script"""
+        channel = channel or ctx.channel
+        timer = ctx.flags.get("self_destruct")
+        if timer:
+            if timer < 6:
+                return await ctx.warn("self-destruct timer must be at least `6` seconds")
+            if timer > 60:
+                return await ctx.warn("self-destruct timer must stay under `60` seconds")
+        exists = await self.db.fetchval(
+            """SELECT 1 FROM join_messages WHERE guild_id = $1 AND channel_id = $2""",
+            ctx.guild.id,
+            channel.id,
+        )
+        if not exists:
+            return await ctx.fail(
+                f"no welcome message for {channel.mention} — use `{ctx.clean_prefix}welcome add` first"
+            )
+        await self.db.execute(
+            """UPDATE join_messages SET message = $1, self_destruct = $2
+               WHERE guild_id = $3 AND channel_id = $4""",
+            message.script,
+            timer,
+            ctx.guild.id,
+            channel.id,
+        )
+        extra = f"\nmessages will delete after `{timer}` seconds" if timer else ""
+        return await ctx.success(f"updated welcome message for {channel.mention}{extra}")
+
+    @welcome.command(
+        name="remove",
+        example=",welcome remove #general  |  ,welcome remove",
+        aliases=["delete", "del"],
+        description="Remove a welcome message from a channel (defaults to current channel)",
+        usage="[channel]",
+    )
+    @has_permissions(manage_guild=True)
+    async def welcome_remove(self, ctx, channel: Optional[TextChannel] = None) -> Message:
         """remove a welcome channel"""
+        channel = channel or ctx.channel
         deleted = await self.db.fetchval(
             """DELETE FROM join_messages WHERE guild_id = $1 AND channel_id = $2 RETURNING channel_id;""",
             ctx.guild.id,
@@ -81,12 +131,15 @@ class WelcomeCommands(Package):
 
     @welcome.command(
         name="view",
-        example=",welcome view #general",
+        example=",welcome view #general  |  ,welcome view",
         aliases=["check"],
+        description="Preview the welcome message for a channel (defaults to current channel)",
+        usage="[channel]",
     )
     @has_permissions(manage_guild=True)
-    async def welcome_view(self, ctx, *, channel: TextChannel) -> Message:
+    async def welcome_view(self, ctx, channel: Optional[TextChannel] = None) -> Message:
         """preview welcome message"""
+        channel = channel or ctx.channel
         msg = await self.db.fetchval(
             """SELECT message FROM join_messages WHERE guild_id = $1 AND channel_id = $2;""",
             ctx.guild.id,
@@ -96,7 +149,11 @@ class WelcomeCommands(Package):
             return await ctx.fail(f"no welcome message for {channel.mention}")
         return await self.bot.send_embed(ctx, msg, member=ctx.author)
 
-    @welcome.command(name="list")
+    @welcome.command(
+        name="list",
+        example=",welcome list",
+        description="List all welcome channels in this server",
+    )
     @has_permissions(manage_guild=True)
     async def welcome_list(self, ctx) -> Message:
         """list all welcome channels"""
@@ -113,7 +170,12 @@ class WelcomeCommands(Package):
             return await ctx.search("no welcome channels set up")
         return await ctx.paginate(Embed(title="Welcome Channels"), channels)
 
-    @welcome.command(name="variables", aliases=["vars"])
+    @welcome.command(
+        name="variables",
+        aliases=["vars"],
+        example=",welcome variables",
+        description="Show available template variables for welcome scripts",
+    )
     @has_permissions(manage_guild=True)
     async def welcome_variables(self, ctx) -> Message:
         """show available template vars"""
@@ -146,7 +208,6 @@ class WelcomeCommands(Package):
         if await self.db.get_antiraid_state(member.guild.id):
             return
 
-        
         invite_info = {}
         try:
             invite_tracker = self.bot.get_cog("InviteTracker")
