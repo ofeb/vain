@@ -1,6 +1,6 @@
 import discord
-from discord.ext.commands import group, command, CommandError
-from discord import Embed, TextChannel, PermissionOverwrite
+from discord.ext.commands import group, CommandError
+from discord import Embed, TextChannel
 
 from core.discord.package import Package
 from core.managers.permissions import has_permissions
@@ -17,18 +17,35 @@ class Lockdown(Package):
         example=",lock #general spam raid",
     )
     @has_permissions(manage_channels=True)
-    async def lock(self, ctx, channel: TextChannel, *, reason: str = "No reason provided"):
-        """lockdown a channel"""
+    async def lock(
+        self,
+        ctx,
+        channel: TextChannel = None,
+        *,
+        reason: str = "No reason provided",
+    ):
+        """lockdown a channel (defaults to current channel)"""
+        channel = channel or ctx.channel
+        if not isinstance(channel, TextChannel):
+            raise CommandError("this command only works on **text channels**")
+
         everyone = ctx.guild.default_role
         overwrite = channel.overwrites_for(everyone)
         overwrite.send_messages = False
-        await channel.set_permissions(everyone, overwrite=overwrite, reason=f"Lockdown by {ctx.author}: {reason}")
+        await channel.set_permissions(
+            everyone,
+            overwrite=overwrite,
+            reason=f"Lockdown by {ctx.author}: {reason}",
+        )
 
         await self.db.execute(
             """INSERT INTO lockdowns (guild_id, channel_id, locked_by, reason)
                VALUES ($1, $2, $3, $4)
                ON CONFLICT (guild_id, channel_id) DO UPDATE SET locked_by = $3, reason = $4""",
-            ctx.guild.id, channel.id, ctx.author.id, reason,
+            ctx.guild.id,
+            channel.id,
+            ctx.author.id,
+            reason,
         )
 
         return await ctx.success(f"{channel.mention} has been **locked** — {reason}")
@@ -57,14 +74,21 @@ class Lockdown(Package):
             overwrite = channel.overwrites_for(everyone)
             if overwrite.send_messages is not False:
                 overwrite.send_messages = False
-                await channel.set_permissions(everyone, overwrite=overwrite, reason=f"Lockdown all by {ctx.author}: {reason}")
+                await channel.set_permissions(
+                    everyone,
+                    overwrite=overwrite,
+                    reason=f"Lockdown all by {ctx.author}: {reason}",
+                )
                 locked.append(channel.mention)
 
                 await self.db.execute(
                     """INSERT INTO lockdowns (guild_id, channel_id, locked_by, reason)
                        VALUES ($1, $2, $3, $4)
                        ON CONFLICT (guild_id, channel_id) DO UPDATE SET locked_by = $3, reason = $4""",
-                    ctx.guild.id, channel.id, ctx.author.id, reason,
+                    ctx.guild.id,
+                    channel.id,
+                    ctx.author.id,
+                    reason,
                 )
 
         if not locked:
@@ -78,7 +102,7 @@ class Lockdown(Package):
         example=",lock role @Admins",
     )
     @has_permissions(manage_guild=True)
-    async def lock_role(self, ctx, role):
+    async def lock_role(self, ctx, role: discord.Role):
         """lockdown role"""
         everyone = ctx.guild.default_role
         for channel in ctx.guild.channels:
@@ -88,7 +112,11 @@ class Lockdown(Package):
             if overwrite.send_messages is False:
                 channel_overwrite = channel.overwrites_for(role)
                 channel_overwrite.send_messages = True
-                await channel.set_permissions(role, overwrite=channel_overwrite, reason=f"Lockdown bypass by {ctx.author}")
+                await channel.set_permissions(
+                    role,
+                    overwrite=channel_overwrite,
+                    reason=f"Lockdown bypass by {ctx.author}",
+                )
 
         return await ctx.success(f"{role.mention} can now **speak** in locked channels")
 
@@ -108,20 +136,28 @@ class Lockdown(Package):
         example=",lock ignore add #bot-commands",
     )
     @has_permissions(manage_guild=True)
-    async def lock_ignore_add(self, ctx, channel: TextChannel):
+    async def lock_ignore_add(self, ctx, channel: TextChannel = None):
         """add ignored lockdown channel"""
+        channel = channel or ctx.channel
+        if not isinstance(channel, TextChannel):
+            raise CommandError("this command only works on **text channels**")
+
         existing = await self.db.fetchval(
             """SELECT channel_id FROM lockdown_ignore WHERE guild_id = $1 AND channel_id = $2""",
-            ctx.guild.id, channel.id,
+            ctx.guild.id,
+            channel.id,
         )
         if existing:
             return await ctx.warn(f"{channel.mention} is already **ignored**")
 
         await self.db.execute(
             """INSERT INTO lockdown_ignore (guild_id, channel_id) VALUES ($1, $2)""",
-            ctx.guild.id, channel.id,
+            ctx.guild.id,
+            channel.id,
         )
-        return await ctx.success(f"{channel.mention} will be **ignored** during lockdown all")
+        return await ctx.success(
+            f"{channel.mention} will be **ignored** during lockdown all"
+        )
 
     @lock_ignore.command(
         name="remove",
@@ -129,15 +165,22 @@ class Lockdown(Package):
         example=",lock ignore remove #bot-commands",
     )
     @has_permissions(manage_guild=True)
-    async def lock_ignore_remove(self, ctx, channel: TextChannel):
+    async def lock_ignore_remove(self, ctx, channel: TextChannel = None):
         """remove ignored lockdown channel"""
+        channel = channel or ctx.channel
+        if not isinstance(channel, TextChannel):
+            raise CommandError("this command only works on **text channels**")
+
         deleted = await self.db.execute(
             """DELETE FROM lockdown_ignore WHERE guild_id = $1 AND channel_id = $2""",
-            ctx.guild.id, channel.id,
+            ctx.guild.id,
+            channel.id,
         )
         if deleted == "DELETE 0":
             return await ctx.warn(f"{channel.mention} is not **ignored**")
-        return await ctx.success(f"{channel.mention} is no longer **ignored** during lockdown all")
+        return await ctx.success(
+            f"{channel.mention} is no longer **ignored** during lockdown all"
+        )
 
     @lock_ignore.command(
         name="list",
@@ -176,16 +219,31 @@ class Lockdown(Package):
         example=",unlock #general",
     )
     @has_permissions(manage_channels=True)
-    async def unlock(self, ctx, channel: TextChannel, *, reason: str = "No reason provided"):
-        """unlock a channel"""
+    async def unlock(
+        self,
+        ctx,
+        channel: TextChannel = None,
+        *,
+        reason: str = "No reason provided",
+    ):
+        """unlock a channel (defaults to current channel)"""
+        channel = channel or ctx.channel
+        if not isinstance(channel, TextChannel):
+            raise CommandError("this command only works on **text channels**")
+
         everyone = ctx.guild.default_role
         overwrite = channel.overwrites_for(everyone)
         overwrite.send_messages = None
-        await channel.set_permissions(everyone, overwrite=overwrite, reason=f"Unlocked by {ctx.author}: {reason}")
+        await channel.set_permissions(
+            everyone,
+            overwrite=overwrite,
+            reason=f"Unlocked by {ctx.author}: {reason}",
+        )
 
         await self.db.execute(
             """DELETE FROM lockdowns WHERE guild_id = $1 AND channel_id = $2""",
-            ctx.guild.id, channel.id,
+            ctx.guild.id,
+            channel.id,
         )
 
         return await ctx.success(f"{channel.mention} has been **unlocked** — {reason}")
@@ -207,7 +265,11 @@ class Lockdown(Package):
             overwrite = channel.overwrites_for(everyone)
             if overwrite.send_messages is False:
                 overwrite.send_messages = None
-                await channel.set_permissions(everyone, overwrite=overwrite, reason=f"Unlock all channels by {ctx.author}: {reason}")
+                await channel.set_permissions(
+                    everyone,
+                    overwrite=overwrite,
+                    reason=f"Unlock all channels by {ctx.author}: {reason}",
+                )
                 unlocked.append(channel.mention)
 
         await self.db.execute(
@@ -219,69 +281,3 @@ class Lockdown(Package):
             return await ctx.warn("no channels are currently **locked**")
 
         return await ctx.success(f"**{len(unlocked)}** channels unlocked — {reason}")
-
-    @command(
-        name="moveall",
-        description="Move all members in current channel to another channel",
-        example=",moveall #voice-2",
-    )
-    @has_permissions(administrator=True)
-    async def moveall(self, ctx, channel: discord.VoiceChannel):
-        """move all members to another voice channel"""
-        if not ctx.author.voice or not ctx.author.voice.channel:
-            raise CommandError("you must be in a **voice channel** to use this command")
-
-        source = ctx.author.voice.channel
-        members = source.members
-        if not members:
-            raise CommandError("no members in your current **voice channel**")
-
-        moved = 0
-        for member in members:
-            try:
-                await member.move_to(channel, reason=f"moveall by {ctx.author}")
-                moved += 1
-            except discord.HTTPException:
-                continue
-
-        if not moved:
-            return await ctx.fail("failed to move any members")
-        return await ctx.success(f"moved **{moved}** members to {channel.mention}")
-
-    @command(
-        name="stripstaff",
-        description="Remove all staff/dangerous permission roles from a member",
-        example=",stripstaff @user",
-    )
-    @has_permissions(administrator=True)
-    async def stripstaff(self, ctx, member: discord.Member):
-        """strip staff roles from a member"""
-        if member.id == ctx.guild.owner_id:
-            raise CommandError("you cannot strip the **server owner**")
-        if member.top_role >= ctx.author.top_role and ctx.author.id != ctx.guild.owner_id:
-            raise CommandError("that member has a **higher or equal** role than you")
-
-        dangerous_perms = {
-            "administrator", "manage_guild", "manage_channels",
-            "manage_roles", "ban_members", "kick_members",
-            "manage_messages", "manage_webhooks", "manage_expressions",
-            "moderate_members",
-        }
-
-        staff_roles = []
-        for role in member.roles:
-            if role.is_default():
-                continue
-            role_perms = dict(role.permissions)
-            if any(role_perms.get(p) for p in dangerous_perms):
-                staff_roles.append(role)
-
-        if not staff_roles:
-            raise CommandError(f"{member.mention} has no **staff roles** to strip")
-
-        try:
-            await member.remove_roles(*staff_roles, reason=f"stripstaff by {ctx.author}")
-        except discord.HTTPException as e:
-            raise CommandError(f"failed to strip roles: {e}")
-
-        return await ctx.success(f"stripped **{len(staff_roles)}** staff roles from {member.mention}")
