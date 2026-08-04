@@ -20,10 +20,10 @@ class GoodbyeCommands(Package):
 
     @group(
         name="goodbye",
-        aliases=["leave", "bye"],
+        aliases=["bye", "gb"],
         example=",goodbye add #bye See ya {user}!",
         invoke_without_command=True,
-        description="Manage goodbye / leave messages",
+        description="Manage goodbye messages for when members leave the server",
     )
     @has_permissions(manage_guild=True)
     async def goodbye(self, ctx) -> Message:
