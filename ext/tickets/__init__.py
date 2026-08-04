@@ -1,1012 +1,951 @@
 from __future__ import annotations
 
-import contextlib
-import io
 import json
-import re
-from typing import TYPE_CHECKING
+from contextlib import suppress
+from logging import getLogger
+from typing import Any, Literal, Optional, Union
 
 import discord
-from discord.ext import commands
-
-from core.discord.ctx import Context
-from core.discord.hybrid import group
-from core.discord.package import Package
-
-from .events import TicketsEvents
-from core.managers.permissions import has_permissions
-from config import color
-
-from .views import TicketControlView, TicketFormModal, TicketOpenView
-
-from core.discord.views.embed import body, c2
-
-if TYPE_CHECKING:
-    from core.vain import Vain
-
-DEFAULT_PANEL_SCRIPT = (
-    "{embed}$v{title: Support Tickets}$v"
-    "{description: > Click a button below to open a ticket with our staff.\n"
-    "-# Please include as much detail as possible when you open one.}$v"
-    "{color: #2B2D31}"
+from discord import (
+    ButtonStyle,
+    CategoryChannel,
+    Embed,
+    HTTPException,
+    Interaction,
+    Member,
+    Message,
+    PermissionOverwrite,
+    Role,
+    SelectOption,
+    TextChannel,
+    Thread,
 )
+from discord.ext.commands import Cog, group, command
+from discord.ext.tasks import loop
+from discord.ui import Button, Select, View
+from discord.utils import snowflake_time, utcnow
 
-def _ticket_embed(
-    title: str,
-    message: str,
-    *,
-    footer: str | None = None,
-    author: str | None = None,
-) -> discord.Embed:
-    embed = c2(
-        color=color.base,
-        title=title,
-        message=message,
-        footer=footer,
-        author=author,
-    )
-    return embed
+from core.discord.package import Package
+from core.managers.permissions import has_permissions
 
-class Tickets(TicketsEvents, Package):
-    """ticket panel and lifecycle management"""
+from .checks import in_ticket, staff
+from .settings import Settings, Ticket, TicketButton, TicketDropdownOption
+from .transcript import Transcript
+
+logger = getLogger("tickets")
+
+STYLE_MAP = {
+    "blurple": ButtonStyle.primary,
+    "grey": ButtonStyle.secondary,
+    "gray": ButtonStyle.secondary,
+    "green": ButtonStyle.success,
+    "red": ButtonStyle.danger,
+}
+
+
+def _ephemeral(interaction: Interaction, content: str, *, followup: bool = False):
+    embed = Embed(color=0x2B2D31, description=content)
+    if followup:
+        return interaction.followup.send(embed=embed, ephemeral=True)
+    return interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+class TicketPanelView(View):
+    """Dynamic view rebuilt from the current panel message components."""
+
+    def __init__(self):
+        super().__init__(timeout=None)
+
+
+# ─────────────────────────────────────────────────────────────
+# Main Package
+# ─────────────────────────────────────────────────────────────
+
+class Tickets(Package):
+    """Ticket system – panels, buttons, dropdowns, staff tools & transcripts."""
+
+    def __init__(self, bot):
+        super().__init__(bot)
+        self.description = "Full ticket system with panels, staff controls and transcripts"
 
     async def cog_load(self) -> None:
-        self.bot.add_view(TicketControlView(self))
-    async def _settings(self, guild_id: int) -> dict:
-        from .settings import Settings as TicketSettings
+        # ensure schema on every load
+        await self._ensure_schema()
+        self._inactivity_loop.start()
+        await super().cog_load()
 
-        guild = self.bot.get_guild(guild_id)
-        if guild is None:
-            row = await self.db.fetchrow(
-                "SELECT * FROM ticket_settings WHERE guild_id = $1",
-                guild_id,
+    async def cog_unload(self) -> None:
+        self._inactivity_loop.cancel()
+        await super().cog_unload()
+
+    async def _ensure_schema(self) -> None:
+        """Create / migrate ticket tables if they are missing."""
+        schema_path = __file__.replace("__init__.py", "schema.sql")
+        try:
+            with open(schema_path, "r", encoding="utf-8") as f:
+                sql = f.read()
+            # run each statement separately for safety
+            for stmt in sql.split(";"):
+                stmt = stmt.strip()
+                if stmt:
+                    await self.db.execute(stmt)
+            logger.info("Ticket schema synchronized")
+        except Exception as exc:
+            logger.warning("Could not fully sync ticket schema: %s", exc)
+
+    # ── inactivity sweeper ───────────────────────────────────
+
+    @loop(minutes=5)
+    async def _inactivity_loop(self) -> None:
+        rows = await self.db.fetch(
+            """
+            SELECT o.channel_id, s.inactivity_timeout
+            FROM tickets.open o
+            JOIN tickets.settings s ON o.guild_id = s.guild_id
+            WHERE s.inactivity_timeout IS NOT NULL
+            """
+        )
+        to_delete: list[int] = []
+        for row in rows:
+            timeout = row["inactivity_timeout"]
+            if not timeout:
+                continue
+            channel = self.bot.get_channel(row["channel_id"])
+            if not isinstance(channel, TextChannel):
+                to_delete.append(row["channel_id"])
+                continue
+            if not channel.last_message_id:
+                continue
+            age = (utcnow() - snowflake_time(channel.last_message_id)).total_seconds()
+            if age >= timeout:
+                with suppress(HTTPException):
+                    await channel.delete(reason="Ticket inactive for too long")
+                logger.info("Closed inactive ticket %s", channel.id)
+                to_delete.append(row["channel_id"])
+
+        if to_delete:
+            await self.db.execute(
+                "DELETE FROM tickets.open WHERE channel_id = ANY($1::BIGINT[])",
+                to_delete,
             )
-            return dict(row or {"guild_id": guild_id})
-        settings = await TicketSettings.fetch(self.bot, guild)
-        if not await TicketSettings.exists(self.bot, guild):
-            await settings.insert()
-            settings = await TicketSettings.fetch(self.bot, guild)
-        return dict(settings.record)
 
-    async def _is_staff(self, member: discord.Member, settings: dict, extra_roles: list[int] | None = None) -> bool:
-        if member.guild_permissions.manage_channels:
-            return True
-        role_ids = set(settings.get("support_role_ids") or [])
-        if extra_roles:
-            role_ids.update(extra_roles)
-        return any(role.id in role_ids for role in member.roles)
+    # ── interaction listener (create ticket) ─────────────────
 
-    async def _render_panel_embed(self, guild: discord.Guild, script: str | None) -> discord.Embed:
-        if script and script != DEFAULT_PANEL_SCRIPT:
-            try:
-                from core.tools.embed import parse
-                payload = await parse(script, sendable=True)
-                embed = payload.get("embed")
-                if embed:
-                    return embed
-            except Exception:
-                pass
-        return _ticket_embed(
-            "Support Tickets",
-            "Click a button below to open a ticket.",
-            footer="Staff will respond as soon as possible",
-        )
-
-    async def _send_panel_message(self, guild: discord.Guild, panel: dict, options: list[dict]) -> discord.Message:
-        channel = guild.get_channel(int(panel["channel_id"]))
-        if not channel or not isinstance(channel, discord.TextChannel):
-            raise commands.CommandError("Panel channel is missing or invalid.")
-        embed = await self._render_panel_embed(guild, panel.get("embed_script"))
-        view = TicketOpenView(self, int(panel["id"]), options, panel.get("panel_type") or "buttons")
-        message = await channel.send(embed=embed, view=view)
-        self.bot.add_view(view, message_id=message.id)
-        await self.db.execute(
-            "UPDATE ticket_panels SET message_id = $2 WHERE id = $1",
-            panel["id"],
-            message.id,
-        )
-        return message
-
-    async def open_ticket(self, interaction: discord.Interaction, panel_id: int, option_id: int) -> None:
-        if not interaction.guild or not isinstance(interaction.user, discord.Member):
+    @Cog.listener("on_interaction")
+    async def on_ticket_interaction(self, interaction: Interaction) -> None:
+        if not interaction.data or not interaction.guild:
             return
-        settings = await self._settings(interaction.guild.id)
-        if interaction.user.id in (settings.get("blacklist_user_ids") or []):
-            await interaction.response.send_message(
-                embed=_ticket_embed("Access Denied", "You are **blacklisted** from opening tickets."),
-                ephemeral=True,
+        if not isinstance(interaction.user, Member):
+            return
+
+        custom_id = interaction.data.get("custom_id") or ""
+        if not custom_id.startswith("ticket.create"):
+            return
+
+        if not interaction.guild.me.guild_permissions.manage_channels:
+            return await _ephemeral(
+                interaction, "I need the **Manage Channels** permission to open tickets."
             )
-            return
 
-        option = await self.db.fetchrow(
-            "SELECT * FROM ticket_options WHERE id = $1 AND panel_id = $2 AND active = TRUE",
-            option_id,
-            panel_id,
-        )
-        if not option:
-            await interaction.response.send_message("That ticket option is unavailable.", ephemeral=True)
-            return
+        component_type = interaction.data.get("component_type", 0)
+        identifier = custom_id.rsplit(":", 1)[-1]
 
-        open_count = await self.db.fetchval(
-            "SELECT COUNT(*) FROM tickets WHERE guild_id = $1 AND user_id = $2 AND status = 'open'",
+        settings = await Settings.fetch(self.bot, interaction.guild)
+        if settings.is_blacklisted(interaction.user):
+            return await _ephemeral(interaction, "You are not allowed to open tickets here.")
+
+        record: Optional[TicketButton | TicketDropdownOption] = None
+        if component_type == 2:  # button
+            record = await settings.fetch_button(identifier)
+        elif component_type == 3:  # select
+            values = interaction.data.get("values") or []
+            if values:
+                record = await settings.fetch_dropdown_option(identifier, values[0])
+
+        if not record:
+            return await _ephemeral(interaction, "This control is no longer valid.")
+
+        # already has an open ticket?
+        existing = await self.db.fetchrow(
+            """
+            SELECT channel_id FROM tickets.open
+            WHERE id = $1 AND guild_id = $2 AND user_id = $3
+            """,
+            identifier,
             interaction.guild.id,
             interaction.user.id,
         )
-        max_open = int(settings.get("max_open_per_user") or 1)
-        if open_count >= max_open:
-            await interaction.response.send_message(
-                f"You already have **{open_count}** open ticket(s). Close one before opening another.",
-                ephemeral=True,
-            )
-            return
-
-        if option.get("form_id"):
-            form = await self.db.fetchrow(
-                "SELECT questions FROM ticket_forms WHERE id = $1 AND guild_id = $2",
-                option["form_id"],
-                interaction.guild.id,
-            )
-            questions = form["questions"] if form else []
-            if isinstance(questions, str):
-                questions = json.loads(questions)
-            if questions:
-                await interaction.response.send_modal(
-                    TicketFormModal(self, panel_id, option_id, questions)
+        if existing:
+            ch = interaction.guild.get_channel(existing["channel_id"])
+            if ch:
+                return await _ephemeral(
+                    interaction, f"You already have an open ticket: {ch.mention}"
                 )
-                return
 
-        await interaction.response.defer(ephemeral=True)
-        await self.create_ticket_channel(interaction, panel_id, option_id, None)
-
-    async def create_ticket_channel(
-        self,
-        interaction: discord.Interaction,
-        panel_id: int,
-        option_id: int,
-        answers: dict | None,
-    ) -> None:
-        assert interaction.guild and isinstance(interaction.user, discord.Member)
-        settings = await self._settings(interaction.guild.id)
-        option = await self.db.fetchrow("SELECT * FROM ticket_options WHERE id = $1", option_id)
-        panel = await self.db.fetchrow("SELECT * FROM ticket_panels WHERE id = $1", panel_id)
-        if not option or not panel:
-            if interaction.response.is_done():
-                await interaction.followup.send("Ticket option no longer exists.", ephemeral=True)
-            else:
-                await interaction.response.send_message("Ticket option no longer exists.", ephemeral=True)
-            return
-
-        category_id = option.get("category_id") or settings.get("category_id")
-        category = interaction.guild.get_channel(int(category_id)) if category_id else None
-
-        if settings.get("counter_enabled"):
-            counter = int(settings.get("ticket_counter") or 0) + 1
-            channel_name = f"ticket-{counter:04d}"
-            await self.db.execute(
-                "UPDATE ticket_settings SET ticket_counter = $2 WHERE guild_id = $1",
+        # max tickets check
+        if settings.record.get("max_tickets"):
+            count = await self.db.fetchval(
+                "SELECT COUNT(*) FROM tickets.open WHERE guild_id = $1",
                 interaction.guild.id,
-                counter,
             )
-        else:
-            name_format = settings.get("channel_name_format") or "ticket-{user}"
-            channel_name = (
-                name_format.replace("{user}", interaction.user.name.lower())
-                .replace("{id}", str(interaction.user.id))
-                .replace("{option}", str(option.get("name") or "ticket"))
-            )
-            channel_name = re.sub(r"[^a-z0-9-]", "-", channel_name.lower())[:100]
+            if count >= settings.record["max_tickets"]:
+                return await _ephemeral(
+                    interaction,
+                    f"The server has reached the maximum of **{settings.record['max_tickets']}** open tickets.",
+                )
+
+        await interaction.response.defer(ephemeral=True, thinking=True)
+
+        category = None
+        cat_id = record.get("category_id")
+        if cat_id:
+            cat = interaction.guild.get_channel(cat_id)
+            if isinstance(cat, CategoryChannel):
+                category = cat
 
         overwrites = {
-            interaction.guild.default_role: discord.PermissionOverwrite(view_channel=False),
-            interaction.user: discord.PermissionOverwrite(
+            interaction.guild.default_role: PermissionOverwrite(view_channel=False),
+            interaction.user: PermissionOverwrite(
                 view_channel=True,
                 send_messages=True,
                 attach_files=True,
                 embed_links=True,
                 read_message_history=True,
             ),
-            interaction.guild.me: discord.PermissionOverwrite(
+        }
+        for role in settings.staff_roles:
+            overwrites[role] = PermissionOverwrite(
                 view_channel=True,
                 send_messages=True,
-                manage_channels=True,
                 manage_messages=True,
-            ),
-        }
-        role_ids = list(settings.get("support_role_ids") or []) + list(option.get("support_role_ids") or [])
-        for role_id in set(role_ids):
-            role = interaction.guild.get_role(int(role_id))
-            if role:
-                overwrites[role] = discord.PermissionOverwrite(
-                    view_channel=True,
-                    send_messages=True,
-                    read_message_history=True,
-                )
+                attach_files=True,
+            )
 
-        channel = await interaction.guild.create_text_channel(
-            name=channel_name or f"ticket-{interaction.user.id}",
-            category=category if isinstance(category, discord.CategoryChannel) else None,
-            overwrites=overwrites,
-            reason=f"Ticket opened by {interaction.user}",
-        )
+        try:
+            channel = await interaction.guild.create_text_channel(
+                name=f"ticket-{interaction.user.name}"[:100],
+                category=category,
+                overwrites=overwrites,
+                topic=(record.get("topic") or "")[:1024] or None,
+                reason=f"Ticket opened by {interaction.user} ({interaction.user.id})",
+            )
+        except HTTPException as exc:
+            return await _ephemeral(
+                interaction,
+                f"Could not create the channel: `{exc.text}`",
+                followup=True,
+            )
 
-        ticket_id = await self.db.fetchval(
+        await self.db.execute(
             """
-            INSERT INTO tickets (guild_id, channel_id, user_id, option_id, panel_id, form_answers, status)
-            VALUES ($1, $2, $3, $4, $5, $6::jsonb, 'open')
-            RETURNING id
+            INSERT INTO tickets.open (id, guild_id, channel_id, user_id)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (id, guild_id, user_id)
+            DO UPDATE SET channel_id = EXCLUDED.channel_id
             """,
+            identifier,
             interaction.guild.id,
             channel.id,
             interaction.user.id,
-            option_id,
-            panel_id,
-            json.dumps(answers or {}),
         )
 
-        greeting = settings.get("greeting_message") or (
-            f"{interaction.user.mention} thanks for opening a ticket.\n"
-            f"**Type:** {option.get('label') or option.get('name')}"
-        )
-        if answers:
-            answer_lines = "\n".join(f"**{key}:** {value}" for key, value in answers.items())
-            greeting += f"\n\n{answer_lines}"
-
-        embed = _ticket_embed(
-            str(option.get("label") or option.get("name")),
-            greeting,
-            footer="A staff member will be with you shortly",
-        )
-        view = TicketControlView(self)
-        self.bot.add_view(view)
-        await channel.send(content=interaction.user.mention, embed=embed, view=view)
-
-        success_embed = _ticket_embed(
-            "Ticket Created",
-            f"Your ticket is ready in {channel.mention}",
-            footer=f"#{ticket_id} · {option.get('label') or option.get('name')}",
-        )
-        if interaction.response.is_done():
-            await interaction.followup.send(embed=success_embed, ephemeral=True)
-        else:
-            await interaction.response.send_message(embed=success_embed, ephemeral=True)
-
-        log_channel_id = settings.get("log_channel_id")
-        if log_channel_id:
-            log_channel = interaction.guild.get_channel(int(log_channel_id))
-            if isinstance(log_channel, discord.TextChannel):
-                log_embed = _ticket_embed(
-                    "Ticket Opened",
-                    f"{interaction.user.mention} opened **{option.get('label')}** in {channel.mention}",
-                    footer=f"Ticket **#{ticket_id}**",
-                )
-                await log_channel.send(embed=log_embed)
-
-    async def _ticket_row(self, channel_id: int) -> dict | None:
-        row = await self.db.fetchrow("SELECT * FROM tickets WHERE channel_id = $1", channel_id)
-        return dict(row) if row else None
-
-    async def claim_ticket(self, interaction: discord.Interaction) -> None:
-        if not interaction.guild or not isinstance(interaction.user, discord.Member) or not interaction.channel:
-            return
-        ticket = await self.db.fetchrow(
-            "SELECT * FROM tickets WHERE channel_id = $1",
-            interaction.channel.id,
-        )
-        if not ticket:
-            await interaction.response.send_message("Ticket not found.", ephemeral=True)
-            return
-        settings = await self._settings(interaction.guild.id)
-        if not settings.get("claim_enabled", True):
-            await interaction.response.send_message("Claiming is disabled.", ephemeral=True)
-            return
-        if not await self._is_staff(interaction.user, settings):
-            await interaction.response.send_message("You cannot claim this ticket.", ephemeral=True)
-            return
-        if ticket["claimed_by"]:
-            await interaction.response.send_message(
-                f"Already claimed by <@{ticket['claimed_by']}>.",
-                ephemeral=True,
+        # welcome message
+        template = record.get("template")
+        if template:
+            content = (
+                template.replace("{user}", interaction.user.mention)
+                .replace("{user.mention}", interaction.user.mention)
+                .replace("{user.name}", interaction.user.display_name)
             )
+            with suppress(HTTPException):
+                await channel.send(content)
+        else:
+            embed = Embed(
+                title="Ticket Opened",
+                description="A staff member will be with you shortly.\nUse the buttons below or wait for assistance.",
+                color=0x5865F2,
+            )
+            with suppress(HTTPException):
+                await channel.send(content=interaction.user.mention, embed=embed)
+
+        await _ephemeral(
+            interaction,
+            f"Your ticket has been created: {channel.mention}",
+            followup=True,
+        )
+        logger.info(
+            "Ticket %s opened by %s in %s",
+            channel.id,
+            interaction.user.id,
+            interaction.guild.id,
+        )
+
+    @Cog.listener("on_guild_channel_delete")
+    async def on_ticket_channel_delete(self, channel: discord.abc.GuildChannel) -> None:
+        if not isinstance(channel, TextChannel):
             return
         await self.db.execute(
-            "UPDATE tickets SET claimed_by = $2 WHERE id = $1",
-            ticket["id"],
-            interaction.user.id,
-        )
-        channel = interaction.guild.get_channel(int(ticket["channel_id"]))
-        if isinstance(channel, discord.TextChannel):
-            await channel.send(f"{interaction.user.mention} claimed this ticket.")
-        await interaction.response.send_message("You claimed this ticket.", ephemeral=True)
-
-    async def close_ticket(self, interaction: discord.Interaction) -> None:
-        if not interaction.guild or not isinstance(interaction.user, discord.Member) or not interaction.channel:
-            return
-        ticket = await self.db.fetchrow(
-            "SELECT * FROM tickets WHERE channel_id = $1",
-            interaction.channel.id,
-        )
-        if not ticket:
-            await interaction.response.send_message("Ticket not found.", ephemeral=True)
-            return
-        settings = await self._settings(interaction.guild.id)
-        is_owner = interaction.user.id == ticket["user_id"]
-        is_staff = await self._is_staff(interaction.user, settings)
-        if not is_staff and not (is_owner and settings.get("creator_can_close", True)):
-            await interaction.response.send_message("You cannot close this ticket.", ephemeral=True)
-            return
-        channel = interaction.guild.get_channel(int(ticket["channel_id"]))
-        if not isinstance(channel, discord.TextChannel):
-            await interaction.response.send_message("Ticket channel is gone.", ephemeral=True)
-            return
-        member = interaction.guild.get_member(int(ticket["user_id"]))
-        if member:
-            await channel.set_permissions(member, send_messages=False)
-        await self.db.execute(
-            "UPDATE tickets SET status = 'closed', closed_at = NOW(), closed_by = $2 WHERE id = $1",
-            ticket["id"],
-            interaction.user.id,
-        )
-        close_message = settings.get("close_message") or "This ticket has been closed."
-        await channel.send(
-            embed=_ticket_embed("Ticket Closed", close_message, footer=f"Closed by {interaction.user.display_name}")
-        )
-        await interaction.response.send_message(
-            embed=_ticket_embed("Done", "Ticket has been closed."),
-            ephemeral=True,
+            "DELETE FROM tickets.open WHERE channel_id = $1", channel.id
         )
 
-    async def transcript_ticket(self, interaction: discord.Interaction) -> None:
-        if not interaction.guild or not isinstance(interaction.user, discord.Member) or not interaction.channel:
-            return
-        ticket = await self.db.fetchrow(
-            "SELECT * FROM tickets WHERE channel_id = $1",
-            interaction.channel.id,
-        )
-        if not ticket:
-            await interaction.response.send_message("Ticket not found.", ephemeral=True)
-            return
-        settings = await self._settings(interaction.guild.id)
-        if not await self._is_staff(interaction.user, settings):
-            await interaction.response.send_message("You cannot save transcripts for this ticket.", ephemeral=True)
-            return
-        channel = interaction.guild.get_channel(int(ticket["channel_id"]))
-        if not isinstance(channel, discord.TextChannel):
-            await interaction.response.send_message("Ticket channel is gone.", ephemeral=True)
-            return
-        await interaction.response.defer(ephemeral=True)
-        await self._publish_transcript(
-            interaction.guild,
-            channel,
-            dict(ticket),
-            settings,
-            closed_by=interaction.user,
-        )
-        await interaction.followup.send(
-            embed=_ticket_embed("Transcript Saved", "HTML transcript posted to the log channel."),
-            ephemeral=True,
+    # ── command group ────────────────────────────────────────
+
+    @group(
+        name="ticket",
+        aliases=["tickets", "tix"],
+        description="Configure and manage the ticket system",
+        invoke_without_command=True,
+        example=",ticket",
+    )
+    @has_permissions(manage_channels=True)
+    async def ticket(self, ctx) -> Message:
+        return await ctx.send_help()
+
+    # ── panel ────────────────────────────────────────────────
+
+    @ticket.command(
+        name="panel",
+        description="Set an existing message as the ticket panel",
+        example=",ticket panel 123456789012345678",
+        usage="<message id | message link>",
+    )
+    @has_permissions(manage_channels=True)
+    async def ticket_panel(self, ctx, message: Message):
+        if message.author.id != self.bot.user.id:
+            return await ctx.warn("The panel message must be sent by me so I can edit its components.")
+
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        await settings.upsert(channel_id=message.channel.id, message_id=message.id)
+        return await ctx.success(
+            f"Panel set to [this message]({message.jump_url}).\n"
+            f"Add controls with `{ctx.clean_prefix}ticket button` or `{ctx.clean_prefix}ticket dropdown`."
         )
 
-    async def delete_ticket(self, interaction: discord.Interaction) -> None:
-        if not interaction.guild or not isinstance(interaction.user, discord.Member) or not interaction.channel:
-            return
-        ticket = await self.db.fetchrow(
-            "SELECT * FROM tickets WHERE channel_id = $1",
-            interaction.channel.id,
-        )
-        if not ticket:
-            await interaction.response.send_message("Ticket not found.", ephemeral=True)
-            return
-        settings = await self._settings(interaction.guild.id)
-        if not await self._is_staff(interaction.user, settings):
-            await interaction.response.send_message("You cannot delete this ticket.", ephemeral=True)
-            return
-        channel = interaction.guild.get_channel(int(ticket["channel_id"]))
-        if isinstance(channel, discord.TextChannel):
-            await self._publish_transcript(
-                interaction.guild,
-                channel,
-                ticket,
-                settings,
-                closed_by=interaction.user,
-            )
-            await channel.delete(reason=f"Ticket deleted by {interaction.user}")
-        await self.db.execute("DELETE FROM tickets WHERE id = $1", ticket["id"])
-        done_embed = _ticket_embed("Deleted", "Ticket deleted and transcript saved.")
-        if interaction.response.is_done():
-            await interaction.followup.send(embed=done_embed, ephemeral=True)
-        else:
-            await interaction.response.send_message(embed=done_embed, ephemeral=True)
+    # ── inactivity ───────────────────────────────────────────
 
-    async def _build_html_transcript(self, channel: discord.TextChannel) -> str:
+    @ticket.group(
+        name="inactivity",
+        aliases=["timeout", "idle"],
+        description="Automatically close tickets after a period of silence",
+        invoke_without_command=True,
+        example=",ticket inactivity 2h",
+    )
+    @has_permissions(manage_channels=True)
+    async def ticket_inactivity(self, ctx, *, duration: str = None):
+        if duration is None:
+            return await ctx.send_help()
+
+        # simple parser: 30m, 2h, 1d
+        duration = duration.lower().strip()
+        seconds = 0
         try:
-            import chat_exporter
-        except ImportError:
-            lines = []
-            async for message in channel.history(limit=500, oldest_first=True):
-                lines.append(f"[{message.created_at:%Y-%m-%d %H:%M}] {message.author}: {message.content}")
-            return f"<html><body><pre>{'&#10;'.join(lines) or 'No messages.'}</pre></body></html>"
+            if duration.endswith("m"):
+                seconds = int(duration[:-1]) * 60
+            elif duration.endswith("h"):
+                seconds = int(duration[:-1]) * 3600
+            elif duration.endswith("d"):
+                seconds = int(duration[:-1]) * 86400
+            else:
+                seconds = int(duration)
+        except ValueError:
+            return await ctx.warn("Use a duration like `30m`, `2h` or `1d` (minimum 30 minutes).")
 
-        return await chat_exporter.export(
-            channel,
-            limit=500,
-            tz_info="UTC",
-            bot=self.bot,
+        if seconds < 1800:
+            return await ctx.warn("Inactivity timeout must be at least **30 minutes**.")
+
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        await settings.upsert(inactivity_timeout=seconds)
+        human = f"{seconds // 3600}h {(seconds % 3600) // 60}m" if seconds >= 3600 else f"{seconds // 60}m"
+        return await ctx.success(f"Tickets will auto-close after **{human}** of inactivity.")
+
+    @ticket_inactivity.command(
+        name="disable",
+        aliases=["off", "remove"],
+        description="Turn off automatic inactivity closing",
+    )
+    @has_permissions(manage_channels=True)
+    async def ticket_inactivity_disable(self, ctx):
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        await settings.upsert(inactivity_timeout=None)
+        return await ctx.success("Inactivity auto-close has been disabled.")
+
+    # ── limit ────────────────────────────────────────────────
+
+    @ticket.command(
+        name="limit",
+        aliases=["max"],
+        description="Set the maximum number of open tickets allowed at once",
+        example=",ticket limit 25",
+        usage="<0-200>",
+    )
+    @has_permissions(manage_channels=True)
+    async def ticket_limit(self, ctx, amount: int):
+        if amount < 0 or amount > 200:
+            return await ctx.warn("Limit must be between **0** (unlimited) and **200**.")
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        await settings.upsert(max_tickets=amount if amount > 0 else None)
+        if amount == 0:
+            return await ctx.success("Open-ticket limit removed.")
+        return await ctx.success(f"Maximum open tickets set to **{amount}**.")
+
+    # ── staff roles ──────────────────────────────────────────
+
+    @ticket.group(
+        name="staff",
+        aliases=["support"],
+        description="Manage roles that can view and control tickets",
+        invoke_without_command=True,
+        example=",ticket staff @Support",
+    )
+    @has_permissions(manage_channels=True)
+    async def ticket_staff(self, ctx, role: Role = None):
+        if role is None:
+            return await ctx.send_help()
+
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        ids = list(settings.record.get("staff_role_ids") or [])
+        if role.id in ids:
+            ids.remove(role.id)
+            await settings.upsert(staff_role_ids=ids)
+            return await ctx.success(f"{role.mention} can no longer manage tickets.")
+        ids.append(role.id)
+        await settings.upsert(staff_role_ids=ids)
+        return await ctx.success(f"{role.mention} can now manage tickets.")
+
+    @ticket_staff.command(
+        name="list",
+        description="Show all ticket staff roles",
+    )
+    @has_permissions(manage_channels=True)
+    async def ticket_staff_list(self, ctx):
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        roles = settings.staff_roles
+        if not roles:
+            return await ctx.warn("No staff roles configured.")
+        embed = Embed(
+            title="Ticket Staff Roles",
+            description="\n".join(f"{r.mention} (`{r.id}`)") for r in roles),
+            color=0x5865F2,
         )
+        return await ctx.send(embed=embed)
 
-    async def _publish_transcript(
+    # ── blacklist ────────────────────────────────────────────
+
+    @ticket.group(
+        name="blacklist",
+        aliases=["block"],
+        description="Prevent members or roles from opening tickets",
+        invoke_without_command=True,
+        example=",ticket blacklist @user",
+    )
+    @has_permissions(manage_channels=True)
+    async def ticket_blacklist(self, ctx, target: Union[Member, Role] = None):
+        if target is None:
+            return await ctx.send_help()
+
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        ids = list(settings.record.get("blacklisted_ids") or [])
+        if target.id in ids:
+            ids.remove(target.id)
+            await settings.upsert(blacklisted_ids=ids)
+            return await ctx.success(f"{target.mention} can open tickets again.")
+        ids.append(target.id)
+        await settings.upsert(blacklisted_ids=ids)
+        return await ctx.success(f"{target.mention} is now blocked from opening tickets.")
+
+    @ticket_blacklist.command(
+        name="list",
+        description="Show everyone currently blacklisted",
+    )
+    @has_permissions(manage_channels=True)
+    async def ticket_blacklist_list(self, ctx):
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        items = settings.blacklisted
+        if not items:
+            return await ctx.warn("The blacklist is empty.")
+        embed = Embed(
+            title="Ticket Blacklist",
+            description="\n".join(f"{t.mention} (`{t.id}`)") for t in items),
+            color=0x5865F2,
+        )
+        return await ctx.send(embed=embed)
+
+    # ── transcript destinations ──────────────────────────────
+
+    @ticket.group(
+        name="transcript",
+        aliases=["logs"],
+        description="Where closed-ticket transcripts are sent",
+        invoke_without_command=True,
+    )
+    @has_permissions(manage_channels=True)
+    async def ticket_transcript(self, ctx):
+        return await ctx.send_help()
+
+    @ticket_transcript.command(
+        name="add",
+        description="Add a channel (or DM) as a transcript destination",
+        example=",ticket transcript add #ticket-logs",
+        usage="<channel | dm>",
+    )
+    @has_permissions(manage_channels=True)
+    async def ticket_transcript_add(self, ctx, target: Union[TextChannel, str]):
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        dests = list(settings.record.get("transcript_destinations") or [])
+        if isinstance(target, str) and target.lower() == "dm":
+            value = "dm"
+            label = "the ticket opener’s DMs"
+        elif isinstance(target, TextChannel):
+            value = str(target.id)
+            label = target.mention
+        else:
+            return await ctx.warn("Provide a text channel or the word `dm`.")
+
+        if value in dests:
+            return await ctx.warn(f"{label} is already a transcript destination.")
+        dests.append(value)
+        await settings.upsert(transcript_destinations=dests)
+        return await ctx.success(f"Transcripts will also be sent to {label}.")
+
+    @ticket_transcript.command(
+        name="remove",
+        description="Remove a transcript destination",
+        example=",ticket transcript remove #ticket-logs",
+    )
+    @has_permissions(manage_channels=True)
+    async def ticket_transcript_remove(self, ctx, target: Union[TextChannel, str]):
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        dests = list(settings.record.get("transcript_destinations") or [])
+        if isinstance(target, str) and target.lower() == "dm":
+            value = "dm"
+            label = "DM"
+        elif isinstance(target, TextChannel):
+            value = str(target.id)
+            label = target.mention
+        else:
+            return await ctx.warn("Provide a text channel or `dm`.")
+
+        if value not in dests:
+            return await ctx.warn(f"{label} is not a transcript destination.")
+        dests.remove(value)
+        await settings.upsert(transcript_destinations=dests)
+        return await ctx.success(f"Removed {label} from transcript destinations.")
+
+    @ticket_transcript.command(
+        name="list",
+        description="Show current transcript destinations",
+    )
+    @has_permissions(manage_channels=True)
+    async def ticket_transcript_list(self, ctx):
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        dests = settings.transcript_destinations
+        if not dests:
+            return await ctx.warn("No transcript destinations configured.")
+        lines = []
+        for d in dests:
+            if d == "dm":
+                lines.append("• Ticket opener’s DMs")
+            else:
+                lines.append(f"• {d.mention}")
+        embed = Embed(title="Transcript Destinations", description="\n".join(lines), color=0x5865F2)
+        return await ctx.send(embed=embed)
+
+    # ── button management ────────────────────────────────────
+
+    @ticket.group(
+        name="button",
+        aliases=["btn"],
+        description="Add or remove buttons on the ticket panel",
+        invoke_without_command=True,
+    )
+    @has_permissions(manage_channels=True)
+    async def ticket_button(self, ctx):
+        return await ctx.send_help()
+
+    @ticket_button.command(
+        name="add",
+        description="Add a button that opens a ticket",
+        example=",ticket button add support --style green --emoji 🎫",
+        usage="<identifier> [label] [--style <color>] [--emoji <emoji>] [--category <category>] [--topic <text>]",
+    )
+    @has_permissions(manage_channels=True)
+    async def ticket_button_add(
         self,
-        guild: discord.Guild,
-        channel: discord.TextChannel,
-        ticket: dict,
-        settings: dict,
+        ctx,
+        identifier: str,
+        label: str = "Open Ticket",
         *,
-        closed_by: discord.abc.User,
-    ) -> None:
-        html = await self._build_html_transcript(channel)
-        filename = f"ticket-{ticket['id']}-{channel.id}.html"
-        transcript_channel_id = settings.get("transcript_channel_id") or settings.get("log_channel_id")
-        if not transcript_channel_id:
-            return
+        style: str = "green",
+        emoji: Optional[str] = None,
+        category: Optional[CategoryChannel] = None,
+        topic: Optional[str] = None,
+    ):
+        identifier = identifier.lower().replace(" ", "-")[:32]
+        style = style.lower()
+        if style not in STYLE_MAP:
+            return await ctx.warn("Style must be one of: blurple, grey, green, red.")
 
-        log_channel = guild.get_channel(int(transcript_channel_id))
-        if not isinstance(log_channel, discord.TextChannel):
-            return
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        message = await settings.fetch_message()
+        if not message:
+            return await ctx.warn(
+                f"Set a panel first with `{ctx.clean_prefix}ticket panel <message>`."
+            )
 
-        opener = guild.get_member(int(ticket["user_id"]))
-        opener_label = opener.mention if opener else f"`{ticket['user_id']}`"
-        embed = _ticket_embed(
-            "Ticket Transcript",
-            f"**Opener:** {opener_label}\n**Channel:** `#{channel.name}`\n**Closed by:** {closed_by.mention}",
-            footer=f"Ticket **#{ticket['id']}**",
-        )
-        file = discord.File(io.BytesIO(html.encode("utf-8")), filename=filename)
-        await log_channel.send(embed=embed, file=file)
+        # persist
         await self.db.execute(
             """
-            INSERT INTO ticket_transcripts (guild_id, ticket_id, channel_id, created_by, filename)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO tickets.button (id, guild_id, category_id, topic, style, emoji, label)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (guild_id, id) DO UPDATE SET
+                category_id = EXCLUDED.category_id,
+                topic       = EXCLUDED.topic,
+                style       = EXCLUDED.style,
+                emoji       = EXCLUDED.emoji,
+                label       = EXCLUDED.label
             """,
-            guild.id,
-            ticket["id"],
-            channel.id,
-            closed_by.id,
-            filename,
-        )
-
-    @group(name="tickets", aliases=["ticket"], invoke_without_command=True, guild_only=True)
-    @has_permissions(manage_guild=True)
-    async def tickets(self, ctx: Context) -> None:
-        if ctx.invoked_subcommand is None:
-            await ctx.send_help(ctx.command)
-
-    @tickets.command(name="setup")
-    async def tickets_setup(
-        self,
-        ctx: Context,
-        category: discord.CategoryChannel,
-        log_channel: discord.TextChannel = None,
-    ) -> None:
-        await self.db.execute(
-            """
-            INSERT INTO ticket_settings (guild_id, category_id, log_channel_id)
-            VALUES ($1, $2, $3)
-            ON CONFLICT (guild_id)
-            DO UPDATE SET category_id = EXCLUDED.category_id, log_channel_id = COALESCE(EXCLUDED.log_channel_id, ticket_settings.log_channel_id)
-            """,
+            identifier,
             ctx.guild.id,
-            category.id,
-            log_channel.id if log_channel else None,
+            category.id if category else None,
+            topic,
+            style,
+            emoji,
+            label[:80],
         )
-        await ctx.success(f"Ticket system configured with category {category.mention}.")
 
-    @tickets.group(name="panels", invoke_without_command=True)
-    async def tickets_panels(self, ctx: Context) -> None:
-        if ctx.invoked_subcommand is None:
-            await ctx.send_help(ctx.command)
+        # rebuild view from current components + new button
+        view = View(timeout=None)
+        # keep existing non-ticket buttons if any
+        for row in message.components:
+            for child in row.children:
+                if getattr(child, "custom_id", None) and str(child.custom_id).startswith("ticket.create"):
+                    continue  # will re-add from DB
+                # we only manage our own buttons; skip others for safety
+        # load all buttons for this guild
+        buttons = await self.db.fetch(
+            "SELECT * FROM tickets.button WHERE guild_id = $1", ctx.guild.id
+        )
+        for b in buttons:
+            btn = Button(
+                style=STYLE_MAP.get(b["style"], ButtonStyle.success),
+                label=b["label"] or "Open Ticket",
+                emoji=b["emoji"],
+                custom_id=f"ticket.create:{b['id']}",
+            )
+            view.add_item(btn)
 
-    @tickets_panels.command(name="add")
-    async def tickets_panels_add(
-        self,
-        ctx: Context,
-        name: str,
-        channel: discord.TextChannel,
-        panel_type: str = "buttons",
-    ) -> None:
-        panel_type = panel_type.lower()
-        if panel_type not in {"buttons", "dropdown"}:
-            return await ctx.warn("Panel type must be `buttons` or `dropdown`.")
-        row = await self.db.fetchrow(
-            """
-            INSERT INTO ticket_panels (guild_id, name, channel_id, panel_type, embed_script)
-            VALUES ($1, $2, $3, $4, $5)
-            RETURNING *
-            """,
+        # also keep any dropdowns
+        dropdowns = await self.db.fetch(
+            "SELECT * FROM tickets.dropdown WHERE guild_id = $1", ctx.guild.id
+        )
+        for d in dropdowns:
+            opts = []
+            for o in d["options"] or []:
+                opts.append(
+                    SelectOption(
+                        label=o.get("label", "Option")[:100],
+                        value=o.get("id", "opt"),
+                        description=(o.get("description") or "")[:100] or None,
+                        emoji=o.get("emoji"),
+                    )
+                )
+            if opts:
+                select = Select(
+                    placeholder=d.get("placeholder") or "Choose a category…",
+                    options=opts,
+                    custom_id=f"ticket.create:{d['id']}",
+                )
+                view.add_item(select)
+
+        try:
+            await message.edit(view=view)
+        except HTTPException as exc:
+            return await ctx.warn(f"Could not update the panel: `{exc.text}`")
+
+        return await ctx.success(
+            f"Button **{label}** (`{identifier}`) added to the panel."
+        )
+
+    @ticket_button.command(
+        name="remove",
+        description="Remove a button from the panel",
+        example=",ticket button remove support",
+        usage="<identifier>",
+    )
+    @has_permissions(manage_channels=True)
+    async def ticket_button_remove(self, ctx, identifier: str):
+        identifier = identifier.lower().replace(" ", "-")
+        deleted = await self.db.execute(
+            "DELETE FROM tickets.button WHERE guild_id = $1 AND id = $2",
             ctx.guild.id,
-            name.lower(),
-            channel.id,
-            panel_type,
-            DEFAULT_PANEL_SCRIPT,
+            identifier,
         )
-        await self._send_panel_message(ctx.guild, dict(row), [])
-        await ctx.success(f"Created panel **`{name}`** in {channel.mention}. Add options with `tickets options add`.")
+        if deleted == "DELETE 0":
+            return await ctx.warn(f"No button with id `{identifier}` found.")
 
-    @tickets_panels.command(name="list")
-    async def tickets_panels_list(self, ctx: Context) -> None:
+        # refresh panel
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        message = await settings.fetch_message()
+        if message:
+            await self._refresh_panel(message, ctx.guild.id)
+
+        return await ctx.success(f"Button `{identifier}` removed.")
+
+    @ticket_button.command(
+        name="list",
+        description="List all buttons on the panel",
+    )
+    @has_permissions(manage_channels=True)
+    async def ticket_button_list(self, ctx):
         rows = await self.db.fetch(
-            "SELECT name, channel_id, panel_type, message_id FROM ticket_panels WHERE guild_id = $1 ORDER BY name",
+            "SELECT id, label, style, emoji FROM tickets.button WHERE guild_id = $1",
             ctx.guild.id,
         )
         if not rows:
-            return await ctx.warn("No ticket panels configured.")
+            return await ctx.warn("No buttons configured.")
         lines = [
-            f"**`{row['name']}`** — <#{row['channel_id']}> ({row['panel_type']})"
-            + (f" • [message](https://discord.com/channels/{ctx.guild.id}/{row['channel_id']}/{row['message_id']})" if row["message_id"] else "")
-            for row in rows
+            f"**{r['label']}** (`{r['id']}`) — {r['style']}"
+            + (f" {r['emoji']}" if r["emoji"] else "")
+            for r in rows
         ]
-        await ctx.send(embed=discord.Embed(
-            title="Ticket Panels",
-            description=body(*lines),
-            color=color.base,
-            timestamp=discord.utils.utcnow(),
-        ))
+        embed = Embed(title="Ticket Buttons", description="\n".join(lines), color=0x5865F2)
+        return await ctx.send(embed=embed)
 
-    @tickets_panels.command(name="remove", aliases=["delete"])
-    async def tickets_panels_remove(self, ctx: Context, name: str) -> None:
-        row = await self.db.fetchrow(
-            "DELETE FROM ticket_panels WHERE guild_id = $1 AND name = $2 RETURNING message_id, channel_id",
+    # ── dropdown management (simplified but complete) ────────
+
+    @ticket.group(
+        name="dropdown",
+        aliases=["select", "menu"],
+        description="Manage dropdown menus on the ticket panel",
+        invoke_without_command=True,
+    )
+    @has_permissions(manage_channels=True)
+    async def ticket_dropdown(self, ctx):
+        return await ctx.send_help()
+
+    @ticket_dropdown.command(
+        name="create",
+        description="Create a new dropdown on the panel",
+        example=",ticket dropdown create categories",
+        usage="<identifier> [placeholder]",
+    )
+    @has_permissions(manage_channels=True)
+    async def ticket_dropdown_create(
+        self, ctx, identifier: str, *, placeholder: str = "Select a category…"
+    ):
+        identifier = identifier.lower().replace(" ", "-")[:32]
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        message = await settings.fetch_message()
+        if not message:
+            return await ctx.warn("Set a panel first with `,ticket panel`.")
+
+        await self.db.execute(
+            """
+            INSERT INTO tickets.dropdown (id, guild_id, placeholder, options)
+            VALUES ($1, $2, $3, '[]'::jsonb)
+            ON CONFLICT (guild_id, id) DO UPDATE SET placeholder = EXCLUDED.placeholder
+            """,
+            identifier,
             ctx.guild.id,
-            name.lower(),
+            placeholder[:100],
+        )
+        await self._refresh_panel(message, ctx.guild.id)
+        return await ctx.success(
+            f"Dropdown `{identifier}` created. Add options with "
+            f"`{ctx.clean_prefix}ticket dropdown option {identifier} <opt-id> <label>`."
+        )
+
+    @ticket_dropdown.command(
+        name="option",
+        description="Add an option to a dropdown",
+        example=",ticket dropdown option categories billing Billing Support",
+        usage="<dropdown-id> <option-id> <label> [--emoji] [--category] [--topic]",
+    )
+    @has_permissions(manage_channels=True)
+    async def ticket_dropdown_option(
+        self,
+        ctx,
+        dropdown_id: str,
+        option_id: str,
+        *,
+        label: str,
+        emoji: Optional[str] = None,
+        category: Optional[CategoryChannel] = None,
+        topic: Optional[str] = None,
+    ):
+        dropdown_id = dropdown_id.lower().replace(" ", "-")
+        option_id = option_id.lower().replace(" ", "-")[:32]
+
+        row = await self.db.fetchrow(
+            "SELECT options FROM tickets.dropdown WHERE guild_id = $1 AND id = $2",
+            ctx.guild.id,
+            dropdown_id,
         )
         if not row:
-            return await ctx.warn(f"No panel named **`{name}`**.")
-        if row["message_id"]:
-            channel = ctx.guild.get_channel(int(row["channel_id"]))
-            if isinstance(channel, discord.TextChannel):
-                with contextlib.suppress(discord.HTTPException):
-                    message = await channel.fetch_message(int(row["message_id"]))
-                    await message.delete()
-        await ctx.success(f"Removed panel **`{name}`**.")
+            return await ctx.warn(f"Dropdown `{dropdown_id}` does not exist.")
 
-    @tickets.command(name="resend")
-    async def tickets_resend(self, ctx: Context, name: str) -> None:
-        panel = await self.db.fetchrow(
-            "SELECT * FROM ticket_panels WHERE guild_id = $1 AND name = $2",
-            ctx.guild.id,
-            name.lower(),
+        options = list(row["options"] or [])
+        # replace if exists
+        options = [o for o in options if o.get("id") != option_id]
+        options.append(
+            {
+                "id": option_id,
+                "label": label[:100],
+                "emoji": emoji,
+                "description": None,
+                "category_id": category.id if category else None,
+                "template": None,
+                "topic": topic,
+            }
         )
-        if not panel:
-            return await ctx.warn(f"No panel named **`{name}`**.")
-        options = await self.db.fetch(
-            "SELECT * FROM ticket_options WHERE panel_id = $1 AND active = TRUE ORDER BY position, id",
-            panel["id"],
-        )
-        if not options:
-            return await ctx.warn("That panel has no active options.")
-        if panel["message_id"]:
-            channel = ctx.guild.get_channel(int(panel["channel_id"]))
-            if isinstance(channel, discord.TextChannel):
-                with contextlib.suppress(discord.HTTPException):
-                    message = await channel.fetch_message(int(panel["message_id"]))
-                    await message.delete()
-        await self._send_panel_message(ctx.guild, dict(panel), [dict(row) for row in options])
-        await ctx.success(f"Resent panel **`{name}`**.")
+        if len(options) > 25:
+            return await ctx.warn("A dropdown can have at most 25 options.")
 
-    @tickets.group(name="options", invoke_without_command=True)
-    async def tickets_options(self, ctx: Context) -> None:
-        if ctx.invoked_subcommand is None:
-            await ctx.send_help(ctx.command)
-
-    @tickets_options.command(name="add")
-    async def tickets_options_add(
-        self,
-        ctx: Context,
-        panel: str,
-        name: str,
-        label: str,
-        emoji: str = None,
-        *,
-        description: str = None,
-    ) -> None:
-        panel_row = await self.db.fetchrow(
-            "SELECT id FROM ticket_panels WHERE guild_id = $1 AND name = $2",
-            ctx.guild.id,
-            panel.lower(),
-        )
-        if not panel_row:
-            return await ctx.warn(f"No panel named **`{panel}`**.")
         await self.db.execute(
-            """
-            INSERT INTO ticket_options (guild_id, panel_id, name, label, emoji, description)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            """,
+            "UPDATE tickets.dropdown SET options = $1::jsonb WHERE guild_id = $2 AND id = $3",
+            json.dumps(options),
             ctx.guild.id,
-            panel_row["id"],
-            name.lower(),
-            label,
-            emoji,
-            description,
+            dropdown_id,
         )
-        await self.tickets_resend(ctx, panel)
 
-    @tickets_options.command(name="remove", aliases=["delete"])
-    async def tickets_options_remove(self, ctx: Context, panel: str, name: str) -> None:
-        panel_row = await self.db.fetchrow(
-            "SELECT id FROM ticket_panels WHERE guild_id = $1 AND name = $2",
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        message = await settings.fetch_message()
+        if message:
+            await self._refresh_panel(message, ctx.guild.id)
+
+        return await ctx.success(f"Option **{label}** added to `{dropdown_id}`.")
+
+    @ticket_dropdown.command(
+        name="remove",
+        description="Remove a dropdown entirely",
+        example=",ticket dropdown remove categories",
+    )
+    @has_permissions(manage_channels=True)
+    async def ticket_dropdown_remove(self, ctx, identifier: str):
+        identifier = identifier.lower().replace(" ", "-")
+        deleted = await self.db.execute(
+            "DELETE FROM tickets.dropdown WHERE guild_id = $1 AND id = $2",
             ctx.guild.id,
-            panel.lower(),
+            identifier,
         )
-        if not panel_row:
-            return await ctx.warn(f"No panel named **`{panel}`**.")
-        result = await self.db.execute(
-            "DELETE FROM ticket_options WHERE panel_id = $1 AND name = $2",
-            panel_row["id"],
-            name.lower(),
-        )
-        if result == "DELETE 0":
-            return await ctx.warn(f"No option named **`{name}`** on that panel.")
-        await self.tickets_resend(ctx, panel)
+        if deleted == "DELETE 0":
+            return await ctx.warn(f"No dropdown `{identifier}` found.")
 
-    @tickets_options.command(name="list")
-    async def tickets_options_list(self, ctx: Context, panel: str) -> None:
-        panel_row = await self.db.fetchrow(
-            "SELECT id FROM ticket_panels WHERE guild_id = $1 AND name = $2",
-            ctx.guild.id,
-            panel.lower(),
-        )
-        if not panel_row:
-            return await ctx.warn(f"No panel named **`{panel}`**.")
-        rows = await self.db.fetch(
-            "SELECT name, label, emoji, description, active FROM ticket_options WHERE panel_id = $1 ORDER BY position, id",
-            panel_row["id"],
-        )
-        if not rows:
-            return await ctx.warn("That panel has no options.")
-        lines = [
-            f"**`{row['name']}`** — {row['label']}"
-            + (f" {row['emoji']}" if row['emoji'] else "")
-            + (" `(inactive)`" if not row["active"] else "")
-            for row in rows
-        ]
-        await ctx.send(embed=discord.Embed(
-            title=f"Options for {panel}",
-            description=body(*lines),
-            color=color.base,
-            timestamp=discord.utils.utcnow(),
-        ))
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        message = await settings.fetch_message()
+        if message:
+            await self._refresh_panel(message, ctx.guild.id)
+        return await ctx.success(f"Dropdown `{identifier}` removed.")
 
-    @tickets.group(name="forms", invoke_without_command=True)
-    async def tickets_forms(self, ctx: Context) -> None:
-        if ctx.invoked_subcommand is None:
-            await ctx.send_help(ctx.command)
+    # ── in-ticket staff commands ─────────────────────────────
 
-    @tickets_forms.command(name="create", aliases=["add"])
-    async def tickets_forms_create(self, ctx: Context, name: str, *, questions: str) -> None:
-        parsed = []
-        for index, question in enumerate(questions.split(";"), start=1):
-            label = question.strip()
-            if not label:
-                continue
-            parsed.append({"key": f"q{index}", "label": label, "required": True})
-        if not parsed:
-            return await ctx.warn("Provide at least one question separated by `;`.")
-        await self.db.execute(
-            """
-            INSERT INTO ticket_forms (guild_id, name, questions)
-            VALUES ($1, $2, $3::jsonb)
-            ON CONFLICT (guild_id, name)
-            DO UPDATE SET questions = EXCLUDED.questions
-            """,
-            ctx.guild.id,
-            name.lower(),
-            json.dumps(parsed),
-        )
-        await ctx.success(f"Saved form **`{name}`** with **{len(parsed)}** question(s).")
-
-    @tickets_forms.command(name="list")
-    async def tickets_forms_list(self, ctx: Context) -> None:
-        rows = await self.db.fetch(
-            "SELECT name, questions FROM ticket_forms WHERE guild_id = $1 ORDER BY name",
-            ctx.guild.id,
-        )
-        if not rows:
-            return await ctx.warn("No ticket forms saved.")
-        lines = []
-        for row in rows:
-            questions = row["questions"]
-            if isinstance(questions, str):
-                questions = json.loads(questions)
-            lines.append(f"**`{row['name']}`** — {len(questions)} question(s)")
-        await ctx.send(embed=discord.Embed(
-            title="Ticket Forms",
-            description=body(*lines),
-            color=color.base,
-            timestamp=discord.utils.utcnow(),
-        ))
-
-    @tickets_forms.command(name="remove", aliases=["delete"])
-    async def tickets_forms_remove(self, ctx: Context, name: str) -> None:
-        result = await self.db.execute(
-            "DELETE FROM ticket_forms WHERE guild_id = $1 AND name = $2",
-            ctx.guild.id,
-            name.lower(),
-        )
-        if result == "DELETE 0":
-            return await ctx.warn(f"No form named **`{name}`**.")
-        await ctx.success(f"Removed form **`{name}`**.")
-
-    @tickets.command(name="claim")
-    async def tickets_claim(self, ctx: Context) -> None:
-        ticket = await self._ticket_row(ctx.channel.id)
-        if not ticket:
-            return await ctx.warn("This is not a ticket channel.")
-        interaction = _FakeInteraction(ctx)
-        await self.claim_ticket(interaction)
-
-    @tickets.command(name="close")
-    async def tickets_close(self, ctx: Context, *, reason: str = None) -> None:
-        ticket = await self._ticket_row(ctx.channel.id)
-        if not ticket:
-            return await ctx.warn("This is not a ticket channel.")
-        interaction = _FakeInteraction(ctx)
-        await self.close_ticket(interaction)
-        if reason:
-            await ctx.channel.send(f"**Reason:** {reason}")
-
-    @tickets.command(name="reopen")
-    async def tickets_reopen(self, ctx: Context) -> None:
-        ticket = await self._ticket_row(ctx.channel.id)
-        if not ticket:
-            return await ctx.warn("This is not a ticket channel.")
-        settings = await self._settings(ctx.guild.id)
-        if not await self._is_staff(ctx.author, settings):
-            return await ctx.warn("You cannot reopen this ticket.")
-        member = ctx.guild.get_member(int(ticket["user_id"]))
-        if member:
-            await ctx.channel.set_permissions(
-                member,
-                view_channel=True,
-                send_messages=True,
-                attach_files=True,
-                embed_links=True,
-                read_message_history=True,
-            )
-        await self.db.execute(
-            "UPDATE tickets SET status = 'open', closed_at = NULL, closed_by = NULL WHERE id = $1",
-            ticket["id"],
-        )
-        await ctx.success("Reopened this ticket.")
-
-    @tickets.command(name="transcript")
-    async def tickets_transcript_cmd(self, ctx: Context) -> None:
-        ticket = await self._ticket_row(ctx.channel.id)
-        if not ticket:
-            return await ctx.warn("This is not a ticket channel.")
-        settings = await self._settings(ctx.guild.id)
-        if not await self._is_staff(ctx.author, settings):
-            return await ctx.warn("You cannot save transcripts for this ticket.")
-        channel = ctx.guild.get_channel(int(ticket["channel_id"]))
-        if not isinstance(channel, discord.TextChannel):
-            return await ctx.warn("Ticket channel is gone.")
-        await self._publish_transcript(
-            ctx.guild,
-            channel,
-            ticket,
-            settings,
-            closed_by=ctx.author,
-        )
-        await ctx.success("HTML transcript saved to the log channel.")
-
-    @tickets.command(name="delete")
-    async def tickets_delete(self, ctx: Context) -> None:
-        ticket = await self._ticket_row(ctx.channel.id)
-        if not ticket:
-            return await ctx.warn("This is not a ticket channel.")
-        interaction = _FakeInteraction(ctx)
-        await self.delete_ticket(interaction)
-
-    @tickets.command(name="add")
-    async def tickets_add(self, ctx: Context, member: discord.Member) -> None:
-        ticket = await self._ticket_row(ctx.channel.id)
-        if not ticket:
-            return await ctx.warn("This is not a ticket channel.")
+    @ticket.command(
+        name="add",
+        aliases=["permit", "allow"],
+        description="Add a member or role to the current ticket",
+        example=",ticket add @user",
+    )
+    @in_ticket()
+    @staff()
+    async def ticket_add(self, ctx, target: Union[Member, Role]):
         await ctx.channel.set_permissions(
-            member,
+            target,
             view_channel=True,
             send_messages=True,
-            read_message_history=True,
+            attach_files=True,
+            reason=f"Added by {ctx.author} ({ctx.author.id})",
         )
-        await ctx.success(f"Added {member.mention} to this ticket.")
+        return await ctx.success(f"Added {target.mention} to the ticket.")
 
-    @tickets.command(name="remove")
-    async def tickets_remove(self, ctx: Context, member: discord.Member) -> None:
-        ticket = await self._ticket_row(ctx.channel.id)
-        if not ticket:
-            return await ctx.warn("This is not a ticket channel.")
-        await ctx.channel.set_permissions(member, overwrite=None)
-        await ctx.success(f"Removed {member.mention} from this ticket.")
+    @ticket.command(
+        name="remove",
+        aliases=["deny", "hide"],
+        description="Remove a member or role from the current ticket",
+        example=",ticket remove @user",
+    )
+    @in_ticket()
+    @staff()
+    async def ticket_remove(self, ctx, target: Union[Member, Role]):
+        await ctx.channel.set_permissions(
+            target,
+            overwrite=None,
+            reason=f"Removed by {ctx.author} ({ctx.author.id})",
+        )
+        return await ctx.success(f"Removed {target.mention} from the ticket.")
 
-    @tickets.group(name="blacklist", invoke_without_command=True)
-    async def tickets_blacklist(self, ctx: Context, member: discord.Member = None) -> None:
-        if member is None:
-            return await ctx.send_help(ctx.command)
-        settings = await self._settings(ctx.guild.id)
-        ids = list(settings.get("blacklist_user_ids") or [])
-        if member.id in ids:
-            return await ctx.warn(f"{member.mention} is already blacklisted.")
-        ids.append(member.id)
+    @ticket.command(
+        name="close",
+        aliases=["end", "delete", "resolve"],
+        description="Close the current ticket and send a transcript",
+        example=",ticket close",
+    )
+    @in_ticket()
+    @staff()
+    async def ticket_close(self, ctx):
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        if settings.transcript_destinations:
+            async with ctx.typing():
+                await Transcript.create(
+                    self.bot,
+                    ctx.guild,
+                    ctx.channel,
+                    ctx.ticket,
+                    settings.transcript_destinations,
+                )
+
         await self.db.execute(
-            "UPDATE ticket_settings SET blacklist_user_ids = $2 WHERE guild_id = $1",
-            ctx.guild.id,
-            ids,
+            "DELETE FROM tickets.open WHERE channel_id = $1", ctx.channel.id
         )
-        await ctx.success(f"Blacklisted {member.mention} from opening tickets.")
-
-    @tickets_blacklist.command(name="remove")
-    async def tickets_blacklist_remove(self, ctx: Context, member: discord.Member) -> None:
-        settings = await self._settings(ctx.guild.id)
-        ids = [value for value in (settings.get("blacklist_user_ids") or []) if value != member.id]
-        await self.db.execute(
-            "UPDATE ticket_settings SET blacklist_user_ids = $2 WHERE guild_id = $1",
-            ctx.guild.id,
-            ids,
-        )
-        await ctx.success(f"Removed {member.mention} from the ticket blacklist.")
-
-    @tickets_blacklist.command(name="list")
-    async def tickets_blacklist_list(self, ctx: Context) -> None:
-        settings = await self._settings(ctx.guild.id)
-        ids = settings.get("blacklist_user_ids") or []
-        if not ids:
-            return await ctx.warn("No users are blacklisted from tickets.")
-        await ctx.send(embed=c2(
-            color=color.base,
-            title="Ticket Blacklist",
-            message=" ".join(f"<@{user_id}>" for user_id in ids),
-        ))
-
-    @tickets.group(name="transcripts", invoke_without_command=True)
-    async def tickets_transcripts(self, ctx: Context) -> None:
-        if ctx.invoked_subcommand is None:
-            await ctx.send_help(ctx.command)
-
-    @tickets_transcripts.command(name="channel")
-    async def tickets_transcripts_channel(
-        self,
-        ctx: Context,
-        channel: discord.TextChannel,
-    ) -> None:
-        await self.db.execute(
-            """
-            INSERT INTO ticket_settings (guild_id, transcript_channel_id)
-            VALUES ($1, $2)
-            ON CONFLICT (guild_id) DO UPDATE SET transcript_channel_id = EXCLUDED.transcript_channel_id
-            """,
-            ctx.guild.id,
-            channel.id,
-        )
-        await ctx.success(f"Transcripts will be posted in {channel.mention}.")
-
-    @tickets.group(name="admin", invoke_without_command=True)
-    async def tickets_admin(self, ctx: Context) -> None:
-        if ctx.invoked_subcommand is None:
-            await ctx.send_help(ctx.command)
-
-    @tickets_admin.command(name="add")
-    async def tickets_admin_add(self, ctx: Context, member: discord.Member) -> None:
-        settings = await self._settings(ctx.guild.id)
-        ids = list(settings.get("transcript_admin_ids") or [])
-        if member.id in ids:
-            return await ctx.warn(f"{member.mention} is already a transcript admin.")
-        ids.append(member.id)
-        await self.db.execute(
-            "UPDATE ticket_settings SET transcript_admin_ids = $2 WHERE guild_id = $1",
-            ctx.guild.id,
-            ids,
-        )
-        await ctx.success(f"Added {member.mention} as a transcript admin.")
-
-    @tickets_admin.command(name="remove")
-    async def tickets_admin_remove(self, ctx: Context, member: discord.Member) -> None:
-        settings = await self._settings(ctx.guild.id)
-        ids = [value for value in (settings.get("transcript_admin_ids") or []) if value != member.id]
-        await self.db.execute(
-            "UPDATE ticket_settings SET transcript_admin_ids = $2 WHERE guild_id = $1",
-            ctx.guild.id,
-            ids,
-        )
-        await ctx.success(f"Removed {member.mention} from transcript admins.")
-
-    @tickets_admin.command(name="list")
-    async def tickets_admin_list(self, ctx: Context) -> None:
-        settings = await self._settings(ctx.guild.id)
-        ids = settings.get("transcript_admin_ids") or []
-        if not ids:
-            return await ctx.warn("No transcript admins configured.")
-        await ctx.send(
-            embed=_ticket_embed(
-                "Transcript Admins",
-                " ".join(f"<@{user_id}>" for user_id in ids),
+        with suppress(HTTPException):
+            await ctx.channel.delete(
+                reason=f"Closed by {ctx.author} ({ctx.author.id})"
             )
+
+    # ── utility ──────────────────────────────────────────────
+
+    async def _refresh_panel(self, message: Message, guild_id: int) -> None:
+        """Rebuild the panel view from the database and edit the message."""
+        view = View(timeout=None)
+
+        buttons = await self.db.fetch(
+            "SELECT * FROM tickets.button WHERE guild_id = $1 ORDER BY id", guild_id
         )
+        for b in buttons:
+            view.add_item(
+                Button(
+                    style=STYLE_MAP.get(b["style"], ButtonStyle.success),
+                    label=b["label"] or "Open Ticket",
+                    emoji=b["emoji"],
+                    custom_id=f"ticket.create:{b['id']}",
+                )
+            )
 
-    @tickets.group(name="counter", invoke_without_command=True)
-    async def tickets_counter(self, ctx: Context, option: str = None) -> None:
-        if option is None:
-            return await ctx.send_help(ctx.command)
-        enabled = option.lower() in {"on", "enable", "enabled", "true", "yes"}
-        await self.db.execute(
-            """
-            INSERT INTO ticket_settings (guild_id, counter_enabled)
-            VALUES ($1, $2)
-            ON CONFLICT (guild_id) DO UPDATE SET counter_enabled = EXCLUDED.counter_enabled
-            """,
-            ctx.guild.id,
-            enabled,
+        dropdowns = await self.db.fetch(
+            "SELECT * FROM tickets.dropdown WHERE guild_id = $1", guild_id
         )
-        await ctx.success(f"Ticket counter naming is now **{'enabled' if enabled else 'disabled'}**.")
+        for d in dropdowns:
+            opts = []
+            for o in d["options"] or []:
+                opts.append(
+                    SelectOption(
+                        label=o.get("label", "Option")[:100],
+                        value=o.get("id", "opt"),
+                        description=(o.get("description") or "")[:100] or None,
+                        emoji=o.get("emoji"),
+                    )
+                )
+            if opts:
+                view.add_item(
+                    Select(
+                        placeholder=(d.get("placeholder") or "Choose…")[:100],
+                        options=opts,
+                        custom_id=f"ticket.create:{d['id']}",
+                    )
+                )
 
-    @tickets.command(name="greeting")
-    async def tickets_greeting(self, ctx: Context, *, message: str) -> None:
-        await self.db.execute(
-            """
-            INSERT INTO ticket_settings (guild_id, greeting_message)
-            VALUES ($1, $2)
-            ON CONFLICT (guild_id) DO UPDATE SET greeting_message = EXCLUDED.greeting_message
-            """,
-            ctx.guild.id,
-            message,
-        )
-        await ctx.success("Updated ticket greeting message.")
+        with suppress(HTTPException):
+            await message.edit(view=view)
 
-    @tickets.command(name="closemessage", aliases=["closemsg"])
-    async def tickets_closemessage(self, ctx: Context, *, message: str) -> None:
-        await self.db.execute(
-            """
-            INSERT INTO ticket_settings (guild_id, close_message)
-            VALUES ($1, $2)
-            ON CONFLICT (guild_id) DO UPDATE SET close_message = EXCLUDED.close_message
-            """,
-            ctx.guild.id,
-            message,
-        )
-        await ctx.success("Updated ticket close message.")
 
-    @tickets.command(name="support")
-    async def tickets_support(self, ctx: Context, *roles: discord.Role) -> None:
-        if not roles:
-            return await ctx.warn("Mention at least one support role.")
-        await self.db.execute(
-            """
-            INSERT INTO ticket_settings (guild_id, support_role_ids)
-            VALUES ($1, $2)
-            ON CONFLICT (guild_id)
-            DO UPDATE SET support_role_ids = EXCLUDED.support_role_ids
-            """,
-            ctx.guild.id,
-            [role.id for role in roles],
-        )
-        await ctx.success("Updated ticket support roles.")
-
-class _FakeInteraction:
-    def __init__(self, ctx: Context) -> None:
-        self.guild = ctx.guild
-        self.user = ctx.author
-        self.channel = ctx.channel
-        self.response = self
-        self._ctx = ctx
-        self._done = False
-
-    def is_done(self) -> bool:
-        return self._done
-
-    async def send_message(self, content: str, *, ephemeral: bool = False) -> None:
-        self._done = True
-        if ephemeral:
-            await self._ctx.send(content, delete_after=10)
-        else:
-            await self._ctx.send(content)
-
-    async def defer(self, *, ephemeral: bool = False) -> None:
-        self._done = True
-async def setup(bot: Vain) -> None:
+async def setup(bot) -> None:
     await bot.add_cog(Tickets(bot))
