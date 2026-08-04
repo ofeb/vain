@@ -644,11 +644,12 @@ class ModerationCommands(Package):
 
     @command(
         name="stripstaff",
-        description="Remove all staff roles from a member",
+        aliases=["strip"],
+        description="Remove all roles with dangerous permissions from a member",
     )
     @has_permissions(manage_roles=True)
     async def stripstaff(self, ctx, *, member: discord.Member):
-        """strip staff roles from member"""
+        """strip dangerous/staff roles from member"""
         if member.id == ctx.author.id:
             return await ctx.warn("You cannot **strip yourself** of staff roles")
 
@@ -658,19 +659,18 @@ class ModerationCommands(Package):
         if ctx.author.top_role <= member.top_role and ctx.author.id != ctx.guild.owner_id:
             return await ctx.warn("Your top role must be **higher** than this member's top role")
 
-        rows = await self.db.fetch(
-            """SELECT role_id FROM staff_roles WHERE guild_id = $1""",
-            ctx.guild.id,
-        )
+        from core.tools.convert.role import DANGEROUS_PERMISSIONS
 
-        if not rows:
-            return await ctx.warn("No **staff roles** are configured for this server")
-
-        staff_role_ids = {row[0] for row in rows}
         removed = []
-
         for role in list(member.roles):
-            if role.id in staff_role_ids and role < ctx.author.top_role:
+            if role.is_default() or role.managed:
+                continue
+            if role >= ctx.guild.me.top_role:
+                continue
+            if role >= ctx.author.top_role and ctx.author.id != ctx.guild.owner_id:
+                continue
+            has_dangerous = any(getattr(role.permissions, perm, False) for perm in DANGEROUS_PERMISSIONS)
+            if has_dangerous:
                 try:
                     await member.remove_roles(role, reason=f"Stripstaff by {ctx.author}")
                     removed.append(role.mention)
@@ -1885,8 +1885,9 @@ class ModerationCommands(Package):
         description="Unhide a channel from a role or member",
     )
     @has_permissions(manage_channels=True)
-    async def unhide(self, ctx, channel: discord.abc.GuildChannel, role_or_member):
+    async def unhide(self, ctx, role_or_member, channel: discord.abc.GuildChannel = None):
         """unhide channel from role or member"""
+        channel = channel or ctx.channel
         try:
             target = await commands.RoleConverter().convert(ctx, str(role_or_member))
         except CommandError:
@@ -1901,8 +1902,9 @@ class ModerationCommands(Package):
         description="Hide a channel from a role or member",
     )
     @has_permissions(manage_channels=True)
-    async def hide(self, ctx, channel: discord.abc.GuildChannel, role_or_member):
+    async def hide(self, ctx, role_or_member, channel: discord.abc.GuildChannel = None):
         """hide channel from role or member"""
+        channel = channel or ctx.channel
         try:
             target = await commands.RoleConverter().convert(ctx, str(role_or_member))
         except CommandError:
@@ -2202,16 +2204,67 @@ class ModerationCommands(Package):
 
     @command(
         name="naughty",
-        description="Temporarily make a channel NSFW for 30 seconds",
+        aliases=["nsfw"],
+        usage="[duration] [channel]",
+        example="30s  or  1d #channel",
+        description="Toggle NSFW on a channel (indefinitely or for a duration)",
     )
     @has_permissions(manage_channels=True)
-    async def naughty(self, ctx, channel: discord.TextChannel):
-        """make channel nsfw temporarily"""
-        await channel.edit(nsfw=True, reason=f"naughty by {ctx.author}")
-        await ctx.success(f"{channel.mention} is **NSFW** for 30 seconds")
-        await asyncio.sleep(30)
-        with contextlib.suppress(discord.HTTPException):
-            await channel.edit(nsfw=False, reason="naughty expired")
+    async def naughty(self, ctx, duration: str = None, channel: discord.TextChannel = None):
+        """toggle nsfw on a channel, optionally timed"""
+        # Flexible: if first arg isn't a valid duration, treat it as the channel
+        if duration is not None and channel is None:
+            seconds = self._parse_duration_seconds(duration)
+            if seconds is None:
+                try:
+                    channel = await commands.TextChannelConverter().convert(ctx, duration)
+                    duration = None
+                    seconds = None
+                except commands.BadArgument:
+                    return await ctx.warn(
+                        f"Invalid duration `{duration}`. Use e.g. `30s`, `5m`, `1h`, `1d`, `1w`"
+                    )
+            else:
+                pass
+        else:
+            seconds = self._parse_duration_seconds(duration) if duration else None
+            if duration and seconds is None:
+                return await ctx.warn(
+                    f"Invalid duration `{duration}`. Use e.g. `30s`, `5m`, `1h`, `1d`, `1w`"
+                )
+
+        channel = channel or ctx.channel
+        if not isinstance(channel, discord.TextChannel):
+            return await ctx.warn("This command only works on **text channels**")
+
+        if not channel.permissions_for(ctx.guild.me).manage_channels:
+            return await ctx.warn("I don't have **Manage Channels** for that channel")
+
+        was_nsfw = channel.nsfw
+        target = not was_nsfw
+        action = "enabled" if target else "disabled"
+        reason = f"naughty by {ctx.author}"
+
+        try:
+            await channel.edit(nsfw=target, reason=reason)
+        except discord.Forbidden:
+            return await ctx.fail("I don't have permission to edit this channel")
+        except discord.HTTPException as e:
+            return await ctx.fail(f"Failed to update channel: {e}")
+
+        if seconds:
+            label = self._format_duration(seconds)
+            await ctx.success(
+                f"{action.title()} NSFW on {channel.mention} for **{label}** "
+                f"(will revert to {'NSFW' if was_nsfw else 'SFW'} afterwards)"
+            )
+            await asyncio.sleep(seconds)
+            with contextlib.suppress(discord.HTTPException, discord.Forbidden):
+                ch = ctx.guild.get_channel(channel.id)
+                if ch and isinstance(ch, discord.TextChannel):
+                    await ch.edit(nsfw=was_nsfw, reason="naughty expired")
+        else:
+            await ctx.success(f"{action.title()} NSFW on {channel.mention} **indefinitely**")
 
     @command(
         name="permissions",
