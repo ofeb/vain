@@ -81,7 +81,6 @@ class Settings:
         ch = self.guild.get_channel_or_thread(int(cid))
         if isinstance(ch, (TextChannel, Thread)):
             return ch
-        
         ch = self.bot.get_channel(int(cid))
         return ch if isinstance(ch, (TextChannel, Thread)) else None
 
@@ -122,7 +121,6 @@ class Settings:
     @classmethod
     async def fetch(cls, bot: Vain, guild: Guild) -> Settings:
         await cls._ensure_schema(bot)
-        
         row = await bot.db.fetchrow(
             "SELECT * FROM vanity WHERE guild_id = $1",
             guild.id,
@@ -192,7 +190,10 @@ class Settings:
         self.record = data
 
     async def dispatch(self, member: Member) -> Message | None:
-        """Send notification when a member starts repping vanity."""
+        """Send notification when a member starts repping vanity.
+
+        Respects ``{embed}$v`` / ``{container}$v`` prefixes (and auto-fallback via Script).
+        """
         channel = self.channel
         if not channel:
             logger.warning(
@@ -206,14 +207,18 @@ class Settings:
         key = f"notifs.vanity:{self.guild.id}-{member.id}"
         if redis is not None:
             try:
-                
                 if await redis.ratelimited(key, 1, _NOTIFY_COOLDOWN_SEC):
                     logger.debug("vanity dispatch cooldown %s", key)
                     return None
             except Exception:
                 pass
 
-        from core.tools.embed import Script
+        from core.tools.embed import (
+            Script,
+            is_container_script,
+            is_embed_script,
+            maybe_wrap_embed_script,
+        )
 
         template = self.template or self._default_template
         vanity_code = (self.guild.vanity_url_code or "vanity").lstrip("/")
@@ -234,7 +239,6 @@ class Settings:
                 vanity=vanity_code,
                 vanity_role=reward_role,
             )
-            
             rendered = rendered.replace("{user.mention}", member.mention)
             rendered = rendered.replace("{user}", member.mention)
             rendered = rendered.replace("{member.mention}", member.mention)
@@ -243,8 +247,8 @@ class Settings:
             if not rendered.strip():
                 rendered = f"thank you {member.mention} for repping /{vanity_code}"
 
-            
-            if "{embed}" in template.lower() or "$v{" in template:
+            normalized = maybe_wrap_embed_script(rendered)
+            if is_embed_script(normalized) or is_container_script(normalized):
                 msg = await script.send(
                     channel,
                     user=member,
@@ -271,14 +275,13 @@ class Settings:
                 "vanity dispatch HTTP failed guild=%s channel=%s: %s",
                 self.guild.id,
                 getattr(channel, "id", None),
-                exc,
+                exp,
             )
             return None
-        except Exception as exc:
+        except Exception as exp:
             logger.exception(
-                "vanity dispatch error guild=%s: %s", self.guild.id, exc
+                "vanity dispatch error guild=%s: %s", self.guild.id, exp
             )
-            
             try:
                 return await channel.send(
                     content=f"thank you {member.mention} for repping /{vanity_code}",
@@ -365,7 +368,6 @@ def vanity_matches(status: str, code: str, *, strict: bool = False) -> bool:
         .replace("discordapp.com/invite/", "/")
         .replace(".gg/", "/")
     )
-    
     normalized = re.sub(r"/\s+", "/", normalized)
     status_ns = re.sub(r"\s+", "", status)
     normalized_ns = re.sub(r"\s+", "", normalized)
