@@ -232,11 +232,11 @@ class Settings:
                 rendered[:120],
             )
             return msg
-        except HTTPException as exc:
-            logger.warning("tag dispatch failed guild=%s: %s", self.guild.id, exp)
+        except HTTPException as err:
+            logger.warning("tag dispatch failed guild=%s: %s", self.guild.id, err)
             return None
-        except Exception as exc:
-            logger.exception("tag dispatch error guild=%s: %s", self.guild.id, exp)
+        except Exception as err:
+            logger.exception("tag dispatch error guild=%s: %s", self.guild.id, err)
             try:
                 return await channel.send(
                     content=f"thank you {member.mention} for repping the server tag",
