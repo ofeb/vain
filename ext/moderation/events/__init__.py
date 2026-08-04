@@ -73,6 +73,62 @@ class ModerationEvents(Package):
         if mute_role:
             await member.add_roles(mute_role, reason="Mute restored on rejoin")
 
+    @Package.listener("on_member_join")
+    async def on_stickyrole_restore(self, member: discord.Member) -> None:
+        """Reapply sticky roles when a member rejoins."""
+        if getattr(self.db, "pool", None) is None:
+            return
+        rows = await self.db.fetch(
+            "SELECT role_id FROM sticky_roles WHERE guild_id = $1 AND user_id = $2",
+            member.guild.id,
+            member.id,
+        )
+        if not rows:
+            return
+        roles_to_add = []
+        for row in rows:
+            role = member.guild.get_role(row["role_id"])
+            if role and role not in member.roles and role < member.guild.me.top_role:
+                roles_to_add.append(role)
+        if roles_to_add:
+            with contextlib.suppress(discord.Forbidden, discord.HTTPException):
+                await member.add_roles(*roles_to_add, reason="stickyrole restore on join")
+
+    @Package.listener("on_member_join")
+    async def on_forcenickname_restore(self, member: discord.Member) -> None:
+        """Reapply forced nickname when a member rejoins."""
+        if getattr(self.db, "pool", None) is None:
+            return
+        row = await self.db.fetchrow(
+            "SELECT nickname FROM forced_nicknames WHERE guild_id = $1 AND user_id = $2",
+            member.guild.id,
+            member.id,
+        )
+        if not row or not row["nickname"]:
+            return
+        with contextlib.suppress(discord.Forbidden, discord.HTTPException):
+            await member.edit(nick=row["nickname"][:32], reason="forcenickname restore on join")
+
+    @Package.listener("on_member_update")
+    async def on_forcenickname_enforce(self, before: discord.Member, after: discord.Member) -> None:
+        """Re-lock forced nickname if the member tries to change it."""
+        if before.nick == after.nick:
+            return
+        if getattr(self.db, "pool", None) is None:
+            return
+        row = await self.db.fetchrow(
+            "SELECT nickname FROM forced_nicknames WHERE guild_id = $1 AND user_id = $2",
+            after.guild.id,
+            after.id,
+        )
+        if not row or not row["nickname"]:
+            return
+        forced = row["nickname"][:32]
+        if after.nick == forced:
+            return
+        with contextlib.suppress(discord.Forbidden, discord.HTTPException):
+            await after.edit(nick=forced, reason="forcenickname enforced")
+
     @Package.listener("on_message")
     async def on_mute_check(self, message: discord.Message):
         if message.author.bot or not message.guild:
@@ -171,4 +227,3 @@ class ModerationEvents(Package):
                 )
                 await log_channel.send(embed=embed)
                 break
-
