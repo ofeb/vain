@@ -204,7 +204,7 @@ def maybe_wrap_embed_script(text: str) -> str:
             return "{embed}" + stripped
         if stripped.startswith("{"):
             return f"{{embed}}$v{stripped}"
-        # Field hints mid-string with $v separators
+        
         return f"{{embed}}$v{stripped}" if "$v{" in stripped else stripped
     return stripped
 
@@ -495,7 +495,7 @@ async def parse_container(raw: str, sendable: bool = False) -> dict:
                     lines.append(payload)
             continue
         if key == "thumbnail":
-            # Thumbnail as Section accessory on pending text, else raw link line
+            
             if payload and _has_link(payload):
                 body = "\n".join(lines) if lines else "​"
                 lines = []
@@ -512,7 +512,7 @@ async def parse_container(raw: str, sendable: bool = False) -> dict:
                 lines.append(payload)
             continue
         if key in {"actionrow", "action_row", "row"}:
-            # Explicit action-row break — flush buttons into a row early
+            
             _flush_text()
             if buttons:
                 try:
@@ -599,14 +599,14 @@ async def parse_container(raw: str, sendable: bool = False) -> dict:
                 row = ui.ActionRow(*buttons[i : i + 5])
                 container.add_item(row)
             except Exception:
-                # Fallback: add buttons one-by-one if ActionRow packing fails
+                
                 for btn in buttons[i : i + 5]:
                     try:
                         container.add_item(ui.ActionRow(btn))
                     except Exception:
                         pass
 
-    # Empty container still needs something to render
+    
     if not getattr(container, "children", None) and not lines:
         try:
             container.add_item(ui.TextDisplay("​"))
@@ -615,8 +615,8 @@ async def parse_container(raw: str, sendable: bool = False) -> dict:
 
     layout.add_item(container)
     final: dict[str, Any] = {"view": layout}
-    # Components V2 messages cannot mix classic content with the layout flag in
-    # some clients — keep content only when explicitly set for non-v2 fallbacks.
+    
+    
     if content is not None:
         final["content"] = content
     if delete_after is not None:

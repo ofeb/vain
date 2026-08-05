@@ -97,7 +97,7 @@ class Restrictcommand(Package):
     async def restrictcommand_list(self, ctx, role_or_command: str | None = None):
         """list restricted commands"""
         if role_or_command:
-            # Try role first
+            
             role = None
             try:
                 role = await discord.ext.commands.RoleConverter().convert(ctx, role_or_command)
@@ -121,7 +121,7 @@ class Restrictcommand(Package):
                 )
                 return await ctx.send(embed=embed)
 
-            # Treat as command name
+            
             cmd = role_or_command.lower().strip()
             rows = await self.db.fetch(
                 "SELECT role_id FROM command_restrictions WHERE guild_id = $1 AND command = $2",

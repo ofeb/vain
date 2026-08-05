@@ -52,7 +52,7 @@ class FilterEvents(Package):
     _regex_cache: dict[int, tuple[float, list]] = {}
     _spam: dict[tuple[int, int], list[float]] = defaultdict(list)
 
-    # ---------- config helpers ----------
+    
 
     async def _row(self, guild_id: int, table: str):
         key = (guild_id, table)
@@ -103,7 +103,7 @@ class FilterEvents(Package):
             with contextlib.suppress(discord.HTTPException, discord.Forbidden):
                 await message.delete()
 
-    # ---------- individual filters ----------
+    
 
     async def _check_caps(self, message: discord.Message) -> bool:
         row = await self._row(message.guild.id, "caps")
@@ -231,7 +231,7 @@ class FilterEvents(Package):
         await self._punish(message, row.get("action"), "spam filter")
         return True
 
-    # ---------- listeners ----------
+    
 
     async def _check_content(self, message: discord.Message) -> bool:
         for check in (

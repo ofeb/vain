@@ -19,7 +19,7 @@ from config import color
 if TYPE_CHECKING:
     from core.vain import Vain
 
-# channel_id = 0 stores the guild-wide default nuke message/script
+
 _DEFAULT_CHANNEL_ID = 0
 _DEFAULT_MESSAGE = "first"
 
@@ -52,9 +52,9 @@ class Nuke(Package):
         if self._autonuke_loop.is_running():
             self._autonuke_loop.cancel()
 
-    # ------------------------------------------------------------------
-    # helpers
-    # ------------------------------------------------------------------
+    
+    
+    
 
     async def _get_default_message(self, guild_id: int) -> str:
         row = await self.db.fetchval(
@@ -221,9 +221,9 @@ class Nuke(Package):
             except Exception:
                 continue
 
-    # ------------------------------------------------------------------
-    # nuke (one-shot)
-    # ------------------------------------------------------------------
+    
+    
+    
 
     @group(
         name="nuke",
@@ -312,9 +312,9 @@ class Nuke(Package):
         embed.set_author(name=str(ctx.author), icon_url=ctx.author.display_avatar.url)
         return await ctx.paginate(embed, _NUKE_VARIABLES)
 
-    # ------------------------------------------------------------------
-    # autonuke group (scheduled)
-    # ------------------------------------------------------------------
+    
+    
+    
 
     @group(
         name="autonuke",
@@ -591,9 +591,9 @@ class Nuke(Package):
             f"Autonuke script for {channel.mention} updated:\n```\n{preview}\n```"
         )
 
-    # ------------------------------------------------------------------
-    # background loop
-    # ------------------------------------------------------------------
+    
+    
+    
 
     @tasks.loop(seconds=60.0)
     async def _autonuke_loop(self) -> None:

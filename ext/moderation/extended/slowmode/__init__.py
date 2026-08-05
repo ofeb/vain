@@ -41,7 +41,7 @@ class Slowmode(Package):
         if delay is None:
             return await ctx.send_help(ctx.command)
 
-        # If first arg is a channel mention/name and no second arg, treat as channel lookup fail for delay
+        
         channel = channel or ctx.channel
         if not isinstance(channel, TextChannel):
             raise CommandError("this command only works on **text channels**")

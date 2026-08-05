@@ -22,7 +22,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 from core.discord.package import Package
 from core.managers.permissions import has_permissions
 
-# Prefer Windows / common Linux font paths
+
 _FONT_CANDIDATES = [
     r"C:\Windows\Fonts\arialbd.ttf",
     r"C:\Windows\Fonts\segoeuib.ttf",
@@ -82,28 +82,28 @@ async def generate_rank_card(
     base = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     draw = ImageDraw.Draw(base)
 
-    # soft shadow
+    
     shadow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     sd = ImageDraw.Draw(shadow)
     sd.rounded_rectangle([10, 14, W - 6, H - 4], radius=28, fill=(0, 0, 0, 90))
     shadow = shadow.filter(ImageFilter.GaussianBlur(10))
     base.alpha_composite(shadow)
 
-    # card body
+    
     _rounded_rect(draw, [0, 0, W - 12, H - 16], 26, (24, 25, 38, 255))
-    # left accent bar
+    
     _rounded_rect(draw, [0, 0, 10, H - 16], 6, (ar, ag, ab, 255))
-    # subtle top highlight
+    
     _rounded_rect(draw, [14, 10, W - 26, 12], 2, (ar, ag, ab, 40))
 
-    # avatar
+    
     try:
         avatar_bytes = await member.display_avatar.read()
         avatar_img = Image.open(io.BytesIO(avatar_bytes)).convert("RGBA")
     except Exception:
         avatar_img = Image.new("RGBA", (180, 180), (60, 62, 80, 255))
     avatar = _circular_avatar(avatar_img, 148)
-    # ring
+    
     ring = Image.new("RGBA", (160, 160), (0, 0, 0, 0))
     ImageDraw.Draw(ring).ellipse((0, 0, 159, 159), outline=(ar, ag, ab, 255), width=4)
     base.paste(ring, (42, (H - 16) // 2 - 80), ring)
@@ -135,12 +135,12 @@ async def generate_rank_card(
         lvl_w = 40
     draw.text((W - 60 - lvl_w - 12, 52), lvl_text, font=font_level, fill=(255, 255, 255, 255))
 
-    # progress bar
+    
     bar_x, bar_y, bar_w, bar_h = 220, 168, 580, 24
     _rounded_rect(draw, [bar_x, bar_y, bar_x + bar_w, bar_y + bar_h], 12, (40, 42, 58, 255))
     fill_w = max(int(bar_w * progress), 10 if progress > 0 else 0)
     if fill_w:
-        # gradient-ish by drawing two layers
+        
         _rounded_rect(
             draw,
             [bar_x, bar_y, bar_x + fill_w, bar_y + bar_h],
@@ -205,7 +205,7 @@ class Leveling(Package):
         self._cooldowns: dict[tuple[int, int], float] = {}
 
     async def cog_load(self) -> None:
-        # Apply schema if present
+        
         from pathlib import Path
 
         schema = Path(__file__).with_name("schema.sql")
@@ -269,9 +269,9 @@ class Leveling(Package):
             .replace("{xp}", str(int(row["xp"])) if row else "0")
         )
 
-    # ------------------------------------------------------------------
-    # user-facing rank card
-    # ------------------------------------------------------------------
+    
+    
+    
 
     @command(
         name="rank",
@@ -310,9 +310,9 @@ class Leveling(Package):
         )
         return await ctx.send(file=File(card, filename=f"rank-{member.id}.png"))
 
-    # ------------------------------------------------------------------
-    # admin group
-    # ------------------------------------------------------------------
+    
+    
+    
 
     @group(
         name="leveling",
@@ -655,7 +655,7 @@ class Leveling(Package):
         )
         return await ctx.send(embed=embed)
 
-    # rewards -----------------------------------------------------------
+    
 
     @leveling.group(
         name="rewards",
@@ -766,7 +766,7 @@ class Leveling(Package):
             f"{'Enabled' if enabled else 'Disabled'} stacking rewards"
         )
 
-    # ignore ------------------------------------------------------------
+    
 
     @leveling.group(
         name="ignore",
@@ -867,7 +867,7 @@ class Leveling(Package):
             return await ctx.warn("Nothing is ignored for XP")
         return await ctx.paginate(Embed(title="Level Ignore List"), lines)
 
-    # role sync ---------------------------------------------------------
+    
 
     async def _sync_user_roles(self, guild, member: Member, user_level: int) -> None:
         cfg = await self._get_cfg(guild.id)

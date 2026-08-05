@@ -21,7 +21,7 @@ def caption(text: str) -> str:
     cleaned = str(text or "").strip()
     if not cleaned:
         return ""
-    # Collapse accidental stacked subtext markers from nested callers
+    
     while cleaned.startswith("-#"):
         cleaned = cleaned[2:].lstrip()
     return f"-# {cleaned}" if cleaned else ""

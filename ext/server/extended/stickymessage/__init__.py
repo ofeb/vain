@@ -386,17 +386,17 @@ class StickymessageCommands(Package):
                 if interval < 30:
                     continue
                 channel_id = int(row["channel_id"])
-                # Prefer live counters; fall back to DB
+                
                 count = self._msg_counts.get(
                     channel_id, int(row.get("message_count") or 0)
                 )
-                # No activity since last sticky → don't spam
+                
                 if count <= 0 and channel_id not in self._last_activity:
                     continue
                 last_sent = row["last_sent"]
                 if last_sent is not None and getattr(last_sent, "tzinfo", None) is not None:
                     last_sent = last_sent.replace(tzinfo=None)
-                # Anchor: last sticky send, else last activity
+                
                 anchor = last_sent or self._last_activity.get(channel_id)
                 if anchor is not None and (now - anchor).total_seconds() < interval:
                     continue

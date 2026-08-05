@@ -83,7 +83,7 @@ class Remind(Package):
             return await ctx.warn("Provide a reminder message")
 
         when = datetime.now(timezone.utc).replace(tzinfo=None) + discord.utils.utcnow().__class__.resolution  # type: ignore
-        # Use timedelta properly
+        
         from datetime import timedelta
 
         when = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=seconds)

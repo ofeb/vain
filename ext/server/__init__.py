@@ -69,7 +69,7 @@ class ServerCommands(Package):
             return value
         if is_container_script(value):
             return value
-        # Explicit container prefer only when it already looks like a script
+        
         if prefer == "container" and is_embed_script(value):
             lowered = value.lower()
             if not (

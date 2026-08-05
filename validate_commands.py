@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+
 """Static validation for Vain commands — no Discord connection required.
 
 Checks:
@@ -48,7 +48,7 @@ def check_syntax() -> None:
             continue
         try:
             raw = path.read_bytes()
-            # Strip UTF-8 BOM if present (common on Windows saves)
+            
             if raw.startswith(b"\xef\xbb\xbf"):
                 raw = raw[3:]
                 bom_fixed += 1
@@ -191,7 +191,7 @@ def check_command_ast() -> None:
                 n in {"command", "group", "hybrid", "hybrid_group"} for n in decos
             ):
                 continue
-            # must take self + ctx at minimum for methods
+            
             args = node.args
             pos = [a.arg for a in args.args]
             if not pos:

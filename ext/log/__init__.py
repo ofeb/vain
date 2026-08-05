@@ -224,12 +224,12 @@ class Log(LogEvents, Package):
             else:
                 channel = await _as_channel(first)
                 if channel is None:
-                    # unknown token — if not a channel, still fall back to invoke + treat as event attempt
+                    
                     channel = ctx.channel if isinstance(ctx.channel, discord.TextChannel) else None
                     event = first
             return channel, event
 
-        # both provided: first is channel, second is event (or swapped)
+        
         channel = await _as_channel(first)
         if channel is not None:
             event = second
@@ -240,7 +240,7 @@ class Log(LogEvents, Package):
             event = first
             return channel, event
 
-        # neither is a channel — use invoke channel, first token as event
+        
         channel = ctx.channel if isinstance(ctx.channel, discord.TextChannel) else None
         event = first
         return channel, event

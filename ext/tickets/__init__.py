@@ -57,9 +57,9 @@ class TicketPanelView(View):
         super().__init__(timeout=None)
 
 
-# ─────────────────────────────────────────────────────────────
-# Main Package
-# ─────────────────────────────────────────────────────────────
+
+
+
 
 class Tickets(Package):
     """Ticket system – panels, buttons, dropdowns, staff tools & transcripts."""
@@ -69,7 +69,7 @@ class Tickets(Package):
         self.description = "Full ticket system with panels, staff controls and transcripts"
 
     async def cog_load(self) -> None:
-        # ensure schema on every load
+        
         await self._ensure_schema()
         self._inactivity_loop.start()
         await super().cog_load()
@@ -84,7 +84,7 @@ class Tickets(Package):
         try:
             with open(schema_path, "r", encoding="utf-8") as f:
                 sql = f.read()
-            # run each statement separately for safety
+            
             for stmt in sql.split(";"):
                 stmt = stmt.strip()
                 if stmt:
@@ -93,7 +93,7 @@ class Tickets(Package):
         except Exception as exc:
             logger.warning("Could not fully sync ticket schema: %s", exc)
 
-    # ── inactivity sweeper ───────────────────────────────────
+    
 
     @loop(minutes=5)
     async def _inactivity_loop(self) -> None:
@@ -129,7 +129,7 @@ class Tickets(Package):
                 to_delete,
             )
 
-    # ── interaction listener (create ticket) ─────────────────
+    
 
     @Cog.listener("on_interaction")
     async def on_ticket_interaction(self, interaction: Interaction) -> None:
@@ -155,9 +155,9 @@ class Tickets(Package):
             return await _ephemeral(interaction, "You are not allowed to open tickets here.")
 
         record: Optional[TicketButton | TicketDropdownOption] = None
-        if component_type == 2:  # button
+        if component_type == 2:  
             record = await settings.fetch_button(identifier)
-        elif component_type == 3:  # select
+        elif component_type == 3:  
             values = interaction.data.get("values") or []
             if values:
                 record = await settings.fetch_dropdown_option(identifier, values[0])
@@ -165,7 +165,7 @@ class Tickets(Package):
         if not record:
             return await _ephemeral(interaction, "This control is no longer valid.")
 
-        # already has an open ticket?
+        
         existing = await self.db.fetchrow(
             """
             SELECT channel_id FROM tickets.open
@@ -182,7 +182,7 @@ class Tickets(Package):
                     interaction, f"You already have an open ticket: {ch.mention}"
                 )
 
-        # max tickets check
+        
         if settings.record.get("max_tickets"):
             count = await self.db.fetchval(
                 "SELECT COUNT(*) FROM tickets.open WHERE guild_id = $1",
@@ -249,7 +249,7 @@ class Tickets(Package):
             interaction.user.id,
         )
 
-        # welcome message
+        
         template = record.get("template")
         if template:
             content = (
@@ -288,7 +288,7 @@ class Tickets(Package):
             "DELETE FROM tickets.open WHERE channel_id = $1", channel.id
         )
 
-    # ── command group ────────────────────────────────────────
+    
 
     @group(
         name="ticket",
@@ -301,7 +301,7 @@ class Tickets(Package):
     async def ticket(self, ctx) -> Message:
         return await ctx.send_help()
 
-    # ── panel ────────────────────────────────────────────────
+    
 
     @ticket.command(
         name="panel",
@@ -321,7 +321,7 @@ class Tickets(Package):
             f"Add controls with `{ctx.clean_prefix}ticket button` or `{ctx.clean_prefix}ticket dropdown`."
         )
 
-    # ── inactivity ───────────────────────────────────────────
+    
 
     @ticket.group(
         name="inactivity",
@@ -335,7 +335,7 @@ class Tickets(Package):
         if duration is None:
             return await ctx.send_help()
 
-        # simple parser: 30m, 2h, 1d
+        
         duration = duration.lower().strip()
         seconds = 0
         try:
@@ -369,7 +369,7 @@ class Tickets(Package):
         await settings.upsert(inactivity_timeout=None)
         return await ctx.success("Inactivity auto-close has been disabled.")
 
-    # ── limit ────────────────────────────────────────────────
+    
 
     @ticket.command(
         name="limit",
@@ -388,7 +388,7 @@ class Tickets(Package):
             return await ctx.success("Open-ticket limit removed.")
         return await ctx.success(f"Maximum open tickets set to **{amount}**.")
 
-    # ── staff roles ──────────────────────────────────────────
+    
 
     @ticket.group(
         name="staff",
@@ -429,7 +429,7 @@ class Tickets(Package):
         )
         return await ctx.send(embed=embed)
 
-    # ── blacklist ────────────────────────────────────────────
+    
 
     @ticket.group(
         name="blacklist",
@@ -470,7 +470,7 @@ class Tickets(Package):
         )
         return await ctx.send(embed=embed)
 
-    # ── transcript destinations ──────────────────────────────
+    
 
     @ticket.group(
         name="transcript",
@@ -550,7 +550,7 @@ class Tickets(Package):
         embed = Embed(title="Transcript Destinations", description="\n".join(lines), color=0x5865F2)
         return await ctx.send(embed=embed)
 
-    # ── button management ────────────────────────────────────
+    
 
     @ticket.group(
         name="button",
@@ -592,7 +592,7 @@ class Tickets(Package):
                 f"Set a panel first with `{ctx.clean_prefix}ticket panel <message>`."
             )
 
-        # persist
+        
         await self.db.execute(
             """
             INSERT INTO tickets.button (id, guild_id, category_id, topic, style, emoji, label)
@@ -613,15 +613,15 @@ class Tickets(Package):
             label[:80],
         )
 
-        # rebuild view from current components + new button
+        
         view = View(timeout=None)
-        # keep existing non-ticket buttons if any
+        
         for row in message.components:
             for child in row.children:
                 if getattr(child, "custom_id", None) and str(child.custom_id).startswith("ticket.create"):
-                    continue  # will re-add from DB
-                # we only manage our own buttons; skip others for safety
-        # load all buttons for this guild
+                    continue  
+                
+        
         buttons = await self.db.fetch(
             "SELECT * FROM tickets.button WHERE guild_id = $1", ctx.guild.id
         )
@@ -634,7 +634,7 @@ class Tickets(Package):
             )
             view.add_item(btn)
 
-        # also keep any dropdowns
+        
         dropdowns = await self.db.fetch(
             "SELECT * FROM tickets.dropdown WHERE guild_id = $1", ctx.guild.id
         )
@@ -683,7 +683,7 @@ class Tickets(Package):
         if deleted == "DELETE 0":
             return await ctx.warn(f"No button with id `{identifier}` found.")
 
-        # refresh panel
+        
         settings = await Settings.fetch(self.bot, ctx.guild)
         message = await settings.fetch_message()
         if message:
@@ -711,7 +711,7 @@ class Tickets(Package):
         embed = Embed(title="Ticket Buttons", description="\n".join(lines), color=0x5865F2)
         return await ctx.send(embed=embed)
 
-    # ── dropdown management (simplified but complete) ────────
+    
 
     @ticket.group(
         name="dropdown",
@@ -785,7 +785,7 @@ class Tickets(Package):
             return await ctx.warn(f"Dropdown `{dropdown_id}` does not exist.")
 
         options = list(row["options"] or [])
-        # replace if exists
+        
         options = [o for o in options if o.get("id") != option_id]
         options.append(
             {
@@ -837,7 +837,7 @@ class Tickets(Package):
             await self._refresh_panel(message, ctx.guild.id)
         return await ctx.success(f"Dropdown `{identifier}` removed.")
 
-    # ── in-ticket staff commands ─────────────────────────────
+    
 
     @ticket.command(
         name="add",
@@ -901,7 +901,7 @@ class Tickets(Package):
                 reason=f"Closed by {ctx.author} ({ctx.author.id})"
             )
 
-    # ── utility ──────────────────────────────────────────────
+    
 
     async def _refresh_panel(self, message: Message, guild_id: int) -> None:
         """Rebuild the panel view from the database and edit the message."""

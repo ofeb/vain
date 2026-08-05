@@ -113,7 +113,7 @@ class _BuilderModal(discord.ui.Modal):
         title: str,
         fields: list[tuple[str, str, bool, int, str]],
     ):
-        # fields: (key, label, paragraph, maxlen, default)
+        
         super().__init__(title=title[:45])
         self.keys: list[str] = []
         self.values: dict[str, str] = {}
@@ -233,15 +233,15 @@ class _BaseBuilder:
             "url": "",
             "divider": "0",
         }
-        self.fields: list[dict[str, str]] = []  # name/value/inline
+        self.fields: list[dict[str, str]] = []  
         self.buttons: list[dict[str, str]] = []
         self.message: discord.Message | None = None
         self.preview_message: discord.Message | None = None
         self._stopped = False
 
-    # ------------------------------------------------------------------
-    # helpers
-    # ------------------------------------------------------------------
+    
+    
+    
 
     def _accent(self) -> int:
         raw = (self.data.get("color") or "2b2d31").lstrip("#")
@@ -368,9 +368,9 @@ class _BaseBuilder:
     def _controls(self) -> _BuilderControls:
         return _BuilderControls(self, field_options=self._field_options())
 
-    # ------------------------------------------------------------------
-    # script serialization
-    # ------------------------------------------------------------------
+    
+    
+    
 
     def _to_script(self) -> str:
         mode = "{embed}" if self.kind == "embed" else "{container}"
@@ -390,7 +390,7 @@ class _BaseBuilder:
             if self.data.get("author_icon"):
                 bits.append(self.data["author_icon"])
             elif self.data.get("author_url"):
-                bits.append("")  # keep icon slot empty
+                bits.append("")  
             if self.data.get("author_url"):
                 bits.append(self.data["author_url"])
             parts.append(f"$v{{author: {' && '.join(bits)}}}")
@@ -416,7 +416,7 @@ class _BaseBuilder:
                 parts.append(f"$v{{field: {name} && {value}{tail}}}")
             else:
                 parts.append(f"$v{{field: {name} && {value}}}")
-        # buttons — optional actionrow breaks every 5 for container
+        
         for i, btn in enumerate(self.buttons[:_MAX_BUILDER_BUTTONS]):
             if self.kind == "container" and i > 0 and i % 5 == 0:
                 parts.append("$v{actionrow}")
@@ -425,9 +425,9 @@ class _BaseBuilder:
             return f"{mode}$v{{description: }}"
         return "".join(parts)
 
-    # ------------------------------------------------------------------
-    # previews
-    # ------------------------------------------------------------------
+    
+    
+    
 
     def _preview_embed(self) -> discord.Embed:
         emb = discord.Embed(
@@ -608,9 +608,9 @@ class _BaseBuilder:
         except Exception:
             pass
 
-    # ------------------------------------------------------------------
-    # field handlers
-    # ------------------------------------------------------------------
+    
+    
+    
 
     async def _run_modal(
         self,
@@ -714,9 +714,9 @@ class _BaseBuilder:
             return
 
         if key == "actionrow":
-            # Script-only marker — store as a zero-width button group break by
-            # padding buttons list with a sentinel? Simpler: just note in DM.
-            # We insert a synthetic marker button the serializer understands.
+            
+            
+            
             if not inter.response.is_done():
                 await inter.response.send_message(
                     "Next buttons will start a **new action row** in the script "
@@ -824,7 +824,7 @@ class _BaseBuilder:
                     ephemeral=True,
                 )
             else:
-                # chunk long scripts
+                
                 chunk = script[:1800]
                 await inter.response.send_message(
                     f"Could not DM you — script:\n```\n{chunk}\n```",
@@ -917,7 +917,7 @@ async def register_builders(bot: "Vain") -> None:
         except Exception:
             builder.preview_message = None
 
-    # Avoid double-register on hot reload
+    
     for name in ("embedbuilder", "containerbuilder", "eb", "cb"):
         existing = bot.get_command(name)
         if existing is not None:

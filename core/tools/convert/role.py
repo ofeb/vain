@@ -86,5 +86,5 @@ class RoleConvert(Converter):
         return False
 
 
-# Backwards-compatible alias used by some command signatures
+
 Role = RoleConvert

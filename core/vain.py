@@ -249,8 +249,8 @@ class Vain(commands.AutoShardedBot):
             keys.append(f"prefix:user:{user_id}")
         if keys:
             await self.forget(*keys)
-        # Clear any composite redis/file cache entries when we know both ids.
-        # User-only invalidation relies on the individual object_cache keys above.
+        
+        
         if self.redis is not None and guild_id is not None and user_id is not None:
             with contextlib.suppress(Exception):
                 await self.redis.delete(f"prefix:{guild_id}:{user_id}")
@@ -281,8 +281,8 @@ class Vain(commands.AutoShardedBot):
 
     async def _fetch_prefixes(self, guild_id: int, user_id: int) -> dict:
         """pull prefix data from individual caches (object_cache + db)."""
-        # Intentionally avoid a composite redis key so that invalidate_prefix_cache
-        # (which only knows user_id or guild_id) always takes effect immediately.
+        
+        
         user_pfx, guild_pfxs = await asyncio.gather(
             self._fetch_user_prefix(user_id),
             self._fetch_guild_prefixes(guild_id),

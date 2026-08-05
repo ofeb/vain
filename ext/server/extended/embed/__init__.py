@@ -43,7 +43,7 @@ class EmbedCommands(Package):
         name = name.lower().strip()
         if not re.fullmatch(r"[a-z0-9_-]{1,50}", name):
             return await ctx.warn("Name must be **1-50** characters: letters, numbers, `_`, `-`.")
-        # Normalize {embed}/{container} prefix for consistent storage
+        
         script = maybe_wrap_embed_script(script)
         await self.db.execute(
             """
@@ -193,9 +193,9 @@ class EmbedCommands(Package):
             )
             if not payload:
                 return await ctx.warn("Script produced no content.")
-            # Prefer destination.send so LayoutView (containers) works cleanly
+            
             kwargs = dict(payload)
-            # Avoid double-wrapping raw_embed for normal embeds when the bot supports it
+            
             if kwargs.get("embed") is not None:
                 kwargs.setdefault("raw_embed", True)
             await ctx.send(**kwargs)

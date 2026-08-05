@@ -2231,7 +2231,7 @@ class ModerationCommands(Package):
         With duration (e.g. 20s, 1d) → flip now, auto-revert after that time.
         Running again while timed cancels the pending revert and toggles immediately.
         """
-        # Flexible: if first arg isn't a valid duration, treat it as the channel
+        
         if duration is not None and channel is None:
             seconds = self._parse_duration_seconds(duration)
             if seconds is None:
@@ -2257,7 +2257,7 @@ class ModerationCommands(Package):
         if not channel.permissions_for(ctx.guild.me).manage_channels:
             return await ctx.warn("I don't have **Manage Channels** for that channel")
 
-        # Cancel any pending timed revert so re-running is a real toggle
+        
         pending = self._naughty_tasks.pop(channel.id, None)
         if pending is not None and not pending.done():
             pending.cancel()

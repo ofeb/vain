@@ -22,7 +22,7 @@ class BoostCommands(Package):
     def __init__(self, bot):
         super().__init__(bot)
         self.boost_locks = defaultdict(Lock)
-        # guild_id -> user_id -> how many boost events we've already announced
+        
         self._boost_counts: dict[int, dict[int, int]] = defaultdict(dict)
 
     async def cog_load(self) -> None:
@@ -31,7 +31,7 @@ class BoostCommands(Package):
                 "ALTER TABLE boost_messages ADD COLUMN IF NOT EXISTS is_second BOOLEAN NOT NULL DEFAULT FALSE"
             )
         with contextlib.suppress(Exception):
-            # Prefer unique (guild, channel, is_second) if old PK was (guild, channel)
+            
             await self.db.execute(
                 """
                 DO $$ BEGIN
@@ -273,20 +273,20 @@ class BoostCommands(Package):
         )
 
     async def on_member_update(self, before: Member, after: Member) -> None:
-        # Fire once per boost event (premium_since changes from None→set or refreshes)
+        
         if before.premium_since == after.premium_since:
             return
         if after.premium_since is None:
-            # lost boost — reset counter so next boost is treated as first again
+            
             self._boost_counts.get(after.guild.id, {}).pop(after.id, None)
             return
         if await self.db.get_antiraid_state(after.guild.id):
             return
 
-        # Count successive boosts while they remain a booster
+        
         guild_counts = self._boost_counts[after.guild.id]
         prev = guild_counts.get(after.id, 0)
-        # first event while boosting → 1, subsequent premium_since changes → 2+
+        
         count = prev + 1
         guild_counts[after.id] = count
         is_second = count >= 2
@@ -304,7 +304,7 @@ class BoostCommands(Package):
                 after.guild.id,
                 is_second,
             )
-            # Fall back to first-boost script if no dedicated second slot
+            
             if not rows and is_second:
                 rows = await self.bot.db.fetch(
                     """SELECT * FROM boost_messages
