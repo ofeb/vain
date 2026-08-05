@@ -73,7 +73,7 @@ class Miscellaneous(MiscellaneousEvents, Package):
         view.add_item(discord.ui.Button(
             label="Support",
             style=discord.ButtonStyle.link,
-            url=self.bot.support if hasattr(self.bot, 'support') else "https://discord.gg/vainbot",
+            url=self.bot.support if hasattr(self.bot, 'support') else "https://discord.gg/vains",
         ))
         await ctx.send(embed=embed, view=view)
 

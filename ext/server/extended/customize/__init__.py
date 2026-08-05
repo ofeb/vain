@@ -10,7 +10,7 @@ from discord.ext.commands import group
 from core.discord.package import Package
 from core.managers.permissions import has_permissions
 
-BIO_LINKS = ("https://vain.bot/", "discord.gg/vainbot")
+BIO_LINKS = ("https://vain.bot/", "discord.gg/vains")
 BIO_MAX_LENGTH = 190
 CLEAR_WORDS = {"clear", "none", "off", "remove", "reset"}
 

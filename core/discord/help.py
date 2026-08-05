@@ -1097,7 +1097,7 @@ def _home_text(ctx: Context) -> str:
     bot = ctx.bot
     bot_name = bot.user.display_name if bot.user else "Vain"
     website = getattr(bot_config, "website", "https://vain.bot")
-    support = getattr(bot_config, "support", "https://discord.gg/vainbot")
+    support = getattr(bot_config, "support", "https://discord.gg/vains")
     return "\n".join(
         [
             f"### [{bot_name}]({website})",

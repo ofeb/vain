@@ -198,7 +198,7 @@ class InformationCommands(Package):
             discord.ui.Button(
                 label="Support",
                 style=discord.ButtonStyle.link,
-                url="https://discord.gg/vainbot",
+                url="https://discord.gg/vains",
             )
         )
 
