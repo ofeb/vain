@@ -101,7 +101,6 @@ _PERM_LABELS: dict[str, str] = {
 _COG_MAP: dict[str, str] = {
     "Servers":       "Server",
     "Starboard":     "Server",
-    "Clownboard":    "Server",
     "Autorole":      "Server",
     "Bump":          "Server",
     "BumpReminder":  "Server",

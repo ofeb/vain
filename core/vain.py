@@ -77,52 +77,66 @@ def _has_setup_entry(path: Path) -> bool:
 
 
 def _discover_extensions(ext_dir: str = "ext") -> tuple[str, ...]:
-    """scan ext/ and return dotted module paths for every loadable extension.
-    package-style extensions load once from their top-level folder.
-    non-package folders load each top-level python module with a setup entrypoint."""
+    """Scan ext/ (and category subfolders) for loadable extensions.
+
+    Layout supported:
+      ext/<package>/__init__.py          → ext.package
+      ext/<category>/<package>/…         → ext.category.package
+      ext/<category>/<module>.py         → ext.category.module
+
+    Category folders are plain directories (no setup()). Packages with setup() load once.
+    """
     base = Path(ext_dir)
     if not base.exists():
         log.warning(f"ext dir not found: {base.resolve()}")
         return ()
 
     found: list[str] = []
-    for child in sorted(base.iterdir()):
-        if child.name.startswith("_") or child.name in _SKIP_DIRS:
-            continue
-        if child.is_dir():
-            if (child / "__init__.py").exists():
-                if _has_setup_entry(child):
-                    found.append(".".join(child.relative_to(Path(".")).parts))
-                continue
-            for py_file in sorted(child.glob("*.py")):
-                if py_file.stem.startswith("_") or py_file.stem in _SKIP_DIRS:
-                    continue
-                if _has_setup_entry(py_file):
-                    found.append(
-                        ".".join(py_file.relative_to(Path(".")).with_suffix("").parts)
-                    )
 
-            for sub in sorted(child.iterdir()):
-                if (
-                    not sub.is_dir()
-                    or sub.name.startswith("_")
-                    or sub.name in _SKIP_DIRS
-                ):
-                    continue
-                if (sub / "__init__.py").exists() and _has_setup_entry(sub):
-                    found.append(".".join(sub.relative_to(Path(".")).parts))
-            continue
-        if child.suffix == ".py" and child.stem != "__init__":
-            if _has_setup_entry(child):
+    def _add_package(path: Path) -> None:
+        if (path / "__init__.py").exists() and _has_setup_entry(path):
+            found.append(".".join(path.relative_to(Path(".")).parts))
+
+    def _add_module(path: Path) -> None:
+        if path.suffix == ".py" and path.stem not in {"__init__", *_SKIP_DIRS}:
+            if not path.stem.startswith("_") and _has_setup_entry(path):
                 found.append(
-                    ".".join(child.relative_to(Path(".")).with_suffix("").parts)
+                    ".".join(path.relative_to(Path(".")).with_suffix("").parts)
                 )
 
-    found.sort()
+    def _scan_dir(directory: Path, *, depth: int = 0) -> None:
+        if depth > 3:
+            return
+        for child in sorted(directory.iterdir()):
+            if child.name.startswith("_") or child.name in _SKIP_DIRS:
+                continue
+            if child.is_dir():
+                # Package with setup → load it (don't recurse into its internals)
+                if (child / "__init__.py").exists() and _has_setup_entry(child):
+                    _add_package(child)
+                    continue
+                # Category / namespace folder → scan one level deeper
+                _scan_dir(child, depth=depth + 1)
+                # Also allow loose .py modules inside category folders
+                for py_file in sorted(child.glob("*.py")):
+                    _add_module(py_file)
+                continue
+            if directory == base:
+                _add_module(child)
+
+    _scan_dir(base)
+    # de-dupe while preserving order
+    seen: set[str] = set()
+    unique: list[str] = []
+    for item in found:
+        if item not in seen:
+            seen.add(item)
+            unique.append(item)
+    unique.sort()
     if not music_enabled:
-        found = [ext for ext in found if ext != "ext.music"]
-    log.debug(f"discovered {len(found)} extensions: {', '.join(found)}")
-    return tuple(found)
+        unique = [ext for ext in unique if not ext.endswith(".music") and ".music." not in ext and ext != "ext.music"]
+    log.debug(f"discovered {len(unique)} extensions: {', '.join(unique)}")
+    return tuple(unique)
 
 
 _BLACKLIST_SQL = """
@@ -359,7 +373,7 @@ class Vain(commands.AutoShardedBot):
             "extensions finished (%.1fs)", time.perf_counter() - extensions_started
         )
 
-        from ext.server.extended.pagination.views import register_stored_paginations
+        from ext.server.server.extended.pagination.views import register_stored_paginations
 
         await register_stored_paginations(self)
 
