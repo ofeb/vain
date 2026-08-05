@@ -50,7 +50,14 @@ class ServerCommands(Package):
 
     @staticmethod
     def _normalize_embed_script(script: str, *, prefer: str = "embed") -> str:
-        """Normalize script mode. prefer='embed'|'container' when no mode tag."""
+        """Normalize script mode.
+
+        - ``{container}`` → container
+        - ``{embed}`` / bare field tags → embed
+        - plain text (no field tags) → plain content (no wrap)
+        prefer is only used when the script has field tags but no mode tag and
+        the caller explicitly wants containers (rare).
+        """
         from core.tools.embed import (
             is_container_script,
             is_embed_script,
@@ -58,27 +65,24 @@ class ServerCommands(Package):
         )
 
         value = str(script).strip()
+        if not value:
+            return value
         if is_container_script(value):
             return value
-        value = maybe_wrap_embed_script(value)
-        lowered = value.lower()
-        if lowered.startswith("{embed}") or lowered.startswith("embed$v"):
-            return value
-        if lowered.startswith("{container}") or lowered.startswith("container$v"):
-            return value
-        if prefer == "container":
-            if value.startswith("$v{"):
-                return "{container}" + value
-            if value.startswith("{"):
-                return f"{{container}}$v{value}"
-            return f"{{container}}$v{{description: {value}}}"
-        if value.startswith("$v{"):
-            return "{embed}" + value
-        if is_embed_script(value) or value.startswith("{"):
-            if value.startswith("{"):
-                return f"{{embed}}$v{value}" if not lowered.startswith("{embed}") else value
-            return value
-        return value
+        # Explicit container prefer only when it already looks like a script
+        if prefer == "container" and is_embed_script(value):
+            lowered = value.lower()
+            if not (
+                lowered.startswith("{embed}")
+                or lowered.startswith("embed$v")
+                or lowered.startswith("{container}")
+                or lowered.startswith("container$v")
+            ):
+                if value.startswith("$v{"):
+                    return "{container}" + value
+                if value.startswith("{"):
+                    return f"{{container}}$v{value}"
+        return maybe_wrap_embed_script(value)
 
     async def _send_embed_script(self, ctx, script: str, *, prefer: str = "embed"):
         normalized = self._normalize_embed_script(script, prefer=prefer)

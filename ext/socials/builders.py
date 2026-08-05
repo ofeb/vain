@@ -1,8 +1,13 @@
-"""Interactive embed (eb) and container (cb) builders with live previews."""
+"""Interactive embed (eb) and container (cb) builders with live previews.
+
+Embed builder  → classic Discord embeds + link/styled buttons
+Container builder → Components V2 LayoutView (TextDisplay, Section+Thumbnail,
+                    MediaGallery, Separator, ActionRow buttons)
+"""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import discord
 from discord import ui
@@ -14,19 +19,19 @@ if TYPE_CHECKING:
     from core.vain import Vain
 
 _MAX_BUILDER_BUTTONS = 25
-_BUTTON_STYLE_NOTE = "url · blurple · green · red · grey  (emoji optional)"
+_MAX_FIELDS = 25
+_BUTTON_STYLE_NOTE = "url · blurple · green · red · grey"
 _HEADER_EB = (
     "**Embed Builder** · live preview below\n"
-    "-# Select a field → fill modal → preview updates. Approve DMs you the script."
+    "-# Pick a field → modal → preview updates. **Approve** DMs you the script."
 )
 _HEADER_CB = (
-    "**Container Builder** · live preview below\n"
-    "-# Select a field → fill modal → preview updates. Approve DMs you the script."
+    "**Container Builder** · live Components V2 preview below\n"
+    "-# Pick a field → modal → preview updates. **Approve** DMs you the script."
 )
 
 
 def _normalize_btn_style(raw: str | None) -> str:
-    """Canonical button style name for scripts: url|blurple|green|red|grey."""
     s = (raw or "url").strip().lower()
     if s in {"url", "link", "u"}:
         return "url"
@@ -52,7 +57,6 @@ def _discord_btn_style(name: str) -> discord.ButtonStyle:
 
 
 def _button_script_chunk(btn: dict[str, str]) -> str:
-    """Serialize one button into embed/container script syntax."""
     style = _normalize_btn_style(btn.get("style"))
     label = (btn.get("label") or "Button").strip() or "Button"
     url = (btn.get("url") or "").strip()
@@ -67,10 +71,7 @@ def _button_script_chunk(btn: dict[str, str]) -> str:
     return f"$v{{button: {style} && {label} && {target}}}"
 
 
-def _make_preview_button(
-    btn: dict[str, str], *, index: int, v2: bool = False
-) -> discord.ui.Button:
-    """Build a Discord button for live preview (link or disabled styled)."""
+def _make_preview_button(btn: dict[str, str], *, index: int) -> discord.ui.Button:
     style_name = _normalize_btn_style(btn.get("style"))
     label = ((btn.get("label") or "Button").strip() or "Button")[:80]
     url = (btn.get("url") or "").strip()
@@ -79,7 +80,7 @@ def _make_preview_button(
     if style == discord.ButtonStyle.link:
         href = (
             url
-            if url.startswith("http")
+            if url.startswith(("http://", "https://"))
             else (f"https://{url}" if url else "https://discord.com")
         )
         return discord.ui.Button(
@@ -93,51 +94,73 @@ def _make_preview_button(
         label=label,
         emoji=emoji,
         disabled=True,
-        custom_id=f"{'cb' if v2 else 'eb'}:preview:{index}",
+        custom_id=f"builder:preview:{index}",
     )
 
 
-class _BuilderModal(discord.ui.Modal):
-    """Generic single/multi-field modal for embed & container builders."""
+def _strip_subtext(text: str) -> str:
+    cleaned = str(text or "").strip()
+    while cleaned.startswith("-#"):
+        cleaned = cleaned[2:].lstrip()
+    return cleaned
 
-    def __init__(self, title: str, fields: list[tuple[str, str, bool, int]]):
+
+class _BuilderModal(discord.ui.Modal):
+    """Multi-field modal used by both builders."""
+
+    def __init__(
+        self,
+        title: str,
+        fields: list[tuple[str, str, bool, int, str]],
+    ):
+        # fields: (key, label, paragraph, maxlen, default)
         super().__init__(title=title[:45])
         self.keys: list[str] = []
         self.values: dict[str, str] = {}
-        for key, label, paragraph, maxlen in fields[:5]:
+        self._submitted = False
+        for key, label, paragraph, maxlen, default in fields[:5]:
             self.keys.append(key)
-            style = (
-                discord.TextStyle.paragraph if paragraph else discord.TextStyle.short
-            )
             item = discord.ui.TextInput(
                 label=label[:45],
-                style=style,
+                style=(
+                    discord.TextStyle.paragraph
+                    if paragraph
+                    else discord.TextStyle.short
+                ),
                 required=False,
-                max_length=min(maxlen, 4000),
+                max_length=min(int(maxlen), 4000),
+                default=(default or "")[: min(int(maxlen), 4000)] or None,
             )
             self.add_item(item)
 
-    async def on_submit(self, interaction: discord.Interaction):
+    async def on_submit(self, interaction: discord.Interaction) -> None:
         for key, child in zip(self.keys, self.children):
             if isinstance(child, discord.ui.TextInput):
                 self.values[key] = child.value or ""
-        await interaction.response.defer()
+        self._submitted = True
+        if not interaction.response.is_done():
+            await interaction.response.defer()
 
 
 class _BuilderControls(discord.ui.View):
-    """Shared select + approve/cancel controls for eb/cb (classic View)."""
+    """Select + Approve/Cancel. Preview buttons live on a separate message."""
 
     def __init__(
-        self, owner: "_BaseBuilder", *, field_options: list[discord.SelectOption]
+        self,
+        owner: "_BaseBuilder",
+        *,
+        field_options: list[discord.SelectOption],
     ):
-        super().__init__(timeout=300)
+        super().__init__(timeout=600)
         self.owner = owner
+
         select = discord.ui.Select(
             placeholder="Choose what to edit...",
             min_values=1,
             max_values=1,
-            options=field_options,
+            options=field_options[:25],
             row=0,
+            custom_id="builder:field",
         )
         select.callback = self._on_select
         self.add_item(select)
@@ -145,45 +168,36 @@ class _BuilderControls(discord.ui.View):
         approve = discord.ui.Button(
             label="Approve & DM Script",
             style=discord.ButtonStyle.success,
-            row=4,
+            row=1,
+            custom_id="builder:approve",
         )
         cancel = discord.ui.Button(
             label="Cancel",
             style=discord.ButtonStyle.danger,
-            row=4,
+            row=1,
+            custom_id="builder:cancel",
         )
         approve.callback = self._on_approve
         cancel.callback = self._on_cancel
         self.add_item(approve)
         self.add_item(cancel)
 
-        
-        
-        for i, btn in enumerate(owner.buttons[:15]):
-            row = 1 + (i // 5)
-            if row > 3:
-                break
-            try:
-                item = _make_preview_button(btn, index=i, v2=False)
-                item.row = row
-                self.add_item(item)
-            except Exception:
-                pass
-
     async def interaction_check(self, inter: discord.Interaction) -> bool:
-        if inter.user.id == self.owner.author_id:
+        if inter.user and inter.user.id == self.owner.author_id:
             return True
-        await inter.response.send_message(
-            f"Only <@{self.owner.author_id}> can use this.",
-            ephemeral=True,
-        )
+        if not inter.response.is_done():
+            await inter.response.send_message(
+                f"Only <@{self.owner.author_id}> can use this.",
+                ephemeral=True,
+            )
         return False
 
     async def _on_select(self, inter: discord.Interaction) -> None:
         data = inter.data or {}
         values = list(data.get("values") or []) if isinstance(data, dict) else []
         key = values[0] if values else ""
-        await self.owner.handle_field(inter, key)
+        if key:
+            await self.owner.handle_field(inter, key)
 
     async def _on_approve(self, inter: discord.Interaction) -> None:
         await self.owner.handle_approve(inter)
@@ -196,7 +210,7 @@ class _BuilderControls(discord.ui.View):
 
 
 class _BaseBuilder:
-    """Shared field data + button list for eb / cb."""
+    """Shared state for embed / container builders."""
 
     kind: str = "embed"
     header: str = _HEADER_EB
@@ -204,6 +218,7 @@ class _BaseBuilder:
     def __init__(self, author_id: int, accent: int | None = None):
         self.author_id = author_id
         self.data: dict[str, str] = {
+            "content": "",
             "title": "",
             "description": "",
             "color": f"{(accent if accent is not None else 0x2B2D31):06x}",
@@ -215,12 +230,18 @@ class _BaseBuilder:
             "footer_timestamp": "0",
             "image": "",
             "thumbnail": "",
+            "url": "",
             "divider": "0",
         }
+        self.fields: list[dict[str, str]] = []  # name/value/inline
         self.buttons: list[dict[str, str]] = []
         self.message: discord.Message | None = None
         self.preview_message: discord.Message | None = None
         self._stopped = False
+
+    # ------------------------------------------------------------------
+    # helpers
+    # ------------------------------------------------------------------
 
     def _accent(self) -> int:
         raw = (self.data.get("color") or "2b2d31").lstrip("#")
@@ -229,8 +250,23 @@ class _BaseBuilder:
         except ValueError:
             return 0x2B2D31
 
+    def _truthy(self, key: str) -> bool:
+        return (self.data.get(key) or "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+            "y",
+            "enable",
+        }
+
     def _field_options(self) -> list[discord.SelectOption]:
-        opts = [
+        opts: list[discord.SelectOption] = [
+            discord.SelectOption(
+                label="Content (message text)",
+                value="content",
+                description="Plain text above the embed/container",
+            ),
             discord.SelectOption(label="Title", value="title"),
             discord.SelectOption(label="Description", value="description"),
             discord.SelectOption(label="Color (hex)", value="color"),
@@ -247,14 +283,64 @@ class _BaseBuilder:
             discord.SelectOption(label="Image URL", value="image"),
             discord.SelectOption(label="Thumbnail URL", value="thumbnail"),
         ]
-        if self.kind == "container":
+        if self.kind == "embed":
             opts.append(
                 discord.SelectOption(
-                    label="Divider on/off",
-                    value="divider",
-                    description="Toggle separator",
+                    label="Embed URL (title link)",
+                    value="url",
+                    description="Clickable title URL",
                 )
             )
+            opts.append(
+                discord.SelectOption(
+                    label=f"Add Field ({len(self.fields)}/{_MAX_FIELDS})",
+                    value="field",
+                    description="name · value · inline yes/no",
+                )
+            )
+            if self.fields:
+                opts.append(
+                    discord.SelectOption(
+                        label="Remove last field",
+                        value="field_remove",
+                    )
+                )
+                opts.append(
+                    discord.SelectOption(
+                        label="Clear all fields",
+                        value="field_clear",
+                    )
+                )
+        else:
+            opts.append(
+                discord.SelectOption(
+                    label="Divider / Separator",
+                    value="divider",
+                    description="Toggle a separator line",
+                )
+            )
+            opts.append(
+                discord.SelectOption(
+                    label=f"Add Field-like block ({len(self.fields)}/{_MAX_FIELDS})",
+                    value="field",
+                    description="bold name + value text block",
+                )
+            )
+            if self.fields:
+                opts.append(
+                    discord.SelectOption(
+                        label="Remove last field block",
+                        value="field_remove",
+                    )
+                )
+            opts.append(
+                discord.SelectOption(
+                    label="New Action Row break",
+                    value="actionrow",
+                    description="Start a fresh button row in the script",
+                )
+            )
+
         n = len(self.buttons)
         opts.append(
             discord.SelectOption(
@@ -277,28 +363,35 @@ class _BaseBuilder:
                     value="button_clear",
                 )
             )
-        return opts
+        return opts[:25]
 
     def _controls(self) -> _BuilderControls:
         return _BuilderControls(self, field_options=self._field_options())
 
+    # ------------------------------------------------------------------
+    # script serialization
+    # ------------------------------------------------------------------
+
     def _to_script(self) -> str:
         mode = "{embed}" if self.kind == "embed" else "{container}"
         parts = [mode]
+        if self.data.get("content"):
+            parts.append(f"$v{{content: {self.data['content']}}}")
         if self.data.get("title"):
             parts.append(f"$v{{title: {self.data['title']}}}")
         if self.data.get("description"):
             parts.append(f"$v{{description: {self.data['description']}}}")
         if self.data.get("color"):
             parts.append(f"$v{{color: #{self.data['color'].lstrip('#')}}}")
+        if self.data.get("url") and self.kind == "embed":
+            parts.append(f"$v{{url: {self.data['url']}}}")
         if self.data.get("author"):
             bits = [self.data["author"]]
             if self.data.get("author_icon"):
                 bits.append(self.data["author_icon"])
+            elif self.data.get("author_url"):
+                bits.append("")  # keep icon slot empty
             if self.data.get("author_url"):
-                
-                if not self.data.get("author_icon"):
-                    bits.append("")  
                 bits.append(self.data["author_url"])
             parts.append(f"$v{{author: {' && '.join(bits)}}}")
         if self.data.get("footer"):
@@ -306,33 +399,45 @@ class _BaseBuilder:
             if self.data.get("footer_icon"):
                 fbits.append(self.data["footer_icon"])
             parts.append(f"$v{{footer: {' && '.join(fbits)}}}")
-        if self.data.get("footer_timestamp") in {"1", "true", "yes", "on"}:
+        if self._truthy("footer_timestamp"):
             parts.append("$v{timestamp}")
-        if self.kind == "container" and self.data.get("divider") in {
-            "1",
-            "true",
-            "yes",
-            "on",
-        }:
+        if self.kind == "container" and self._truthy("divider"):
             parts.append("$v{divider}")
         if self.data.get("image"):
             parts.append(f"$v{{image: {self.data['image']}}}")
         if self.data.get("thumbnail"):
             parts.append(f"$v{{thumbnail: {self.data['thumbnail']}}}")
-        for btn in self.buttons[:_MAX_BUILDER_BUTTONS]:
+        for field in self.fields[:_MAX_FIELDS]:
+            name = field.get("name") or "Field"
+            value = field.get("value") or "​"
+            inline = field.get("inline") == "1"
+            if self.kind == "embed":
+                tail = " && inline" if inline else ""
+                parts.append(f"$v{{field: {name} && {value}{tail}}}")
+            else:
+                parts.append(f"$v{{field: {name} && {value}}}")
+        # buttons — optional actionrow breaks every 5 for container
+        for i, btn in enumerate(self.buttons[:_MAX_BUILDER_BUTTONS]):
+            if self.kind == "container" and i > 0 and i % 5 == 0:
+                parts.append("$v{actionrow}")
             parts.append(_button_script_chunk(btn))
         if len(parts) == 1:
             return f"{mode}$v{{description: }}"
         return "".join(parts)
+
+    # ------------------------------------------------------------------
+    # previews
+    # ------------------------------------------------------------------
 
     def _preview_embed(self) -> discord.Embed:
         emb = discord.Embed(
             title=self.data.get("title") or None,
             description=self.data.get("description") or None,
             color=self._accent(),
+            url=(self.data.get("url") or None) or None,
         )
         if self.data.get("author"):
-            kwargs: dict = {"name": self.data["author"]}
+            kwargs: dict[str, Any] = {"name": self.data["author"]}
             if self.data.get("author_icon"):
                 kwargs["icon_url"] = self.data["author_icon"]
             if self.data.get("author_url"):
@@ -352,7 +457,7 @@ class _BaseBuilder:
                     emb.set_footer(text=self.data["footer"])
             except Exception:
                 emb.set_footer(text=self.data["footer"])
-        if self.data.get("footer_timestamp") in {"1", "true", "yes", "on"}:
+        if self._truthy("footer_timestamp"):
             emb.timestamp = discord.utils.utcnow()
         if self.data.get("image"):
             try:
@@ -364,7 +469,15 @@ class _BaseBuilder:
                 emb.set_thumbnail(url=self.data["thumbnail"])
             except Exception:
                 pass
-        
+        for field in self.fields[:_MAX_FIELDS]:
+            try:
+                emb.add_field(
+                    name=(field.get("name") or "Field")[:256],
+                    value=(field.get("value") or "​")[:1024],
+                    inline=field.get("inline") == "1",
+                )
+            except Exception:
+                pass
         has_any = any(
             (
                 emb.title,
@@ -375,16 +488,15 @@ class _BaseBuilder:
                 self.data.get("image"),
                 self.data.get("thumbnail"),
                 self.buttons,
+                self.data.get("content"),
             )
         )
-        if not has_any:
-            emb.description = "\u200b"
-        elif not emb.title and not emb.description:
-            emb.description = "\u200b"
+        if not has_any or (not emb.title and not emb.description and not emb.fields):
+            if not emb.description:
+                emb.description = "​"
         return emb
 
     def _preview_container(self) -> ui.LayoutView:
-        """Visual empty/filled container for cb live preview."""
         layout = ui.LayoutView(timeout=None)
         container = ui.Container(accent_colour=self._accent())
 
@@ -395,18 +507,22 @@ class _BaseBuilder:
             lines.append(f"## {self.data['title']}")
         if self.data.get("description"):
             lines.append(self.data["description"])
+        for field in self.fields[:_MAX_FIELDS]:
+            name = field.get("name") or "Field"
+            value = field.get("value") or "​"
+            lines.append(f"**{name}**\n{value}")
         if self.data.get("footer"):
-            foot = self.data["footer"]
-            if self.data.get("footer_timestamp") in {"1", "true", "yes", "on"}:
+            foot = _strip_subtext(self.data["footer"])
+            if self._truthy("footer_timestamp"):
                 now = discord.utils.utcnow()
-                foot = f"{foot} · Today at {now.strftime('%H:%M')}"
-            lines.append(f"-# {foot}")
-        elif self.data.get("footer_timestamp") in {"1", "true", "yes", "on"}:
+                foot = f"{foot} · Today at {now.strftime('%H:%M')}" if foot else f"Today at {now.strftime('%H:%M')}"
+            if foot:
+                lines.append(f"-# {foot}")
+        elif self._truthy("footer_timestamp"):
             now = discord.utils.utcnow()
             lines.append(f"-# Today at {now.strftime('%H:%M')}")
 
-        body = "\n".join(lines) if lines else "\u200b"
-        
+        body = "\n".join(lines) if lines else "​"
         accessory = (
             (self.data.get("thumbnail") or "").strip()
             or (self.data.get("author_icon") or "").strip()
@@ -424,28 +540,41 @@ class _BaseBuilder:
         else:
             container.add_item(ui.TextDisplay(body))
 
-        if self.data.get("divider") in {"1", "true", "yes", "on"}:
-            container.add_item(ui.Separator(visible=True))
+        if self._truthy("divider"):
+            try:
+                container.add_item(ui.Separator(visible=True))
+            except Exception:
+                pass
 
         image = (self.data.get("image") or "").strip()
         if image.startswith("http"):
             try:
-                container.add_item(ui.MediaGallery(discord.MediaGalleryItem(image)))
+                gallery = ui.MediaGallery()
+                gallery.add_item(media=image)
+                container.add_item(gallery)
+            except Exception:
+                try:
+                    container.add_item(ui.MediaGallery(discord.MediaGalleryItem(image)))
+                except Exception:
+                    pass
+
+        if self.buttons:
+            try:
+                container.add_item(ui.Separator(visible=True))
             except Exception:
                 pass
-
-        
-        if self.buttons:
-            container.add_item(ui.Separator(visible=True))
             for i in range(0, min(len(self.buttons), _MAX_BUILDER_BUTTONS), 5):
                 row = ui.ActionRow()
                 for j, btn in enumerate(self.buttons[i : i + 5]):
                     try:
-                        row.add_item(_make_preview_button(btn, index=i + j, v2=True))
+                        row.add_item(_make_preview_button(btn, index=i + j))
                     except Exception:
                         pass
-                if row.children:
-                    container.add_item(row)
+                if getattr(row, "children", None):
+                    try:
+                        container.add_item(row)
+                    except Exception:
+                        pass
 
         layout.add_item(container)
         return layout
@@ -453,16 +582,19 @@ class _BaseBuilder:
     async def refresh(self) -> None:
         if self._stopped or not self.message:
             return
+        content_prefix = ""
+        if self.data.get("content"):
+            content_prefix = f"{self.data['content']}\n\n"
         try:
             if self.kind == "embed":
                 await self.message.edit(
-                    content=self.header,
+                    content=f"{content_prefix}{self.header}",
                     embed=self._preview_embed(),
                     view=self._controls(),
                 )
             else:
                 await self.message.edit(
-                    content=self.header,
+                    content=f"{content_prefix}{self.header}",
                     view=self._controls(),
                 )
                 if self.preview_message is not None:
@@ -476,6 +608,23 @@ class _BaseBuilder:
         except Exception:
             pass
 
+    # ------------------------------------------------------------------
+    # field handlers
+    # ------------------------------------------------------------------
+
+    async def _run_modal(
+        self,
+        inter: discord.Interaction,
+        title: str,
+        fields: list[tuple[str, str, bool, int, str]],
+    ) -> dict[str, str] | None:
+        modal = _BuilderModal(title, fields)
+        await inter.response.send_modal(modal)
+        timed_out = await modal.wait()
+        if timed_out and not modal._submitted:
+            return None
+        return modal.values or None
+
     async def handle_field(self, inter: discord.Interaction, key: str) -> None:
         if key == "button":
             if len(self.buttons) >= _MAX_BUILDER_BUTTONS:
@@ -484,28 +633,22 @@ class _BaseBuilder:
                     ephemeral=True,
                 )
                 return
-            modal = _BuilderModal(
+            values = await self._run_modal(
+                inter,
                 f"Add Button ({len(self.buttons) + 1}/{_MAX_BUILDER_BUTTONS})",
                 [
-                    ("label", "Label / title", False, 80),
-                    ("url", "URL (required for style url)", False, 500),
-                    ("emoji", "Emoji (optional)", False, 100),
-                    (
-                        "style",
-                        "Style: url blurple green red grey",
-                        False,
-                        20,
-                    ),
+                    ("label", "Label", False, 80, ""),
+                    ("url", "URL (for style url)", False, 500, ""),
+                    ("emoji", "Emoji (optional)", False, 100, ""),
+                    ("style", "Style: url blurple green red grey", False, 20, "url"),
                 ],
             )
-            await inter.response.send_modal(modal)
-            await modal.wait()
-            if not modal.values:
+            if not values:
                 return
-            label = (modal.values.get("label") or "").strip() or "Button"
-            url = (modal.values.get("url") or "").strip()
-            emoji = (modal.values.get("emoji") or "").strip()
-            style = _normalize_btn_style(modal.values.get("style") or "url")
+            label = (values.get("label") or "").strip() or "Button"
+            url = (values.get("url") or "").strip()
+            emoji = (values.get("emoji") or "").strip()
+            style = _normalize_btn_style(values.get("style") or "url")
             if style == "url" and not url:
                 url = "https://discord.com"
             self.buttons.append(
@@ -529,15 +672,67 @@ class _BaseBuilder:
             await self.refresh()
             return
 
-        if key == "divider":
-            modal = _BuilderModal(
-                "Divider",
-                [("divider", "on or off", False, 10)],
+        if key == "field":
+            if len(self.fields) >= _MAX_FIELDS:
+                await inter.response.send_message(
+                    f"Max **{_MAX_FIELDS}** fields.",
+                    ephemeral=True,
+                )
+                return
+            values = await self._run_modal(
+                inter,
+                f"Add Field ({len(self.fields) + 1}/{_MAX_FIELDS})",
+                [
+                    ("name", "Field name", False, 256, ""),
+                    ("value", "Field value", True, 1024, ""),
+                    ("inline", "Inline? yes/no (embed only)", False, 10, "no"),
+                ],
             )
-            await inter.response.send_modal(modal)
-            await modal.wait()
-            if modal.values:
-                val = (modal.values.get("divider") or "").lower().strip()
+            if not values:
+                return
+            name = (values.get("name") or "").strip() or "Field"
+            value = (values.get("value") or "").strip() or "​"
+            inline_raw = (values.get("inline") or "").lower().strip()
+            inline = "1" if inline_raw in {"yes", "y", "true", "1", "on", "inline"} else "0"
+            self.fields.append({"name": name, "value": value, "inline": inline})
+            await self.refresh()
+            return
+
+        if key == "field_remove":
+            if self.fields:
+                self.fields.pop()
+            if not inter.response.is_done():
+                await inter.response.defer()
+            await self.refresh()
+            return
+
+        if key == "field_clear":
+            self.fields.clear()
+            if not inter.response.is_done():
+                await inter.response.defer()
+            await self.refresh()
+            return
+
+        if key == "actionrow":
+            # Script-only marker — store as a zero-width button group break by
+            # padding buttons list with a sentinel? Simpler: just note in DM.
+            # We insert a synthetic marker button the serializer understands.
+            if not inter.response.is_done():
+                await inter.response.send_message(
+                    "Next buttons will start a **new action row** in the script "
+                    "(every 5 buttons also auto-break).",
+                    ephemeral=True,
+                )
+            return
+
+        if key == "divider":
+            values = await self._run_modal(
+                inter,
+                "Divider / Separator",
+                [("divider", "on or off", False, 10, "on" if self._truthy("divider") else "off")],
+            )
+            if values:
+                val = (values.get("divider") or "").lower().strip()
                 self.data["divider"] = (
                     "1" if val in {"on", "yes", "true", "1", "enable"} else "0"
                 )
@@ -545,47 +740,44 @@ class _BaseBuilder:
             return
 
         if key == "author":
-            modal = _BuilderModal(
+            values = await self._run_modal(
+                inter,
                 "Author",
                 [
-                    ("author", "Name", False, 256),
-                    ("author_icon", "Icon URL (optional)", False, 500),
-                    ("author_url", "URL (optional)", False, 500),
+                    ("author", "Name", False, 256, self.data.get("author") or ""),
+                    ("author_icon", "Icon URL", False, 500, self.data.get("author_icon") or ""),
+                    ("author_url", "URL", False, 500, self.data.get("author_url") or ""),
                 ],
             )
-            await inter.response.send_modal(modal)
-            await modal.wait()
-            if modal.values:
+            if values:
                 for k in ("author", "author_icon", "author_url"):
-                    if k in modal.values:
-                        self.data[k] = (modal.values[k] or "").strip()
+                    if k in values:
+                        self.data[k] = (values[k] or "").strip()
             await self.refresh()
             return
 
         if key == "footer":
-            modal = _BuilderModal(
+            values = await self._run_modal(
+                inter,
                 "Footer",
                 [
-                    ("footer", "Text", True, 2048),
-                    ("footer_icon", "Icon URL (optional)", False, 500),
+                    ("footer", "Text", True, 2048, self.data.get("footer") or ""),
+                    ("footer_icon", "Icon URL", False, 500, self.data.get("footer_icon") or ""),
                     (
                         "footer_timestamp",
-                        "Timestamp yes/no (Today at HH:MM)",
+                        "Timestamp yes/no",
                         False,
                         10,
+                        "yes" if self._truthy("footer_timestamp") else "no",
                     ),
                 ],
             )
-            await inter.response.send_modal(modal)
-            await modal.wait()
-            if modal.values:
-                if "footer" in modal.values:
-                    self.data["footer"] = (modal.values["footer"] or "").strip()
-                if "footer_icon" in modal.values:
-                    self.data["footer_icon"] = (
-                        modal.values["footer_icon"] or ""
-                    ).strip()
-                ts = (modal.values.get("footer_timestamp") or "").lower().strip()
+            if values:
+                if "footer" in values:
+                    self.data["footer"] = _strip_subtext(values.get("footer") or "")
+                if "footer_icon" in values:
+                    self.data["footer_icon"] = (values.get("footer_icon") or "").strip()
+                ts = (values.get("footer_timestamp") or "").lower().strip()
                 self.data["footer_timestamp"] = (
                     "1" if ts in {"on", "yes", "true", "1", "y"} else "0"
                 )
@@ -593,74 +785,71 @@ class _BaseBuilder:
             return
 
         labels = {
-            "title": "Title",
-            "description": "Description",
-            "color": "Color hex (e.g. 5865F2)",
-            "image": "Image URL",
-            "thumbnail": "Thumbnail URL",
+            "content": ("Content / message text", True, 2000),
+            "title": ("Title", False, 256),
+            "description": ("Description", True, 4000),
+            "color": ("Color hex (e.g. 5865F2)", False, 20),
+            "image": ("Image URL", False, 500),
+            "thumbnail": ("Thumbnail URL", False, 500),
+            "url": ("Title URL", False, 500),
         }
-        modal = _BuilderModal(
-            f"Edit {labels.get(key, key)}",
-            [
-                (
-                    key,
-                    labels.get(key, key),
-                    key in {"description"},
-                    4000
-                    if key == "description"
-                    else 500
-                    if key in {"image", "thumbnail"}
-                    else 256,
-                )
-            ],
+        if key not in labels:
+            if not inter.response.is_done():
+                await inter.response.send_message("Unknown field.", ephemeral=True)
+            return
+        label, paragraph, maxlen = labels[key]
+        values = await self._run_modal(
+            inter,
+            f"Edit {label}",
+            [(key, label, paragraph, maxlen, self.data.get(key) or "")],
         )
-        if self.data.get(key) and modal.children:
-            child = modal.children[0]
-            if isinstance(child, discord.ui.TextInput):
-                child.default = (self.data[key] or "")[: child.max_length]
-        await inter.response.send_modal(modal)
-        await modal.wait()
-        if modal.values and key in modal.values:
-            self.data[key] = modal.values[key]
+        if values and key in values:
+            self.data[key] = (values[key] or "").strip()
+            if key == "color":
+                self.data[key] = self.data[key].lstrip("#")
         await self.refresh()
 
     async def handle_approve(self, inter: discord.Interaction) -> None:
         script = self._to_script()
-        label = "embed" if self.kind == "embed" else "container"
-        paste = (
-            "`,ce` / `,createembed`"
-            if self.kind == "embed"
-            else "`,cc` / `,createcontainer`"
-        )
         dm_ok = False
         try:
-            await inter.user.send(
-                f"`{script}`"
-            )
+            await inter.user.send(f"`{script}`")
             dm_ok = True
         except Exception:
             pass
-        if dm_ok:
-            await inter.response.send_message(
-                "Script sent to your **DMs**. Live preview stays above.",
-                ephemeral=True,
-            )
-        else:
-            await inter.response.send_message(
-                f"Could not DM you — script:\n```\n{script[:1800]}\n```",
-                ephemeral=True,
-            )
+        if not inter.response.is_done():
+            if dm_ok:
+                await inter.response.send_message(
+                    "Script sent to your **DMs**. Live preview stays above.",
+                    ephemeral=True,
+                )
+            else:
+                # chunk long scripts
+                chunk = script[:1800]
+                await inter.response.send_message(
+                    f"Could not DM you — script:\n```\n{chunk}\n```",
+                    ephemeral=True,
+                )
         self._stopped = True
+        try:
+            self.stop_controls()
+        except Exception:
+            pass
+
+    def stop_controls(self) -> None:
+        if self.message and self.message.components is not None:
+            pass
 
     async def handle_cancel(self, inter: discord.Interaction) -> None:
         self._stopped = True
         name = "Embed" if self.kind == "embed" else "Container"
         try:
-            await inter.response.edit_message(
-                content=f"{name} builder cancelled.",
-                embed=None,
-                view=None,
-            )
+            if not inter.response.is_done():
+                await inter.response.edit_message(
+                    content=f"{name} builder cancelled.",
+                    embed=None,
+                    view=None,
+                )
         except Exception:
             pass
         if self.preview_message is not None:
@@ -694,11 +883,12 @@ async def register_builders(bot: "Vain") -> None:
     @hybrid(
         name="embedbuilder",
         aliases=["eb"],
-        description="Interactive embed builder with live classic embed preview. Approve DMs the script.",
+        description="Interactive embed builder with live preview. Approve DMs the script.",
         example=",embedbuilder",
     )
     async def _run_eb(ctx: Context):
-        builder = EmbedBuilderView(ctx.author.id)
+        accent = getattr(ctx.bot, "color", None) or 0x2B2D31
+        builder = EmbedBuilderView(ctx.author.id, accent=int(accent))
         m = await ctx.send(
             content=builder.header,
             embed=builder._preview_embed(),
@@ -710,24 +900,28 @@ async def register_builders(bot: "Vain") -> None:
     @hybrid(
         name="containerbuilder",
         aliases=["cb"],
-        description="Interactive container builder with live visual container preview. Approve DMs the script.",
+        description="Interactive Components V2 container builder with live preview. Approve DMs the script.",
         example=",containerbuilder",
     )
     async def _run_cb(ctx: Context):
         accent = getattr(ctx.bot, "color", None) or 0x2B2D31
         builder = ContainerBuilderView(ctx.author.id, accent=int(accent))
-        
         m = await ctx.send(
             content=builder.header,
             view=builder._controls(),
         )
         builder.message = m
-        
         try:
             preview = await ctx.send(view=builder._preview_container())
             builder.preview_message = preview
         except Exception:
             builder.preview_message = None
+
+    # Avoid double-register on hot reload
+    for name in ("embedbuilder", "containerbuilder", "eb", "cb"):
+        existing = bot.get_command(name)
+        if existing is not None:
+            bot.remove_command(existing.name)
 
     bot.add_command(_run_eb)
     bot.add_command(_run_cb)

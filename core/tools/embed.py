@@ -170,11 +170,21 @@ def is_embed_script(raw: str) -> bool:
     return False
 
 
+def _strip_subtext_prefix(text: str) -> str:
+    """Remove leading ``-#`` markers so callers can re-apply a single one."""
+    cleaned = str(text or "").strip()
+    while cleaned.startswith("-#"):
+        cleaned = cleaned[2:].lstrip()
+    return cleaned
+
+
 def maybe_wrap_embed_script(text: str) -> str:
     """Normalize scripts: auto-prefix ``{embed}`` when field tags are present.
 
-    Explicit ``{container}`` is left alone. Plain chat templates without embed
-    field keys stay as plain content.
+    Rules:
+    - ``{container}`` / ``container$v`` → left alone (Components V2)
+    - ``{embed}`` / ``embed$v`` / bare ``{title:}`` etc. → classic embed
+    - plain text with no field tags → plain content message (no wrap)
     """
     stripped = str(text).strip()
     if not stripped:
@@ -187,13 +197,14 @@ def maybe_wrap_embed_script(text: str) -> str:
             lowered.startswith("{embed}")
             or lowered.startswith("embed$v")
             or lowered.startswith("{container}")
+            or lowered.startswith("container$v")
         ):
             return stripped
         if stripped.startswith("$v{"):
             return "{embed}" + stripped
         if stripped.startswith("{"):
             return f"{{embed}}$v{stripped}"
-        
+        # Field hints mid-string with $v separators
         return f"{{embed}}$v{stripped}" if "$v{" in stripped else stripped
     return stripped
 
@@ -446,12 +457,27 @@ async def parse_container(raw: str, sendable: bool = False) -> dict:
         if key == "footer":
             bits = _split_fields(payload)
             if bits and bits[0]:
-                lines.append(f"-# {bits[0]}")
+                foot = _strip_subtext_prefix(bits[0])
+                if foot:
+                    lines.append(f"-# {foot}")
             continue
         if key == "author":
             bits = _split_fields(payload)
-            if bits and bits[0]:
-                lines.append(f"**{bits[0]}**")
+            name = bits[0] if bits else ""
+            icon = bits[1] if len(bits) > 1 else ""
+            if name and icon and _has_link(icon):
+                _flush_text()
+                try:
+                    container.add_item(
+                        ui.Section(
+                            ui.TextDisplay(f"**{name}**"),
+                            accessory=ui.Thumbnail(media=icon),
+                        )
+                    )
+                except Exception:
+                    lines.append(f"**{name}**")
+            elif name:
+                lines.append(f"**{name}**")
             continue
         if key == "field":
             bits = _split_fields(payload)
@@ -459,7 +485,6 @@ async def parse_container(raw: str, sendable: bool = False) -> dict:
                 lines.append(f"**{bits[0]}**\n{bits[1]}")
             continue
         if key == "image":
-            
             _flush_text()
             if payload and _has_link(payload):
                 try:
@@ -470,9 +495,34 @@ async def parse_container(raw: str, sendable: bool = False) -> dict:
                     lines.append(payload)
             continue
         if key == "thumbnail":
-            
-            if payload:
+            # Thumbnail as Section accessory on pending text, else raw link line
+            if payload and _has_link(payload):
+                body = "\n".join(lines) if lines else "​"
+                lines = []
+                try:
+                    container.add_item(
+                        ui.Section(
+                            ui.TextDisplay(body),
+                            accessory=ui.Thumbnail(media=payload),
+                        )
+                    )
+                except Exception:
+                    lines.append(payload)
+            elif payload:
                 lines.append(payload)
+            continue
+        if key in {"actionrow", "action_row", "row"}:
+            # Explicit action-row break — flush buttons into a row early
+            _flush_text()
+            if buttons:
+                try:
+                    container.add_item(ui.Separator(visible=True))
+                except Exception:
+                    pass
+                for i in range(0, len(buttons), 5):
+                    row = ui.ActionRow(*buttons[i : i + 5])
+                    container.add_item(row)
+                buttons = []
             continue
         if key == "button":
             bits = _split_fields(payload)
@@ -480,11 +530,11 @@ async def parse_container(raw: str, sendable: bool = False) -> dict:
                 raise BadEmbed("button needs at least two arguments")
             first, second = bits[0], bits[1]
             third = bits[2] if len(bits) > 2 else ""
-            fourth = bits[3] if len(bits) > 3 else None
             first_url = first if _has_link(first) else None
             label = second or None
             emoji = None
             url = None
+            style = discord.ButtonStyle.secondary
             if first_url:
                 style = discord.ButtonStyle.link
                 url = first_url
@@ -502,16 +552,29 @@ async def parse_container(raw: str, sendable: bool = False) -> dict:
                     url = target
                 else:
                     emoji = _parse_button_emoji(target)
-            buttons.append(
-                discord.ui.Button(
-                    label=label,
-                    style=style if first_url or style == discord.ButtonStyle.link else style,
-                    url=url,
-                    emoji=emoji,
-                )
-            )
+            try:
+                if style == discord.ButtonStyle.link:
+                    buttons.append(
+                        discord.ui.Button(
+                            label=label,
+                            style=style,
+                            url=url,
+                            emoji=emoji,
+                        )
+                    )
+                else:
+                    buttons.append(
+                        PassiveButton(
+                            label=label,
+                            style=style,
+                            emoji=emoji,
+                            disabled=False,
+                        )
+                    )
+            except Exception as error:
+                raise BadEmbed(f"invalid button: {error}") from error
             continue
-        
+
         if payload:
             lines.append(payload)
 
@@ -532,11 +595,28 @@ async def parse_container(raw: str, sendable: bool = False) -> dict:
         except Exception:
             pass
         for i in range(0, len(buttons), 5):
-            row = ui.ActionRow(*buttons[i : i + 5])
-            container.add_item(row)
+            try:
+                row = ui.ActionRow(*buttons[i : i + 5])
+                container.add_item(row)
+            except Exception:
+                # Fallback: add buttons one-by-one if ActionRow packing fails
+                for btn in buttons[i : i + 5]:
+                    try:
+                        container.add_item(ui.ActionRow(btn))
+                    except Exception:
+                        pass
+
+    # Empty container still needs something to render
+    if not getattr(container, "children", None) and not lines:
+        try:
+            container.add_item(ui.TextDisplay("​"))
+        except Exception:
+            pass
 
     layout.add_item(container)
     final: dict[str, Any] = {"view": layout}
+    # Components V2 messages cannot mix classic content with the layout flag in
+    # some clients — keep content only when explicitly set for non-v2 fallbacks.
     if content is not None:
         final["content"] = content
     if delete_after is not None:
