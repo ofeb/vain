@@ -71,10 +71,12 @@ class ModuleConverter(commands.Converter):
 
 
 class EmbedConverter(commands.Converter):
-    """pass embed script bodies through while preserving `.script` access."""
+    """Pass embed/container/plain/discohook JSON through as ScriptType."""
 
     async def convert(self, ctx: commands.Context, argument: str):
         from core.tools.embed import maybe_wrap_embed_script
+
+        # maybe_wrap also converts discohook JSON → {embed}$v… / plain
         return ScriptType(maybe_wrap_embed_script(argument))
 
 

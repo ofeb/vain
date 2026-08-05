@@ -178,10 +178,159 @@ def _strip_subtext_prefix(text: str) -> str:
     return cleaned
 
 
+def _looks_like_json(text: str) -> bool:
+    s = str(text or "").strip()
+    return (s.startswith("{") and s.endswith("}")) or (
+        s.startswith("[") and s.endswith("]")
+    )
+
+
+def _discohook_color(value) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        raw = value.strip()
+        if raw.startswith("#"):
+            return raw
+        if raw.lower().startswith("0x"):
+            try:
+                return f"#{int(raw, 16):06x}"
+            except ValueError:
+                return None
+        if raw.isdigit():
+            try:
+                return f"#{int(raw):06x}"
+            except ValueError:
+                return None
+        return raw
+    try:
+        return f"#{int(value):06x}"
+    except Exception:
+        return None
+
+
+def _discohook_embed_to_script(embed: dict) -> str:
+    """Convert one discohook/discord embed object into vain ``{embed}$v…`` script."""
+    parts = ["{embed}"]
+    if embed.get("title"):
+        parts.append(f"$v{{title: {embed['title']}}}")
+    if embed.get("description"):
+        parts.append(f"$v{{description: {embed['description']}}}")
+    color = _discohook_color(embed.get("color"))
+    if color:
+        parts.append(f"$v{{color: {color}}}")
+    if embed.get("url"):
+        parts.append(f"$v{{url: {embed['url']}}}")
+    author = embed.get("author") or {}
+    if isinstance(author, dict) and author.get("name"):
+        bits = [str(author["name"])]
+        icon = author.get("icon_url") or author.get("iconUrl")
+        url = author.get("url")
+        if icon:
+            bits.append(str(icon))
+        elif url:
+            bits.append("")
+        if url:
+            bits.append(str(url))
+        parts.append(f"$v{{author: {' && '.join(bits)}}}")
+    footer = embed.get("footer") or {}
+    if isinstance(footer, dict) and footer.get("text"):
+        fbits = [str(footer["text"])]
+        ficon = footer.get("icon_url") or footer.get("iconUrl")
+        if ficon:
+            fbits.append(str(ficon))
+        parts.append(f"$v{{footer: {' && '.join(fbits)}}}")
+    if embed.get("timestamp"):
+        parts.append("$v{timestamp}")
+    image = embed.get("image") or {}
+    if isinstance(image, dict) and image.get("url"):
+        parts.append(f"$v{{image: {image['url']}}}")
+    elif isinstance(image, str) and image:
+        parts.append(f"$v{{image: {image}}}")
+    thumb = embed.get("thumbnail") or {}
+    if isinstance(thumb, dict) and thumb.get("url"):
+        parts.append(f"$v{{thumbnail: {thumb['url']}}}")
+    elif isinstance(thumb, str) and thumb:
+        parts.append(f"$v{{thumbnail: {thumb}}}")
+    for field in embed.get("fields") or []:
+        if not isinstance(field, dict):
+            continue
+        name = field.get("name") or "Field"
+        value = field.get("value") or "​"
+        inline = field.get("inline")
+        tail = " && inline" if inline in (True, "true", "yes", "1") else ""
+        parts.append(f"$v{{field: {name} && {value}{tail}}}")
+    return "".join(parts) if len(parts) > 1 else ""
+
+
+def discohook_to_script(text: str) -> str | None:
+    """Convert discohook / discord message JSON into vain script text.
+
+    Supports shapes like:
+      {"content":"hi","embeds":[{...}]}
+      {"embeds":[{...}]}
+      [{...embed...}]
+      {...single embed...}
+    Returns None when input is not JSON / not discohook-like.
+    """
+    import json
+
+    raw = str(text or "").strip()
+    if not raw or not _looks_like_json(raw):
+        return None
+    try:
+        data = json.loads(raw)
+    except Exception:
+        return None
+
+    content = None
+    embeds: list[dict] = []
+
+    if isinstance(data, list):
+        embeds = [e for e in data if isinstance(e, dict)]
+    elif isinstance(data, dict):
+        if "embeds" in data or "content" in data or "components" in data:
+            content = data.get("content")
+            embeds = [e for e in (data.get("embeds") or []) if isinstance(e, dict)]
+        elif any(
+            k in data
+            for k in (
+                "title",
+                "description",
+                "fields",
+                "author",
+                "footer",
+                "image",
+                "thumbnail",
+                "color",
+            )
+        ):
+            embeds = [data]
+        else:
+            return None
+    else:
+        return None
+
+    # Prefer first embed as classic embed script; plain content alone is fine
+    if embeds:
+        script = _discohook_embed_to_script(embeds[0])
+        if content:
+            # content goes as message content field
+            if script.startswith("{embed}"):
+                script = script.replace("{embed}", f"{{embed}}$v{{content: {content}}}", 1)
+            else:
+                script = f"{{embed}}$v{{content: {content}}}" + script
+        return script or (str(content) if content else None)
+    if content is not None:
+        return str(content)
+    return None
+
+
 def maybe_wrap_embed_script(text: str) -> str:
     """Normalize scripts: auto-prefix ``{embed}`` when field tags are present.
 
     Rules:
+    - discohook / discord message JSON → converted to ``{embed}$v…`` (or plain)
     - ``{container}`` / ``container$v`` → left alone (Components V2)
     - ``{embed}`` / ``embed$v`` / bare ``{title:}`` etc. → classic embed
     - plain text with no field tags → plain content message (no wrap)
@@ -189,6 +338,10 @@ def maybe_wrap_embed_script(text: str) -> str:
     stripped = str(text).strip()
     if not stripped:
         return stripped
+    # Discohook JSON first (before is_embed_script treats "{" as embed)
+    converted = discohook_to_script(stripped)
+    if converted is not None:
+        return converted
     if is_container_script(stripped):
         return stripped
     if is_embed_script(stripped):
@@ -204,7 +357,7 @@ def maybe_wrap_embed_script(text: str) -> str:
             return "{embed}" + stripped
         if stripped.startswith("{"):
             return f"{{embed}}$v{stripped}"
-        
+
         return f"{{embed}}$v{stripped}" if "$v{" in stripped else stripped
     return stripped
 

@@ -73,44 +73,39 @@ class Embedcode(Package):
         return int(match.group(2)), int(match.group(3))
 
     def _embed_to_code(self, embed: discord.Embed) -> str:
-        lines = ["{embed}"]
-
+        """Export as vain tagscript: {embed}$v{title: …}$v{description: …}"""
+        parts = ["{embed}"]
         if embed.title:
-            lines.append(f"{{title: {embed.title}}}")
-
+            parts.append(f"$v{{title: {embed.title}}}")
         if embed.description:
-            lines.append(f"{{description: {embed.description}}}")
-
+            parts.append(f"$v{{description: {embed.description}}}")
         if embed.color:
-            color_hex = f"#{embed.color.value:06x}"
-            lines.append(f"{{color: {color_hex}}}")
-
-        if embed.author:
-            author = embed.author
-            if author.name:
-                author_text = author.name
-                if author.url:
-                    author_text += f" | {author.url}"
-                if author.icon_url:
-                    author_text += f" | {author.icon_url}"
-                lines.append(f"{{author: {author_text}}}")
-
-        if embed.footer:
-            footer = embed.footer
-            if footer.text:
-                footer_text = footer.text
-                if footer.icon_url:
-                    footer_text += f" | {footer.icon_url}"
-                lines.append(f"{{footer: {footer_text}}}")
-
-        if embed.image:
-            lines.append(f"{{image: {embed.image.url}}}")
-
-        if embed.thumbnail:
-            lines.append(f"{{thumbnail: {embed.thumbnail.url}}}")
-
+            parts.append(f"$v{{color: #{embed.color.value:06x}}}")
+        if embed.url:
+            parts.append(f"$v{{url: {embed.url}}}")
+        if embed.author and embed.author.name:
+            bits = [embed.author.name]
+            if embed.author.icon_url:
+                bits.append(embed.author.icon_url)
+            elif embed.author.url:
+                bits.append("")
+            if embed.author.url:
+                bits.append(embed.author.url)
+            parts.append(f"$v{{author: {' && '.join(bits)}}}")
+        if embed.footer and embed.footer.text:
+            fbits = [embed.footer.text]
+            if embed.footer.icon_url:
+                fbits.append(embed.footer.icon_url)
+            parts.append(f"$v{{footer: {' && '.join(fbits)}}}")
+        if embed.timestamp:
+            parts.append("$v{timestamp}")
+        if embed.image and embed.image.url:
+            parts.append(f"$v{{image: {embed.image.url}}}")
+        if embed.thumbnail and embed.thumbnail.url:
+            parts.append(f"$v{{thumbnail: {embed.thumbnail.url}}}")
         for field in embed.fields:
-            field_text = field.value or ""
-            lines.append(f"{{field: {field.name} | {field_text} | {str(field.inline).lower()}}}")
-
-        return "\n".join(lines)
+            tail = " && inline" if field.inline else ""
+            parts.append(
+                f"$v{{field: {field.name or 'Field'} && {field.value or '​'}{tail}}}"
+            )
+        return "".join(parts)

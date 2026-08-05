@@ -20,14 +20,43 @@ class InformationEvents(Package):
         super().__init__(bot)
         self.locks = defaultdict(Lock)
         self.joined_cache = {}
+        
         if not hasattr(bot, "member_last_seen"):
             bot.member_last_seen = {}
+        
+        if not hasattr(bot, "member_last_online"):
+            bot.member_last_online = {}
 
     @Package.listener("on_message")
     async def on_member_seen(self, message: discord.Message) -> None:
         if message.author.bot or message.guild is None:
             return
-        self.bot.member_last_seen[(message.guild.id, message.author.id)] = message.created_at
+        now = message.created_at
+        key = (message.guild.id, message.author.id)
+        self.bot.member_last_seen[key] = now
+        
+        self.bot.member_last_online[key] = now
+        
+        if len(self.bot.member_last_seen) > 20_000:
+            
+            self.bot.member_last_seen.clear()
+        if len(self.bot.member_last_online) > 20_000:
+            self.bot.member_last_online.clear()
+
+    @Package.listener("on_presence_update")
+    async def on_member_presence_seen(
+        self, before: discord.Member, after: discord.Member
+    ) -> None:
+        """Track last time a member was online (status left offline)."""
+        if after.bot or after.guild is None:
+            return
+        
+        if after.status is not discord.Status.offline:
+            self.bot.member_last_online[(after.guild.id, after.id)] = discord.utils.utcnow()
+        
+        elif before.status is not discord.Status.offline and after.status is discord.Status.offline:
+            key = (after.guild.id, after.id)
+            self.bot.member_last_online[key] = discord.utils.utcnow()
 
     async def _fetch_config(self, guild_id: int):
         try:

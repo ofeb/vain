@@ -159,6 +159,7 @@ class Nuke(Package):
         await self.update_channels_by_id(old.id, new.id, old.guild.id)
 
     async def update_channels_by_id(self, old_id: int, new_id: int, guild_id: int) -> None:
+        # Deduped list of (table, column, is_array) rewired after a channel nuke.
         tables = [
             ("guilds", "welcome_channel_id", False),
             ("guilds", "leave_channel_id", False),
@@ -175,6 +176,8 @@ class Nuke(Package):
             ("join_messages", "channel_id", False),
             ("leave_messages", "channel_id", False),
             ("boost_messages", "channel_id", False),
+            ("welcome_messages", "channel_id", False),
+            ("goodbye_messages", "channel_id", False),
             ("suggest_settings", "channel_id", False),
             ("suggest_settings", "review_channel_id", False),
             ("birthday_notifications", "channel_id", False),
@@ -199,6 +202,10 @@ class Nuke(Package):
             ("guild_tag", "channel_id", False),
             ("sticky_message", "channel_id", False),
             ("pingonjoin", "channel_ids", True),
+            ("leveling", "channel_id", False),
+            ("voicemaster", "channel_id", False),
+            ("voicemaster_config", "category_id", False),
+            ("voicemaster_config", "interface_channel_id", False),
         ]
 
         for table, column, is_array in tables:

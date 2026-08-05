@@ -510,23 +510,32 @@ class InformationCommands(Package):
     @describe(member="Member to check")
     @commands.cooldown(1, 2, commands.BucketType.user)
     async def seen(self, ctx: Context, member: discord.Member | None = None) -> None:
+        """Last seen based on last online / last activity — not 'now' while only online."""
         member = member or ctx.author
         cache = getattr(self.bot, "member_last_seen", {})
         last = cache.get((ctx.guild.id, member.id))
-        now = discord.utils.utcnow()
+        
+        last_online = getattr(self.bot, "member_last_online", {}).get(
+            (ctx.guild.id, member.id)
+        )
+        stamp = last_online or last
 
-        if member.status is not discord.Status.offline:
-            label = "now"
-        elif last is not None and (now - last).total_seconds() < 60:
-            label = "now"
-        elif last is not None:
-            label = discord.utils.format_dt(last, style="R")
+        if stamp is not None:
+            
+            if stamp.tzinfo is None:
+                stamp = stamp.replace(tzinfo=discord.utils.utcnow().tzinfo)
+            label = discord.utils.format_dt(stamp, style="R")
+            absolute = discord.utils.format_dt(stamp, style="f")
+            detail = f"{label} ({absolute})"
+        elif member.status is not discord.Status.offline:
+            
+            detail = "online right now (no prior activity recorded)"
         else:
-            label = "a while ago"
+            detail = "unknown — no activity recorded yet"
 
         embed = reply_embed(
             color=color.base,
-            message=f"**{member.display_name}** was last seen {label}",
+            message=f"**{member.display_name}** was last seen {detail}",
         )
         await ctx.send(embed=embed)
 

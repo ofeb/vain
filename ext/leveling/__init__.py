@@ -1,8 +1,3 @@
-"""Server leveling — Pillow rank cards, multipliers, rewards, ignore lists.
-
-Inspired by classic multipurpose bots; rewritten for Vain's Package layout.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -19,8 +14,11 @@ from discord.ext.commands import Author, BucketType, cooldown, group, command
 from discord.ui import Button, View
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
+from core.discord.mixin import _Meta
 from core.discord.package import Package
 from core.managers.permissions import has_permissions
+
+from .events import LevelingEvents
 
 
 _FONT_CANDIDATES = [
@@ -49,17 +47,113 @@ def _load_font(size: int, *, bold: bool = False) -> ImageFont.ImageFont:
     return ImageFont.load_default()
 
 
-def _circular_avatar(avatar: Image.Image, size: int = 148) -> Image.Image:
-    avatar = avatar.convert("RGBA").resize((size, size), Image.Resampling.LANCZOS)
+def _circle_mask(size: int) -> Image.Image:
     mask = Image.new("L", (size, size), 0)
     ImageDraw.Draw(mask).ellipse((0, 0, size - 1, size - 1), fill=255)
+    return mask
+
+
+def _circular_avatar(avatar: Image.Image, size: int = 148) -> Image.Image:
+    avatar = avatar.convert("RGBA").resize((size, size), Image.Resampling.LANCZOS)
     out = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    out.paste(avatar, (0, 0), mask)
+    out.paste(avatar, (0, 0), _circle_mask(size))
     return out
 
 
 def _rounded_rect(draw: ImageDraw.ImageDraw, xy, radius: int, fill) -> None:
     draw.rounded_rectangle(xy, radius=radius, fill=fill)
+
+
+def _draw_rank_base(
+    *,
+    level: int,
+    xp: float,
+    target_xp: int,
+    rank: int,
+    total_members: int,
+    display_name: str,
+    accent: int,
+    avatar_rgba: Image.Image,
+) -> Image.Image:
+    """Static rank card frame + text + avatar (transparent outside rounded card)."""
+    W, H = 900, 260
+    progress = min(float(xp) / float(target_xp), 1.0) if target_xp > 0 else 0.0
+    ar = (accent >> 16) & 0xFF
+    ag = (accent >> 8) & 0xFF
+    ab = accent & 0xFF
+
+    
+    base = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(base)
+
+    
+    panel = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    pd = ImageDraw.Draw(panel)
+    _rounded_rect(pd, [0, 0, W - 1, H - 1], 28, (28, 30, 48, 255))
+    
+    for x in range(0, 220):
+        alpha = int(50 * (1 - x / 220))
+        pd.line([(x, 8), (x, H - 9)], fill=(ar, ag, ab, alpha))
+    
+    for y in range(H - 50, H - 1):
+        t = (y - (H - 50)) / 50
+        pd.line([(12, y), (W - 13, y)], fill=(ar, ag, ab, int(18 * t)))
+    base.alpha_composite(panel)
+
+    
+    _rounded_rect(draw, [14, 28, 20, H - 28], 4, (ar, ag, ab, 220))
+
+    
+    av = _circular_avatar(avatar_rgba, 140)
+    
+    ring = Image.new("RGBA", (150, 150), (0, 0, 0, 0))
+    ImageDraw.Draw(ring).ellipse((1, 1, 148, 148), outline=(ar, ag, ab, 230), width=3)
+    base.paste(ring, (40, (H // 2) - 75), ring)
+    base.paste(av, (45, (H // 2) - 70), av)
+
+    font_name = _load_font(32, bold=True)
+    font_rank = _load_font(18, bold=True)
+    font_level = _load_font(48, bold=True)
+    font_xp = _load_font(17)
+    font_small = _load_font(15)
+
+    name = display_name
+    if len(name) > 18:
+        name = name[:17] + "…"
+    draw.text((210, 42), name, font=font_name, fill=(245, 246, 252, 255))
+    draw.text(
+        (210, 88),
+        f"RANK  #{rank}  ·  {total_members} members",
+        font=font_rank,
+        fill=(150, 154, 180, 255),
+    )
+
+    draw.text((W - 190, 36), "LEVEL", font=font_small, fill=(150, 154, 180, 255))
+    lvl_text = str(level)
+    try:
+        lvl_w = draw.textlength(lvl_text, font=font_level)
+    except Exception:
+        lvl_w = 40
+    draw.text((W - 48 - lvl_w, 50), lvl_text, font=font_level, fill=(255, 255, 255, 255))
+
+    bar_x, bar_y, bar_w, bar_h = 210, 155, 560, 22
+    _rounded_rect(draw, [bar_x, bar_y, bar_x + bar_w, bar_y + bar_h], 11, (42, 44, 62, 255))
+    fill_w = max(int(bar_w * progress), 10 if progress > 0 else 0)
+    if fill_w:
+        _rounded_rect(
+            draw,
+            [bar_x, bar_y, bar_x + fill_w, bar_y + bar_h],
+            11,
+            (ar, ag, ab, 255),
+        )
+    pct = progress * 100
+    draw.text(
+        (bar_x, bar_y + 30),
+        f"{int(xp):,}  /  {int(target_xp):,} XP   ·   {pct:.1f}%",
+        font=font_xp,
+        fill=(180, 184, 205, 255),
+    )
+    return base
 
 
 async def generate_rank_card(
@@ -72,99 +166,89 @@ async def generate_rank_card(
     *,
     accent: int = 0x5865F2,
 ) -> io.BytesIO:
-    """Render a polished rank/level card (Pillow)."""
-    W, H = 934, 282
-    progress = min(float(xp) / float(target_xp), 1.0) if target_xp > 0 else 0.0
-    ar = (accent >> 16) & 0xFF
-    ag = (accent >> 8) & 0xFF
-    ab = accent & 0xFF
+    """Render a polished rank card. Animated avatars export as GIF."""
+    display_name = getattr(member, "display_name", None) or getattr(member, "name", "User")
+    avatar_asset = getattr(member, "display_avatar", None)
+    is_animated = bool(getattr(avatar_asset, "is_animated", False))
 
-    base = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(base)
-
-    
-    shadow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    sd = ImageDraw.Draw(shadow)
-    sd.rounded_rectangle([10, 14, W - 6, H - 4], radius=28, fill=(0, 0, 0, 90))
-    shadow = shadow.filter(ImageFilter.GaussianBlur(10))
-    base.alpha_composite(shadow)
-
-    
-    _rounded_rect(draw, [0, 0, W - 12, H - 16], 26, (24, 25, 38, 255))
-    
-    _rounded_rect(draw, [0, 0, 10, H - 16], 6, (ar, ag, ab, 255))
-    
-    _rounded_rect(draw, [14, 10, W - 26, 12], 2, (ar, ag, ab, 40))
-
-    
     try:
-        avatar_bytes = await member.display_avatar.read()
-        avatar_img = Image.open(io.BytesIO(avatar_bytes)).convert("RGBA")
+        avatar_bytes = await avatar_asset.read()
+        src = Image.open(io.BytesIO(avatar_bytes))
     except Exception:
-        avatar_img = Image.new("RGBA", (180, 180), (60, 62, 80, 255))
-    avatar = _circular_avatar(avatar_img, 148)
-    
-    ring = Image.new("RGBA", (160, 160), (0, 0, 0, 0))
-    ImageDraw.Draw(ring).ellipse((0, 0, 159, 159), outline=(ar, ag, ab, 255), width=4)
-    base.paste(ring, (42, (H - 16) // 2 - 80), ring)
-    base.paste(avatar, (48, (H - 16) // 2 - 74), avatar)
-
-    font_name = _load_font(34, bold=True)
-    font_rank = _load_font(20, bold=True)
-    font_level = _load_font(52, bold=True)
-    font_xp = _load_font(18)
-    font_small = _load_font(16)
-
-    name = member.display_name
-    if len(name) > 18:
-        name = name[:17] + "…"
-    draw.text((220, 48), name, font=font_name, fill=(245, 246, 252, 255))
-    draw.text(
-        (220, 96),
-        f"RANK  #{rank}  ·  {total_members} members",
-        font=font_rank,
-        fill=(150, 154, 175, 255),
-    )
-
-    lvl_label = "LEVEL"
-    draw.text((W - 200, 40), lvl_label, font=font_small, fill=(150, 154, 175, 255))
-    lvl_text = str(level)
-    try:
-        lvl_w = draw.textlength(lvl_text, font=font_level)
-    except Exception:
-        lvl_w = 40
-    draw.text((W - 60 - lvl_w - 12, 52), lvl_text, font=font_level, fill=(255, 255, 255, 255))
-
-    
-    bar_x, bar_y, bar_w, bar_h = 220, 168, 580, 24
-    _rounded_rect(draw, [bar_x, bar_y, bar_x + bar_w, bar_y + bar_h], 12, (40, 42, 58, 255))
-    fill_w = max(int(bar_w * progress), 10 if progress > 0 else 0)
-    if fill_w:
-        
-        _rounded_rect(
-            draw,
-            [bar_x, bar_y, bar_x + fill_w, bar_y + bar_h],
-            12,
-            (ar, ag, ab, 255),
-        )
-        _rounded_rect(
-            draw,
-            [bar_x, bar_y, bar_x + fill_w, bar_y + bar_h // 2],
-            12,
-            (min(ar + 30, 255), min(ag + 30, 255), min(ab + 30, 255), 90),
-        )
-
-    pct = progress * 100
-    draw.text(
-        (bar_x, bar_y + 32),
-        f"{int(xp):,}  /  {int(target_xp):,} XP   ·   {pct:.1f}%",
-        font=font_xp,
-        fill=(180, 184, 205, 255),
-    )
+        src = Image.new("RGBA", (180, 180), (70, 74, 96, 255))
+        is_animated = False
 
     buf = io.BytesIO()
-    base.convert("RGB").save(buf, format="PNG", optimize=True)
+
+    if is_animated and getattr(src, "is_animated", False):
+        frames: list[Image.Image] = []
+        durations: list[int] = []
+        n = min(getattr(src, "n_frames", 1), 48)  
+        for i in range(n):
+            try:
+                src.seek(i)
+                frame = src.convert("RGBA")
+            except Exception:
+                continue
+            card = _draw_rank_base(
+                level=level,
+                xp=xp,
+                target_xp=target_xp,
+                rank=rank,
+                total_members=total_members,
+                display_name=display_name,
+                accent=accent,
+                avatar_rgba=frame,
+            )
+            
+            frames.append(card.convert("RGBA"))
+            durations.append(int(src.info.get("duration", 40) or 40))
+        if not frames:
+            is_animated = False
+        else:
+            
+            bg_color = (22, 24, 38, 255)
+            solid_frames = []
+            for fr in frames:
+                bg = Image.new("RGBA", fr.size, bg_color)
+                bg.alpha_composite(fr)
+                solid_frames.append(bg.convert("P", palette=Image.ADAPTIVE, colors=255))
+            solid_frames[0].save(
+                buf,
+                format="GIF",
+                save_all=True,
+                append_images=solid_frames[1:],
+                duration=durations[: len(solid_frames)],
+                loop=0,
+                optimize=True,
+                disposal=2,
+            )
+            buf.seek(0)
+            buf.name = "rank.gif"  # type: ignore[attr-defined]
+            return buf
+
+    
+    if not isinstance(src, Image.Image):
+        avatar_rgba = Image.new("RGBA", (180, 180), (70, 74, 96, 255))
+    else:
+        try:
+            src.seek(0)
+        except Exception:
+            pass
+        avatar_rgba = src.convert("RGBA")
+    card = _draw_rank_base(
+        level=level,
+        xp=xp,
+        target_xp=target_xp,
+        rank=rank,
+        total_members=total_members,
+        display_name=display_name,
+        accent=accent,
+        avatar_rgba=avatar_rgba,
+    )
+    card.save(buf, format="PNG", optimize=True)
     buf.seek(0)
+    buf.name = "rank.png"  # type: ignore[attr-defined]
     return buf
 
 
@@ -195,17 +279,16 @@ class ConfirmView(View):
         await interaction.response.defer()
 
 
-class Leveling(Package):
+class Leveling(LevelingEvents, Package, metaclass=_Meta):
     """Server leveling with rank cards, multipliers, and role rewards."""
 
     def __init__(self, bot):
-        super().__init__(bot)
+        Package.__init__(self, bot)
+        LevelingEvents.__init__(self, bot)
         self.description = "Leveling system with rank cards, multipliers and rewards"
         self._xp_locks: dict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
-        self._cooldowns: dict[tuple[int, int], float] = {}
 
     async def cog_load(self) -> None:
-        
         from pathlib import Path
 
         schema = Path(__file__).with_name("schema.sql")
@@ -308,7 +391,15 @@ class Leveling(Package):
             len(sorted_rows),
             accent=int(accent),
         )
-        return await ctx.send(file=File(card, filename=f"rank-{member.id}.png"))
+        ext = "gif" if getattr(card, "name", "").endswith(".gif") else "png"
+        
+        try:
+            head = card.getvalue()[:6] if hasattr(card, "getvalue") else b""
+            if head.startswith(b"GIF"):
+                ext = "gif"
+        except Exception:
+            pass
+        return await ctx.send(file=File(card, filename=f"rank-{member.id}.{ext}"))
 
     
     
