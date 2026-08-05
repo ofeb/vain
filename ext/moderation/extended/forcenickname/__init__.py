@@ -22,7 +22,7 @@ class Forcenickname(Package):
 
     @group(
         name="forcenickname",
-        aliases=["forcenick", "fn"],
+        aliases=["forcenick", "forcednick", "fnick"],
         description="Force a member's nickname and keep it locked",
         invoke_without_command=True,
         example=",forcenickname @member cool name",

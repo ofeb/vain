@@ -137,7 +137,7 @@ class StickymessageCommands(Package):
             raise CommandError("Interval must be at least **30 seconds**")
         return channel, script, message_limit, interval_seconds
 
-    @group(name="stickymessage", aliases=["sticky", "sm"], description="Set up sticky messages that re-post every N messages or after an idle interval", invoke_without_command=True, example=",stickymessage add #general Stay on topic! 5 5m")
+    @group(name="stickymessage", aliases=["sticky", "stickymsg"], description="Set up sticky messages that re-post every N messages or after an idle interval", invoke_without_command=True, example=",stickymessage add #general Stay on topic! 5 5m")
     @has_permissions(manage_guild=True)
     async def stickymessage(self, ctx):
         return await ctx.send_help(ctx.command)

@@ -86,7 +86,7 @@ class Timers(Package):
         name="timer",
         description="Create and manage timed reminders",
         invoke_without_command=True,
-        aliases=["reminder", "schedule"],
+        aliases=["schedule", "timers"],
     )
     async def timer(self, ctx: Context, duration: str = None, *, text: str = None) -> None:
         if not duration or not text:
