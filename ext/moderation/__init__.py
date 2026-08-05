@@ -83,6 +83,7 @@ class ModerationCommands(Package):
     def __init__(self, bot) -> None:
         super().__init__(bot)
         self._unbanall_tasks: dict[int, asyncio.Task] = {}
+        self._naughty_tasks: dict[int, asyncio.Task] = {}
 
     async def cog_load(self) -> None:
         if self.db.pool is not None:
@@ -97,6 +98,10 @@ class ModerationCommands(Package):
         for task in self._unbanall_tasks.values():
             if not task.done():
                 task.cancel()
+        for task in self._naughty_tasks.values():
+            if not task.done():
+                task.cancel()
+        self._naughty_tasks.clear()
 
     def _audit_reason(self, ctx, reason: str | None) -> str:
         base = reason or "no reason provided"
@@ -1864,10 +1869,19 @@ class ModerationCommands(Package):
     @command(
         name="talk",
         description="Toggle a channel to text for a role",
+        example=",talk @Members  or  ,talk @Members #general",
     )
     @has_permissions(manage_channels=True)
-    async def talk(self, ctx, channel: discord.TextChannel, role: discord.Role):
-        """toggle channel text for role"""
+    async def talk(
+        self,
+        ctx,
+        role: discord.Role,
+        channel: discord.TextChannel = None,
+    ):
+        """toggle channel text for role (defaults to current channel)"""
+        channel = channel or ctx.channel
+        if not isinstance(channel, discord.TextChannel):
+            return await ctx.warn("This command only works on **text channels**")
         overwrite = channel.overwrites_for(role)
         if overwrite.send_messages is False:
             overwrite.send_messages = True
@@ -2211,7 +2225,12 @@ class ModerationCommands(Package):
     )
     @has_permissions(manage_channels=True)
     async def naughty(self, ctx, duration: str = None, channel: discord.TextChannel = None):
-        """toggle nsfw on a channel, optionally timed"""
+        """toggle nsfw on a channel, optionally timed.
+
+        No duration → indefinite toggle until run again.
+        With duration (e.g. 20s, 1d) → flip now, auto-revert after that time.
+        Running again while timed cancels the pending revert and toggles immediately.
+        """
         # Flexible: if first arg isn't a valid duration, treat it as the channel
         if duration is not None and channel is None:
             seconds = self._parse_duration_seconds(duration)
@@ -2224,8 +2243,6 @@ class ModerationCommands(Package):
                     return await ctx.warn(
                         f"Invalid duration `{duration}`. Use e.g. `30s`, `5m`, `1h`, `1d`, `1w`"
                     )
-            else:
-                pass
         else:
             seconds = self._parse_duration_seconds(duration) if duration else None
             if duration and seconds is None:
@@ -2240,6 +2257,11 @@ class ModerationCommands(Package):
         if not channel.permissions_for(ctx.guild.me).manage_channels:
             return await ctx.warn("I don't have **Manage Channels** for that channel")
 
+        # Cancel any pending timed revert so re-running is a real toggle
+        pending = self._naughty_tasks.pop(channel.id, None)
+        if pending is not None and not pending.done():
+            pending.cancel()
+
         was_nsfw = channel.nsfw
         target = not was_nsfw
         action = "enabled" if target else "disabled"
@@ -2252,17 +2274,34 @@ class ModerationCommands(Package):
         except discord.HTTPException as e:
             return await ctx.fail(f"Failed to update channel: {e}")
 
-        if seconds:
+        if seconds and seconds > 0:
             label = self._format_duration(seconds)
             await ctx.success(
                 f"{action.title()} NSFW on {channel.mention} for **{label}** "
                 f"(will revert to {'NSFW' if was_nsfw else 'SFW'} afterwards)"
             )
-            await asyncio.sleep(seconds)
-            with contextlib.suppress(discord.HTTPException, discord.Forbidden):
-                ch = ctx.guild.get_channel(channel.id)
-                if ch and isinstance(ch, discord.TextChannel):
-                    await ch.edit(nsfw=was_nsfw, reason="naughty expired")
+            guild_id = ctx.guild.id
+            channel_id = channel.id
+            revert_to = was_nsfw
+
+            async def _revert() -> None:
+                try:
+                    await asyncio.sleep(seconds)
+                    guild = self.bot.get_guild(guild_id)
+                    if guild is None:
+                        return
+                    ch = guild.get_channel(channel_id)
+                    if ch and isinstance(ch, discord.TextChannel) and ch.nsfw != revert_to:
+                        with contextlib.suppress(discord.HTTPException, discord.Forbidden):
+                            await ch.edit(nsfw=revert_to, reason="naughty expired")
+                except asyncio.CancelledError:
+                    return
+                finally:
+                    current = self._naughty_tasks.get(channel_id)
+                    if current is asyncio.current_task():
+                        self._naughty_tasks.pop(channel_id, None)
+
+            self._naughty_tasks[channel_id] = asyncio.create_task(_revert())
         else:
             await ctx.success(f"{action.title()} NSFW on {channel.mention} **indefinitely**")
 

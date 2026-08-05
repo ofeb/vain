@@ -193,13 +193,74 @@ class Log(LogEvents, Package):
     async def log(self, ctx: Context) -> None:
         await ctx.send_help(ctx.command)
 
+    async def _parse_channel_event(
+        self,
+        ctx: Context,
+        first: str | None = None,
+        second: str | None = None,
+    ) -> tuple[discord.TextChannel | None, str | None]:
+        """Resolve optional channel + optional event from two free-form tokens."""
+        channel: discord.TextChannel | None = None
+        event: str | None = None
+
+        async def _as_channel(token: str) -> discord.TextChannel | None:
+            with contextlib.suppress(Exception):
+                from discord.ext.commands import TextChannelConverter
+
+                ch = await TextChannelConverter().convert(ctx, token)
+                if isinstance(ch, discord.TextChannel):
+                    return ch
+            return None
+
+        if first is None and second is None:
+            channel = ctx.channel if isinstance(ctx.channel, discord.TextChannel) else None
+            return channel, None
+
+        if first is not None and second is None:
+            low = first.lower()
+            if low in EVENT_TYPES or low == "all":
+                event = low
+                channel = ctx.channel if isinstance(ctx.channel, discord.TextChannel) else None
+            else:
+                channel = await _as_channel(first)
+                if channel is None:
+                    # unknown token — if not a channel, still fall back to invoke + treat as event attempt
+                    channel = ctx.channel if isinstance(ctx.channel, discord.TextChannel) else None
+                    event = first
+            return channel, event
+
+        # both provided: first is channel, second is event (or swapped)
+        channel = await _as_channel(first)
+        if channel is not None:
+            event = second
+            return channel, event
+
+        channel = await _as_channel(second)
+        if channel is not None:
+            event = first
+            return channel, event
+
+        # neither is a channel — use invoke channel, first token as event
+        channel = ctx.channel if isinstance(ctx.channel, discord.TextChannel) else None
+        event = first
+        return channel, event
+
     @log.command(
         name="add",
         description="Set up logging in a channel",
-        example=",log add #logs messages",
+        example=",log add #logs messages  or  ,log add messages",
     )
     @has_permissions(manage_guild=True)
-    async def log_add(self, ctx: Context, channel: discord.TextChannel, event: str = None) -> None:
+    async def log_add(
+        self,
+        ctx: Context,
+        first: str = None,
+        second: str = None,
+    ) -> None:
+        channel, event = await self._parse_channel_event(ctx, first, second)
+        if channel is None or not isinstance(channel, discord.TextChannel):
+            return await ctx.warn("Provide a **text channel** (or run this in one)")
+
         if event is None:
             events = list(EVENT_TYPES.keys())
         else:
@@ -234,10 +295,19 @@ class Log(LogEvents, Package):
     @log.command(
         name="remove",
         description="Remove events from a logging channel",
-        example=",log remove #logs messages",
+        example=",log remove #logs messages  or  ,log remove messages",
     )
     @has_permissions(manage_guild=True)
-    async def log_remove(self, ctx: Context, channel: discord.TextChannel, event: str = None) -> None:
+    async def log_remove(
+        self,
+        ctx: Context,
+        first: str = None,
+        second: str = None,
+    ) -> None:
+        channel, event = await self._parse_channel_event(ctx, first, second)
+        if channel is None or not isinstance(channel, discord.TextChannel):
+            return await ctx.warn("Provide a **text channel** (or run this in one)")
+
         if event is None or event.lower() == "all":
             await self.db.execute(
                 "DELETE FROM log_config WHERE guild_id = $1 AND channel_id = $2",
@@ -264,6 +334,7 @@ class Log(LogEvents, Package):
     )
     @has_permissions(manage_guild=True)
     async def log_color(self, ctx: Context, channel: discord.TextChannel = None, event: str = None, *, hex_color: str = None) -> None:
+        channel = channel or (ctx.channel if isinstance(ctx.channel, discord.TextChannel) else None)
         if channel is None or event is None or hex_color is None:
             return await ctx.send_help(ctx.command)
 
@@ -292,8 +363,9 @@ class Log(LogEvents, Package):
     )
     @has_permissions(manage_guild=True)
     async def log_color_list(self, ctx: Context, channel: discord.TextChannel = None) -> None:
+        channel = channel or (ctx.channel if isinstance(ctx.channel, discord.TextChannel) else None)
         if channel is None:
-            return await ctx.send_help(ctx.command)
+            return await ctx.warn("Provide a **text channel** (or run this in one)")
 
         rows = await self.db.fetch(
             "SELECT event, color FROM log_event_colors WHERE guild_id = $1 AND channel_id = $2",
