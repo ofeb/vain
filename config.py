@@ -126,6 +126,9 @@ class api:
     twitch_client_id: str = ""
     twitch_client_secret: str = ""
     llm: str = "gemini-2.5-flash-lite"
+    # Social content API (OpenAPI at api-1.json) — Instagram, TikTok, etc.
+    guilt_base: str = "https://scl.guilt.bot"
+    guilt_key: str = ""
 
     class lastfm:
         key: str = ""

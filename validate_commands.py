@@ -114,7 +114,7 @@ def check_embed_helpers() -> None:
 
 
 def check_builders() -> None:
-    from ext.social.socials import builders
+    from ext.social import builders
 
     eb = builders.EmbedBuilderView(1, accent=0x5865F2)
     assert eb._to_script().startswith("{embed}")

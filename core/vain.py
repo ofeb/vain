@@ -105,15 +105,27 @@ def _discover_extensions(ext_dir: str = "ext") -> tuple[str, ...]:
                 )
 
     def _scan_dir(directory: Path, *, depth: int = 0) -> None:
-        if depth > 3:
+        if depth > 4:
             return
         for child in sorted(directory.iterdir()):
             if child.name.startswith("_") or child.name in _SKIP_DIRS:
                 continue
             if child.is_dir():
-                # Package with setup → load it (don't recurse into its internals)
+                # Package with setup → load it
                 if (child / "__init__.py").exists() and _has_setup_entry(child):
                     _add_package(child)
+                    # Also load sibling cogs under package/extended/*/
+                    ext_dir = child / "extended"
+                    if ext_dir.is_dir():
+                        for sub in sorted(ext_dir.iterdir()):
+                            if (
+                                sub.is_dir()
+                                and not sub.name.startswith("_")
+                                and sub.name not in _SKIP_DIRS
+                                and (sub / "__init__.py").exists()
+                                and _has_setup_entry(sub)
+                            ):
+                                _add_package(sub)
                     continue
                 # Category / namespace folder → scan one level deeper
                 _scan_dir(child, depth=depth + 1)
@@ -373,7 +385,7 @@ class Vain(commands.AutoShardedBot):
             "extensions finished (%.1fs)", time.perf_counter() - extensions_started
         )
 
-        from ext.server.server.extended.pagination.views import register_stored_paginations
+        from ext.server.extended.pagination.views import register_stored_paginations
 
         await register_stored_paginations(self)
 

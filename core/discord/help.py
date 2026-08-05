@@ -151,6 +151,7 @@ _COG_MAP: dict[str, str] = {
     "Fun":         "Fun",
     "Roleplay":    "Fun",
     "Manipulation":"Fun",
+    # nested under category packages still map correctly via cog key
     "Misc":        "Fun",
     "Miscellaneous": "Miscellaneous",
     "Music":       "Music",
