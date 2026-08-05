@@ -1,4 +1,4 @@
-﻿"""in memory cache with ttl support.
+"""in memory cache with ttl support.
 wraps a dict with async get set delete and expiry.
 from core.managers.cache import Store"""
 

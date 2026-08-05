@@ -306,6 +306,32 @@ class ServerCommands(Package):
                     "{user.mention}": "Member who started repping",
                 },
             },
+            "nuke": {
+                "description": "Nuke / autonuke script variables",
+                "variables": {
+                    "{nuke.interval}": "Scheduled interval (autonuke)",
+                    "{nuke.threshold}": "Same as interval (human duration)",
+                    "{nuke.reconfigured}": "Systems re-pointed after clone (welcome, leave, boost, logs, …)",
+                    "{nuke.channel}": "New channel mention after nuke",
+                    "{nuke.channel.name}": "New channel name",
+                    "{nuke.channel.id}": "New channel id",
+                    "{nuke.old}": "Old channel name before the nuke",
+                    "{channel}": "New channel mention",
+                    "{guild}": "Server name",
+                    "{user}": "Member who triggered a manual nuke",
+                },
+            },
+            "level": {
+                "description": "Level-up message variables",
+                "variables": {
+                    "{level}": "New level reached",
+                    "{xp}": "Current XP in this level",
+                    "{target_xp}": "XP required for next level",
+                    "{user}": "Member who leveled up",
+                    "{user.mention}": "Member mention",
+                    "{guild.name}": "Server name",
+                },
+            },
             "tag": {
                 "description": "Server tag variables (tag notifications)",
                 "variables": {

@@ -1,4 +1,4 @@
-﻿"""patched context base class.
+"""patched context base class.
 extends commands.Context with bot specific helpers.
 use this as the bot context_class"""
 

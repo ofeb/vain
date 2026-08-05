@@ -1,4 +1,4 @@
-﻿"""patches TextChannel with helper methods.
+"""patches TextChannel with helper methods.
 adds slow_send and purge_from user shortcuts.
 import early to activate"""
 

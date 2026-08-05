@@ -1,4 +1,4 @@
-﻿"""render text and image overlays onto images.
+"""render text and image overlays onto images.
 uses pillow to draw text and composite layers.
 use render_text for simple text overlays"""
 

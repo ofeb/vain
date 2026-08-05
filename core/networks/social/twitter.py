@@ -1,4 +1,4 @@
-﻿"""twitter api client for tweet lookup.
+"""twitter api client for tweet lookup.
 uses syndication api so no auth needed.
 use Twitter class methods directly"""
 

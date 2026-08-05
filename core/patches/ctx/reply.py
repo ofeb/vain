@@ -1,4 +1,4 @@
-﻿"""reply helper functions for context.
+"""reply helper functions for context.
 wraps ctx.reply with emoji prefixes from config.
 use success fail warn functions"""
 

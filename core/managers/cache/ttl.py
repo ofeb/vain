@@ -1,4 +1,4 @@
-﻿"""ttl cache decorator for async functions.
+"""ttl cache decorator for async functions.
 caches the return value and re-calls after expiry.
 use ttl_cache on any async function"""
 

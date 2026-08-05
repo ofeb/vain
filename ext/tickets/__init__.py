@@ -424,7 +424,7 @@ class Tickets(Package):
             return await ctx.warn("No staff roles configured.")
         embed = Embed(
             title="Ticket Staff Roles",
-            description="\n".join(f"{r.mention} (`{r.id}`)") for r in roles),
+            description="\n".join(f"{r.mention} (`{r.id}`)" for r in roles),
             color=0x5865F2,
         )
         return await ctx.send(embed=embed)
@@ -465,7 +465,7 @@ class Tickets(Package):
             return await ctx.warn("The blacklist is empty.")
         embed = Embed(
             title="Ticket Blacklist",
-            description="\n".join(f"{t.mention} (`{t.id}`)") for t in items),
+            description="\n".join(f"{t.mention} (`{t.id}`)" for t in items),
             color=0x5865F2,
         )
         return await ctx.send(embed=embed)

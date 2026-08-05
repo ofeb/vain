@@ -1,1 +1,1 @@
-﻿"""models for discord patches"""
+"""models for discord patches"""

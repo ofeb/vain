@@ -270,6 +270,72 @@ class StickymessageCommands(Package):
         self._last_activity.pop(channel.id, None)
         return await ctx.success(f"Sticky removed from {channel.mention}")
 
+    @stickymessage.group(
+        name="change",
+        aliases=["cfg", "config"],
+        description="Change sticky settings (interval, message limit, script)",
+        invoke_without_command=True,
+        example=",stickymessage change interval 10m",
+    )
+    @has_permissions(manage_guild=True)
+    async def stickymessage_change(self, ctx):
+        return await ctx.send_help(ctx.command)
+
+    @stickymessage_change.command(
+        name="interval",
+        aliases=["changeinterval", "ci"],
+        description="Change sticky auto-send interval",
+        example=",stickymessage change interval #general 10m",
+        usage="[channel] <interval>",
+    )
+    @has_permissions(manage_guild=True)
+    async def stickymessage_change_interval(self, ctx, *, args: str = ""):
+        return await self.stickymessage_interval(ctx, args=args)
+
+    @stickymessage_change.command(
+        name="messagelimit",
+        aliases=["limit", "cml", "changemessagelimit"],
+        description="Change sticky message limit",
+        example=",stickymessage change messagelimit #general 10",
+        usage="[channel] <limit>",
+    )
+    @has_permissions(manage_guild=True)
+    async def stickymessage_change_messagelimit(self, ctx, *, args: str = ""):
+        return await self.stickymessage_messagelimit(ctx, args=args)
+
+    @stickymessage_change.command(
+        name="script",
+        aliases=["message", "embed", "code"],
+        description="Change only the sticky script for a channel",
+        example=",stickymessage change script #general Stay on topic!",
+        usage="[channel] <script>",
+    )
+    @has_permissions(manage_guild=True)
+    async def stickymessage_change_script(self, ctx, *, args: str = ""):
+        tokens = args.split() if args else []
+        channel: TextChannel = ctx.channel  # type: ignore[assignment]
+        i = 0
+        if tokens:
+            try:
+                channel = await TextChannelConverter().convert(ctx, tokens[0])
+                i = 1
+            except Exception:
+                pass
+        script = " ".join(tokens[i:]).strip()
+        if not script:
+            raise CommandError("Provide a sticky script/message")
+        existing = await self._get_row(ctx.guild.id, channel.id)
+        if not existing:
+            raise CommandError(f"No sticky in {channel.mention}")
+        await self.db.execute(
+            "UPDATE sticky_message SET code = $1 WHERE guild_id = $2 AND channel_id = $3",
+            script,
+            ctx.guild.id,
+            channel.id,
+        )
+        await self._repost(channel, script, user=ctx.author)
+        return await ctx.success(f"Updated sticky script in {channel.mention}")
+
     async def on_valid_message(self, ctx) -> None:
         if not getattr(ctx, "guild", None) or not getattr(ctx, "channel", None):
             return
@@ -294,11 +360,21 @@ class StickymessageCommands(Package):
 
     @tasks.loop(seconds=30.0)
     async def _sticky_interval_loop(self) -> None:
+        """Re-post sticky when there was activity but the message limit wasn't hit.
+
+        Example: limit=5, interval=5m. User sends 1–4 messages then goes quiet —
+        after 5 minutes from last sticky (or last activity window), re-post.
+        Completely idle channels (0 messages since last sticky) are skipped.
+        """
         if getattr(self.db, "pool", None) is None:
             return
         try:
             rows = await self.db.fetch(
-                """SELECT guild_id, channel_id, code, COALESCE(interval_seconds, $1) AS interval_seconds, last_sent FROM sticky_message""",
+                """SELECT guild_id, channel_id, code,
+                          COALESCE(interval_seconds, $1) AS interval_seconds,
+                          COALESCE(message_count, 0) AS message_count,
+                          last_sent
+                   FROM sticky_message""",
                 _DEFAULT_INTERVAL_SECONDS,
             )
         except Exception:
@@ -309,16 +385,25 @@ class StickymessageCommands(Package):
                 interval = int(row["interval_seconds"] or _DEFAULT_INTERVAL_SECONDS)
                 if interval < 30:
                     continue
+                channel_id = int(row["channel_id"])
+                # Prefer live counters; fall back to DB
+                count = self._msg_counts.get(
+                    channel_id, int(row.get("message_count") or 0)
+                )
+                # No activity since last sticky → don't spam
+                if count <= 0 and channel_id not in self._last_activity:
+                    continue
                 last_sent = row["last_sent"]
                 if last_sent is not None and getattr(last_sent, "tzinfo", None) is not None:
                     last_sent = last_sent.replace(tzinfo=None)
-                if last_sent is not None:
-                    if (now - last_sent).total_seconds() < interval:
-                        continue
+                # Anchor: last sticky send, else last activity
+                anchor = last_sent or self._last_activity.get(channel_id)
+                if anchor is not None and (now - anchor).total_seconds() < interval:
+                    continue
                 guild = self.bot.get_guild(row["guild_id"])
                 if guild is None:
                     continue
-                channel = guild.get_channel(row["channel_id"])
+                channel = guild.get_channel(channel_id)
                 if channel is None or not isinstance(channel, TextChannel):
                     continue
                 await self._repost(channel, row["code"])

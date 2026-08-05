@@ -1,1 +1,1 @@
-﻿"""models for media utilities"""
+"""models for media utilities"""

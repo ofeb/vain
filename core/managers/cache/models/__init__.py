@@ -1,1 +1,1 @@
-﻿"""models for cache manager"""
+"""models for cache manager"""

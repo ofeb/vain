@@ -1,4 +1,4 @@
-﻿"""media repost managers for social platforms.
+"""media repost managers for social platforms.
 each file handles one platform download and repost.
 from core.managers.repost import TikTokRepost IGRepost"""
 

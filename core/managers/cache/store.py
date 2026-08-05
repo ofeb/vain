@@ -1,4 +1,4 @@
-﻿"""generic async in memory key value store.
+"""generic async in memory key value store.
 supports optional ttl expiry per key.
 use Store as a shared cache across cogs"""
 

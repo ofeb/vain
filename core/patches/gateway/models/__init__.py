@@ -1,1 +1,1 @@
-﻿"""models for gateway patches"""
+"""models for gateway patches"""

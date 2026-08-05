@@ -1,4 +1,4 @@
-﻿"""patches User and Member with badge helpers.
+"""patches User and Member with badge helpers.
 reads public flags and maps them to emoji config values.
 import early to activate"""
 

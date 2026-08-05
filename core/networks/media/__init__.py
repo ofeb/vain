@@ -1,4 +1,4 @@
-﻿"""media processing utilities.
+"""media processing utilities.
 compress render and image manipulation helpers.
 from core.networks.media import compress render"""
 

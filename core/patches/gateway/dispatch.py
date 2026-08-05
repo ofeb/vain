@@ -1,4 +1,4 @@
-﻿"""custom event dispatcher for internal events.
+"""custom event dispatcher for internal events.
 lets cogs emit and listen to bot specific events.
 use bot.dispatch or register_listener"""
 

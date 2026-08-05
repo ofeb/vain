@@ -1,1 +1,1 @@
-﻿"""models for discord view components"""
+"""models for discord view components"""

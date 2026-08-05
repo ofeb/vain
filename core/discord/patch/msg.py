@@ -1,4 +1,4 @@
-﻿"""patches discord Message with helpers.
+"""patches discord Message with helpers.
 adds to_dict serialization shortcut to messages.
 import early to activate on all messages"""
 

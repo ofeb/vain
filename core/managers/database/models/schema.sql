@@ -45,6 +45,10 @@ CREATE TABLE IF NOT EXISTS sticky_message (
     channel_id BIGINT NOT NULL,
     code TEXT NOT NULL,
     last_message BIGINT,
+    message_limit INT NOT NULL DEFAULT 5,
+    interval_seconds INT NOT NULL DEFAULT 300,
+    message_count INT NOT NULL DEFAULT 0,
+    last_sent TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (guild_id, channel_id)
 );

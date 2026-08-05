@@ -1,4 +1,4 @@
-﻿"""social media platform api clients.
+"""social media platform api clients.
 each file wraps one platform api.
 from core.networks.social import TikTok Twitter YouTube"""
 

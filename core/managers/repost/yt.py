@@ -1,4 +1,4 @@
-﻿"""youtube video download and repost handler.
+"""youtube video download and repost handler.
 uses yt-dlp to get best audio or video stream.
 use YTRepost.send in commands"""
 

@@ -1,4 +1,4 @@
-﻿"""youtube api client for video and channel lookup.
+"""youtube api client for video and channel lookup.
 wraps youtube data api v3 endpoints.
 set api key in config under Authorization.youtube"""
 

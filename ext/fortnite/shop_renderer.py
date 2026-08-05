@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 """Render FNBR shop rotations as a horizontal multi-column grid image."""
 
 

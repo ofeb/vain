@@ -1,4 +1,4 @@
-﻿"""gateway event patches and dispatchers.
+"""gateway event patches and dispatchers.
 events.py hooks into discord gateway events.
 dispatch.py routes events to registered handlers"""
 

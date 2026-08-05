@@ -1,4 +1,4 @@
-﻿"""download and validate image bytes.
+"""download and validate image bytes.
 checks content type and size before returning.
 use fetch_image in image manipulation commands"""
 

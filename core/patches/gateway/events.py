@@ -1,4 +1,4 @@
-﻿"""gateway event hooks.
+"""gateway event hooks.
 registers listeners that run before cog listeners.
 handles global checks like blacklists and maintenance"""
 

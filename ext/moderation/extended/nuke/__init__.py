@@ -481,6 +481,116 @@ class Nuke(Package):
     async def autonuke_variables(self, ctx):
         return await self.nuke_variables(ctx)
 
+    @autonuke.group(
+        name="change",
+        aliases=["cfg", "edit", "update"],
+        description="Change an existing autonuke schedule (interval / script)",
+        invoke_without_command=True,
+        example=",autonuke change interval #general 1h",
+    )
+    @has_permissions(administrator=True)
+    async def autonuke_change(self, ctx):
+        return await ctx.send_help(ctx.command)
+
+    @autonuke_change.command(
+        name="interval",
+        aliases=["time", "threshold", "ci"],
+        description="Change the autonuke interval for a channel",
+        example=",autonuke change interval #general 2h",
+        usage="[channel] <interval>",
+    )
+    @has_permissions(administrator=True)
+    async def autonuke_change_interval(self, ctx, *, args: str = ""):
+        tokens = args.split() if args else []
+        channel: TextChannel = ctx.channel  # type: ignore[assignment]
+        interval_token = None
+        if tokens:
+            try:
+                channel = await TextChannelConverter().convert(ctx, tokens[0])
+                rest = tokens[1:]
+            except Exception:
+                rest = tokens
+            if rest:
+                interval_token = rest[0]
+        if not interval_token:
+            raise CommandError(
+                f"Provide an interval (e.g. `30m`, `2h`, `1d`)\n"
+                f"Example: `{ctx.clean_prefix}autonuke change interval #general 2h`"
+            )
+        seconds = parse_duration_seconds(interval_token)
+        if seconds is None and interval_token.isdigit():
+            seconds = int(interval_token)
+        if seconds is None or seconds < 60:
+            raise CommandError("Interval must be at least **60 seconds**")
+        if not isinstance(channel, TextChannel):
+            raise CommandError("You can only schedule text channels")
+        existing = await self.db.fetchval(
+            """SELECT 1 FROM nuke
+               WHERE guild_id = $1 AND channel_id = $2 AND channel_id <> $3""",
+            ctx.guild.id,
+            channel.id,
+            _DEFAULT_CHANNEL_ID,
+        )
+        if not existing:
+            raise CommandError(
+                f"No autonuke for {channel.mention} — use "
+                f"`{ctx.clean_prefix}autonuke add` first"
+            )
+        await self.db.execute(
+            """UPDATE nuke SET nuke_threshold = $1
+               WHERE guild_id = $2 AND channel_id = $3""",
+            int(seconds),
+            ctx.guild.id,
+            channel.id,
+        )
+        return await ctx.success(
+            f"Autonuke interval for {channel.mention} set to **{naturaldelta(seconds)}**"
+        )
+
+    @autonuke_change.command(
+        name="script",
+        aliases=["message", "embed", "msg"],
+        description="Change the autonuke message/script for a channel",
+        example=",autonuke change script #general {embed}$v{description: wiped}",
+        usage="[channel] <script>",
+    )
+    @has_permissions(administrator=True)
+    async def autonuke_change_script(self, ctx, *, args: str = ""):
+        tokens = args.split() if args else []
+        channel: TextChannel = ctx.channel  # type: ignore[assignment]
+        i = 0
+        if tokens:
+            try:
+                channel = await TextChannelConverter().convert(ctx, tokens[0])
+                i = 1
+            except Exception:
+                pass
+        script = " ".join(tokens[i:]).strip()
+        if not script:
+            raise CommandError("Provide a nuke script/message")
+        if not isinstance(channel, TextChannel):
+            raise CommandError("You can only schedule text channels")
+        existing = await self.db.fetchval(
+            """SELECT 1 FROM nuke
+               WHERE guild_id = $1 AND channel_id = $2 AND channel_id <> $3""",
+            ctx.guild.id,
+            channel.id,
+            _DEFAULT_CHANNEL_ID,
+        )
+        if not existing:
+            raise CommandError(f"No autonuke for {channel.mention}")
+        await self.db.execute(
+            """UPDATE nuke SET message = $1
+               WHERE guild_id = $2 AND channel_id = $3""",
+            script,
+            ctx.guild.id,
+            channel.id,
+        )
+        preview = script if len(script) <= 120 else script[:120] + "…"
+        return await ctx.success(
+            f"Autonuke script for {channel.mention} updated:\n```\n{preview}\n```"
+        )
+
     # ------------------------------------------------------------------
     # background loop
     # ------------------------------------------------------------------
