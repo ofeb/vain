@@ -581,8 +581,6 @@ class Socials(Package):
                 or ""
             ),
         }
-            except Exception:
-                return None
 
     @group(
         name="socials",
