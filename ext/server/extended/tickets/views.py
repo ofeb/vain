@@ -1,141 +1,216 @@
 from __future__ import annotations
 
-import json
 import re
-from typing import TYPE_CHECKING
+from typing import Any, Optional
 
 import discord
 
-from config import color
+from config import emojis
 
-if TYPE_CHECKING:
-    from ext.server.extended.tickets import Tickets
+from .settings import Settings
 
 
 def _parse_emoji(value: str | None) -> discord.PartialEmoji | str | None:
     if not value:
         return None
-    match = re.match(r"<a?:(\w+):(\d+)>", value)
+    text = str(value).strip()
+    if not text:
+        return None
+    match = re.match(r"<a?:(\w+):(\d+)>", text)
     if match:
-        animated = value.startswith("<a:")
-        return discord.PartialEmoji(name=match.group(1), id=int(match.group(2)), animated=animated)
-    return value
-
-
-class TicketOpenView(discord.ui.View):
-    def __init__(self, cog: "Tickets", panel_id: int, options: list[dict], panel_type: str) -> None:
-        super().__init__(timeout=None)
-        self.cog = cog
-        self.panel_id = panel_id
-        if panel_type == "dropdown" and options:
-            self.add_item(TicketSelect(cog, panel_id, options))
-        else:
-            for option in options[:25]:
-                self.add_item(TicketOpenButton(cog, panel_id, option))
-
-
-class TicketOpenButton(discord.ui.Button):
-    def __init__(self, cog: "Tickets", panel_id: int, option: dict) -> None:
-        emoji = _parse_emoji(option.get("emoji"))
-        super().__init__(
-            label=str(option.get("label") or option.get("name"))[:80],
-            emoji=emoji,
-            style=discord.ButtonStyle.secondary,
-            custom_id=f"ticket:open:{panel_id}:{option['id']}",
+        animated = text.startswith("<a:")
+        return discord.PartialEmoji(
+            name=match.group(1), id=int(match.group(2)), animated=animated
         )
-        self.cog = cog
-        self.panel_id = panel_id
-        self.option_id = int(option["id"])
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        await self.cog.open_ticket(interaction, self.panel_id, self.option_id)
+    return text
 
 
-class TicketSelect(discord.ui.Select):
-    def __init__(self, cog: "Tickets", panel_id: int, options: list[dict]) -> None:
-        select_options = []
-        for option in options[:25]:
-            emoji = _parse_emoji(option.get("emoji"))
-            select_options.append(
-                discord.SelectOption(
-                    label=str(option.get("label") or option.get("name"))[:100],
-                    description=(option.get("description") or "")[:100] or None,
-                    emoji=emoji,
-                    value=str(option["id"]),
-                )
-            )
-        super().__init__(
-            placeholder="Select a ticket type",
-            min_values=1,
-            max_values=1,
-            options=select_options,
-            custom_id=f"ticket:select:{panel_id}",
+def ticket_emoji(name: str, fallback: str) -> discord.PartialEmoji | str | None:
+    raw = getattr(getattr(emojis, "ticket", None), name, None) or fallback
+    return _parse_emoji(str(raw))
+
+
+async def _ephemeral(
+    interaction: discord.Interaction, content: str, *, followup: bool = False
+) -> None:
+    embed = discord.Embed(color=0x2B2D31, description=content)
+    if followup or interaction.response.is_done():
+        await interaction.followup.send(embed=embed, ephemeral=True)
+    else:
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+async def require_ticket_staff(interaction: discord.Interaction) -> bool:
+    if not interaction.guild or not isinstance(interaction.user, discord.Member):
+        await _ephemeral(interaction, "This can only be used in a server.")
+        return False
+
+    settings = await Settings.fetch(interaction.client, interaction.guild)
+    if not settings.is_staff(interaction.user):
+        await _ephemeral(
+            interaction,
+            "Only **ticket staff** can use these buttons.",
         )
-        self.cog = cog
-        self.panel_id = panel_id
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        await self.cog.open_ticket(interaction, self.panel_id, int(self.values[0]))
+        return False
+    return True
 
 
 class TicketControlView(discord.ui.View):
-    def __init__(self, cog: "Tickets") -> None:
+    """Persistent staff controls attached to every open ticket."""
+
+    def __init__(self, cog: Optional[Any] = None) -> None:
         super().__init__(timeout=None)
         self.cog = cog
 
-    @discord.ui.button(label="Claim", style=discord.ButtonStyle.primary, custom_id="ticket:claim")
-    async def claim(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await self.cog.claim_ticket(interaction)
+        # Rebuild buttons with config emojis
+        self.clear_items()
+        self.add_item(
+            discord.ui.Button(
+                label="Claim",
+                style=discord.ButtonStyle.primary,
+                custom_id="ticket:control:claim",
+                emoji=ticket_emoji("claim", "🙋"),
+            )
+        )
+        self.add_item(
+            discord.ui.Button(
+                label="Close",
+                style=discord.ButtonStyle.danger,
+                custom_id="ticket:control:close",
+                emoji=ticket_emoji("close", "🔒"),
+            )
+        )
+        self.add_item(
+            discord.ui.Button(
+                label="Transcript",
+                style=discord.ButtonStyle.secondary,
+                custom_id="ticket:control:transcript",
+                emoji=ticket_emoji("transcript", "📄"),
+            )
+        )
+        for child in self.children:
+            if isinstance(child, discord.ui.Button):
+                child.callback = self._make_callback(child.custom_id or "")
 
-    @discord.ui.button(label="Close", style=discord.ButtonStyle.secondary, custom_id="ticket:close")
-    async def close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await self.cog.close_ticket(interaction)
+    def _make_callback(self, custom_id: str):
+        async def _callback(interaction: discord.Interaction) -> None:
+            if not await require_ticket_staff(interaction):
+                return
+            cog = self._resolve_cog(interaction)
+            if cog is None:
+                await _ephemeral(interaction, "Ticket system is not loaded.")
+                return
+            if custom_id.endswith(":claim"):
+                await cog.claim_ticket(interaction)
+            elif custom_id.endswith(":close"):
+                await cog.close_ticket(interaction)
+            elif custom_id.endswith(":transcript"):
+                await cog.transcript_ticket(interaction)
 
-    @discord.ui.button(label="Transcript", style=discord.ButtonStyle.secondary, custom_id="ticket:transcript")
-    async def transcript(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await self.cog.transcript_ticket(interaction)
+        return _callback
 
-    @discord.ui.button(label="Delete", style=discord.ButtonStyle.danger, custom_id="ticket:delete")
-    async def delete(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await self.cog.delete_ticket(interaction)
+    def _resolve_cog(self, interaction: discord.Interaction) -> Any:
+        if self.cog is not None:
+            return self.cog
+        get_cog = getattr(interaction.client, "get_cog", None)
+        if callable(get_cog):
+            return get_cog("Tickets")
+        return None
 
 
-class TicketFormModal(discord.ui.Modal):
-    def __init__(
-        self,
-        cog: "Tickets",
-        panel_id: int,
-        option_id: int,
-        questions: list[dict],
-    ) -> None:
-        title = "Ticket Questions"
-        super().__init__(title=title[:45])
-        self.cog = cog
-        self.panel_id = panel_id
-        self.option_id = option_id
-        self.question_keys: list[str] = []
-        for index, question in enumerate(questions[:5]):
-            key = str(question.get("key") or f"q{index + 1}")
-            self.question_keys.append(key)
-            self.add_item(
-                discord.ui.TextInput(
-                    label=str(question.get("label") or key)[:45],
-                    placeholder=str(question.get("placeholder") or "")[:100] or None,
-                    required=bool(question.get("required", True)),
-                    style=discord.TextStyle.paragraph if question.get("long") else discord.TextStyle.short,
-                    max_length=1024,
+class OpeningButtonEmojiSelect(discord.ui.Select):
+    """Pick which opening button to update the emoji for."""
+
+    def __init__(self, cog: Any, buttons: list[dict]) -> None:
+        options: list[discord.SelectOption] = []
+        for row in buttons[:25]:
+            label = str(row.get("label") or row.get("id") or "Button")[:100]
+            emoji = _parse_emoji(row.get("emoji"))
+            options.append(
+                discord.SelectOption(
+                    label=label,
+                    value=str(row["id"]),
+                    description=f"id: {row['id']}"[:100],
+                    emoji=emoji,
                 )
             )
+        super().__init__(
+            placeholder="Select a ticket opening button to edit…",
+            min_values=1,
+            max_values=1,
+            options=options,
+        )
+        self.cog = cog
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        button_id = self.values[0]
+        await interaction.response.send_modal(
+            OpeningButtonEmojiModal(self.cog, button_id)
+        )
+
+
+class OpeningButtonEmojiModal(discord.ui.Modal, title="Set button emoji"):
+    emoji = discord.ui.TextInput(
+        label="Emoji",
+        placeholder="🎫 or <:name:id>  (leave empty to clear)",
+        required=False,
+        max_length=100,
+    )
+
+    def __init__(self, cog: Any, button_id: str) -> None:
+        super().__init__()
+        self.cog = cog
+        self.button_id = button_id
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        answers = {
-            key: child.value
-            for key, child in zip(self.question_keys, self.children)
-            if isinstance(child, discord.ui.TextInput)
-        }
-        await self.cog.create_ticket_channel(
+        await self.cog.set_opening_button_emoji(
+            interaction, self.button_id, str(self.emoji.value or "").strip() or None
+        )
+
+
+class OpeningButtonEmojiView(discord.ui.View):
+    def __init__(self, cog: Any, buttons: list[dict]) -> None:
+        super().__init__(timeout=120)
+        self.add_item(OpeningButtonEmojiSelect(cog, buttons))
+
+
+class OpeningButtonAddModal(discord.ui.Modal, title="Add ticket opening button"):
+    label = discord.ui.TextInput(
+        label="Label",
+        placeholder="Open Ticket",
+        default="Open Ticket",
+        required=True,
+        max_length=80,
+    )
+    emoji = discord.ui.TextInput(
+        label="Emoji (optional)",
+        placeholder="🎫 or <:name:id>",
+        required=False,
+        max_length=100,
+    )
+    style = discord.ui.TextInput(
+        label="Style",
+        placeholder="green / blurple / grey / red",
+        default="green",
+        required=False,
+        max_length=16,
+    )
+    identifier = discord.ui.TextInput(
+        label="Identifier (optional)",
+        placeholder="support",
+        required=False,
+        max_length=32,
+    )
+
+    def __init__(self, cog: Any) -> None:
+        super().__init__()
+        self.cog = cog
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await self.cog.add_opening_button_from_modal(
             interaction,
-            self.panel_id,
-            self.option_id,
-            answers,
+            label=str(self.label.value).strip(),
+            emoji=str(self.emoji.value or "").strip() or None,
+            style=str(self.style.value or "green").strip().lower(),
+            identifier=str(self.identifier.value or "").strip() or None,
         )

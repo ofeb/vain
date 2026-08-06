@@ -6,11 +6,13 @@ from typing import Any, Literal, Optional, TypedDict, cast
 from discord import Guild, HTTPException, Member, Message, Role, TextChannel, Thread
 
 
-class Ticket(TypedDict):
+class Ticket(TypedDict, total=False):
     id: str
     guild_id: int
     channel_id: int
     user_id: int
+    claimed_by: Optional[int]
+    opened_at: Any
 
 
 class TicketButton(TypedDict, total=False):
@@ -50,6 +52,7 @@ class Record(TypedDict, total=False):
     staff_role_ids: list[int]
     blacklisted_ids: list[int]
     transcript_destinations: list[str]
+    open_embed: Optional[str]
 
 
 def _default_record(guild_id: int = 0) -> Record:
@@ -62,11 +65,12 @@ def _default_record(guild_id: int = 0) -> Record:
         "staff_role_ids": [],
         "blacklisted_ids": [],
         "transcript_destinations": [],
+        "open_embed": None,
     }
 
 
 class Settings:
-    """Per-guild ticket configuration with light in-memory cache."""
+    """Per-guild ticket configuration."""
 
     __slots__ = ("bot", "guild", "record")
 
@@ -80,7 +84,7 @@ class Settings:
 
     @property
     def channel(self) -> Optional[TextChannel]:
-        cid = self.record.get("channel_id") or 0
+        cid = int(self.record.get("channel_id") or 0)
         if not cid:
             return None
         ch = self.guild.get_channel(cid)
@@ -88,26 +92,27 @@ class Settings:
 
     @property
     def staff_roles(self) -> list[Role]:
-        return [
-            role
-            for rid in (self.record.get("staff_role_ids") or [])
-            if (role := self.guild.get_role(rid))
-        ]
+        roles: list[Role] = []
+        for rid in list(self.record.get("staff_role_ids") or []):
+            role = self.guild.get_role(int(rid))
+            if role is not None:
+                roles.append(role)
+        return roles
 
     @property
     def blacklisted(self) -> list[Role | Member]:
         out: list[Role | Member] = []
-        for tid in self.record.get("blacklisted_ids") or []:
-            if role := self.guild.get_role(tid):
+        for tid in list(self.record.get("blacklisted_ids") or []):
+            if role := self.guild.get_role(int(tid)):
                 out.append(role)
-            elif member := self.guild.get_member(tid):
+            elif member := self.guild.get_member(int(tid)):
                 out.append(member)
         return out
 
     @property
     def transcript_destinations(self) -> list[TextChannel | Thread | Literal["dm"]]:
         dests: list[TextChannel | Thread | Literal["dm"]] = []
-        for d in self.record.get("transcript_destinations") or []:
+        for d in list(self.record.get("transcript_destinations") or []):
             if d == "dm":
                 dests.append("dm")
                 continue
@@ -118,6 +123,14 @@ class Settings:
             except (ValueError, TypeError):
                 continue
         return dests
+
+    @property
+    def open_embed(self) -> Optional[str]:
+        value = self.record.get("open_embed")
+        if value is None:
+            return None
+        text = str(value).strip()
+        return text or None
 
     def is_blacklisted(self, member: Member) -> bool:
         if member in self.blacklisted:
@@ -131,7 +144,7 @@ class Settings:
 
     async def fetch_message(self) -> Optional[Message]:
         ch = self.channel
-        mid = self.record.get("message_id") or 0
+        mid = int(self.record.get("message_id") or 0)
         if not ch or not mid:
             return None
         with suppress(HTTPException, AttributeError):
@@ -144,7 +157,7 @@ class Settings:
             self.guild.id,
             identifier,
         )
-        return dict(row) if row else None
+        return cast(Optional[TicketButton], dict(row) if row else None)
 
     async def fetch_dropdown_option(
         self, identifier: str, option_id: str
@@ -158,7 +171,7 @@ class Settings:
             return None
         for opt in row["options"] or []:
             if opt.get("id") == option_id:
-                return opt
+                return cast(TicketDropdownOption, opt)
         return None
 
     @classmethod
@@ -167,18 +180,17 @@ class Settings:
             "SELECT * FROM tickets.settings WHERE guild_id = $1", guild.id
         )
         if row:
-
             data = dict(row)
             data["staff_role_ids"] = list(data.get("staff_role_ids") or [])
             data["blacklisted_ids"] = list(data.get("blacklisted_ids") or [])
             data["transcript_destinations"] = list(
                 data.get("transcript_destinations") or []
             )
-            return cls(bot, guild, data)
+            data["open_embed"] = data.get("open_embed")
+            return cls(bot, guild, cast(Record, data))
         return cls(bot, guild, _default_record(guild.id))
 
     async def upsert(self, **kwargs) -> Settings:
-
         for k, v in kwargs.items():
             self.record[k] = v
 
@@ -187,8 +199,8 @@ class Settings:
             INSERT INTO tickets.settings (
                 guild_id, channel_id, message_id, max_tickets,
                 inactivity_timeout, staff_role_ids, blacklisted_ids,
-                transcript_destinations
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+                transcript_destinations, open_embed
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
             ON CONFLICT (guild_id) DO UPDATE SET
                 channel_id              = EXCLUDED.channel_id,
                 message_id              = EXCLUDED.message_id,
@@ -196,7 +208,8 @@ class Settings:
                 inactivity_timeout      = EXCLUDED.inactivity_timeout,
                 staff_role_ids          = EXCLUDED.staff_role_ids,
                 blacklisted_ids         = EXCLUDED.blacklisted_ids,
-                transcript_destinations = EXCLUDED.transcript_destinations
+                transcript_destinations = EXCLUDED.transcript_destinations,
+                open_embed              = EXCLUDED.open_embed
             """,
             self.guild.id,
             self.record.get("channel_id") or 0,
@@ -206,5 +219,6 @@ class Settings:
             self.record.get("staff_role_ids") or [],
             self.record.get("blacklisted_ids") or [],
             self.record.get("transcript_destinations") or [],
+            self.record.get("open_embed"),
         )
         return self

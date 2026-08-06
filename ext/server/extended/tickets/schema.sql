@@ -11,17 +11,23 @@ CREATE TABLE IF NOT EXISTS tickets.settings (
     inactivity_timeout      INT,
     staff_role_ids          BIGINT[] DEFAULT '{}',
     blacklisted_ids         BIGINT[] DEFAULT '{}',
-    transcript_destinations TEXT[] DEFAULT '{}'
+    transcript_destinations TEXT[] DEFAULT '{}',
+    open_embed              TEXT
 );
+
+ALTER TABLE tickets.settings ADD COLUMN IF NOT EXISTS open_embed TEXT;
 
 CREATE TABLE IF NOT EXISTS tickets.open (
     id          TEXT NOT NULL,
     guild_id    BIGINT NOT NULL,
     channel_id  BIGINT NOT NULL UNIQUE,
     user_id     BIGINT NOT NULL,
+    claimed_by  BIGINT,
     opened_at   TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (id, guild_id, user_id)
 );
+
+ALTER TABLE tickets.open ADD COLUMN IF NOT EXISTS claimed_by BIGINT;
 
 CREATE TABLE IF NOT EXISTS tickets.button (
     id          TEXT NOT NULL,

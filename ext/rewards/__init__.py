@@ -338,18 +338,22 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         except Exception:
             return []
 
-    async def _level_replace(self, member: Member, params: str) -> str:
+    async def _level_replace(self, member: Member, params: str, *, level: int | None = None) -> str:
         row = await self.db.fetchrow(
             "SELECT * FROM level_user WHERE guild_id = $1 AND user_id = $2",
             member.guild.id,
             member.id,
         )
-        level = str(row["level"]) if row else "1"
-        target = str(row["target_xp"]) if row else "100"
-        return (
-            params.replace("{level}", level)
-            .replace("{target_xp}", target)
-            .replace("{xp}", str(int(row["xp"])) if row else "0")
+        lv = level if level is not None else (int(row["level"]) if row else 1)
+        target = int(row["target_xp"]) if row else self._calc_target(lv)
+        xp = float(row["xp"]) if row else 0.0
+        return self._render_level_message(
+            params,
+            member=member,
+            guild=member.guild,
+            level=lv,
+            xp=xp,
+            target_xp=target,
         )
 
     
@@ -479,24 +483,40 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         if not await self._require_enabled(ctx):
             return
         raw = channel.strip().lower()
-        if raw == "any":
+        if raw in {"any", "here", "current", "same"}:
             await self.db.execute(
                 "UPDATE leveling SET channel_id = $1 WHERE guild_id = $2",
                 None,
                 ctx.guild.id,
             )
-            return await ctx.success("Level-ups will post in **any** channel")
-        if raw == "dm":
+            return await ctx.success(
+                "Level-ups will post in the **same channel** the member leveled in"
+            )
+        if raw in {"dm", "dms", "private"}:
             await self.db.execute(
                 "UPDATE leveling SET channel_id = $1 WHERE guild_id = $2",
                 0,
                 ctx.guild.id,
             )
             return await ctx.success("Level-ups will be sent in **DMs**")
-        try:
-            ch = await commands.TextChannelConverter().convert(ctx, channel)
-        except Exception:
-            return await ctx.warn("Use a channel mention, `any`, or `dm`")
+        ch = None
+        for converter in (
+            commands.TextChannelConverter(),
+            commands.ThreadConverter(),
+        ):
+            try:
+                ch = await converter.convert(ctx, channel)
+                break
+            except Exception:
+                continue
+        if ch is None:
+            return await ctx.warn("Use a channel mention/ID, `any`, or `dm`")
+        me = ctx.guild.me
+        perms = ch.permissions_for(me) if me is not None else None
+        if perms is not None and not perms.send_messages:
+            return await ctx.warn(
+                f"I can't send messages in {ch.mention} — fix my permissions first"
+            )
         await self.db.execute(
             "UPDATE leveling SET channel_id = $1 WHERE guild_id = $2",
             ch.id,
@@ -528,11 +548,14 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
             message,
             ctx.guild.id,
         )
-        return await ctx.success(f"Level-up message set to:\n```\n{message[:500]}\n```")
+        return await ctx.success(
+            f"Level-up message set — it will send to the configured "
+            f"`{ctx.clean_prefix}leveling channel` destination.\n```\n{message[:500]}\n```"
+        )
 
     @leveling.command(
         name="test",
-        description="Preview the level-up message",
+        description="Preview the level-up message in the configured channel",
         example=",leveling test",
     )
     @has_permissions(manage_guild=True)
@@ -541,22 +564,51 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         if not cfg:
             return
         script = cfg.get("message") or "none"
-        if script == "none":
+        if str(script).strip().lower() == "none":
             return await ctx.warn("No level-up message configured")
-        rendered = await self._level_replace(ctx.author, script)
-        ch_id = cfg.get("channel_id")
-        channel = (
-            ctx.guild.get_channel(ch_id)
-            if ch_id not in (None, 0)
-            else ctx.channel
+
+        row = await self.db.fetchrow(
+            "SELECT xp, level, target_xp FROM level_user WHERE guild_id = $1 AND user_id = $2",
+            ctx.guild.id,
+            ctx.author.id,
         )
-        try:
-            msg = await self.bot.send_embed(
-                channel or ctx.channel, rendered, member=ctx.author, user=ctx.author
+        level = int(row["level"]) if row else 1
+        xp = float(row["xp"]) if row else 0.0
+        target = int(row["target_xp"]) if row else self._calc_target(level)
+
+        dest = await self._resolve_level_destination(
+            guild=ctx.guild,
+            cfg=cfg,
+            fallback=ctx.channel,
+            member=ctx.author,
+        )
+        if dest is None:
+            ch_id = cfg.get("channel_id")
+            return await ctx.warn(
+                f"Configured level channel `{ch_id}` is missing or not messageable. "
+                f"Set it again with `{ctx.clean_prefix}leveling channel #channel`"
             )
-            return await ctx.success(f"Sent preview → {msg.jump_url}")
-        except Exception as e:
-            return await ctx.warn(f"Failed to send preview:\n```{e}```")
+
+        msg = await self._send_level_message(
+            dest,
+            str(script),
+            member=ctx.author,
+            guild=ctx.guild,
+            level=level,
+            source_channel=ctx.channel,
+            xp=xp,
+            target_xp=target,
+        )
+        if msg is None:
+            return await ctx.warn(
+                "Failed to send the level-up preview — check bot permissions "
+                "in the configured channel (and DMs if channel is `dm`)"
+            )
+        jump = getattr(msg, "jump_url", None)
+        if jump:
+            return await ctx.success(f"Sent preview → {jump}")
+        where = getattr(dest, "mention", None) or "DMs"
+        return await ctx.success(f"Sent preview → {where}")
 
     def _check_multi(self, value: float) -> bool:
         return float(value) in _VALID_MULTIS
@@ -718,10 +770,13 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         if ch_id == 0:
             ch_label = "DMs"
         elif ch_id:
-            ch = ctx.guild.get_channel(ch_id)
-            ch_label = ch.mention if ch else f"`{ch_id}`"
+            getter = getattr(ctx.guild, "get_channel_or_thread", None)
+            ch = getter(int(ch_id)) if callable(getter) else None
+            if ch is None:
+                ch = ctx.guild.get_channel(int(ch_id))
+            ch_label = ch.mention if ch else f"`{ch_id}` (missing)"
         else:
-            ch_label = "any"
+            ch_label = "same channel (any)"
         embed = Embed(title="Leveling Config", color=0x5865F2)
         embed.add_field(name="Channel", value=ch_label, inline=True)
         embed.add_field(
@@ -964,48 +1019,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         cfg = await self._get_cfg(guild.id)
         if not cfg:
             return
-        rewards = await self.db.fetch(
-            "SELECT level, role_id FROM level_rewards WHERE guild_id = $1",
-            guild.id,
-        )
-        if not rewards:
-            return
-        by_level: dict[int, list[int]] = {}
-        for r in rewards:
-            by_level.setdefault(int(r["level"]), []).append(int(r["role_id"]))
-        stack = bool(cfg.get("stack"))
-        if stack:
-            to_add = []
-            for lv, role_ids in by_level.items():
-                if lv <= user_level:
-                    for rid in role_ids:
-                        role = guild.get_role(rid)
-                        if role and role not in member.roles:
-                            to_add.append(role)
-            if to_add:
-                with contextlib.suppress(HTTPException, discord.Forbidden):
-                    await member.add_roles(*to_add, reason="Level reward sync")
-        else:
-            eligible = [lv for lv in by_level if lv <= user_level]
-            if not eligible:
-                return
-            highest = max(eligible)
-            keep = by_level[highest][0]
-            keep_role = guild.get_role(keep)
-            remove = []
-            for lv, role_ids in by_level.items():
-                if lv == highest:
-                    continue
-                for rid in role_ids:
-                    role = guild.get_role(rid)
-                    if role and role in member.roles:
-                        remove.append(role)
-            if remove:
-                with contextlib.suppress(HTTPException, discord.Forbidden):
-                    await member.remove_roles(*remove, reason="Level reward sync")
-            if keep_role and keep_role not in member.roles:
-                with contextlib.suppress(HTTPException, discord.Forbidden):
-                    await member.add_roles(keep_role, reason="Level reward sync")
+        await self._apply_level_rewards(member, guild, cfg, user_level)
 
 
 async def setup(bot) -> None:

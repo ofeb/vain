@@ -28,22 +28,22 @@ class Transcript:
         self.content = content
 
     @classmethod
-    async def create(
+    async def build(
         cls,
         bot: Any,
         guild: Guild,
         channel: TextChannel,
         ticket: dict,
-        destinations: list,
-    ) -> Optional["Transcript"]:
-        if not destinations:
-            return None
-
+        *,
+        persist: bool = True,
+    ) -> "Transcript":
+        """Collect channel history into a Transcript (optionally store a row)."""
         lines: list[str] = [
             f"Ticket Transcript — {channel.name}",
             f"Guild: {guild.name} ({guild.id})",
             f"Channel: #{channel.name} ({channel.id})",
             f"Opened by: {ticket.get('user_id')}",
+            f"Claimed by: {ticket.get('claimed_by') or 'unclaimed'}",
             f"Generated: {datetime.now(timezone.utc).isoformat()}",
             "=" * 60,
             "",
@@ -65,20 +65,21 @@ class Transcript:
         body = "\n".join(lines)
         identifier = token_urlsafe(10)
 
-        await bot.db.execute(
-            """
-            INSERT INTO tickets.transcript (id, guild_id, channel_id, user_id, messages)
-            VALUES ($1, $2, $3, $4, $5::jsonb)
-            ON CONFLICT (id) DO NOTHING
-            """,
-            identifier,
-            guild.id,
-            channel.id,
-            ticket["user_id"],
-            "[]",
-        )
+        if persist:
+            await bot.db.execute(
+                """
+                INSERT INTO tickets.transcript (id, guild_id, channel_id, user_id, messages)
+                VALUES ($1, $2, $3, $4, $5::jsonb)
+                ON CONFLICT (id) DO NOTHING
+                """,
+                identifier,
+                guild.id,
+                channel.id,
+                ticket["user_id"],
+                "[]",
+            )
 
-        transcript = cls(
+        return cls(
             identifier=identifier,
             guild_id=guild.id,
             channel_id=channel.id,
@@ -86,35 +87,66 @@ class Transcript:
             content=body,
         )
 
-        file = File(
-            io.BytesIO(body.encode("utf-8")),
-            filename=f"transcript-{channel.name}-{identifier}.txt",
+    def as_file(self, channel_name: str = "ticket") -> File:
+        return File(
+            io.BytesIO(self.content.encode("utf-8")),
+            filename=f"transcript-{channel_name}-{self.id}.txt",
         )
+
+    @staticmethod
+    async def deliver(
+        guild: Guild,
+        ticket: dict,
+        transcript: "Transcript",
+        destinations: list,
+        *,
+        channel_name: str,
+        description: str = "Ticket closed. Full log attached.",
+    ) -> None:
+        """Send an already-built transcript to destinations."""
         embed = Embed(
-            title=f"Transcript — {channel.name}",
-            description=f"Ticket closed. Full log attached.",
+            title=f"Transcript — {channel_name}",
+            description=description,
             color=0x5865F2,
             timestamp=datetime.now(timezone.utc),
         )
-        embed.set_footer(text=f"ID: {identifier}")
-
+        embed.set_footer(text=f"ID: {transcript.id}")
+        body = transcript.content
         for dest in destinations:
+            file = File(
+                io.BytesIO(body.encode("utf-8")),
+                filename=f"transcript-{channel_name}-{transcript.id}.txt",
+            )
             if dest == "dm":
                 user = guild.get_member(ticket["user_id"])
                 if user:
                     with suppress(HTTPException):
                         await user.send(embed=embed, file=file)
-
-                        file = File(
-                            io.BytesIO(body.encode("utf-8")),
-                            filename=f"transcript-{channel.name}-{identifier}.txt",
-                        )
             elif isinstance(dest, (TextChannel, Thread)):
                 with suppress(HTTPException):
                     await dest.send(embed=embed, file=file)
-                    file = File(
-                        io.BytesIO(body.encode("utf-8")),
-                        filename=f"transcript-{channel.name}-{identifier}.txt",
-                    )
 
+    @classmethod
+    async def create(
+        cls,
+        bot: Any,
+        guild: Guild,
+        channel: TextChannel,
+        ticket: dict,
+        destinations: list,
+        *,
+        description: str = "Ticket closed. Full log attached.",
+    ) -> Optional["Transcript"]:
+        if not destinations:
+            return None
+
+        transcript = await cls.build(bot, guild, channel, ticket, persist=True)
+        await cls.deliver(
+            guild,
+            ticket,
+            transcript,
+            destinations,
+            channel_name=channel.name,
+            description=description,
+        )
         return transcript

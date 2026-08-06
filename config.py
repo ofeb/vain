@@ -74,6 +74,14 @@ class emojis:
         increase: str = "<:interface_increase:1511705999348596767>"
         decrease: str = "<:interface_decrease:1511705998434500719>"
 
+    class ticket:
+        claim: str = default_emoji("ticket_claim", "<:claim:1535044178898325595>")
+        close: str = default_emoji("ticket_close", "<:delete:1535040504516055191>")
+        transcript: str = default_emoji(
+            "ticket_transcript", "<:transcript:1535045337117491340>"
+        )
+        open: str = default_emoji("ticket_open", "<:open:1535046932487999540>")
+
 
 class color:
     neutral: int = 0x2A2B2F
