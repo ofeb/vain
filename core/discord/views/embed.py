@@ -29,18 +29,26 @@ def caption(text: str) -> str:
 
 def c2(
     *,
-    color: int,
+    color: int | None = None,
     message: str,
     title: str | None = None,
     footer: str | None = None,
     author: str | None = None,
     timestamp: bool = True,
 ) -> discord.Embed:
+    """Build a compact embed.
+
+    Pass ``color=None`` (default for informational panels) so Components V2
+    containers render with **no accent strip**. Status replies
+    (success / warn / fail) should still pass their status color.
+    """
     description = compose(
         body(message),
         caption(footer) if footer else None,
     )
-    embed = discord.Embed(color=color, description=description)
+    embed = discord.Embed(description=description)
+    if color is not None:
+        embed.color = color
     if title:
         embed.title = title
     if author:
@@ -52,7 +60,7 @@ def c2(
 
 def reply_embed(
     *,
-    color: int,
+    color: int | None = None,
     message: str,
     subtitle: str | None = None,
 ) -> discord.Embed:
@@ -75,7 +83,9 @@ def panel_embed(
         body(*(lines or [])),
         caption(footer) if footer else None,
     )
-    embed = discord.Embed(color=color, description=description or None, url=url)
+    embed = discord.Embed(description=description or None, url=url)
+    if color is not None:
+        embed.color = color
     if title:
         embed.title = title
     if author:

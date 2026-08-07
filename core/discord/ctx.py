@@ -359,14 +359,15 @@ class Context(commands.Context):
         *,
         emoji: str = "",
         color_value: Optional[int] = None,
+        colored: bool = True,
     ) -> discord.Embed:
-        
+
         prefix = f"{emoji} " if emoji else ""
         line = f"{prefix}**{self.author.display_name}**: {message}"
-        return discord.Embed(
-            color=color_value or self.bot.color,
-            description=body(line),
-        )
+        embed = discord.Embed(description=body(line))
+        if colored:
+            embed.color = color_value if color_value is not None else self.bot.color
+        return embed
 
     async def _send_embed_response(
         self,
@@ -449,14 +450,18 @@ class Context(commands.Context):
         return await self.warn(message, **kw)
 
     async def normal(self, message: str, *, emoji: str = "", **kw):
-        """send a neutral informational reply"""
+        """send a neutral informational reply (colorless C2)"""
         return await self._send_embed_response(
-            self._message_embed(self._strip_self_mention(message), emoji=emoji),
+            self._message_embed(
+                self._strip_self_mention(message),
+                emoji=emoji,
+                colored=False,
+            ),
             **kw,
         )
 
     async def info(self, message: str, **kw):
-        """send an informational reply using vain's info emoji."""
+        """send an informational reply using vain's info emoji (colorless C2)."""
         emoji = await self._get_emoji("info")
         return await self.normal(message, emoji=emoji, **kw)
 

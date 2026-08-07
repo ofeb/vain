@@ -1012,17 +1012,9 @@ def _detail_embed(
     if usage:
         parts.append(usage)
 
-    dom = getattr(ctx.bot, "color", 0x5865F2)
-    try:
-        loop = ctx.bot.loop
-        if loop and not loop.is_running():
-            dom = loop.run_until_complete(get_bot_dominant_color(ctx.bot))
-    except Exception:
-        pass
     e = Embed(
         title=title,
         description="\n".join(parts) if parts else desc,
-        color=dom,
     )
     
     display_name = getattr(ctx.author, "display_name", ctx.author.name)
@@ -1084,11 +1076,9 @@ def _detail_text(
     return "\n".join(lines)
 
 
-async def _accent_color(bot: Vain) -> int:
-    try:
-        return await get_bot_dominant_color(bot)
-    except Exception:
-        return getattr(bot, "color", None) or 0x5865F2
+async def _accent_color(bot: Vain) -> int | None:
+    """Help menus are colorless C2 containers — no accent strip."""
+    return None
 
 
 def _home_text(ctx: Context) -> str:
@@ -1128,7 +1118,6 @@ def _category_text(ctx: Context, label: str, cmds: list[Command]) -> str:
 def _brief_embed(cmd: Command, ctx: Context) -> Embed:
     prefix = _get_prefix(ctx)
     e = Embed(
-        color=ctx.bot.color,
         title=("Group Command: " if isinstance(cmd, Group) else "Command: ") + command_display_name(cmd),
         description=_description(cmd),
     )
@@ -1161,7 +1150,7 @@ def _category_options(cats: dict[str, list[Command]]) -> list[SelectOption]:
 class HelpMenu(ui.LayoutView):
     """Home + category browser using Components V2 LayoutView (select inside container)."""
 
-    def __init__(self, ctx: Context, cats: dict[str, list[Command]], accent: int) -> None:
+    def __init__(self, ctx: Context, cats: dict[str, list[Command]], accent: int | None = None) -> None:
         super().__init__(timeout=180)
         self.ctx = ctx
         self.cats = cats
@@ -1208,7 +1197,7 @@ class HelpMenu(ui.LayoutView):
         await inter.response.edit_message(view=self)
 
     async def on_timeout(self) -> None:
-        
+
         if self.msg is None:
             return
         body = ui.TextDisplay(self.body.content)
@@ -1230,13 +1219,13 @@ class HelpMenu(ui.LayoutView):
 
 
 class GroupHelpMenu(ui.LayoutView):
-    """Group/family help — forward · delete · backward · search (blue)."""
+    """Group/family help — forward · delete · backward · search."""
 
     def __init__(
         self,
         ctx: Context,
         pages: list[Command],
-        accent: int,
+        accent: int | None = None,
     ) -> None:
         super().__init__(timeout=180)
         self.ctx = ctx
@@ -1276,9 +1265,8 @@ class GroupHelpMenu(ui.LayoutView):
 
         self.clear_items()
         body = ui.TextDisplay(self._page_text())
-        
-        accent = self.accent or getattr(self.ctx.bot, "color", None) or color.base
-        container = ui.Container(accent_colour=accent)
+        # Informational C2 help — no accent color (status replies keep colors).
+        container = ui.Container(accent_colour=self.accent)
         container.add_item(body)
         if len(self.pages) > 1:
             container.add_item(ui.Separator(visible=True))
@@ -1392,7 +1380,7 @@ class GroupHelpMenu(ui.LayoutView):
 class CommandHelpMenu(ui.LayoutView):
     """Single non-group command help page (no pagination)."""
 
-    def __init__(self, ctx: Context, cmd: Command, accent: int) -> None:
+    def __init__(self, ctx: Context, cmd: Command, accent: int | None = None) -> None:
         super().__init__(timeout=180)
         self.ctx = ctx
         self.msg: discord.Message | None = None
@@ -1559,8 +1547,7 @@ class VainHelp(commands.HelpCommand):
         try:
             menu.msg = await menu.start()
         except Exception:
-            
-            e = Embed(color=accent, description=_home_text(ctx).replace("### ", ""))
+            e = Embed(description=_home_text(ctx).replace("### ", ""))
             if bot.user:
                 e.set_author(name=bot.user.display_name, icon_url=bot.user.display_avatar.url)
             await self._send(ctx, e)
@@ -1671,7 +1658,7 @@ class VainHelp(commands.HelpCommand):
         try:
             await self._send_layout(ctx, view)
         except Exception:
-            e = Embed(title=f"**{label} Commands**", description=_fmt_commands(cmds), color=accent)
+            e = Embed(title=f"**{label} Commands**", description=_fmt_commands(cmds))
             await self._send(ctx, e)
 
     async def _not_found(self, ctx: Context, query: str) -> None:

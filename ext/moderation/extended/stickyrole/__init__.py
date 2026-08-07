@@ -120,7 +120,7 @@ class Stickyrole(Package):
                 lines.append(role.mention if role else f"`{row['role_id']}`")
             embed = panel_embed(
                 title=f"Sticky Roles — {member}",
-                color=self.color,
+                color=None,
                 lines=lines,
                 timestamp=False,
             )
@@ -143,7 +143,7 @@ class Stickyrole(Package):
 
         embed = panel_embed(
             title=f"Sticky Roles ({len(rows)})",
-            color=self.color,
+            color=None,
             lines=lines,
             footer=f"{len(rows)} total" if len(rows) > 40 else None,
             timestamp=False,

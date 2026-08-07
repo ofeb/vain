@@ -205,7 +205,7 @@ class Lockdown(Package):
 
         numbered = [f"`{i}` {ln}" for i, ln in enumerate(lines, start=1)]
         return await ctx.paginate(
-            Embed(title="Ignored Lockdown Channels", color=self.bot.color).set_author(
+            Embed(title="Ignored Lockdown Channels").set_author(
                 name=str(ctx.author), icon_url=ctx.author.display_avatar.url
             ),
             numbered,

@@ -46,7 +46,7 @@ class Notes(Package):
 
         embed = panel_embed(
             title=f"Notes — {member}",
-            color=self.color,
+            color=None,
             lines=lines,
             footer=f"{len(rows)} total" if len(rows) > 25 else None,
             timestamp=False,

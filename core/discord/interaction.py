@@ -92,11 +92,15 @@ async def _info(
     *,
     ephemeral: bool = True,
 ) -> None:
-    from config import emojis, color as _color
+    from config import emojis
     from core.managers.app_emojis import format_embed_emoji
+    from core.discord.views.embed import body
 
     emoji = format_embed_emoji(self.client, emojis.interface.information, fallback_key="info")
-    embed = _build_embed(self, message, emoji=emoji, color=_color.base)
+    # Informational interaction replies are colorless C2 (no accent).
+    embed = discord.Embed(
+        description=body(f"{emoji} {self.user.mention}: {message}"),
+    )
     send = (
         self.followup.send
         if self.response.is_done()

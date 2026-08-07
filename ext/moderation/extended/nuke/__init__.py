@@ -14,7 +14,6 @@ from core.discord.package import Package
 from core.discord.views.confirm import ConfirmView
 from core.managers.permissions import has_permissions
 from core.tools.moderation_args import parse_duration_seconds, is_duration_token
-from config import color
 
 if TYPE_CHECKING:
     from core.vain import Vain
@@ -247,7 +246,6 @@ class Nuke(Package):
 
         view = ConfirmView(ctx, timeout=30.0)
         embed = Embed(
-            color=color.base,
             description=(
                 f"> This will **nuke** {channel.mention}.\n"
                 f"> Are you sure you want to do this?\n"
@@ -310,8 +308,7 @@ class Nuke(Package):
     async def nuke_variables(self, ctx):
         embed = Embed(
             title="Nuke / Autonuke Variables",
-            color=self.color,
-            description=(
+                        description=(
                 "Use these inside custom embed scripts for `,nuke` and `,autonuke`.\n"
                 "Also see: https://vain.bot/resources/scripting/variables"
             ),
@@ -460,7 +457,7 @@ class Nuke(Package):
         if not rows:
             raise CommandError("No scheduled autonuke channels found")
 
-        embed = Embed(title="Scheduled Autonukes", color=self.color)
+        embed = Embed(title="Scheduled Autonukes")
         embed.set_author(name=str(ctx.author), icon_url=ctx.author.display_avatar.url)
         values = []
         i = 0

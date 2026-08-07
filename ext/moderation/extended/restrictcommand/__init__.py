@@ -115,7 +115,7 @@ class Restrictcommand(Package):
                 lines = [f"`{r['command']}`" for r in rows]
                 embed = panel_embed(
                     title=f"Restricted Commands — {role.name}",
-                    color=self.color,
+                    color=None,
                     lines=lines,
                     timestamp=False,
                 )
@@ -136,7 +136,7 @@ class Restrictcommand(Package):
                 lines.append(role_obj.mention if role_obj else f"`{r['role_id']}`")
             embed = panel_embed(
                 title=f"Restrictions — {cmd}",
-                color=self.color,
+                color=None,
                 lines=lines,
                 timestamp=False,
             )
@@ -157,7 +157,7 @@ class Restrictcommand(Package):
 
         embed = panel_embed(
             title=f"Restricted Commands ({len(rows)})",
-            color=self.color,
+            color=None,
             lines=lines,
             footer=f"{len(rows)} total" if len(rows) > 40 else None,
             timestamp=False,

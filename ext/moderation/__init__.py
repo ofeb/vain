@@ -283,9 +283,10 @@ class ModerationCommands(Package):
         ctx,
         *,
         action: str,
-        target: discord.abc.User | None,
-        case_id: int | None,
-        reason: str | None,
+        target: discord.abc.User | str | None = None,
+        target_name: str | None = None,
+        case_id: int | None = None,
+        reason: str | None = None,
         extra: str | None = None,
     ) -> None:
         if getattr(self.db, "pool", None) is None:
@@ -297,7 +298,14 @@ class ModerationCommands(Package):
         if not isinstance(channel, discord.TextChannel):
             return
 
-        target_label = target.mention if target else "Unknown User"
+        if target_name is not None:
+            target_label = target_name
+        elif isinstance(target, str):
+            target_label = target
+        elif target is not None:
+            target_label = getattr(target, "mention", None) or str(target)
+        else:
+            target_label = "Unknown User"
         embed = build_modlog_embed(
             color=self.color,
             action=action,
@@ -2374,6 +2382,7 @@ from .extended.revokefiles import Revokefiles
 from .extended.restrictcommand import Restrictcommand
 from .extended.stickyrole import Stickyrole
 from .extended.forcenickname import Forcenickname
+from .extended.honeypot import Honeypot
 
 class Moderation(
     ModerationCommands,
@@ -2391,6 +2400,7 @@ class Moderation(
     Restrictcommand,
     Stickyrole,
     Forcenickname,
+    Honeypot,
     commands.Cog,
     metaclass=_Meta,
 ):

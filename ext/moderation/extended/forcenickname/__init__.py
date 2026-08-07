@@ -91,7 +91,7 @@ class Forcenickname(Package):
 
         embed = panel_embed(
             title=f"Forced Nicknames ({len(rows)})",
-            color=self.color,
+            color=None,
             lines=lines,
             timestamp=False,
         )

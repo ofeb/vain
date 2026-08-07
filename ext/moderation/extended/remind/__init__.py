@@ -129,7 +129,7 @@ class Remind(Package):
 
         embed = panel_embed(
             title=f"Your Reminders ({len(rows)})",
-            color=self.color,
+            color=None,
             lines=lines,
             timestamp=False,
         )
@@ -179,7 +179,7 @@ class Remind(Package):
                 if user is None:
                     continue
                 embed = reply_embed(
-                    color=self.color,
+                    color=None,
                     message=f"**Reminder**\n{row['message']}",
                 )
                 with contextlib.suppress(discord.Forbidden, discord.HTTPException):

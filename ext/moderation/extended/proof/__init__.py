@@ -90,7 +90,7 @@ class Proof(Package):
 
         embed = panel_embed(
             title=f"Proof — Case #{case_id}",
-            color=self.color,
+            color=None,
             lines=lines,
             timestamp=False,
         )
@@ -119,7 +119,7 @@ class Proof(Package):
         urls = "\n".join(f"**#{r['id']}** {r['url']}" for r in rows[:15])
         embed = panel_embed(
             title=f"Proof — Case #{case_id}",
-            color=self.color,
+            color=None,
             lines=[urls],
             timestamp=False,
         )

@@ -46,7 +46,7 @@ class History(Package):
             title += f" ({command})"
         embed = panel_embed(
             title=title,
-            color=self.color,
+            color=None,
             lines=[self._format_case_line(row) for row in rows],
             timestamp=False,
         )
@@ -71,7 +71,7 @@ class History(Package):
         from core.tools.moderation_logs import build_modlog_embed
 
         embed = build_modlog_embed(
-            color=self.color,
+            color=None,
             action=str(row["action"]),
             target_label=target_label,
             moderator_label=moderator_label,
