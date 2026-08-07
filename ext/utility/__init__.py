@@ -312,6 +312,7 @@ class Snipe(commands.Cog):
 
     @hybrid(
         name="clearsnipe",
+        aliases=["cs", "csnipe", "clearsnipes"],
         description="Clear all results for reactions, edits and messages",
         guild_only=True,
     )
