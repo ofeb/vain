@@ -1342,20 +1342,23 @@ class GroupHelpMenu(ui.LayoutView):
             if 0 <= idx < len(self.pages):
                 self.index = idx
             self._rebuild()
-            if interaction.response.is_done():
-                if self.msg is not None:
-                    with contextlib.suppress(discord.HTTPException):
-                        await self.msg.edit(view=self)
-            else:
-                await interaction.response.edit_message(view=self)
+            
+            if not interaction.response.is_done():
+                await interaction.response.defer()
+            if self.msg is not None:
+                with contextlib.suppress(discord.HTTPException):
+                    await self.msg.edit(view=self)
 
         picker = PageJumpSelect(
             title=f"Search for a command (1-{total})..",
             options=options,
             on_pick=on_pick,
             author_id=self.ctx.author.id,
+            timeout=self.timeout or 180,
         )
         await inter.response.send_message(view=picker, ephemeral=True)
+        with contextlib.suppress(Exception):
+            picker.message = await inter.original_response()
 
     async def _cancel(self, inter: Interaction) -> None:
         await inter.response.defer()

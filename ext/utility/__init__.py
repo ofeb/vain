@@ -21,12 +21,17 @@ if TYPE_CHECKING:
 
 
 def _format_when(ts_raw) -> tuple[str, datetime.datetime]:
-    if isinstance(ts_raw, (int, float)):
-        ts = datetime.datetime.fromtimestamp(ts_raw, tz=datetime.timezone.utc)
-    elif isinstance(ts_raw, datetime.datetime):
+    if isinstance(ts_raw, datetime.datetime):
         ts = ts_raw if ts_raw.tzinfo else ts_raw.replace(tzinfo=datetime.timezone.utc)
+    elif isinstance(ts_raw, (int, float)):
+        
+        ts = datetime.datetime.fromtimestamp(float(ts_raw), tz=datetime.timezone.utc)
     else:
         ts = datetime.datetime.now(tz=datetime.timezone.utc)
+    
+    now = datetime.datetime.now(tz=datetime.timezone.utc)
+    if ts.year > now.year + 1 or ts.year < 2015:
+        ts = now
     relative = discord.utils.format_dt(ts, style="R")
     return relative, ts
 
@@ -68,11 +73,11 @@ def _snipe_accent(bot=None) -> int:
 
 
 def _build_delete_container(snipe: dict, *, accent: int | None = None) -> ui.Container:
-    """Deleted message — header + divider + body (inspired, not 1:1)."""
+    """Deleted message — mention + deleted this message + relative time."""
     container = ui.Container(accent_colour=accent if accent is not None else color.base)
-    name = _author_name(snipe)
     when, _ = _format_when(snipe.get("timestamp", 0))
-    container.add_item(ui.TextDisplay(f"**{name}** - {when}"))
+    who = _author_mention(snipe)
+    container.add_item(ui.TextDisplay(f"{who} deleted this message {when}"))
     container.add_item(ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small))
 
     body = _filter_invites(snipe.get("content") or "")
@@ -167,7 +172,10 @@ async def _send_snipe_pages(
     key = store._key(prefix, ctx.channel.id)
     data = list(store.data.get(key, []))
     accent = _snipe_accent(ctx.bot)
-    pages = [_build_snipe_container(e, kind, accent=accent) for e in data]
+    
+    pages = [
+        (lambda e=e: _build_snipe_container(e, kind, accent=accent)) for e in data
+    ]
     start = min(max(index - 1, 0), max(len(pages) - 1, 0))
 
     async def on_delete_page(page_index: int) -> None:
@@ -177,8 +185,7 @@ async def _send_snipe_pages(
             pass
 
     if total == 1:
-        
-        layout = layout_from_items([pages[0]])
+        layout = layout_from_items([pages[0]()])
         await ctx.send(view=layout)
         return
 

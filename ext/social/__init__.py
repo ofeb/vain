@@ -713,7 +713,7 @@ class Socials(Package):
             
             await self._send_profile(ctx, containers)
 
-    @youtube.command(name="repost", description="Repost a YouTube video or short", aliases=["video", "short", "shorts"])
+    @youtube.command(name="repost", description="Repost a YouTube video or short", aliases=["video", "short"])
     @describe(url="YouTube video or shorts URL")
     async def youtube_repost(self, ctx: Context, *, url: str) -> None:
         async with ctx.typing():

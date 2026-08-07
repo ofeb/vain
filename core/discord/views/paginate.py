@@ -228,7 +228,7 @@ def _emoji(value: str) -> discord.PartialEmoji:
 
 
 class PageJumpSelect(ui.LayoutView):
-    """Ephemeral C2 select — page list or labeled entries (group search)."""
+    """Ephemeral C2 select — stays open until timeout; picks update the original message."""
 
     def __init__(
         self,
@@ -237,20 +237,28 @@ class PageJumpSelect(ui.LayoutView):
         options: list[discord.SelectOption],
         on_pick: Callable[[discord.Interaction, str], Any],
         author_id: int,
-        timeout: float = 60,
+        timeout: float = 180,
     ) -> None:
         super().__init__(timeout=timeout)
         self.author_id = author_id
         self.on_pick = on_pick
+        self.message: discord.Message | None = None
+        self._title = title
+        self._options = list(options)[:25]
+        self._disabled = False
+        self._build()
 
+    def _build(self) -> None:
+        self.clear_items()
         container = ui.Container()
-        container.add_item(ui.TextDisplay(title))
+        container.add_item(ui.TextDisplay(self._title))
         row = ui.ActionRow()
         select = ui.Select(
             placeholder="pick one…",
             min_values=1,
             max_values=1,
-            options=options[:25],
+            options=self._options,
+            disabled=self._disabled,
         )
 
         async def _cb(interaction: discord.Interaction) -> None:
@@ -263,6 +271,9 @@ class PageJumpSelect(ui.LayoutView):
                     ephemeral=True,
                 )
                 return
+            if self._disabled:
+                await interaction.response.defer()
+                return
             value = select.values[0]
             await self.on_pick(interaction, value)
 
@@ -271,10 +282,43 @@ class PageJumpSelect(ui.LayoutView):
         container.add_item(row)
         self.add_item(container)
 
+    async def on_timeout(self) -> None:
+        self._disabled = True
+        self._build()
+        if self.message is not None:
+            with suppress(discord.HTTPException):
+                await self.message.edit(view=self)
+
 
 
 _PAGER_SEARCH = "<:search:1479154501066817600>"
 _PAGER_DELETE = "<:delete:1535040504516055191>"
+
+
+def _strip_trailing_pager(container: ui.Container) -> ui.Container:
+    """Drop trailing separator + action-row pager chrome without touching content.
+
+    Safety net when a stored Container was mutated in-place (which stacked buttons).
+    Prefer factories that return fresh containers instead.
+    """
+    children = list(getattr(container, "children", ()) or ())
+    if not children:
+        return container
+
+    changed = False
+    while children and isinstance(children[-1], ui.ActionRow):
+        try:
+            container.remove_item(children[-1])
+        except Exception:
+            break
+        children.pop()
+        changed = True
+    if changed and children and isinstance(children[-1], ui.Separator):
+        try:
+            container.remove_item(children[-1])
+        except Exception:
+            pass
+    return container
 
 
 def build_pager_row(
@@ -326,6 +370,18 @@ def build_pager_row(
     return row
 
 
+def _resolve_page(raw: Page) -> Any:
+    """Materialize lazy page factories so stored pages are never mutated."""
+    if isinstance(raw, (ui.Container, discord.Embed, str)):
+        return raw
+    if callable(raw):
+        try:
+            return raw()
+        except TypeError:
+            return raw
+    return raw
+
+
 class PaginateView(discord.ui.LayoutView):
     """Paginated embeds/containers as Components V2 with shared control order."""
 
@@ -354,9 +410,16 @@ class PaginateView(discord.ui.LayoutView):
         self.on_delete_page = on_delete_page
         self._rebuild()
 
-    def _as_container(self, raw: Page) -> ui.Container:
+    def _as_container(self, raw: Page, *, with_pager: bool = False) -> ui.Container:
+        raw = _resolve_page(raw)
         if isinstance(raw, ui.Container):
-            return raw
+            
+            
+            
+            container = raw
+            if with_pager:
+                container = _strip_trailing_pager(raw)
+            return container
         if isinstance(raw, discord.Embed):
             return embed_to_container(raw)
         accent = getattr(self.ctx.bot, "color", None) or 0x5865F2
@@ -365,7 +428,16 @@ class PaginateView(discord.ui.LayoutView):
         return container
 
     def _page_container(self) -> ui.Container:
-        container = self._as_container(self.pages[self.index])
+        
+        
+        raw = self.pages[self.index]
+        if callable(raw) and not isinstance(raw, (ui.Container, discord.Embed, str)):
+            container = self._as_container(raw(), with_pager=False)
+        elif isinstance(raw, ui.Container):
+            
+            container = _strip_trailing_pager(raw)
+        else:
+            container = self._as_container(raw, with_pager=False)
 
         if needs_pagination(self.pages):
             container.add_item(ui.Separator(visible=True))
@@ -406,8 +478,11 @@ class PaginateView(discord.ui.LayoutView):
         if self.message is None or not self.pages:
             return
         with suppress(discord.HTTPException):
-            raw = self.pages[self.index]
-            container = self._as_container(raw)
+            raw = _resolve_page(self.pages[self.index])
+            if isinstance(raw, ui.Container):
+                container = _strip_trailing_pager(raw)
+            else:
+                container = self._as_container(raw, with_pager=False)
             view = ui.LayoutView(timeout=None)
             view.add_item(container)
             await self.message.edit(view=view)
@@ -437,7 +512,6 @@ class PaginateView(discord.ui.LayoutView):
                 f"Search for a command (1-{len(self.pages)}).."
             )
         else:
-            
             total = len(self.pages)
             options = [
                 discord.SelectOption(
@@ -456,20 +530,23 @@ class PaginateView(discord.ui.LayoutView):
             if 0 <= idx < len(self.pages):
                 self.index = idx
             self._rebuild()
-            if inter.response.is_done():
-                if self.message is not None:
-                    with suppress(discord.HTTPException):
-                        await self.message.edit(view=self)
-            else:
-                await inter.response.edit_message(view=self)
+            
+            if not inter.response.is_done():
+                await inter.response.defer()
+            if self.message is not None:
+                with suppress(discord.HTTPException):
+                    await self.message.edit(view=self)
 
         picker = PageJumpSelect(
             title=title,
             options=options,
             on_pick=on_pick,
             author_id=self.ctx.author.id,
+            timeout=self.timeout or 180,
         )
         await interaction.response.send_message(view=picker, ephemeral=True)
+        with suppress(Exception):
+            picker.message = await interaction.original_response()
 
     async def _cancel(self, interaction: discord.Interaction) -> None:
         if self.on_delete_page is not None and self.pages:

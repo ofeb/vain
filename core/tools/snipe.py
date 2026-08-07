@@ -55,7 +55,7 @@ class Snipe:
     ) -> dict:
         """Store a snipe entry for a channel."""
         kind_l = (kind or "snipe").lower()
-        now_ts = datetime.datetime.utcnow().timestamp()
+        now_ts = datetime.datetime.now(datetime.timezone.utc).timestamp()
 
         if isinstance(message, dict):
             entry = dict(message)
@@ -145,7 +145,7 @@ class Snipe:
                 payload.message_id,
                 str(payload.emoji),
                 payload.user_id,
-                datetime.datetime.utcnow(),
+                datetime.datetime.now(datetime.timezone.utc),
             )
         except Exception:
             return False
