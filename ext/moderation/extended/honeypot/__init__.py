@@ -7,7 +7,7 @@ from typing import Any, Iterable
 import discord
 from discord import ui
 from discord.ext import commands
-from discord.ext.commands import group
+from discord.ext.commands import BucketType, cooldown, group
 
 from core.discord.package import Package
 from core.discord.views.embed import panel_embed
@@ -309,6 +309,7 @@ class Honeypot(Package):
         description="Create the honeypot channel and arm the trap.",
     )
     @has_permissions(manage_guild=True)
+    @cooldown(1, 10, BucketType.guild)
     async def honeypot_setup(self, ctx):
         """Create the honeypot channel and arm the trap."""
         if ctx.guild is None:
@@ -384,6 +385,7 @@ class Honeypot(Package):
         description="Disable the honeypot and remove its channel.",
     )
     @has_permissions(manage_guild=True)
+    @cooldown(1, 10, BucketType.guild)
     async def honeypot_disable(self, ctx):
         """Disable the honeypot and remove its channel."""
         if ctx.guild is None:

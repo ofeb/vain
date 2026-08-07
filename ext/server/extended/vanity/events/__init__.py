@@ -33,8 +33,6 @@ class VanityEvents:
         before_on = vanity_matches(before_status, code, strict=strict)
         after_on = vanity_matches(after_status, code, strict=strict)
 
-        
-        
         if before_on == after_on:
             return
 
@@ -48,7 +46,11 @@ class VanityEvents:
             after_on,
         )
 
-        await self._apply_vanity_state(after, settings, repping=after_on, notify=after_on)
+        
+        
+        await self._apply_vanity_state(
+            after, settings, repping=after_on, notify=after_on
+        )
 
     async def _apply_vanity_state(
         self,

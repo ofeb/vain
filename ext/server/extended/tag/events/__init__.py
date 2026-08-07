@@ -60,6 +60,8 @@ class TagEvents:
                 was_match,
                 is_match,
             )
+
+            
             await self._apply_tag_state(
                 member, settings, repping=is_match, notify=is_match
             )

@@ -393,7 +393,7 @@ class Context(commands.Context):
         if return_embed:
             return embed
         kwargs.setdefault("mention_author", False)
-        # Prefer send() so embeds always convert to C2 lookalikes.
+        
         try:
             return await self.send(embed=embed, **kwargs)
         except discord.NotFound:

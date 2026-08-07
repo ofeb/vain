@@ -22,7 +22,7 @@ def _accent_from_embed(embed: discord.Embed) -> int | None:
         value = int(colour.value)
     except Exception:
         return None
-    # Treat pure black / default as no accent.
+    
     if value in (0, 0x000000):
         return None
     return value
@@ -429,7 +429,7 @@ def build_pager_row(
             )
         )
 
-    # Ensure nested buttons can resolve their owning LayoutView immediately.
+    
     for child in getattr(row, "children", ()) or ():
         with suppress(Exception):
             child._view = parent  # type: ignore[attr-defined]
@@ -496,10 +496,10 @@ class PaginateView(discord.ui.LayoutView):
 
     def _page_container(self) -> ui.Container:
         raw = _resolve_page(self.pages[self.index])
-        # Always build a fresh content container for embeds/strings so pager
-        # chrome never mutates a shared page object.
+        
+        
         if isinstance(raw, ui.Container):
-            # Clone content by stripping old pager chrome, then re-adding.
+            
             container = _strip_trailing_pager(raw)
         elif isinstance(raw, discord.Embed):
             container = embed_to_container(raw)

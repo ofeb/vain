@@ -12,7 +12,8 @@ from core.vain import Vain
 
 logger = getLogger("vain.server.extended.tag.settings")
 
-_NOTIFY_COOLDOWN_SEC = 30
+
+_NOTIFY_COOLDOWN_SEC = 10
 
 
 class Record(TypedDict, total=False):
@@ -164,12 +165,18 @@ class Settings:
             )
             return None
 
-        redis = getattr(self.bot, "redis", None)
+        from core.tools.ratelimit import notify_ratelimited
+
         key = f"notifs.tag:{self.guild.id}-{member.id}"
+        if notify_ratelimited(key, per=_NOTIFY_COOLDOWN_SEC):
+            logger.debug("tag dispatch cooldown %s", key)
+            return None
+
+        redis = getattr(self.bot, "redis", None)
         if redis is not None:
             try:
                 if await redis.ratelimited(key, 1, _NOTIFY_COOLDOWN_SEC):
-                    logger.debug("tag dispatch cooldown %s", key)
+                    logger.debug("tag dispatch redis cooldown %s", key)
                     return None
             except Exception:
                 pass

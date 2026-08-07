@@ -28,7 +28,7 @@ from .managers.redis import VainCache, FileVainCache, RedisClient
 from .managers.guard import Guard
 from .tools.embed import PreparedScript, Script, parse
 from .tools.errors import Ratelimited
-from .tools.ratelimit import global_ratelimit
+from .tools.ratelimit import global_ratelimit, is_setup_command, setup_ratelimit
 from .tools.snipe import Snipe
 from config import color, database, redis, emojis, music_enabled
 from .managers.filetypes import CACHE_REDIS_FILE, ensure_storage_files
@@ -616,6 +616,17 @@ class Vain(commands.AutoShardedBot):
             retry = global_ratelimit(ctx.author.id)
             if retry:
                 raise Ratelimited(retry)
+
+            
+            qname = getattr(ctx.command, "qualified_name", None) if ctx.command else None
+            if is_setup_command(qname):
+                setup_retry = setup_ratelimit(
+                    ctx.guild.id if ctx.guild else None,
+                    ctx.author.id,
+                    str(qname).lower(),
+                )
+                if setup_retry:
+                    raise Ratelimited(setup_retry)
 
         return True
 

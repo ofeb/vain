@@ -22,7 +22,8 @@ from core.vain import Vain
 logger = getLogger("vain.server.extended.vanity.settings")
 
 
-_NOTIFY_COOLDOWN_SEC = 30
+
+_NOTIFY_COOLDOWN_SEC = 10
 
 _INVISIBLE_RE = re.compile(r"[\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff\u00ad]")
 
@@ -203,12 +204,20 @@ class Settings:
             )
             return None
 
-        redis = getattr(self.bot, "redis", None)
+        from core.tools.ratelimit import notify_ratelimited
+
         key = f"notifs.vanity:{self.guild.id}-{member.id}"
+        
+        
+        if notify_ratelimited(key, per=_NOTIFY_COOLDOWN_SEC):
+            logger.debug("vanity dispatch cooldown %s", key)
+            return None
+
+        redis = getattr(self.bot, "redis", None)
         if redis is not None:
             try:
                 if await redis.ratelimited(key, 1, _NOTIFY_COOLDOWN_SEC):
-                    logger.debug("vanity dispatch cooldown %s", key)
+                    logger.debug("vanity dispatch redis cooldown %s", key)
                     return None
             except Exception:
                 pass

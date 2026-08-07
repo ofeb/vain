@@ -870,46 +870,137 @@ class Role(Package):
             f"{role.mention} is {'now' if role.mentionable else 'no longer'} mentionable"
         )
 
+    async def _resolve_role_icon(
+        self,
+        ctx,
+        source: str | None = None,
+    ) -> bytes | str | None:
+        """Resolve a role icon from emoji, URL, or attached image.
+
+        Returns:
+            - ``bytes`` for custom emoji / URL / attachment images
+            - ``str`` for unicode emoji (Discord accepts these directly)
+            - ``None`` to clear the icon
+        """
+        if not source and ctx.message and ctx.message.attachments:
+            attachment = ctx.message.attachments[0]
+            content_type = (attachment.content_type or "").lower()
+            filename = (attachment.filename or "").lower()
+            is_image = content_type.startswith("image/") or filename.endswith(
+                (".png", ".jpg", ".jpeg", ".gif", ".webp")
+            )
+            if not is_image:
+                raise CommandError("Attached file must be an **image**")
+            data = await attachment.read()
+            if len(data) > 256 * 1024:
+                raise CommandError("Role icons must be **256 KB** or smaller")
+            return data
+
+        if not source:
+            return None
+
+        raw = source.strip()
+        if not raw:
+            return None
+
+        
+        try:
+            partial = discord.PartialEmoji.from_str(raw)
+        except Exception:
+            partial = None
+
+        if partial is not None and partial.is_custom_emoji() and partial.id:
+            try:
+                data = await partial.read()
+            except Exception as exc:
+                raise CommandError("Could not download that **emoji**") from exc
+            if len(data) > 256 * 1024:
+                raise CommandError("Role icons must be **256 KB** or smaller")
+            return data
+
+        
+        if raw.startswith(("http://", "https://")):
+            try:
+                timeout = aiohttp.ClientTimeout(total=15)
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.get(raw) as resp:
+                        if resp.status != 200:
+                            raise CommandError("Could not download that image")
+                        content_type = (resp.headers.get("Content-Type") or "").lower()
+                        if content_type and not content_type.startswith("image/"):
+                            raise CommandError("URL must point to an **image**")
+                        data = await resp.read()
+            except CommandError:
+                raise
+            except Exception as exc:
+                raise CommandError("Could not download that image") from exc
+            if len(data) > 256 * 1024:
+                raise CommandError("Role icons must be **256 KB** or smaller")
+            return data
+
+        
+        if raw.startswith(("<@", "<#")):
+            raise CommandError(
+                "Provide a **custom emoji**, **unicode emoji**, **image URL**, or **attachment**"
+            )
+        
+        if len(raw) <= 16 and not raw.isascii():
+            return raw
+        if len(raw) <= 8 and all(
+            ord(ch) > 127 or ch.isspace() or ch in "️‍" for ch in raw
+        ):
+            return raw
+
+        raise CommandError(
+            "Provide a **custom emoji**, **unicode emoji**, **image URL**, or **attachment**"
+        )
+
     @role.command(
         name="icon",
-        description="Set an icon for a role",
-        example=",role icon https://... @Role",
+        description="Set a role icon from an emoji, URL, or image",
+        example=",role icon @Role ⭐",
+        usage="(role) [emoji|url|attachment]",
     )
     @has_permissions(manage_roles=True)
     async def role_icon(
         self,
         ctx,
-        url: str | None = None,
-        *,
         role: RoleConvert,
+        *,
+        icon: str | None = None,
     ) -> discord.Message | None:
-        """Set or clear a role icon (requires BOOST_LEVEL_2)."""
+        """Set or clear a role icon (emoji, URL, or attached image). Requires boost level 2."""
         if not await self._ensure_manageable_role(
             ctx, role, action="icon", check_integrated=False
         ):
             return None
         if ctx.guild is None:
             return await ctx.warn("This command can only be used in a server")
-        if ctx.guild.premium_tier < 2:
+        features = {str(f).upper() for f in getattr(ctx.guild, "features", ()) or ()}
+        if ctx.guild.premium_tier < 2 and "ROLE_ICONS" not in features:
             return await ctx.warn("Role icons require server boost level **2**")
 
-        icon_bytes: bytes | None = None
-        if url:
-            try:
-                timeout = aiohttp.ClientTimeout(total=15)
-                async with aiohttp.ClientSession(timeout=timeout) as session:
-                    async with session.get(url) as resp:
-                        if resp.status != 200:
-                            return await ctx.warn("Could not download that image")
-                        icon_bytes = await resp.read()
-            except Exception:
-                return await ctx.warn("Could not download that image")
-        elif ctx.message.attachments:
-            icon_bytes = await ctx.message.attachments[0].read()
+        try:
+            resolved = await self._resolve_role_icon(ctx, icon)
+        except CommandError as exc:
+            return await ctx.warn(str(exc))
 
-        await role.edit(display_icon=icon_bytes, reason=self._audit_reason(ctx, None))
-        if icon_bytes is None:
+        try:
+            await role.edit(
+                display_icon=resolved,
+                reason=self._audit_reason(ctx, None),
+            )
+        except discord.Forbidden:
+            return await ctx.fail("I don't have permission to edit that role icon")
+        except discord.HTTPException as exc:
+            return await ctx.fail(f"Failed to update the role icon: {exc}")
+
+        if resolved is None:
             return await ctx.success(f"Cleared the icon for {role.mention}")
+        if isinstance(resolved, str):
+            return await ctx.success(
+                f"Updated the icon for {role.mention} to {resolved}"
+            )
         return await ctx.success(f"Updated the icon for {role.mention}")
 
     @role.command(
