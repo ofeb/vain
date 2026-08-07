@@ -1265,7 +1265,7 @@ class GroupHelpMenu(ui.LayoutView):
 
         self.clear_items()
         body = ui.TextDisplay(self._page_text())
-        # Informational C2 help — no accent color (status replies keep colors).
+        
         container = ui.Container()
         container.add_item(body)
         if len(self.pages) > 1:

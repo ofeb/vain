@@ -365,7 +365,7 @@ class Role(Package):
         )
         await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
-    # ── cache listeners ──────────────────────────────────────────────
+    
 
     @Package.listener("on_member_remove")
     async def role_cache(self, member: discord.Member) -> None:
@@ -414,7 +414,7 @@ class Role(Package):
         with contextlib.suppress(discord.HTTPException, discord.Forbidden):
             await member.add_roles(*roles, reason="Reassigned from cache")
 
-    # ── role group ───────────────────────────────────────────────────
+    
 
     @group(
         name="role",
@@ -526,7 +526,7 @@ class Role(Package):
             f"Removed {target_role.mention} from {member.mention}"
         )
 
-    # ── restore / reassign ───────────────────────────────────────────
+    
 
     @role.group(
         name="restore",
@@ -655,7 +655,7 @@ class Role(Package):
         pages = build_pages(embed, entries, split=10)
         return await Paginator(ctx, pages).start()
 
-    # ── create / duplicate / delete / edit ───────────────────────────
+    
 
     @role.command(
         name="create",
@@ -950,7 +950,7 @@ class Role(Package):
             f"Changed {target.mention}'s top role {top.mention} color to `{color}`"
         )
 
-    # ── mass role ops ────────────────────────────────────────────────
+    
 
     @role.command(
         name="cancel",

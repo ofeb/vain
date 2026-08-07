@@ -15,7 +15,7 @@ from core.managers.permissions import has_permissions
 
 _VALID_PUNISHMENTS = ("kick", "ban", "softban", "timeout")
 _DEFAULT_PUNISHMENTS = ["ban"]
-_TIMEOUT_SECONDS = 7 * 24 * 60 * 60  # 7 days
+_TIMEOUT_SECONDS = 7 * 24 * 60 * 60  
 _MISSING: Any = object()
 
 
@@ -206,7 +206,7 @@ class Honeypot(Package):
             message = await channel.fetch_message(int(message_id))
             await message.edit(view=layout)
             return
-        # Trap message missing — repost and store the new id.
+        
         with contextlib.suppress(discord.Forbidden, discord.HTTPException):
             msg = await self._post_trap_message(channel, caught)
             await self._upsert(guild.id, message_id=msg.id)
@@ -232,7 +232,7 @@ class Honeypot(Package):
                 if action == "kick":
                     await member.kick(reason=reason)
                     applied.append("kick")
-                    break  # member gone
+                    break  
                 if action == "ban":
                     await member.ban(delete_message_seconds=0, reason=reason)
                     applied.append("ban")
@@ -515,7 +515,7 @@ class Honeypot(Package):
         punishments = _normalize_punishments(tokens)
         updated = await self._upsert(ctx.guild.id, punishments=punishments)
 
-        # Live-edit the trap card so the punishment text stays accurate.
+        
         if updated.get("enabled"):
             await self._refresh_trap_message(ctx.guild, updated)
 
@@ -584,24 +584,24 @@ class Honeypot(Package):
             return
         if int(message.channel.id) != int(row["channel_id"]):
             return
-        # Ignore the trap message itself / staff.
+        
         if message.id == row.get("message_id"):
             return
         if self._is_exempt(message.author):
             return
 
-        # Snapshot message details before delete (for optional alert channel).
+        
         reason = f"Honeypot triggered in #{getattr(message.channel, 'name', 'honeypot')}"
         author = message.author
         content = message.content or ""
         attachment_count = len(message.attachments or [])
         channel_mention = getattr(message.channel, "mention", None) or f"`{message.channel.id}`"
 
-        # Immediate delete — never surface errors to the channel.
+        
         with contextlib.suppress(discord.Forbidden, discord.HTTPException, discord.NotFound):
             await message.delete()
 
-        # Default action is ban; configured punishments still apply, silently.
+        
         punishments = _normalize_punishments(row.get("punishments"))
         if "ban" not in punishments and "softban" not in punishments and "kick" not in punishments:
             punishments = ["ban", *punishments]

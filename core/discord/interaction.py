@@ -97,7 +97,7 @@ async def _info(
     from core.discord.views.embed import body
 
     emoji = format_embed_emoji(self.client, emojis.interface.information, fallback_key="info")
-    # Informational interaction replies are colorless C2 (no accent).
+    
     embed = discord.Embed(
         description=body(f"{emoji} {self.user.mention}: {message}"),
     )

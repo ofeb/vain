@@ -1209,7 +1209,7 @@ class ModerationCommands(Package):
         if parsed.member is None:
             return await ctx.send_help(ctx.command)
 
-        duration_seconds = parsed.duration_seconds or (60 * 60)  # default 1h
+        duration_seconds = parsed.duration_seconds or (60 * 60)  
         if duration_seconds < 60:
             return await ctx.warn("Duration must be at least **60 seconds**")
         if duration_seconds > 28 * 86400:

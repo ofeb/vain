@@ -243,8 +243,8 @@ def _pop_hybrid_attrs(attrs: dict) -> tuple[str | None, dict, bool, bool | None,
     groupchats = attrs.pop("groupchats", None)
     slash = attrs.pop("slash", True)
     is_group = attrs.pop("group", False)
-    # Normalize aliases up-front and keep them in attrs for the d.py factory
-    # AND return a copy so we can re-apply after registration.
+    
+    
     aliases_raw = attrs.pop("aliases", None)
     aliases: list[str] | None
     if aliases_raw is None:

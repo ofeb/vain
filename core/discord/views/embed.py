@@ -47,7 +47,7 @@ def c2(
         caption(footer) if footer else None,
     )
     embed = discord.Embed(description=description)
-    # Intentionally no embed.color — C2 responses are colorless.
+    
     _ = color
     if title:
         embed.title = title
@@ -84,7 +84,7 @@ def panel_embed(
         caption(footer) if footer else None,
     )
     embed = discord.Embed(description=description or None, url=url)
-    # Intentionally no embed.color — C2 responses are colorless.
+    
     _ = color
     if title:
         embed.title = title
