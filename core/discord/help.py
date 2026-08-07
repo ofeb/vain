@@ -1355,6 +1355,7 @@ class GroupHelpMenu(ui.LayoutView):
             on_pick=on_pick,
             author_id=self.ctx.author.id,
             timeout=self.timeout or 180,
+            placeholder="select a command to jump to...",
         )
         await inter.response.send_message(view=picker, ephemeral=True)
         with contextlib.suppress(Exception):

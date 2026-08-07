@@ -1025,7 +1025,7 @@ class Giveaway(commands.Cog):
 
     @giveaway_customize.command(
         name="showentries",
-        aliases=["entries", "showentry", "showentries"],
+        aliases=["entries", "showentry", "show"],
         description="Toggle showing entry count on the giveaway panel",
         usage="<on|off>",
         example=",giveaway customize showentries off",

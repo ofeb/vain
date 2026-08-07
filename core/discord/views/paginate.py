@@ -238,6 +238,7 @@ class PageJumpSelect(ui.LayoutView):
         on_pick: Callable[[discord.Interaction, str], Any],
         author_id: int,
         timeout: float = 180,
+        placeholder: str | None = None,
     ) -> None:
         super().__init__(timeout=timeout)
         self.author_id = author_id
@@ -245,6 +246,7 @@ class PageJumpSelect(ui.LayoutView):
         self.message: discord.Message | None = None
         self._title = title
         self._options = list(options)[:25]
+        self._placeholder = (placeholder or "select a page...").strip()[:150] or "select a page..."
         self._disabled = False
         self._build()
 
@@ -254,7 +256,7 @@ class PageJumpSelect(ui.LayoutView):
         container.add_item(ui.TextDisplay(self._title))
         row = ui.ActionRow()
         select = ui.Select(
-            placeholder="pick one…",
+            placeholder=self._placeholder,
             min_values=1,
             max_values=1,
             options=self._options,
@@ -396,6 +398,7 @@ class PaginateView(discord.ui.LayoutView):
         show_goto: bool = True,
         search_options: list[discord.SelectOption] | None = None,
         search_title: str | None = None,
+        search_placeholder: str | None = None,
         on_delete_page: Callable[[int], Any] | None = None,
     ) -> None:
         super().__init__(timeout=timeout if timeout is not None else 180)
@@ -407,6 +410,7 @@ class PaginateView(discord.ui.LayoutView):
         self.show_goto = show_goto
         self.search_options = search_options
         self.search_title = search_title
+        self.search_placeholder = search_placeholder
         self.on_delete_page = on_delete_page
         self._rebuild()
 
@@ -515,8 +519,9 @@ class PaginateView(discord.ui.LayoutView):
         if self.search_options:
             options = list(self.search_options)[:25]
             title = self.search_title or (
-                f"Search for a command (1-{len(self.pages)}).."
+                f"Search for a page (1-{len(self.pages)}).."
             )
+            placeholder = self.search_placeholder or "select a page to jump to..."
         else:
             total = len(self.pages)
             options = [
@@ -526,7 +531,8 @@ class PaginateView(discord.ui.LayoutView):
                 )
                 for i in range(1, min(total, 25) + 1)
             ]
-            title = f"Search for a page (1-{total}).."
+            title = self.search_title or f"Search for a page (1-{total}).."
+            placeholder = self.search_placeholder or "select a page to jump to..."
 
         async def on_pick(inter: discord.Interaction, value: str) -> None:
             try:
@@ -559,6 +565,7 @@ class PaginateView(discord.ui.LayoutView):
             on_pick=on_pick,
             author_id=self.ctx.author.id,
             timeout=self.timeout or 180,
+            placeholder=placeholder,
         )
         await interaction.response.send_message(view=picker, ephemeral=True)
         with suppress(Exception):
@@ -618,6 +625,7 @@ async def send_pages(
     show_goto: bool = True,
     search_options: list[discord.SelectOption] | None = None,
     search_title: str | None = None,
+    search_placeholder: str | None = None,
     on_delete_page: Callable[[int], Any] | None = None,
 ) -> discord.Message:
     """send or attach paginated content; skip buttons when there is only one page."""
@@ -652,6 +660,7 @@ async def send_pages(
         show_goto=show_goto,
         search_options=search_options,
         search_title=search_title,
+        search_placeholder=search_placeholder,
         on_delete_page=on_delete_page,
     )
     if message is not None:
