@@ -54,9 +54,12 @@ def embed_to_container(
     extra_rows: Sequence[ui.ActionRow] | None = None,
     attachment_files: Sequence[discord.File] | None = None,
 ) -> ui.Container:
-    """Convert a rich embed into a Components V2 container with dividers."""
-    accent = _accent_from_embed(embed)
-    container = ui.Container(accent_colour=accent)
+    """Convert a rich embed into a Components V2 container with dividers.
+
+    Response containers are always colorless (no accent strip), regardless of
+    any color set on the source embed.
+    """
+    container = ui.Container()
 
     
     author_name = embed.author.name if embed.author else None
@@ -359,14 +362,17 @@ class Context(commands.Context):
         *,
         emoji: str = "",
         color_value: Optional[int] = None,
-        colored: bool = True,
+        colored: bool = False,
     ) -> discord.Embed:
+        """Build a compact status embed.
 
+        Defaults to colorless so C2 containers have no accent strip.
+        """
         prefix = f"{emoji} " if emoji else ""
         line = f"{prefix}**{self.author.display_name}**: {message}"
         embed = discord.Embed(description=body(line))
-        if colored:
-            embed.color = color_value if color_value is not None else self.bot.color
+        if colored and color_value is not None:
+            embed.color = color_value
         return embed
 
     async def _send_embed_response(
@@ -394,53 +400,45 @@ class Context(commands.Context):
                 return None
 
     async def success(self, message: str, **kw):
-        """send a success reply with vain styling"""
+        """send a success reply with vain styling (colorless C2)"""
         emoji = await self._get_emoji("success")
-        color_value = await self._get_color("approve")
         return await self._send_embed_response(
             self._message_embed(
                 self._strip_self_mention(message),
                 emoji=emoji,
-                color_value=color_value,
             ),
             **kw,
         )
 
     async def fail(self, message: str, **kw):
-        """send a failure reply with vain styling"""
+        """send a failure reply with vain styling (colorless C2)"""
         emoji = await self._get_emoji("deny")
-        color_value = await self._get_color("deny")
         return await self._send_embed_response(
             self._message_embed(
                 self._strip_self_mention(message),
                 emoji=emoji,
-                color_value=color_value,
             ),
             **kw,
         )
 
     async def warn(self, message: str, **kw):
-        """send a warning reply with vain styling"""
+        """send a warning reply with vain styling (colorless C2)"""
         emoji = await self._get_emoji("warn")
-        color_value = await self._get_color("warn")
         return await self._send_embed_response(
             self._message_embed(
                 self._strip_self_mention(message),
                 emoji=emoji,
-                color_value=color_value,
             ),
             **kw,
         )
 
     async def cooldown(self, message: str, **kw):
-        """send a cooldown reply with vain styling"""
+        """send a cooldown reply with vain styling (colorless C2)"""
         emoji = await self._get_emoji("cooldown")
-        color_value = await self._get_color("cooldown")
         return await self._send_embed_response(
             self._message_embed(
                 self._strip_self_mention(message),
                 emoji=emoji,
-                color_value=color_value,
             ),
             **kw,
         )
@@ -466,17 +464,11 @@ class Context(commands.Context):
         return await self.normal(message, emoji=emoji, **kw)
 
     async def lastfm(self, message: str, **kw):
-        """send a compact Last.fm reply with vain styling."""
-        try:
-            color_value = discord.Color.from_str(lastfm_color.value)
-        except ValueError:
-            color_value = discord.Color(0xBBA0D2)
-
+        """send a compact Last.fm reply with vain styling (colorless C2)."""
         return await self._send_embed_response(
             self._message_embed(
                 self._strip_self_mention(message),
                 emoji=emojis.lastfm,
-                color_value=color_value.value,
             ),
             **kw,
         )

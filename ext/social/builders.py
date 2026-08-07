@@ -498,7 +498,7 @@ class _BaseBuilder:
 
     def _preview_container(self) -> ui.LayoutView:
         layout = ui.LayoutView(timeout=None)
-        container = ui.Container(accent_colour=self._accent())
+        container = ui.Container()
 
         lines: list[str] = []
         if self.data.get("author"):

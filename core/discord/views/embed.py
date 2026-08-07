@@ -38,17 +38,17 @@ def c2(
 ) -> discord.Embed:
     """Build a compact embed.
 
-    Pass ``color=None`` (default for informational panels) so Components V2
-    containers render with **no accent strip**. Status replies
-    (success / warn / fail) should still pass their status color.
+    Response embeds stay colorless by default so Components V2 containers
+    render with **no accent strip**. ``color`` is accepted for API
+    compatibility but ignored for C2 response styling.
     """
     description = compose(
         body(message),
         caption(footer) if footer else None,
     )
     embed = discord.Embed(description=description)
-    if color is not None:
-        embed.color = color
+    # Intentionally no embed.color — C2 responses are colorless.
+    _ = color
     if title:
         embed.title = title
     if author:
@@ -64,7 +64,7 @@ def reply_embed(
     message: str,
     subtitle: str | None = None,
 ) -> discord.Embed:
-    return c2(color=color, message=message, footer=subtitle, timestamp=False)
+    return c2(color=None, message=message, footer=subtitle, timestamp=False)
 
 
 def panel_embed(
@@ -84,8 +84,8 @@ def panel_embed(
         caption(footer) if footer else None,
     )
     embed = discord.Embed(description=description or None, url=url)
-    if color is not None:
-        embed.color = color
+    # Intentionally no embed.color — C2 responses are colorless.
+    _ = color
     if title:
         embed.title = title
     if author:

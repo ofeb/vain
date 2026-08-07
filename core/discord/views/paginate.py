@@ -37,9 +37,11 @@ def embed_to_container(
     extra_rows: Sequence[ui.ActionRow] | None = None,
     attachment_files: Sequence[discord.File] | None = None,
 ) -> ui.Container:
-    """Convert a rich embed into a Components V2 container with dividers."""
-    accent = _accent_from_embed(embed)
-    container = ui.Container(accent_colour=accent)
+    """Convert a rich embed into a Components V2 container with dividers.
+
+    Response containers are always colorless (no accent strip).
+    """
+    container = ui.Container()
 
     author_name = embed.author.name if embed.author else None
     author_icon = embed.author.icon_url if embed.author else None
@@ -426,8 +428,7 @@ class PaginateView(discord.ui.LayoutView):
             return container
         if isinstance(raw, discord.Embed):
             return embed_to_container(raw)
-        accent = getattr(self.ctx.bot, "color", None) or 0x5865F2
-        container = ui.Container(accent_colour=accent)
+        container = ui.Container()
         container.add_item(ui.TextDisplay(str(raw)))
         return container
 
@@ -465,8 +466,7 @@ class PaginateView(discord.ui.LayoutView):
     def _rebuild(self) -> None:
         self._clear_all()
         if not self.pages:
-            accent = getattr(self.ctx.bot, "color", None) or 0x5865F2
-            empty = ui.Container(accent_colour=accent)
+            empty = ui.Container()
             empty.add_item(ui.TextDisplay("-# nothing left here"))
             self.add_item(empty)
             return

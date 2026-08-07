@@ -80,7 +80,8 @@ def _snipe_accent(bot=None) -> int:
 
 def _build_delete_container(snipe: dict, *, accent: int | None = None) -> ui.Container:
     """Deleted message — mention + deleted this message + relative time."""
-    container = ui.Container(accent_colour=accent if accent is not None else color.base)
+    container = ui.Container()
+    _ = accent
     when, _ = _format_when(snipe.get("timestamp", 0))
     who = _author_mention(snipe)
     container.add_item(ui.TextDisplay(f"{who} deleted this message {when}"))
@@ -103,7 +104,8 @@ def _build_delete_container(snipe: dict, *, accent: int | None = None) -> ui.Con
 
 def _build_edit_container(snipe: dict, *, accent: int | None = None) -> ui.Container:
     """Edited message card — before/after blocks."""
-    container = ui.Container(accent_colour=accent if accent is not None else color.base)
+    container = ui.Container()
+    _ = accent
     name = _author_name(snipe)
     when, _ = _format_when(snipe.get("timestamp", 0))
     jump = snipe.get("jump_url") or snipe.get("message") or ""
@@ -130,7 +132,8 @@ def _build_edit_container(snipe: dict, *, accent: int | None = None) -> ui.Conta
 
 def _build_reaction_container(snipe: dict, *, accent: int | None = None) -> ui.Container:
     """Reaction removal — compact quoted line with jump link."""
-    container = ui.Container(accent_colour=accent if accent is not None else color.base)
+    container = ui.Container()
+    _ = accent
     jump = snipe.get("message") or ""
     reaction = snipe.get("reaction", "")
     if isinstance(reaction, str) and reaction.startswith("https://cdn.discordapp.com/"):

@@ -12,12 +12,10 @@ from discord.ext.commands import group
 from core.discord.package import Package
 from core.discord.views.embed import panel_embed
 from core.managers.permissions import has_permissions
-from config import emojis
 
 _VALID_PUNISHMENTS = ("kick", "ban", "softban", "timeout")
-_DEFAULT_PUNISHMENTS = ["softban"]
+_DEFAULT_PUNISHMENTS = ["ban"]
 _TIMEOUT_SECONDS = 7 * 24 * 60 * 60  # 7 days
-_TRAP_ACCENT = 0xF5D76E  # gold warning strip on the trap card
 _MISSING: Any = object()
 
 
@@ -38,7 +36,7 @@ def _normalize_punishments(raw: Iterable[str] | None) -> list[str]:
 def _punishment_phrase(punishments: list[str]) -> str:
     labels = [f"**{p}**" for p in punishments]
     if not labels:
-        labels = ["**softban**"]
+        labels = ["**ban**"]
     if len(labels) == 1:
         return labels[0]
     if len(labels) == 2:
@@ -46,16 +44,14 @@ def _punishment_phrase(punishments: list[str]) -> str:
     return ", ".join(labels[:-1]) + f", and {labels[-1]}"
 
 
-def _trap_body(punishments: list[str], caught: int) -> str:
-    phrase = _punishment_phrase(punishments)
+def _trap_body() -> str:
+    """Minimal trap copy — no accent, no counters in the text body."""
     return "\n".join(
         [
-            f"### {emojis.warn} DO NOT SEND MESSAGES HERE! {emojis.warn}",
+            "### Do not send messages here",
             "",
-            "> -# This channel is a **trap** for compromised accounts.",
-            f"> -# Sending any message here will result in a {phrase}.",
-            "",
-            f"-# :honey_pot: Accounts Caught: **{caught}**",
+            "-# This channel is a trap for compromised accounts.",
+            "-# Anything posted here is removed and the account is banned.",
         ]
     )
 
@@ -74,7 +70,7 @@ class Honeypot(Package):
                     channel_id BIGINT,
                     message_id BIGINT,
                     alert_channel_id BIGINT,
-                    punishments TEXT[] NOT NULL DEFAULT ARRAY['softban']::TEXT[],
+                    punishments TEXT[] NOT NULL DEFAULT ARRAY['ban']::TEXT[],
                     caught INT NOT NULL DEFAULT 0,
                     enabled BOOLEAN NOT NULL DEFAULT FALSE
                 )
@@ -165,20 +161,32 @@ class Honeypot(Package):
             "enabled": next_enabled,
         }
 
-    def _trap_layout(self, punishments: list[str], caught: int) -> ui.LayoutView:
+    def _trap_layout(self, caught: int) -> ui.LayoutView:
+        """Minimal colorless trap card with a non-clickable Caught counter."""
         layout = ui.LayoutView(timeout=None)
-        container = ui.Container(accent_colour=_TRAP_ACCENT)
-        container.add_item(ui.TextDisplay(_trap_body(punishments, caught)))
+        container = ui.Container()
+        container.add_item(ui.TextDisplay(_trap_body()))
+        container.add_item(ui.Separator(visible=True))
+
+        row = ui.ActionRow()
+        row.add_item(
+            ui.Button(
+                style=discord.ButtonStyle.secondary,
+                label=f"Caught: {int(caught)}",
+                emoji="🍯",
+                disabled=True,
+            )
+        )
+        container.add_item(row)
         layout.add_item(container)
         return layout
 
     async def _post_trap_message(
         self,
         channel: discord.TextChannel,
-        punishments: list[str],
         caught: int,
     ) -> discord.Message:
-        return await channel.send(view=self._trap_layout(punishments, caught))
+        return await channel.send(view=self._trap_layout(caught))
 
     async def _refresh_trap_message(
         self,
@@ -192,16 +200,15 @@ class Honeypot(Package):
         channel = guild.get_channel(int(channel_id))
         if not isinstance(channel, discord.TextChannel):
             return
-        punishments = _normalize_punishments(row.get("punishments"))
         caught = int(row.get("caught") or 0)
-        layout = self._trap_layout(punishments, caught)
+        layout = self._trap_layout(caught)
         with contextlib.suppress(discord.NotFound, discord.Forbidden, discord.HTTPException):
             message = await channel.fetch_message(int(message_id))
             await message.edit(view=layout)
             return
         # Trap message missing — repost and store the new id.
         with contextlib.suppress(discord.Forbidden, discord.HTTPException):
-            msg = await self._post_trap_message(channel, punishments, caught)
+            msg = await self._post_trap_message(channel, caught)
             await self._upsert(guild.id, message_id=msg.id)
 
     def _is_exempt(self, member: discord.Member) -> bool:
@@ -252,7 +259,10 @@ class Honeypot(Package):
         row: dict,
         member: discord.Member,
         applied: list[str],
-        message: discord.Message,
+        *,
+        content: str = "",
+        attachment_count: int = 0,
+        channel_label: str = "`?`",
     ) -> None:
         alert_id = row.get("alert_channel_id")
         if not alert_id:
@@ -261,15 +271,11 @@ class Honeypot(Package):
         if not isinstance(channel, discord.TextChannel):
             return
         phrase = _punishment_phrase(applied or _normalize_punishments(row.get("punishments")))
-        content = message.content or ""
-        preview = content[:180] + ("…" if len(content) > 180 else "")
-        if not preview and message.attachments:
-            preview = f"[{len(message.attachments)} attachment(s)]"
+        preview = (content or "")[:180] + ("…" if len(content or "") > 180 else "")
+        if not preview and attachment_count:
+            preview = f"[{attachment_count} attachment(s)]"
         if not preview:
             preview = "*empty / non-text message*"
-
-        source = message.channel
-        source_label = getattr(source, "mention", None) or f"`{getattr(source, 'id', '?')}`"
 
         embed = panel_embed(
             color=None,
@@ -277,7 +283,7 @@ class Honeypot(Package):
             lines=[
                 f"**Member**: {member.mention} (`{member.id}`)",
                 f"**Action**: {phrase}",
-                f"**Channel**: {source_label}",
+                f"**Channel**: {channel_label}",
                 f"**Message**: {preview}",
             ],
             footer=f"Accounts caught: {int(row.get('caught') or 0)}",
@@ -356,7 +362,7 @@ class Honeypot(Package):
         caught = int(row.get("caught") or 0) if row else 0
 
         try:
-            msg = await self._post_trap_message(channel, punishments, caught)
+            msg = await self._post_trap_message(channel, caught)
         except (discord.Forbidden, discord.HTTPException):
             with contextlib.suppress(discord.HTTPException):
                 await channel.delete(reason="Honeypot setup failed to post trap message")
@@ -370,9 +376,7 @@ class Honeypot(Package):
             caught=caught,
             enabled=True,
         )
-        return await ctx.success(
-            f"Honeypot armed in {channel.mention} — punishment: {_punishment_phrase(punishments)}"
-        )
+        return await ctx.success(f"Honeypot armed in {channel.mention}")
 
     @honeypot.command(
         name="disable",
@@ -586,19 +590,34 @@ class Honeypot(Package):
         if self._is_exempt(message.author):
             return
 
-        punishments = _normalize_punishments(row.get("punishments"))
+        # Snapshot message details before delete (for optional alert channel).
         reason = f"Honeypot triggered in #{getattr(message.channel, 'name', 'honeypot')}"
+        author = message.author
+        content = message.content or ""
+        attachment_count = len(message.attachments or [])
+        channel_mention = getattr(message.channel, "mention", None) or f"`{message.channel.id}`"
 
-        with contextlib.suppress(discord.Forbidden, discord.HTTPException):
+        # Immediate delete — never surface errors to the channel.
+        with contextlib.suppress(discord.Forbidden, discord.HTTPException, discord.NotFound):
             await message.delete()
 
-        applied = await self._apply_punishments(
-            message.author,
-            punishments,
-            reason=reason,
-        )
+        # Default action is ban; configured punishments still apply, silently.
+        punishments = _normalize_punishments(row.get("punishments"))
+        if "ban" not in punishments and "softban" not in punishments and "kick" not in punishments:
+            punishments = ["ban", *punishments]
+
+        applied = await self._apply_punishments(author, punishments, reason=reason)
 
         caught = int(row.get("caught") or 0) + 1
         updated = await self._upsert(message.guild.id, caught=caught)
         await self._refresh_trap_message(message.guild, updated)
-        await self._send_alert(message.guild, updated, message.author, applied, message)
+
+        await self._send_alert(
+            message.guild,
+            updated,
+            author,
+            applied,
+            content=content,
+            attachment_count=attachment_count,
+            channel_label=channel_mention,
+        )

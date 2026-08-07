@@ -195,7 +195,8 @@ def build_social_repost_container(
     plat = _platform_key(platform)
     if accent is None:
         accent = _PLATFORM_ACCENTS.get(plat, 0x5865F2)
-    c = ui.Container(accent_colour=int(accent))
+    c = ui.Container()
+    _ = accent
 
     user = (username or "unknown").lstrip("@")
     profile = _profile_url(plat, user)
@@ -352,7 +353,8 @@ def build_profile_container(
     if bio_clean:
         body_bits.append(bio_clean[:500])
 
-    c = ui.Container(accent_colour=int(accent))
+    c = ui.Container()
+    _ = accent
     header = "\n".join(body_bits)
     if avatar_url:
         try:

@@ -391,7 +391,7 @@ class Owner(Package):
         If the error is too large for TextDisplay, attach a discord.File on
         the message (not inside the container).
         """
-        container = ui.Container(accent_colour=color.deny)
+        container = ui.Container()
         container.add_item(ui.TextDisplay(f"### Traceback #{key}"))
         container.add_item(ui.Separator(visible=True))
 

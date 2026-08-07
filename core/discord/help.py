@@ -1158,7 +1158,7 @@ class HelpMenu(ui.LayoutView):
         self.msg: discord.Message | None = None
 
         self.body = ui.TextDisplay(_home_text(ctx))
-        self.container = ui.Container(accent_colour=accent)
+        self.container = ui.Container()
         self.container.add_item(self.body)
 
         self.select_row = ui.ActionRow()
@@ -1201,7 +1201,7 @@ class HelpMenu(ui.LayoutView):
         if self.msg is None:
             return
         body = ui.TextDisplay(self.body.content)
-        container = ui.Container(accent_colour=self.accent)
+        container = ui.Container()
         container.add_item(body)
         bare = ui.LayoutView(timeout=None)
         bare.add_item(container)
@@ -1266,7 +1266,7 @@ class GroupHelpMenu(ui.LayoutView):
         self.clear_items()
         body = ui.TextDisplay(self._page_text())
         # Informational C2 help — no accent color (status replies keep colors).
-        container = ui.Container(accent_colour=self.accent)
+        container = ui.Container()
         container.add_item(body)
         if len(self.pages) > 1:
             container.add_item(ui.Separator(visible=True))
@@ -1360,7 +1360,7 @@ class GroupHelpMenu(ui.LayoutView):
         if self.msg is None:
             return
         body = ui.TextDisplay(self._page_text())
-        container = ui.Container(accent_colour=self.accent)
+        container = ui.Container()
         container.add_item(body)
         bare = ui.LayoutView(timeout=None)
         bare.add_item(container)
@@ -1385,7 +1385,7 @@ class CommandHelpMenu(ui.LayoutView):
         self.ctx = ctx
         self.msg: discord.Message | None = None
         body = ui.TextDisplay(_detail_text(cmd, ctx, group_title=False))
-        container = ui.Container(accent_colour=accent)
+        container = ui.Container()
         container.add_item(body)
         self.add_item(container)
 
@@ -1652,7 +1652,7 @@ class VainHelp(commands.HelpCommand):
         accent = await _accent_color(ctx.bot)
         text = _category_text(ctx, label, cmds)
         view = ui.LayoutView(timeout=180)
-        container = ui.Container(accent_colour=accent)
+        container = ui.Container()
         container.add_item(ui.TextDisplay(text))
         view.add_item(container)
         try:

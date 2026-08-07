@@ -16,7 +16,6 @@ from config import color, emojis
 
 def _confirm_embed(message: str) -> discord.Embed:
     return discord.Embed(
-        color=color.base,
         description=f"> {message}",
     )
 

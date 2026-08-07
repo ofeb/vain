@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import discord
 from datetime import timedelta
+from typing import Literal
 from discord.ext import tasks
 from discord.ext import commands
 from discord.ext.commands import Greedy, command, group
@@ -1113,7 +1114,9 @@ class ModerationCommands(Package):
         case_id = await self._create_case(
             ctx, action=role_label, target_id=member.id, reason=reason,
         )
-        duration_label = self._format_duration(seconds) if duration and expires_at else None
+        duration_label = (
+            self._format_duration(seconds) if duration and expires_at and seconds else None
+        )
         if mute_type == "":
             await self._invoke_dm(
                 ctx,
@@ -1192,65 +1195,185 @@ class ModerationCommands(Package):
 
     @command(
         name="mute",
-        usage="[duration] (member) <reason>",
-        example="30m @member spamming",
-        description="Mute a member",
+        aliases=["silence"],
+        usage="(member) (duration) <reason>",
+        example=",mute @member 30m spamming",
+        description="Mute a member (Discord timeout)",
     )
     @has_permissions(moderate_members=True)
     async def mute(self, ctx):
-        """mute a member"""
-        parsed = await parse_moderation_args(ctx, command_names=("mute",), allow_duration=True)
-        duration = (
-            format_duration_token(parsed.duration_seconds)
-            if parsed.duration_seconds
-            else None
+        """Mute a member using Discord timeout (same as timeout)."""
+        parsed = await parse_moderation_args(
+            ctx, command_names=("mute", "timeout"), allow_duration=True
         )
-        await self._mute_member(ctx, parsed.member, "", duration=duration, reason=parsed.reason)
+        if parsed.member is None:
+            return await ctx.send_help(ctx.command)
+
+        duration_seconds = parsed.duration_seconds or (60 * 60)  # default 1h
+        if duration_seconds < 60:
+            return await ctx.warn("Duration must be at least **60 seconds**")
+        if duration_seconds > 28 * 86400:
+            return await ctx.warn("Duration cannot exceed **28 days**")
+
+        member = parsed.member
+        if not await self._ensure_targetable(ctx, member):
+            return
+
+        duration_label = self._format_duration(duration_seconds)
+        until = discord.utils.utcnow() + timedelta(seconds=duration_seconds)
+        case_id = await self._create_case(
+            ctx, action="timeout", target_id=member.id, reason=parsed.reason,
+        )
+        await self._invoke_dm(
+            ctx,
+            member,
+            "timeout",
+            reason=parsed.reason,
+            case_id=case_id,
+            duration=duration_label,
+        )
+        try:
+            await member.timeout(until, reason=self._audit_reason(ctx, parsed.reason))
+        except discord.Forbidden:
+            return await ctx.fail("I don't have permission to timeout this member")
+        except discord.HTTPException as e:
+            return await ctx.fail(f"Failed to mute **{member}**: {e}")
+
+        await self._send_modlog(
+            ctx,
+            action="timeout",
+            target=member,
+            case_id=case_id,
+            reason=parsed.reason,
+            extra=f"**Duration** : {duration_label}",
+        )
+        if await self._invoke_response(
+            ctx,
+            "timeout",
+            user=member,
+            reason=parsed.reason,
+            case_id=case_id,
+            duration=duration_label,
+        ):
+            return
+        return await ctx.success(
+            f"Muted **{member}** for **{duration_label}** - {self._default_reason(parsed.reason)}"
+        )
 
     @command(
         name="unmute",
-        description="Unmute a member",
+        description="Unmute a member (remove timeout)",
+        example=",unmute @member",
     )
     @has_permissions(moderate_members=True)
-    async def unmute(self, ctx, member: discord.Member, *, reason: str = None):
-        """unmute a member"""
-        await self._unmute_member(ctx, member, "", reason=reason)
+    async def unmute(self, ctx, member: discord.Member, *, reason: str | None = None):
+        """Remove a timeout from a member (same as untimeout)."""
+        return await ctx.invoke(self.untimeout, member=member, reason=reason)
+
+    async def _resolve_member_or_role(self, ctx, target: str):
+        """Resolve a message token to a Member or Role."""
+        raw = (target or "").strip()
+        if not raw:
+            return None
+        with contextlib.suppress(Exception):
+            return await commands.MemberConverter().convert(ctx, raw)
+        with contextlib.suppress(Exception):
+            return await commands.RoleConverter().convert(ctx, raw)
+        return None
+
+    async def _apply_special_mute(
+        self,
+        ctx,
+        target: discord.Member | discord.Role,
+        mute_type: Literal["i", "r"],
+        *,
+        reason: str | None = None,
+        remove: bool = False,
+    ):
+        """Image/reaction mute a single member, or every member with a role."""
+        if isinstance(target, discord.Role):
+            members = [m for m in target.members if not m.bot]
+            if not members:
+                return await ctx.warn(f"No members found with {target.mention}")
+            ok = 0
+            for member in members:
+                try:
+                    if remove:
+                        await self._unmute_member(ctx, member, mute_type, reason=reason)
+                    else:
+                        await self._mute_member(ctx, member, mute_type, reason=reason)
+                    ok += 1
+                except Exception:
+                    continue
+            label = "image" if mute_type == "i" else "reaction"
+            verb = "unmuted" if remove else "muted"
+            return await ctx.success(
+                f"{label.title()}-{verb} **{ok}** member(s) with {target.mention}"
+            )
+
+        if remove:
+            return await self._unmute_member(ctx, target, mute_type, reason=reason)
+        return await self._mute_member(ctx, target, mute_type, reason=reason)
 
     @command(
-        name="imute",
-        description="Image mute a member",
+        name="imagemute",
+        aliases=["imute", "imgmute"],
+        description="Image mute a member or role",
+        example=",imagemute @member",
     )
-    @has_permissions(moderate_members=True)
-    async def imute(self, ctx, member: discord.Member, *, reason: str = None):
-        """image mute a member"""
-        await self._mute_member(ctx, member, "i", reason=reason)
+    @has_permissions(moderate_members=True, manage_roles=True)
+    async def imagemute(self, ctx, target: str, *, reason: str | None = None):
+        """Image mute a member or everyone with a role."""
+        resolved = await self._resolve_member_or_role(ctx, target)
+        if resolved is None:
+            return await ctx.warn(f"Couldn't find a member or role matching `{target}`")
+        return await self._apply_special_mute(ctx, resolved, "i", reason=reason)
 
     @command(
-        name="iunmute",
-        description="Un-image mute a member",
+        name="imageunmute",
+        aliases=["iunmute", "unimagemute"],
+        description="Remove image mute from a member or role",
+        example=",imageunmute @member",
     )
-    @has_permissions(moderate_members=True)
-    async def iunmute(self, ctx, member: discord.Member, *, reason: str = None):
-        """un image mute a member"""
-        await self._unmute_member(ctx, member, "i", reason=reason)
+    @has_permissions(moderate_members=True, manage_roles=True)
+    async def imageunmute(self, ctx, target: str, *, reason: str | None = None):
+        """Remove image mute from a member or everyone with a role."""
+        resolved = await self._resolve_member_or_role(ctx, target)
+        if resolved is None:
+            return await ctx.warn(f"Couldn't find a member or role matching `{target}`")
+        return await self._apply_special_mute(
+            ctx, resolved, "i", reason=reason, remove=True
+        )
 
     @command(
-        name="rmute",
-        description="Reaction mute a member",
+        name="reactionmute",
+        aliases=["rmute", "reactmute"],
+        description="Reaction mute a member or role",
+        example=",reactionmute @member",
     )
-    @has_permissions(moderate_members=True)
-    async def rmute(self, ctx, member: discord.Member, *, reason: str = None):
-        """reaction mute a member"""
-        await self._mute_member(ctx, member, "r", reason=reason)
+    @has_permissions(moderate_members=True, manage_roles=True)
+    async def reactionmute(self, ctx, target: str, *, reason: str | None = None):
+        """Reaction mute a member or everyone with a role."""
+        resolved = await self._resolve_member_or_role(ctx, target)
+        if resolved is None:
+            return await ctx.warn(f"Couldn't find a member or role matching `{target}`")
+        return await self._apply_special_mute(ctx, resolved, "r", reason=reason)
 
     @command(
-        name="runmute",
-        description="Un-reaction mute a member",
+        name="reactionunmute",
+        aliases=["runmute", "unreactionmute"],
+        description="Remove reaction mute from a member or role",
+        example=",reactionunmute @member",
     )
-    @has_permissions(moderate_members=True)
-    async def runmute(self, ctx, member: discord.Member, *, reason: str = None):
-        """un reaction mute a member"""
-        await self._unmute_member(ctx, member, "r", reason=reason)
+    @has_permissions(moderate_members=True, manage_roles=True)
+    async def reactionunmute(self, ctx, target: str, *, reason: str | None = None):
+        """Remove reaction mute from a member or everyone with a role."""
+        resolved = await self._resolve_member_or_role(ctx, target)
+        if resolved is None:
+            return await ctx.warn(f"Couldn't find a member or role matching `{target}`")
+        return await self._apply_special_mute(
+            ctx, resolved, "r", reason=reason, remove=True
+        )
 
     @command(
         name="hardban",

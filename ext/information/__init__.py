@@ -33,7 +33,8 @@ def panel_container(
     buttons: Sequence[ui.Button] | None = None,
 ) -> ui.Container:
     """Build a clean panel container with separators (preferred over panel_embed)."""
-    c = ui.Container(accent_colour=accent)
+    c = ui.Container()
+    _ = accent
 
     header = f"**{title}**" if title else None
     if header and thumbnail:

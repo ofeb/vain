@@ -43,7 +43,8 @@ def build_giveaway_panel(
     prize = (prize or "Giveaway").strip() or "Giveaway"
     accent = int(accent if accent is not None else color.base)
     layout = ui.LayoutView(timeout=None)
-    container = ui.Container(accent_colour=accent)
+    container = ui.Container()
+    _ = accent
 
     req_block = ""
     if requirement_lines:
@@ -146,7 +147,8 @@ def build_win_announce_panel(
     prize = (prize or "Giveaway").strip() or "Giveaway"
     accent = int(accent if accent is not None else color.base)
     layout = ui.LayoutView(timeout=None)
-    container = ui.Container(accent_colour=accent)
+    container = ui.Container()
+    _ = accent
     verb = "rerolled and won" if reroll else "won"
     host_line = f"\n-# Hosted by {host_mention}" if host_mention else ""
     container.add_item(
