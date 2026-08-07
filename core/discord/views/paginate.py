@@ -19,9 +19,13 @@ def _accent_from_embed(embed: discord.Embed) -> int | None:
     if colour is None:
         return None
     try:
-        return int(colour.value)
+        value = int(colour.value)
     except Exception:
         return None
+    # Treat pure black / default as no accent.
+    if value in (0, 0x000000):
+        return None
+    return value
 
 
 def _blankish(value: str | None) -> bool:
@@ -37,11 +41,14 @@ def embed_to_container(
     extra_rows: Sequence[ui.ActionRow] | None = None,
     attachment_files: Sequence[discord.File] | None = None,
 ) -> ui.Container:
-    """Convert a rich embed into a Components V2 container with dividers.
+    """Convert a rich embed into a Components V2 container that mirrors embed layout.
 
-    Response containers are always colorless (no accent strip).
+    Keeps title / author / description / fields / image / footer structure and
+    applies the embed's colour as the container accent strip so it still reads
+    like a classic embed.
     """
-    container = ui.Container()
+    accent = _accent_from_embed(embed)
+    container = ui.Container(accent_colour=discord.Colour(accent)) if accent is not None else ui.Container()
 
     author_name = embed.author.name if embed.author else None
     author_icon = embed.author.icon_url if embed.author else None
@@ -225,8 +232,48 @@ def _warning_embed(user: discord.abc.User, message: str) -> discord.Embed:
     )
 
 
-def _emoji(value: str) -> discord.PartialEmoji:
-    return discord.PartialEmoji.from_str(value)
+def _safe_emoji(value: str | None, fallback: str) -> discord.PartialEmoji | str:
+    raw = (value or "").strip() or fallback
+    try:
+        return discord.PartialEmoji.from_str(raw)
+    except Exception:
+        try:
+            return discord.PartialEmoji.from_str(fallback)
+        except Exception:
+            return fallback
+
+
+_PAGER_SEARCH = "<:search:1479154501066817600>"
+_PAGER_DELETE = "<:delete:1535040504516055191>"
+_PAGER_NEXT = "▶️"
+_PAGER_PREV = "◀️"
+
+
+class _PagerButton(ui.Button):
+    """Stable button subclass so LayoutView always dispatches prev/next/delete/goto.
+
+    Stores an explicit parent reference because nested ActionRow buttons inside
+    Containers sometimes lose ``item.view`` during LayoutView rebuilds.
+    """
+
+    def __init__(self, action: str, parent: Any, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.action = action
+        self._parent = parent
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view: Any = self.view or self._parent
+        if view is None:
+            return
+        action = self.action
+        if action == "next":
+            await view._next(interaction)
+        elif action == "prev":
+            await view._prev(interaction)
+        elif action == "delete":
+            await view._cancel(interaction)
+        elif action == "goto":
+            await view._goto(interaction)
 
 
 class PageJumpSelect(ui.LayoutView):
@@ -294,17 +341,8 @@ class PageJumpSelect(ui.LayoutView):
                 await self.message.edit(view=self)
 
 
-
-_PAGER_SEARCH = "<:search:1479154501066817600>"
-_PAGER_DELETE = "<:delete:1535040504516055191>"
-
-
 def _strip_trailing_pager(container: ui.Container) -> ui.Container:
-    """Drop trailing separator + action-row pager chrome without touching content.
-
-    Safety net when a stored Container was mutated in-place (which stacked buttons).
-    Prefer factories that return fresh containers instead.
-    """
+    """Drop trailing separator + action-row pager chrome without touching content."""
     children = list(getattr(container, "children", ()) or ())
     if not children:
         return container
@@ -327,49 +365,76 @@ def _strip_trailing_pager(container: ui.Container) -> ui.Container:
 
 def build_pager_row(
     *,
-    on_next: Callable,
-    on_prev: Callable,
-    on_delete: Callable,
-    on_search: Callable | None = None,
+    parent: "PaginateView",
     show_search: bool = True,
 ) -> ui.ActionRow:
-    """Action row order: forward · delete · backward · search (blue)."""
+    """Action row order: next · delete · previous · search (blue)."""
     row = ui.ActionRow()
 
-    next_btn = ui.Button(
-        style=discord.ButtonStyle.secondary,
-        emoji=_emoji(emojis.paginator.next),
+    next_emoji = _safe_emoji(
+        getattr(emojis.paginator, "next", None),
+        getattr(emojis.paginator, "right", None) or _PAGER_NEXT,
     )
-    del_btn = ui.Button(
-        style=discord.ButtonStyle.secondary,
-        emoji=_emoji(
-            getattr(emojis.paginator, "delete", None)
-            or getattr(emojis.paginator, "cancel", None)
-            or _PAGER_DELETE
-        ),
+    prev_emoji = _safe_emoji(
+        getattr(emojis.paginator, "previous", None),
+        getattr(emojis.paginator, "left", None) or _PAGER_PREV,
     )
-    prev_btn = ui.Button(
-        style=discord.ButtonStyle.secondary,
-        emoji=_emoji(emojis.paginator.previous),
+    del_emoji = _safe_emoji(
+        getattr(emojis.paginator, "delete", None)
+        or getattr(emojis.paginator, "cancel", None),
+        _PAGER_DELETE,
     )
-    next_btn.callback = on_next
-    del_btn.callback = on_delete
-    prev_btn.callback = on_prev
-    row.add_item(next_btn)
-    row.add_item(del_btn)
-    row.add_item(prev_btn)
+    search_emoji = _safe_emoji(
+        getattr(emojis.paginator, "search", None)
+        or getattr(emojis.paginator, "navigate", None),
+        _PAGER_SEARCH,
+    )
 
-    if show_search and on_search is not None:
-        search_btn = ui.Button(
-            style=discord.ButtonStyle.primary,
-            emoji=_emoji(
-                getattr(emojis.paginator, "search", None)
-                or getattr(emojis.paginator, "navigate", None)
-                or _PAGER_SEARCH
-            ),
+    row.add_item(
+        _PagerButton(
+            "next",
+            parent,
+            style=discord.ButtonStyle.secondary,
+            emoji=next_emoji,
+            custom_id=f"vain:pager:next:{id(parent)}",
         )
-        search_btn.callback = on_search
-        row.add_item(search_btn)
+    )
+    row.add_item(
+        _PagerButton(
+            "delete",
+            parent,
+            style=discord.ButtonStyle.secondary,
+            emoji=del_emoji,
+            custom_id=f"vain:pager:delete:{id(parent)}",
+        )
+    )
+    row.add_item(
+        _PagerButton(
+            "prev",
+            parent,
+            style=discord.ButtonStyle.secondary,
+            emoji=prev_emoji,
+            custom_id=f"vain:pager:prev:{id(parent)}",
+        )
+    )
+
+    if show_search:
+        row.add_item(
+            _PagerButton(
+                "goto",
+                parent,
+                style=discord.ButtonStyle.primary,
+                emoji=search_emoji,
+                custom_id=f"vain:pager:goto:{id(parent)}",
+            )
+        )
+
+    # Ensure nested buttons can resolve their owning LayoutView immediately.
+    for child in getattr(row, "children", ()) or ():
+        with suppress(Exception):
+            child._view = parent  # type: ignore[attr-defined]
+            if hasattr(child, "_parent") and getattr(child, "_parent", None) is None:
+                child._parent = parent  # type: ignore[attr-defined]
 
     return row
 
@@ -387,7 +452,7 @@ def _resolve_page(raw: Page) -> Any:
 
 
 class PaginateView(discord.ui.LayoutView):
-    """Paginated embeds/containers as Components V2 with shared control order."""
+    """Paginated embeds/containers as Components V2 with working nav controls."""
 
     def __init__(
         self,
@@ -419,9 +484,6 @@ class PaginateView(discord.ui.LayoutView):
     def _as_container(self, raw: Page, *, with_pager: bool = False) -> ui.Container:
         raw = _resolve_page(raw)
         if isinstance(raw, ui.Container):
-            
-            
-            
             container = raw
             if with_pager:
                 container = _strip_trailing_pager(raw)
@@ -433,29 +495,29 @@ class PaginateView(discord.ui.LayoutView):
         return container
 
     def _page_container(self) -> ui.Container:
-        
-        
         raw = _resolve_page(self.pages[self.index])
+        # Always build a fresh content container for embeds/strings so pager
+        # chrome never mutates a shared page object.
         if isinstance(raw, ui.Container):
+            # Clone content by stripping old pager chrome, then re-adding.
             container = _strip_trailing_pager(raw)
+        elif isinstance(raw, discord.Embed):
+            container = embed_to_container(raw)
         else:
-            container = self._as_container(raw, with_pager=False)
+            container = ui.Container()
+            container.add_item(ui.TextDisplay(str(raw)))
 
         if needs_pagination(self.pages):
             container.add_item(ui.Separator(visible=True))
             container.add_item(
                 build_pager_row(
-                    on_next=self._next,
-                    on_prev=self._prev,
-                    on_delete=self._cancel,
-                    on_search=self._goto if self.show_goto else None,
+                    parent=self,
                     show_search=self.show_goto,
                 )
             )
         return container
 
     def _clear_all(self) -> None:
-        """Drop every child. clear_items alone can leave stale C2 nodes on some edits."""
         with suppress(Exception):
             self.clear_items()
         children = list(getattr(self, "children", ()) or ())
@@ -497,19 +559,34 @@ class PaginateView(discord.ui.LayoutView):
             view.add_item(container)
             await self.message.edit(view=view)
 
+    async def _edit(self, interaction: discord.Interaction) -> None:
+        """Rebuild and apply the current page to the interaction message."""
+        self._rebuild()
+        if interaction.response.is_done():
+            if interaction.message is not None:
+                with suppress(discord.HTTPException):
+                    await interaction.message.edit(view=self)
+            elif self.message is not None:
+                with suppress(discord.HTTPException):
+                    await self.message.edit(view=self)
+            return
+        await interaction.response.edit_message(view=self)
+
     async def _prev(self, interaction: discord.Interaction) -> None:
         if not self.pages:
+            if not interaction.response.is_done():
+                await interaction.response.defer()
             return
         self.index = (self.index - 1) % len(self.pages)
-        self._rebuild()
-        await interaction.response.edit_message(view=self)
+        await self._edit(interaction)
 
     async def _next(self, interaction: discord.Interaction) -> None:
         if not self.pages:
+            if not interaction.response.is_done():
+                await interaction.response.defer()
             return
         self.index = (self.index + 1) % len(self.pages)
-        self._rebuild()
-        await interaction.response.edit_message(view=self)
+        await self._edit(interaction)
 
     async def _goto(self, interaction: discord.Interaction) -> None:
         if not self.pages:
@@ -541,14 +618,12 @@ class PaginateView(discord.ui.LayoutView):
                 idx = 0
             if 0 <= idx < len(self.pages):
                 self.index = idx
-            
-            
+
             if not inter.response.is_done():
                 await inter.response.defer()
             self._rebuild()
             target = self.message
             if target is None and inter.message is not None:
-                
                 if getattr(inter.message, "flags", None) is not None:
                     try:
                         if not inter.message.flags.ephemeral:
@@ -590,14 +665,16 @@ class PaginateView(discord.ui.LayoutView):
                 self.stop()
                 return
             self.index = min(self.index, len(self.pages) - 1)
-            self._rebuild()
-            await interaction.response.edit_message(view=self)
+            await self._edit(interaction)
             return
 
         await interaction.response.defer()
         if interaction.message is not None:
             with suppress(discord.HTTPException):
                 await interaction.message.delete()
+        elif self.message is not None:
+            with suppress(discord.HTTPException):
+                await self.message.delete()
         self.stop()
 
     async def start(self) -> discord.Message:
@@ -643,10 +720,10 @@ async def send_pages(
                 return await message.edit(view=layout, embed=None, content=None)
             return await ctx.send(view=layout)
         if isinstance(page, discord.Embed):
+            layout = embed_to_layout(page, timeout=timeout)
             if message is not None:
-                layout = embed_to_layout(page)
                 return await message.edit(view=layout, embed=None, content=None)
-            return await ctx.send(embed=page)
+            return await ctx.send(view=layout)
         if message is not None:
             return await message.edit(content=str(page), embed=None, view=None)
         return await ctx.send(str(page))

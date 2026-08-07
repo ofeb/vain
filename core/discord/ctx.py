@@ -38,9 +38,12 @@ def _accent_from_embed(embed: discord.Embed) -> int | None:
     if colour is None:
         return None
     try:
-        return int(colour.value)
+        value = int(colour.value)
     except Exception:
         return None
+    if value in (0, 0x000000):
+        return None
+    return value
 
 def _blankish(value: str | None) -> bool:
     if value is None:
@@ -54,12 +57,18 @@ def embed_to_container(
     extra_rows: Sequence[ui.ActionRow] | None = None,
     attachment_files: Sequence[discord.File] | None = None,
 ) -> ui.Container:
-    """Convert a rich embed into a Components V2 container with dividers.
+    """Convert a rich embed into a Components V2 container that mirrors embed layout.
 
-    Response containers are always colorless (no accent strip), regardless of
-    any color set on the source embed.
+    Title, author, description, fields, image, and footer are preserved. The
+    embed colour becomes the container accent strip so replies still look like
+    classic embeds.
     """
-    container = ui.Container()
+    accent = _accent_from_embed(embed)
+    container = (
+        ui.Container(accent_colour=discord.Colour(accent))
+        if accent is not None
+        else ui.Container()
+    )
 
     
     author_name = embed.author.name if embed.author else None
@@ -362,17 +371,16 @@ class Context(commands.Context):
         *,
         emoji: str = "",
         color_value: Optional[int] = None,
-        colored: bool = False,
+        colored: bool = True,
     ) -> discord.Embed:
-        """Build a compact status embed.
-
-        Defaults to colorless so C2 containers have no accent strip.
-        """
+        """Build a compact status embed that becomes a C2 lookalike on send."""
         prefix = f"{emoji} " if emoji else ""
         line = f"{prefix}**{self.author.display_name}**: {message}"
         embed = discord.Embed(description=body(line))
         if colored and color_value is not None:
             embed.color = color_value
+        elif colored:
+            embed.color = color.base
         return embed
 
     async def _send_embed_response(
@@ -385,60 +393,64 @@ class Context(commands.Context):
         if return_embed:
             return embed
         kwargs.setdefault("mention_author", False)
+        # Prefer send() so embeds always convert to C2 lookalikes.
         try:
-            return await self.reply(embed=embed, **kwargs)
+            return await self.send(embed=embed, **kwargs)
         except discord.NotFound:
-            
             try:
-                return await self.send(embed=embed, **kwargs)
+                return await super().reply(embed=embed, **kwargs)
             except (discord.NotFound, discord.HTTPException):
                 return None
         except discord.HTTPException:
             try:
-                return await self.send(embed=embed, **kwargs)
+                return await super().send(embed=embed, **kwargs)
             except (discord.NotFound, discord.HTTPException):
                 return None
 
     async def success(self, message: str, **kw):
-        """send a success reply with vain styling (colorless C2)"""
+        """send a success reply as a C2 embed lookalike"""
         emoji = await self._get_emoji("success")
         return await self._send_embed_response(
             self._message_embed(
                 self._strip_self_mention(message),
                 emoji=emoji,
+                color_value=await self._get_color("approve"),
             ),
             **kw,
         )
 
     async def fail(self, message: str, **kw):
-        """send a failure reply with vain styling (colorless C2)"""
+        """send a failure reply as a C2 embed lookalike"""
         emoji = await self._get_emoji("deny")
         return await self._send_embed_response(
             self._message_embed(
                 self._strip_self_mention(message),
                 emoji=emoji,
+                color_value=await self._get_color("deny"),
             ),
             **kw,
         )
 
     async def warn(self, message: str, **kw):
-        """send a warning reply with vain styling (colorless C2)"""
+        """send a warning reply as a C2 embed lookalike"""
         emoji = await self._get_emoji("warn")
         return await self._send_embed_response(
             self._message_embed(
                 self._strip_self_mention(message),
                 emoji=emoji,
+                color_value=await self._get_color("warn"),
             ),
             **kw,
         )
 
     async def cooldown(self, message: str, **kw):
-        """send a cooldown reply with vain styling (colorless C2)"""
+        """send a cooldown reply as a C2 embed lookalike"""
         emoji = await self._get_emoji("cooldown")
         return await self._send_embed_response(
             self._message_embed(
                 self._strip_self_mention(message),
                 emoji=emoji,
+                color_value=await self._get_color("cooldown"),
             ),
             **kw,
         )
@@ -448,27 +460,28 @@ class Context(commands.Context):
         return await self.warn(message, **kw)
 
     async def normal(self, message: str, *, emoji: str = "", **kw):
-        """send a neutral informational reply (colorless C2)"""
+        """send a neutral informational reply as a C2 embed lookalike"""
         return await self._send_embed_response(
             self._message_embed(
                 self._strip_self_mention(message),
                 emoji=emoji,
-                colored=False,
+                color_value=await self._get_color("base"),
             ),
             **kw,
         )
 
     async def info(self, message: str, **kw):
-        """send an informational reply using vain's info emoji (colorless C2)."""
+        """send an informational reply using vain's info emoji."""
         emoji = await self._get_emoji("info")
         return await self.normal(message, emoji=emoji, **kw)
 
     async def lastfm(self, message: str, **kw):
-        """send a compact Last.fm reply with vain styling (colorless C2)."""
+        """send a compact Last.fm reply as a C2 embed lookalike."""
         return await self._send_embed_response(
             self._message_embed(
                 self._strip_self_mention(message),
                 emoji=emojis.lastfm,
+                color_value=lastfm_color if isinstance(lastfm_color, int) else color.base,
             ),
             **kw,
         )

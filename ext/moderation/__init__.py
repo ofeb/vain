@@ -968,20 +968,31 @@ class ModerationCommands(Package):
 
     @group(
         name="timeout",
-        description="Mutes the provided member using Discords timeout feature",
+        aliases=["mute", "silence"],
+        description="Timeout a member using Discord's timeout feature",
+        example=",timeout @member 30m spamming",
         invoke_without_command=True,
     )
     @has_permissions(moderate_members=True)
-    async def timeout(self, ctx, member: discord.Member, duration: str, *, reason=None):
-        """timeout a member"""
+    async def timeout(self, ctx):
+        """Timeout a member (aliases: mute, silence)."""
+        parsed = await parse_moderation_args(
+            ctx, command_names=("timeout", "mute", "silence"), allow_duration=True
+        )
+        if parsed.member is None:
+            return await ctx.send_help(ctx.command)
+
+        member = parsed.member
         if not await self._ensure_targetable(ctx, member):
             return
-        seconds = self._parse_duration_seconds(duration)
-        if not seconds or seconds < 60:
+
+        seconds = parsed.duration_seconds or (60 * 60)
+        if seconds < 60:
             return await ctx.warn("Duration must be at least **60 seconds**")
         if seconds > 28 * 86400:
             return await ctx.warn("Duration cannot exceed **28 days**")
 
+        reason = parsed.reason
         duration_label = self._format_duration(seconds)
         until = discord.utils.utcnow() + timedelta(seconds=seconds)
         case_id = await self._create_case(
@@ -1043,7 +1054,9 @@ class ModerationCommands(Package):
 
     @command(
         name="untimeout",
+        aliases=["unmute"],
         description="Removes a timeout for a member",
+        example=",untimeout @member",
     )
     @has_permissions(moderate_members=True)
     async def untimeout(self, ctx, member: discord.Member, *, reason=None):
@@ -1192,83 +1205,6 @@ class ModerationCommands(Package):
             if await self._invoke_response(ctx, "unmute", user=member, reason=reason):
                 return
         return await ctx.success(f"Un{mute_type if mute_type else 'mute'}d **{member}** - {self._default_reason(reason)}")
-
-    @command(
-        name="mute",
-        aliases=["silence"],
-        usage="(member) (duration) <reason>",
-        example=",mute @member 30m spamming",
-        description="Mute a member (Discord timeout)",
-    )
-    @has_permissions(moderate_members=True)
-    async def mute(self, ctx):
-        """Mute a member using Discord timeout (same as timeout)."""
-        parsed = await parse_moderation_args(
-            ctx, command_names=("mute", "timeout"), allow_duration=True
-        )
-        if parsed.member is None:
-            return await ctx.send_help(ctx.command)
-
-        duration_seconds = parsed.duration_seconds or (60 * 60)  
-        if duration_seconds < 60:
-            return await ctx.warn("Duration must be at least **60 seconds**")
-        if duration_seconds > 28 * 86400:
-            return await ctx.warn("Duration cannot exceed **28 days**")
-
-        member = parsed.member
-        if not await self._ensure_targetable(ctx, member):
-            return
-
-        duration_label = self._format_duration(duration_seconds)
-        until = discord.utils.utcnow() + timedelta(seconds=duration_seconds)
-        case_id = await self._create_case(
-            ctx, action="timeout", target_id=member.id, reason=parsed.reason,
-        )
-        await self._invoke_dm(
-            ctx,
-            member,
-            "timeout",
-            reason=parsed.reason,
-            case_id=case_id,
-            duration=duration_label,
-        )
-        try:
-            await member.timeout(until, reason=self._audit_reason(ctx, parsed.reason))
-        except discord.Forbidden:
-            return await ctx.fail("I don't have permission to timeout this member")
-        except discord.HTTPException as e:
-            return await ctx.fail(f"Failed to mute **{member}**: {e}")
-
-        await self._send_modlog(
-            ctx,
-            action="timeout",
-            target=member,
-            case_id=case_id,
-            reason=parsed.reason,
-            extra=f"**Duration** : {duration_label}",
-        )
-        if await self._invoke_response(
-            ctx,
-            "timeout",
-            user=member,
-            reason=parsed.reason,
-            case_id=case_id,
-            duration=duration_label,
-        ):
-            return
-        return await ctx.success(
-            f"Muted **{member}** for **{duration_label}** - {self._default_reason(parsed.reason)}"
-        )
-
-    @command(
-        name="unmute",
-        description="Unmute a member (remove timeout)",
-        example=",unmute @member",
-    )
-    @has_permissions(moderate_members=True)
-    async def unmute(self, ctx, member: discord.Member, *, reason: str | None = None):
-        """Remove a timeout from a member (same as untimeout)."""
-        return await ctx.invoke(self.untimeout, member=member, reason=reason)
 
     async def _resolve_member_or_role(self, ctx, target: str):
         """Resolve a message token to a Member or Role."""

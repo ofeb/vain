@@ -1272,10 +1272,7 @@ class GroupHelpMenu(ui.LayoutView):
             container.add_item(ui.Separator(visible=True))
             container.add_item(
                 build_pager_row(
-                    on_next=self._next,
-                    on_prev=self._prev,
-                    on_delete=self._cancel,
-                    on_search=self._goto,
+                    parent=self,
                     show_search=True,
                 )
             )
@@ -1297,14 +1294,20 @@ class GroupHelpMenu(ui.LayoutView):
         return False
 
     async def _prev(self, inter: Interaction) -> None:
-        if self.index > 0:
-            self.index -= 1
+        if not self.pages:
+            if not inter.response.is_done():
+                await inter.response.defer()
+            return
+        self.index = (self.index - 1) % len(self.pages)
         self._rebuild()
         await inter.response.edit_message(view=self)
 
     async def _next(self, inter: Interaction) -> None:
-        if self.index < len(self.pages) - 1:
-            self.index += 1
+        if not self.pages:
+            if not inter.response.is_done():
+                await inter.response.defer()
+            return
+        self.index = (self.index + 1) % len(self.pages)
         self._rebuild()
         await inter.response.edit_message(view=self)
 
