@@ -37,6 +37,7 @@ def build_giveaway_panel(
     show_entries: bool = True,
     join_type: str = "button",
     custom_body: str | None = None,
+    requirement_lines: list[str] | None = None,
 ) -> ui.LayoutView:
     """Active / ended giveaway panel matching the inspo Components V2 layout."""
     prize = (prize or "Giveaway").strip() or "Giveaway"
@@ -44,15 +45,22 @@ def build_giveaway_panel(
     layout = ui.LayoutView(timeout=None)
     container = ui.Container(accent_colour=accent)
 
+    req_block = ""
+    if requirement_lines:
+        bullets = "\n".join(f"-# · {line}" for line in requirement_lines)
+        req_block = f"\n**To enter**\n{bullets}"
+
     if custom_body:
         body = custom_body
+        if req_block and "To enter" not in body:
+            body = f"{body.rstrip()}{req_block}"
     elif ended:
         if no_entries:
             body = (
                 f"## {prize}\n"
                 f"**Entries** {entries}\n"
                 f"-# ended · **no valid entries**\n"
-                f"-# Hosted by {host_mention}"
+                f"-# hosted by {host_mention}"
             )
         else:
             wlabel = "Winner" if (winner_mentions or "").count("<@") <= 1 else "Winners"
@@ -60,15 +68,16 @@ def build_giveaway_panel(
                 f"## {prize}\n"
                 f"**{wlabel}** {winner_mentions or '—'}\n"
                 f"**Entries** {entries}\n"
-                f"-# ended · Hosted by {host_mention}"
+                f"-# ended · hosted by {host_mention}"
             )
     else:
         entries_bit = f"  **Entries** {entries}" if show_entries else ""
         body = (
             f"## {prize}\n"
             f"{_ends_line(end_time)}\n"
-            f"**Winners** {winners}{entries_bit}\n"
-            f"-# Hosted by {host_mention}"
+            f"**Winners** {winners}{entries_bit}"
+            f"{req_block}\n"
+            f"-# hosted by {host_mention}"
         )
 
     if guild_icon:

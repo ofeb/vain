@@ -13,6 +13,12 @@ from discord.ext.commands import Cog
 
 from config import color
 
+from ..requirements import (
+    check_member_requirements,
+    format_requirements,
+    has_any_requirement,
+    requirements_from_record,
+)
 from ..views import (
     EntriesPaginator,
     build_dm_win_view,
@@ -77,7 +83,7 @@ class GiveawayEvents(Cog):
                 )
                 """
             )
-        
+
         for stmt in (
             "ALTER TABLE giveaway_settings ADD COLUMN IF NOT EXISTS dm_on_win BOOLEAN NOT NULL DEFAULT FALSE",
             "ALTER TABLE giveaway_settings ADD COLUMN IF NOT EXISTS dm_script TEXT",
@@ -105,12 +111,58 @@ class GiveawayEvents(Cog):
                     max_level INT,
                     min_level INT,
                     required_roles BIGINT[],
+                    requirements JSONB DEFAULT '{}'::jsonb,
                     win_message_id BIGINT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     PRIMARY KEY (message_id)
                 )
                 """
             )
+        for stmt in (
+            "ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS requirements JSONB DEFAULT '{}'::jsonb",
+            "ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS min_level INT",
+            "ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS max_level INT",
+            "ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS required_roles BIGINT[]",
+        ):
+            with suppress(Exception):
+                await self.bot.db.execute(stmt)
+
+        for ddl in (
+            """
+            CREATE TABLE IF NOT EXISTS giveaway_message_stats (
+                guild_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                count BIGINT NOT NULL DEFAULT 0,
+                PRIMARY KEY (guild_id, user_id)
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS giveaway_voice_stats (
+                guild_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                minutes BIGINT NOT NULL DEFAULT 0,
+                PRIMARY KEY (guild_id, user_id)
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS giveaway_participation (
+                message_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                count BIGINT NOT NULL DEFAULT 0,
+                PRIMARY KEY (message_id, user_id)
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS giveaway_voice_sessions (
+                guild_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                joined_at TIMESTAMP NOT NULL,
+                PRIMARY KEY (guild_id, user_id)
+            )
+            """,
+        ):
+            with suppress(Exception):
+                await self.bot.db.execute(ddl)
 
     def _default_settings(self) -> dict[str, Any]:
         return {
@@ -303,6 +355,15 @@ class GiveawayEvents(Cog):
     def _jump_url(self, guild_id: int, channel_id: int, message_id: int) -> str:
         return f"https://discord.com/channels/{guild_id}/{channel_id}/{message_id}"
 
+    def _req_lines_for(self, record: dict, guild: discord.Guild | None) -> list[str]:
+        reqs = requirements_from_record(record)
+        raw = record.get("requirements")
+        if isinstance(raw, dict):
+            reqs = requirements_from_record({**reqs, **raw})
+        if not has_any_requirement(reqs):
+            return []
+        return format_requirements(reqs, guild=guild)
+
     async def rebuild_panel_message(
         self,
         message: discord.Message,
@@ -330,10 +391,10 @@ class GiveawayEvents(Cog):
                     entries=len(entries),
                     ends_at=str(record.get("expiration") or ""),
                 )
-                
+
                 custom_body = rendered
                 if "{embed}" in embed_script.lower() or "$v{" in embed_script:
-                    
+
                     custom_body = (
                         rendered.replace("{embed}", "")
                         .replace("$v", "\n")
@@ -359,32 +420,26 @@ class GiveawayEvents(Cog):
             show_entries=bool(settings.get("show_entries", True)),
             join_type=str(settings.get("join_type") or "button"),
             custom_body=custom_body,
+            requirement_lines=self._req_lines_for(record, guild),
         )
         await message.edit(content=None, embed=None, view=panel)
 
-    async def check_requirements(self, member: discord.Member, requirements: dict) -> bool:
-        if requirements.get("required_roles"):
-            member_roles = {role.id for role in member.roles}
-            required = set(requirements["required_roles"] or [])
-            if required and not (member_roles & required):
-                return False
-        if requirements.get("min_level") is not None:
-            level = await self.bot.db.fetchval(
-                "SELECT level FROM levels WHERE user_id = $1 AND guild_id = $2",
-                member.id,
-                member.guild.id,
-            )
-            if level is not None and level < requirements["min_level"]:
-                return False
-        if requirements.get("max_level") is not None:
-            level = await self.bot.db.fetchval(
-                "SELECT level FROM levels WHERE user_id = $1 AND guild_id = $2",
-                member.id,
-                member.guild.id,
-            )
-            if level is not None and level > requirements["max_level"]:
-                return False
-        return True
+    async def check_requirements(
+        self,
+        member: discord.Member,
+        requirements: dict,
+        *,
+        giveaway: dict | None = None,
+        enforce_participation: bool = True,
+    ) -> tuple[bool, str | None]:
+        ok, reason = await check_member_requirements(
+            self.bot,
+            member,
+            requirements,
+            giveaway=giveaway,
+            enforce_participation=enforce_participation,
+        )
+        return ok, reason
 
     @Cog.listener("on_interaction")
     async def on_giveaway_interaction(self, interaction: discord.Interaction) -> None:
@@ -450,13 +505,17 @@ class GiveawayEvents(Cog):
         if member is None or member.bot:
             return
 
-        requirements = {
-            "required_roles": row.get("required_roles"),
-            "min_level": row.get("min_level"),
-            "max_level": row.get("max_level"),
-        }
-        if not await self.check_requirements(member, requirements):
-            return
+        record = dict(row)
+        reqs = requirements_from_record(record)
+        if adding:
+            ok, _reason = await self.check_requirements(
+                member,
+                reqs,
+                giveaway=record,
+                enforce_participation=False,
+            )
+            if not ok:
+                return
 
         message_id = int(row["message_id"])
         async with self.locks[f"giveaway:{message_id}"]:
@@ -514,17 +573,25 @@ class GiveawayEvents(Cog):
         if getattr(member, "bot", False):
             return
 
-        requirements = {
-            "required_roles": row.get("required_roles"),
-            "min_level": row.get("min_level"),
-            "max_level": row.get("max_level"),
-        }
+        record = dict(row)
+        reqs = requirements_from_record(record)
         if isinstance(member, discord.Member):
-            if not await self.check_requirements(member, requirements):
-                await interaction.fail(
-                    "you don't meet the **requirements** for this giveaway"
+            
+            entries_preview = list(record.get("entries") or [])
+            already_in = interaction.user.id in entries_preview
+            if not already_in:
+                ok, reason = await self.check_requirements(
+                    member,
+                    reqs,
+                    giveaway=record,
+                    enforce_participation=False,
                 )
-                return
+                if not ok:
+                    await interaction.fail(
+                        reason
+                        or "you don’t meet the **entry rules** for this giveaway"
+                    )
+                    return
 
         async with self.locks[f"giveaway:{message_id}"]:
             fresh = await self.bot.db.fetchrow(
@@ -552,11 +619,10 @@ class GiveawayEvents(Cog):
                     message_id,
                 )
 
-            
             if left:
                 await interaction.warning("you **left** the giveaway")
             else:
-                await interaction.success("you **entered** the giveaway")
+                await interaction.success("you’re **in** — good luck")
 
             record = dict(fresh)
             record["entries"] = entries
@@ -783,11 +849,15 @@ class GiveawayEvents(Cog):
 
             prize = str(giveaway.get("prize") or "Giveaway")
             entries = list(giveaway.get("entries") or [])
-            members = [
-                m
-                for uid in entries
-                if (m := guild.get_member(uid)) is not None and not m.bot
-            ]
+            reqs = requirements_from_record(giveaway)
+            members: list[discord.Member] = []
+            for uid in entries:
+                m = guild.get_member(uid)
+                if m is None or m.bot:
+                    continue
+                ok, _ = await self.check_requirements(m, reqs, giveaway=giveaway)
+                if ok:
+                    members.append(m)
             winners_count = max(1, int(giveaway.get("winner_count") or 1))
             host_mention = self._host_mention(giveaway)
             jump = self._jump_url(guild.id, channel.id, message_id)
@@ -881,7 +951,123 @@ class GiveawayEvents(Cog):
         winners_count: int = 1,
         channel: discord.abc.Messageable | None = None,
     ) -> list[discord.Member]:
-        
         data = dict(giveaway)
         data["winner_count"] = max(1, int(winners_count or 1))
         return await self.end_giveaway(data, force=True, reroll=True)
+
+    
+    
+    
+
+    @Cog.listener("on_message")
+    async def on_giveaway_message_track(self, message: discord.Message) -> None:
+        if message.author.bot or not message.guild:
+            return
+        if not message.content and not message.attachments:
+            return
+        guild_id = message.guild.id
+        user_id = message.author.id
+        with suppress(Exception):
+            await self.bot.db.execute(
+                """
+                INSERT INTO giveaway_message_stats (guild_id, user_id, count)
+                VALUES ($1, $2, 1)
+                ON CONFLICT (guild_id, user_id) DO UPDATE
+                SET count = giveaway_message_stats.count + 1
+                """,
+                guild_id,
+                user_id,
+            )
+        
+        with suppress(Exception):
+            rows = await self.bot.db.fetch(
+                """
+                SELECT message_id FROM giveaways
+                WHERE guild_id = $1 AND win_message_id IS NULL
+                """,
+                guild_id,
+            )
+            for row in rows or []:
+                mid = int(row["message_id"])
+                with suppress(Exception):
+                    await self.bot.db.execute(
+                        """
+                        INSERT INTO giveaway_participation (message_id, user_id, count)
+                        VALUES ($1, $2, 1)
+                        ON CONFLICT (message_id, user_id) DO UPDATE
+                        SET count = giveaway_participation.count + 1
+                        """,
+                        mid,
+                        user_id,
+                    )
+
+    @Cog.listener("on_voice_state_update")
+    async def on_giveaway_voice_track(
+        self,
+        member: discord.Member,
+        before: discord.VoiceState,
+        after: discord.VoiceState,
+    ) -> None:
+        if member.bot or not member.guild:
+            return
+        guild_id = member.guild.id
+        user_id = member.id
+        was_in = before.channel is not None
+        now_in = after.channel is not None
+
+        
+        if was_in and not now_in:
+            with suppress(Exception):
+                row = await self.bot.db.fetchrow(
+                    """
+                    SELECT joined_at FROM giveaway_voice_sessions
+                    WHERE guild_id = $1 AND user_id = $2
+                    """,
+                    guild_id,
+                    user_id,
+                )
+                if row and row.get("joined_at"):
+                    joined = row["joined_at"]
+                    if getattr(joined, "tzinfo", None) is not None:
+                        joined = joined.astimezone().replace(tzinfo=None)
+                    delta = max(0, int((_now() - joined).total_seconds() // 60))
+                    if delta > 0:
+                        await self.bot.db.execute(
+                            """
+                            INSERT INTO giveaway_voice_stats (guild_id, user_id, minutes)
+                            VALUES ($1, $2, $3)
+                            ON CONFLICT (guild_id, user_id) DO UPDATE
+                            SET minutes = giveaway_voice_stats.minutes + EXCLUDED.minutes
+                            """,
+                            guild_id,
+                            user_id,
+                            delta,
+                        )
+                await self.bot.db.execute(
+                    """
+                    DELETE FROM giveaway_voice_sessions
+                    WHERE guild_id = $1 AND user_id = $2
+                    """,
+                    guild_id,
+                    user_id,
+                )
+            return
+
+        
+        if not was_in and now_in:
+            with suppress(Exception):
+                await self.bot.db.execute(
+                    """
+                    INSERT INTO giveaway_voice_sessions (guild_id, user_id, joined_at)
+                    VALUES ($1, $2, $3)
+                    ON CONFLICT (guild_id, user_id) DO UPDATE
+                    SET joined_at = EXCLUDED.joined_at
+                    """,
+                    guild_id,
+                    user_id,
+                    _now(),
+                )
+            return
+
+        
+        return

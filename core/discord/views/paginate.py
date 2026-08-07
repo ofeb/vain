@@ -430,11 +430,8 @@ class PaginateView(discord.ui.LayoutView):
     def _page_container(self) -> ui.Container:
         
         
-        raw = self.pages[self.index]
-        if callable(raw) and not isinstance(raw, (ui.Container, discord.Embed, str)):
-            container = self._as_container(raw(), with_pager=False)
-        elif isinstance(raw, ui.Container):
-            
+        raw = _resolve_page(self.pages[self.index])
+        if isinstance(raw, ui.Container):
             container = _strip_trailing_pager(raw)
         else:
             container = self._as_container(raw, with_pager=False)
@@ -452,8 +449,17 @@ class PaginateView(discord.ui.LayoutView):
             )
         return container
 
+    def _clear_all(self) -> None:
+        """Drop every child. clear_items alone can leave stale C2 nodes on some edits."""
+        with suppress(Exception):
+            self.clear_items()
+        children = list(getattr(self, "children", ()) or ())
+        for child in children:
+            with suppress(Exception):
+                self.remove_item(child)
+
     def _rebuild(self) -> None:
-        self.clear_items()
+        self._clear_all()
         if not self.pages:
             accent = getattr(self.ctx.bot, "color", None) or 0x5865F2
             empty = ui.Container(accent_colour=accent)
@@ -529,13 +535,23 @@ class PaginateView(discord.ui.LayoutView):
                 idx = 0
             if 0 <= idx < len(self.pages):
                 self.index = idx
-            self._rebuild()
+            
             
             if not inter.response.is_done():
                 await inter.response.defer()
-            if self.message is not None:
+            self._rebuild()
+            target = self.message
+            if target is None and inter.message is not None:
+                
+                if getattr(inter.message, "flags", None) is not None:
+                    try:
+                        if not inter.message.flags.ephemeral:
+                            target = inter.message
+                    except Exception:
+                        pass
+            if target is not None:
                 with suppress(discord.HTTPException):
-                    await self.message.edit(view=self)
+                    await target.edit(view=self)
 
         picker = PageJumpSelect(
             title=title,

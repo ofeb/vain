@@ -19,9 +19,21 @@ from core.tools.moderation_args import (
 )
 
 from .events import GiveawayEvents
+from .requirements import (
+    apply_start_flags,
+    catalog_lines,
+    empty_requirements,
+    format_requirements,
+    has_any_requirement,
+    split_start_payload,
+)
 from .views import build_giveaway_panel
 
 _INVISIBLE_RE = re.compile(r"[\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff]")
+_COMMA_DURATION = re.compile(
+    r"^(?P<head>.*?)\s*,\s*(?P<dur>\d+\s*[smhdw](?:econds?|inutes?|ours?|ays?|eeks?)?|\d+)\s*$",
+    re.I,
+)
 
 def _clean_token(token: str) -> str:
     return _INVISIBLE_RE.sub("", (token or "")).strip()
@@ -32,18 +44,44 @@ if TYPE_CHECKING:
 def shorten(text: str, length: int):
     return text[:length] + "..." if len(text) > length else text
 
+_WORD_DURATION = re.compile(
+    r"^(?P<n>\d+)\s*(?P<u>"
+    r"s(?:ec(?:ond)?s?)?|"
+    r"m(?:in(?:ute)?s?)?|"
+    r"h(?:(?:ou)?rs?)?|"
+    r"d(?:ays?)?|"
+    r"w(?:eeks?)?|"
+    r"y(?:ears?)?"
+    r")$",
+    re.I,
+)
+
+
 def _parse_duration_value(argument: str) -> int | None:
-    """Parse a duration token into seconds, or None if invalid/unparseable."""
-    raw = _clean_token(argument).lower()
+    """Parse a duration token into seconds, or None if invalid/unparseable.
+
+    Accepts ``30s``, ``10m``, ``2h``, ``2 hours``, ``1 day``, raw seconds.
+    """
+    raw = _clean_token(argument).lower().strip()
     if not raw:
         return None
     if raw.isdigit():
         seconds = int(raw)
-    else:
-        seconds = parse_duration_seconds(raw)
-    if seconds is None or seconds <= 0:
-        return None
-    return seconds
+        return seconds if seconds > 0 else None
+    
+    seconds = parse_duration_seconds(raw.replace(" ", ""))
+    if seconds is not None and seconds > 0:
+        return seconds
+    m = _WORD_DURATION.match(raw.replace(" ", ""))
+    if not m:
+        m = _WORD_DURATION.match(raw)
+    if m:
+        n = int(m.group("n"))
+        u = m.group("u")[0].lower()
+        mult = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800, "y": 31536000}
+        seconds = n * mult[u]
+        return seconds if seconds > 0 else None
+    return None
 
 class DurationSeconds(commands.Converter):
     """Accept raw seconds or human tokens like ``1h``, ``30m``, ``2d``."""
@@ -56,10 +94,10 @@ class DurationSeconds(commands.Converter):
             if len(shown) > 40:
                 shown = shown[:37] + "..."
             raise commands.BadArgument(
-                f"Could not parse duration **{shown}**. Use e.g. `30s`, `10m`, `1h`, `2d`."
+                f"Couldn\u2019t read duration **{shown}**. Try `30s`, `10m`, `1h`, or `2d`."
             )
         if seconds > 365 * 86400:
-            raise commands.BadArgument("Duration cannot exceed **1 year**.")
+            raise commands.BadArgument("Duration can\u2019t be longer than **1 year**.")
         return seconds
 
 async def _resolve_channel(ctx: Context, token: str) -> discord.abc.Messageable | None:
@@ -73,77 +111,110 @@ async def _resolve_channel(ctx: Context, token: str) -> discord.abc.Messageable 
 
 async def _parse_start_args(
     ctx: Context, raw: str
-) -> tuple[discord.abc.Messageable, int, int, str]:
-    """Parse ``[channel] <duration> [winners] <prize>``.
+) -> tuple[discord.abc.Messageable, int, int, str, dict]:
+    """Parse start body + optional ``--winners`` / ``--requirement`` flags.
 
-    Examples:
-    - ``2m 1 Nitro Classic``
-    - ``#giveaways 1h 2 Nitro``
-    - ``1h Nitro`` (defaults to 1 winner)
+    Supported shapes:
+    - ``#channel Prize, 2 hours``
+    - ``#channel Prize, 2 hours --winners 3``
+    - ``#channel Prize, 2h --requirement level 5, badge``
+    - legacy: ``[channel] <duration> [winners] <prize>``
     """
-    tokens = [_clean_token(t) for t in (raw or "").split()]
-    tokens = [t for t in tokens if t]
-    if not tokens:
+    body, flag_chunks = split_start_payload(raw or "")
+    winners_flag, requirements = await apply_start_flags(ctx, flag_chunks)
+
+    text = body.strip()
+    if not text:
         raise commands.BadArgument(
-            "Usage: `,giveaway start [channel] <duration> [winners] <prize>` "
-            "e.g. `,giveaway start 2m 1 Nitro`"
+            "Usage: `,giveaway start [channel] <prize>, <duration>` "
+            "\u00b7 add `--winners 3` or `--requirement level 5`"
         )
 
     channel: discord.abc.Messageable = ctx.channel
-    i = 0
+    tokens = [_clean_token(t) for t in text.split()]
+    tokens = [t for t in tokens if t]
+    if not tokens:
+        raise commands.BadArgument(
+            "Usage: `,giveaway start [channel] <prize>, <duration>`"
+        )
 
     
     maybe_channel = await _resolve_channel(ctx, tokens[0])
+    prize_duration = text
     if maybe_channel is not None:
         channel = maybe_channel
-        i = 1
-    elif is_duration_token(tokens[0]) or (
-        tokens[0].isdigit() and len(tokens) >= 2
-    ):
-        i = 0
+        prize_duration = " ".join(tokens[1:]).strip()
+
+    seconds: int | None = None
+    prize = ""
+    winners = 1
+
+    
+    m = _COMMA_DURATION.match(prize_duration.strip())
+    if m:
+        prize = m.group("head").strip().strip(",")
+        seconds = _parse_duration_value(m.group("dur"))
+        if seconds is None:
+            raise commands.BadArgument(
+                f"Couldn\u2019t read duration **{m.group('dur')}**. Try `2h` or `2 hours`."
+            )
     else:
         
-        
-        dur_at = next(
-            (idx for idx in range(len(tokens)) if is_duration_token(tokens[idx])),
-            None,
-        )
-        if dur_at is None:
+        parts = [_clean_token(t) for t in prize_duration.split() if _clean_token(t)]
+        if not parts:
             raise commands.BadArgument(
-                f"**{tokens[0]}** is not a channel or duration. "
-                "Usage: `,giveaway start [channel] <duration> [winners] <prize>` "
-                "e.g. `,giveaway start #chat 2m 1 Nitro`"
+                "Include a prize and duration. Example: "
+                "`,giveaway start #chat Nitro, 2 hours`"
             )
-        i = dur_at
 
-    if i >= len(tokens):
-        raise commands.BadArgument(
-            "Missing duration. Use e.g. `30s`, `10m`, `1h`, `2d`."
-        )
+        
+        if is_duration_token(parts[0]) or (
+            parts[0].isdigit() and len(parts) >= 2 and _parse_duration_value(parts[0])
+        ):
+            seconds = _parse_duration_value(parts[0])
+            i = 1
+            if i < len(parts) and parts[i].isdigit() and len(parts[i]) < 6:
+                winners = int(parts[i])
+                i += 1
+            prize = " ".join(parts[i:]).strip()
+        else:
+            
+            seconds = _parse_duration_value(parts[-1])
+            if seconds is not None:
+                prize = " ".join(parts[:-1]).strip().rstrip(",")
+            else:
+                
+                dur_at = next(
+                    (
+                        idx
+                        for idx, p in enumerate(parts)
+                        if is_duration_token(p) or _parse_duration_value(p)
+                    ),
+                    None,
+                )
+                if dur_at is None:
+                    raise commands.BadArgument(
+                        "Missing duration. Example: `,giveaway start Nitro, 2 hours`"
+                    )
+                seconds = _parse_duration_value(parts[dur_at])
+                prize = " ".join(parts[:dur_at] + parts[dur_at + 1 :]).strip().rstrip(",")
 
-    seconds = _parse_duration_value(tokens[i])
-    if seconds is None:
+    if seconds is None or seconds <= 0:
         raise commands.BadArgument(
-            f"Could not parse duration **{tokens[i]}**. Use e.g. `30s`, `10m`, `1h`, `2d`."
+            "Couldn\u2019t read the duration. Try `30s`, `10m`, `2h`, or `2 hours`."
         )
     if seconds > 365 * 86400:
-        raise commands.BadArgument("Duration cannot exceed **1 year**.")
-    i += 1
-
-    winners = 1
-    if i < len(tokens) and tokens[i].isdigit():
-        winners = int(tokens[i])
-        i += 1
-
-    prize = " ".join(tokens[i:]).strip()
+        raise commands.BadArgument("Duration can\u2019t be longer than **1 year**.")
     if not prize:
         raise commands.BadArgument(
-            "A prize is required. Example: `,giveaway start 2m 1 Nitro Classic`"
+            "A prize is required. Example: `,giveaway start #chat Nitro, 2 hours`"
         )
+    if winners_flag is not None:
+        winners = winners_flag
     if winners < 1:
-        raise commands.BadArgument("Winner count must be at least **1**")
+        raise commands.BadArgument("Winner count must be at least **1**.")
 
-    return channel, seconds, winners, prize
+    return channel, seconds, winners, prize, requirements
 
 class Giveaway(commands.Cog):
     """Giveaway management system."""
@@ -151,16 +222,8 @@ class Giveaway(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    def get_requirements(self, record) -> list[str]:
-        r: list[str] = []
-        if record.get("max_level"):
-            r.append(f"max level **{record['max_level']}**")
-        if record.get("min_level"):
-            r.append(f"min level **{record['min_level']}**")
-        if record.get("required_roles"):
-            for role_id in record["required_roles"] or []:
-                r.append(f"role <@&{role_id}>")
-        return r
+    def get_requirements(self, record, guild: discord.Guild | None = None) -> list[str]:
+        return format_requirements(record or {}, guild=guild)
 
     def _events(self) -> GiveawayEvents | None:
         return self.bot.get_cog("GiveawayEvents")  # type: ignore[return-value]
@@ -245,9 +308,15 @@ class Giveaway(commands.Cog):
         winner_mentions: str | None = None,
         no_entries: bool = False,
         settings: dict | None = None,
+        requirements: dict | None = None,
     ):
         icon = str(guild.icon.url) if guild and guild.icon else None
         settings = settings or {}
+        req_lines = (
+            format_requirements(requirements or {}, guild=guild)
+            if has_any_requirement(requirements or {})
+            else []
+        )
         return build_giveaway_panel(
             message_id=message_id,
             prize=prize,
@@ -263,12 +332,13 @@ class Giveaway(commands.Cog):
             button_emoji=settings.get("button_emoji"),
             show_entries=bool(settings.get("show_entries", True)),
             join_type=str(settings.get("join_type") or "button"),
+            requirement_lines=req_lines,
         )
 
     @group(
         name="giveaway",
         aliases=["gw"],
-        description="Start a giveaway quickly and easily",
+        description="Run giveaways with optional entry rules",
         guild_only=True,
     )
     @has_permissions(manage_guild=True)
@@ -276,6 +346,47 @@ class Giveaway(commands.Cog):
         """Giveaway management group."""
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
+
+    @giveaway.command(
+        name="requirements",
+        aliases=["reqs", "requirement"],
+        description="List every entry rule you can attach to a giveaway",
+        guild_only=True,
+        example=",giveaway requirements",
+    )
+    @has_permissions(manage_guild=True)
+    async def giveaway_requirements(self, ctx: Context) -> None:
+        """Show all supported entry requirements with plain-English explanations."""
+        lines = catalog_lines()
+        header = (
+            "**Giveaway entry rules**\n"
+            "-# Attach with `--requirement …` on `,giveaway start`\n"
+            "-# Combine several: `--requirement level 5, badge`\n"
+            "-# Winners flag: `--winners 3`\n"
+        )
+        body = "\n".join(lines)
+        examples = (
+            "\n\n**Examples**\n"
+            "```\n"
+            ",giveaway start #chat Nitro, 2 hours\n"
+            ",giveaway start #chat Nitro, 2 hours --winners 3\n"
+            ",giveaway start #chat Nitro, 2 hours --requirement level 5\n"
+            ",giveaway start #chat Nitro, 2h --requirement level 5, badge\n"
+            ",giveaway start #chat Nitro, 1d --requirement role Members --requirement invites 3\n"
+            "```"
+        )
+        
+        text = header + "\n" + body + examples
+        if len(text) > 3800:
+            embed = discord.Embed(
+                color=color.base,
+                title="Giveaway entry rules",
+                description=header,
+            )
+            await ctx.paginate(embed, [f"`{i:02d}` " + ln.split(" — ", 1)[-1] if " — " in ln else ln for i, ln in enumerate(lines, 1)])
+            return
+        emb = discord.Embed(color=color.base, description=text)
+        await ctx.send(embed=emb)
 
     @giveaway.command(
         name="reroll",
@@ -556,40 +667,45 @@ class Giveaway(commands.Cog):
 
     @giveaway.command(
         name="start",
-        description="Start a new giveaway",
+        description="Launch a giveaway in a channel",
         guild_only=True,
-        usage="[channel] <duration> [winners] <prize>",
-        example=",giveaway start 30s 1 nitro",
+        usage="[channel] <prize>, <duration> [--winners n] [--requirement …]",
+        example=",giveaway start #chat Nitro, 2 hours --requirement level 5",
     )
     @describe(
-        arguments="[channel] <duration> [winners] <prize> — e.g. 30s 1 Nitro or #chat 1h 2 Nitro",
+        arguments=(
+            "[channel] <prize>, <duration> · optional --winners / --requirement flags"
+        ),
     )
     @has_permissions(manage_guild=True)
     async def start(self, ctx: Context, *, arguments: str = None) -> None:
-        """Start a new giveaway.
+        """Launch a giveaway.
 
-        Syntax: `,giveaway start [channel] <duration> [winners] <prize>`
+        Preferred:
+        - `,giveaway start #chat Nitro, 2 hours`
+        - `,giveaway start #chat Nitro, 2 hours --winners 3`
+        - `,giveaway start #chat Nitro, 2h --requirement level 5, badge`
 
-        Examples:
-        - `,giveaway start 30s 1 nitro`
-        - `,giveaway start 1h 1 Nitro Classic`
-        - `,giveaway start #giveaways 1h 2 Nitro`
+        See `,giveaway requirements` for every entry rule.
         """
         if not arguments or not str(arguments).strip():
             await ctx.warn(
-                "Usage: `,giveaway start [channel] <duration> [winners] <prize>` "
-                "e.g. `,giveaway start 30s 1 Nitro`"
+                "Usage: `,giveaway start [channel] <prize>, <duration>`\n"
+                "-# e.g. `,giveaway start #chat Nitro, 2 hours --winners 3`\n"
+                "-# rules: `,giveaway requirements`"
             )
             return
 
         try:
-            channel, seconds, winners, prize = await _parse_start_args(ctx, arguments)
+            channel, seconds, winners, prize, requirements = await _parse_start_args(
+                ctx, arguments
+            )
         except commands.BadArgument as exc:
             await ctx.warn(str(exc))
             return
 
-        
         end_time = datetime.now() + timedelta(seconds=seconds)
+        requirements = requirements or empty_requirements()
 
         events = self._events()
         settings = await events.get_settings(ctx.guild.id) if events else {}
@@ -603,10 +719,10 @@ class Giveaway(commands.Cog):
             entries=0,
             guild=ctx.guild,
             settings=settings,
+            requirements=requirements,
         )
         message = await channel.send(view=panel)
 
-        
         join_type = str(settings.get("join_type") or "button").lower()
         if join_type == "reaction":
             react = settings.get("join_reaction") or "🎉"
@@ -625,6 +741,7 @@ class Giveaway(commands.Cog):
             entries=0,
             guild=ctx.guild,
             settings=settings,
+            requirements=requirements,
         )
 
         async def _edit() -> None:
@@ -634,20 +751,16 @@ class Giveaway(commands.Cog):
                 pass
 
         async def _insert() -> None:
-            await self.bot.db.execute(
-                """
-                INSERT INTO giveaways (
-                    guild_id, channel_id, message_id, prize, expiration,
-                    winner_count, hosts, entries, created_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-                ON CONFLICT (message_id) DO UPDATE SET
-                    prize = EXCLUDED.prize,
-                    expiration = EXCLUDED.expiration,
-                    winner_count = EXCLUDED.winner_count,
-                    hosts = EXCLUDED.hosts,
-                    entries = EXCLUDED.entries,
-                    win_message_id = NULL
-                """,
+            import json
+
+            min_level = requirements.get("min_level")
+            roles = list(requirements.get("required_roles") or []) or None
+            req_json = {
+                k: v
+                for k, v in requirements.items()
+                if v not in (None, False, [], {})
+            }
+            payload = (
                 ctx.guild.id,
                 channel.id,
                 message.id,
@@ -656,8 +769,63 @@ class Giveaway(commands.Cog):
                 winners,
                 [ctx.author.id],
                 [],
+                min_level,
+                roles,
                 datetime.now(),
             )
+            inserted = False
+            
+            for req_arg in (req_json, json.dumps(req_json)):
+                try:
+                    await self.bot.db.execute(
+                        """
+                        INSERT INTO giveaways (
+                            guild_id, channel_id, message_id, prize, expiration,
+                            winner_count, hosts, entries, min_level, required_roles,
+                            requirements, created_at
+                        ) VALUES (
+                            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+                            $11::jsonb, $12
+                        )
+                        ON CONFLICT (message_id) DO UPDATE SET
+                            prize = EXCLUDED.prize,
+                            expiration = EXCLUDED.expiration,
+                            winner_count = EXCLUDED.winner_count,
+                            hosts = EXCLUDED.hosts,
+                            entries = EXCLUDED.entries,
+                            min_level = EXCLUDED.min_level,
+                            required_roles = EXCLUDED.required_roles,
+                            requirements = EXCLUDED.requirements,
+                            win_message_id = NULL
+                        """,
+                        *payload[:10],
+                        req_arg,
+                        payload[10],
+                    )
+                    inserted = True
+                    break
+                except Exception:
+                    continue
+            if not inserted:
+                await self.bot.db.execute(
+                    """
+                    INSERT INTO giveaways (
+                        guild_id, channel_id, message_id, prize, expiration,
+                        winner_count, hosts, entries, min_level, required_roles,
+                        created_at
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                    ON CONFLICT (message_id) DO UPDATE SET
+                        prize = EXCLUDED.prize,
+                        expiration = EXCLUDED.expiration,
+                        winner_count = EXCLUDED.winner_count,
+                        hosts = EXCLUDED.hosts,
+                        entries = EXCLUDED.entries,
+                        min_level = EXCLUDED.min_level,
+                        required_roles = EXCLUDED.required_roles,
+                        win_message_id = NULL
+                    """,
+                    *payload,
+                )
 
         await asyncio.gather(_edit(), _insert())
 
@@ -667,7 +835,13 @@ class Giveaway(commands.Cog):
         try:
             await ctx.message.add_reaction("👍")
         except Exception:
-            await ctx.success(f"Giveaway started in {channel.mention}")
+            bits = [f"live in {getattr(channel, 'mention', channel)}"]
+            if has_any_requirement(requirements):
+                bits.append(
+                    "rules: "
+                    + ", ".join(format_requirements(requirements, guild=ctx.guild)[:4])
+                )
+            await ctx.success(" · ".join(bits))
 
     
     

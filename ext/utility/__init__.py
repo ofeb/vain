@@ -24,16 +24,22 @@ def _format_when(ts_raw) -> tuple[str, datetime.datetime]:
     if isinstance(ts_raw, datetime.datetime):
         ts = ts_raw if ts_raw.tzinfo else ts_raw.replace(tzinfo=datetime.timezone.utc)
     elif isinstance(ts_raw, (int, float)):
-        
         ts = datetime.datetime.fromtimestamp(float(ts_raw), tz=datetime.timezone.utc)
     else:
         ts = datetime.datetime.now(tz=datetime.timezone.utc)
-    
+
     now = datetime.datetime.now(tz=datetime.timezone.utc)
     if ts.year > now.year + 1 or ts.year < 2015:
         ts = now
     relative = discord.utils.format_dt(ts, style="R")
     return relative, ts
+
+
+def _format_clock(ts_raw) -> str:
+    """Wall-clock time as zero-padded ``HH:MM`` (local 24h)."""
+    _, ts = _format_when(ts_raw)
+    local = ts.astimezone()
+    return f"{local.hour:02d}:{local.minute:02d}"
 
 
 def _filter_invites(content: str) -> str:
@@ -154,6 +160,36 @@ def _build_snipe_container(
     return _build_delete_container(snipe, accent=accent)
 
 
+def _snipe_option_label(snipe: dict, kind: str) -> str:
+    """Select option title — e.g. ``message deleted by hroe at 5:13``."""
+    name = _author_name(snipe)
+    clock = _format_clock(snipe.get("timestamp", 0))
+    if kind == "editsnipe":
+        verb = "message edited by"
+    elif kind == "reactionsnipe":
+        verb = "reaction removed by"
+    else:
+        verb = "message deleted by"
+    label = f"{verb} {name} at {clock}"
+    return label[:100]
+
+
+def _snipe_search_options(
+    data: list[dict], kind: str
+) -> list[discord.SelectOption]:
+    total = len(data)
+    options: list[discord.SelectOption] = []
+    for i, snipe in enumerate(data[:25]):
+        options.append(
+            discord.SelectOption(
+                label=_snipe_option_label(snipe, kind),
+                value=str(i),
+                description=f"page {i + 1}/{total}"[:100],
+            )
+        )
+    return options
+
+
 async def _send_snipe_pages(
     ctx: Context,
     *,
@@ -172,17 +208,30 @@ async def _send_snipe_pages(
     key = store._key(prefix, ctx.channel.id)
     data = list(store.data.get(key, []))
     accent = _snipe_accent(ctx.bot)
+
+    
     
     pages = [
         (lambda e=e: _build_snipe_container(e, kind, accent=accent)) for e in data
     ]
     start = min(max(index - 1, 0), max(len(pages) - 1, 0))
+    search_options = _snipe_search_options(data, kind)
 
     async def on_delete_page(page_index: int) -> None:
         try:
             await store.delete_entry(ctx.channel, kind, page_index + 1)
         except SnipeError:
             pass
+        
+        if 0 <= page_index < len(data):
+            try:
+                del data[page_index]
+            except Exception:
+                pass
+            try:
+                view.search_options = _snipe_search_options(data, kind)
+            except Exception:
+                pass
 
     if total == 1:
         layout = layout_from_items([pages[0]()])
@@ -195,6 +244,7 @@ async def _send_snipe_pages(
         start_index=start,
         show_goto=True,
         on_delete_page=on_delete_page,
+        search_options=search_options,
         search_title=f"Search for a page (1-{len(pages)})..",
     )
     await view.start()
