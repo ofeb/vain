@@ -192,7 +192,49 @@ def group(name: str | None = None, **attrs: Any):
     return commands.command(name=name, **attrs)
 
 
-def _pop_hybrid_attrs(attrs: dict) -> tuple[str | None, dict, bool, bool | None, bool | None, bool | None, bool, bool]:
+def _normalize_aliases(raw: Any) -> list[str]:
+    """Coerce ``aliases`` to a clean ``list[str]`` for discord.py.
+
+    Accepts list/tuple/set/str. A bare string is treated as **one** alias
+    (not character-iterated). Empty/duplicate values are dropped.
+    """
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        items: Iterable[Any] = (raw,)
+    elif isinstance(raw, Iterable):
+        items = raw
+    else:
+        items = (raw,)
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        alias = str(item).strip()
+        if not alias:
+            continue
+        key = alias.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(alias)
+    return out
+
+
+def _apply_aliases(cmd: commands.Command, aliases: list[str] | None) -> None:
+    """Ensure prefix aliases stick on the command object after factory create."""
+    if aliases is None:
+        return
+    cleaned = _normalize_aliases(aliases)
+    try:
+        cmd.aliases = cleaned
+    except Exception:
+        try:
+            object.__setattr__(cmd, "aliases", cleaned)
+        except Exception:
+            log.warning("could not set aliases=%s on %s", cleaned, getattr(cmd, "name", cmd))
+
+
+def _pop_hybrid_attrs(attrs: dict) -> tuple[str | None, dict, bool, bool | None, bool | None, bool | None, bool, bool, list[str] | None]:
     example = attrs.pop("example", None)
     parameters = attrs.pop("parameters", {})
     guild_only = attrs.pop("guild_only", False)
@@ -201,17 +243,38 @@ def _pop_hybrid_attrs(attrs: dict) -> tuple[str | None, dict, bool, bool | None,
     groupchats = attrs.pop("groupchats", None)
     slash = attrs.pop("slash", True)
     is_group = attrs.pop("group", False)
+    # Normalize aliases up-front and keep them in attrs for the d.py factory
+    # AND return a copy so we can re-apply after registration.
+    aliases_raw = attrs.pop("aliases", None)
+    aliases: list[str] | None
+    if aliases_raw is None:
+        aliases = None
+    else:
+        aliases = _normalize_aliases(aliases_raw)
+        attrs["aliases"] = list(aliases)
     attrs.pop("dm_enabled", None)
     attrs.pop("cls", None)
     if not slash:
         attrs["with_app_command"] = False
-    return example, parameters, guild_only, guilds, dms, groupchats, slash, is_group
+    return example, parameters, guild_only, guilds, dms, groupchats, slash, is_group, aliases
 
 
-def hybrid(name: str | None = None, **attrs: Any):
+def hybrid(name: str | None = None, *, aliases: Iterable[str] | str | None = None, **attrs: Any):
     """hybrid command or group factory.
-    pass group=True for slash+prefix command groups.
-    auto defers interactions and applies slash context flags"""
+
+    Parameters
+    ----------
+    name:
+        Command name (defaults to the function name).
+    aliases:
+        Prefix aliases (e.g. ``aliases=["cs"]`` for ``clearsnipe``). Forwarded
+        to discord.py and force-applied on the resulting command so they always
+        register in ``bot.all_commands`` / ``bot.get_command``.
+    group:
+        Pass ``group=True`` (or ``invoke_without_command=...``) for a hybrid group.
+    """
+    if aliases is not None:
+        attrs["aliases"] = aliases
     is_group = attrs.pop("group", False)
     if is_group or "invoke_without_command" in attrs:
         if "invoke_without_command" not in attrs:
@@ -221,12 +284,13 @@ def hybrid(name: str | None = None, **attrs: Any):
 
 
 def _hybrid_command(name: str | None = None, **attrs: Any):
-    example, params, guild_only, guilds, dms, groupchats, _, _ = _pop_hybrid_attrs(attrs)
+    example, params, guild_only, guilds, dms, groupchats, _, _, aliases = _pop_hybrid_attrs(attrs)
     guilds, _dms, _gcs = _resolve_contexts(guild_only=guild_only, guilds=guilds, dms=dms, groupchats=groupchats)
 
     def deco(fn: Callable[..., Any]) -> commands.HybridCommand:
         prepared = _inject_descriptions(_wrap_callback(fn, guilds=guilds, dms=_dms, groupchats=_gcs), params)
         cmd = _try_register(commands.hybrid_command, prepared, name=name, attrs=attrs)
+        _apply_aliases(cmd, aliases)
         _copy_link_meta(cmd, fn)
         cmd.example = example
         cmd.parameters = params
@@ -236,12 +300,13 @@ def _hybrid_command(name: str | None = None, **attrs: Any):
 
 
 def _hybrid_group(name: str | None = None, **attrs: Any):
-    example, params, guild_only, guilds, dms, groupchats, _, _ = _pop_hybrid_attrs(attrs)
+    example, params, guild_only, guilds, dms, groupchats, _, _, aliases = _pop_hybrid_attrs(attrs)
     guilds, _dms, _gcs = _resolve_contexts(guild_only=guild_only, guilds=guilds, dms=dms, groupchats=groupchats)
 
     def deco(fn: Callable[..., Any]) -> commands.HybridGroup:
         prepared = _inject_descriptions(_wrap_callback(fn, guilds=guilds, dms=_dms, groupchats=_gcs), params)
         grp = _try_register(commands.hybrid_group, prepared, name=name, attrs=attrs)
+        _apply_aliases(grp, aliases)
         grp.example = example
         grp.parameters = params
         _orig_command = grp.command
@@ -257,6 +322,12 @@ def _hybrid_group(name: str | None = None, **attrs: Any):
                 kw["with_app_command"] = False
             kw.pop("dm_enabled", None)
             kw.pop("cls", None)
+            sub_aliases_raw = kw.pop("aliases", None)
+            sub_aliases = (
+                None if sub_aliases_raw is None else _normalize_aliases(sub_aliases_raw)
+            )
+            if sub_aliases is not None:
+                kw["aliases"] = list(sub_aliases)
             sg, sd, sc = _resolve_contexts(guild_only=sub_guild_only, guilds=sub_servers, dms=sub_dms, groupchats=sub_gcs)
 
             def sub_deco(sub_fn):
@@ -268,6 +339,7 @@ def _hybrid_group(name: str | None = None, **attrs: Any):
                     log.warning("hybrid /%s slash failed (%s), prefix-only", cmd_name, e)
                     fallback_kw = {**kw, "with_app_command": False}
                     cmd = _orig_command(*args, **fallback_kw)(sub_prepared)
+                _apply_aliases(cmd, sub_aliases)
                 cmd.example = sub_example
                 cmd.parameters = sub_params
                 return cmd
@@ -290,6 +362,12 @@ def _hybrid_group(name: str | None = None, **attrs: Any):
                     kw["with_app_command"] = False
                 kw.pop("dm_enabled", None)
                 kw.pop("cls", None)
+                sub_aliases_raw = kw.pop("aliases", None)
+                sub_aliases = (
+                    None if sub_aliases_raw is None else _normalize_aliases(sub_aliases_raw)
+                )
+                if sub_aliases is not None:
+                    kw["aliases"] = list(sub_aliases)
                 if "invoke_without_command" not in kw:
                     kw["invoke_without_command"] = True
                 sg, sd, sc = _resolve_contexts(
@@ -314,9 +392,10 @@ def _hybrid_group(name: str | None = None, **attrs: Any):
                         nested = _orig_group(*args, **{**kw, "with_app_command": False})(
                             sub_prepared
                         )
+                    _apply_aliases(nested, sub_aliases)
                     nested.example = sub_example
                     nested.parameters = sub_params
-                    
+
                     _nested_orig_command = nested.command
 
                     def nested_command(*n_args: Any, **n_kw: Any):
@@ -330,6 +409,14 @@ def _hybrid_group(name: str | None = None, **attrs: Any):
                             n_kw["with_app_command"] = False
                         n_kw.pop("dm_enabled", None)
                         n_kw.pop("cls", None)
+                        n_aliases_raw = n_kw.pop("aliases", None)
+                        n_aliases = (
+                            None
+                            if n_aliases_raw is None
+                            else _normalize_aliases(n_aliases_raw)
+                        )
+                        if n_aliases is not None:
+                            n_kw["aliases"] = list(n_aliases)
                         ng, nd, nc = _resolve_contexts(
                             guild_only=n_guild_only,
                             guilds=n_servers,
@@ -348,6 +435,7 @@ def _hybrid_group(name: str | None = None, **attrs: Any):
                                 cmd = _nested_orig_command(
                                     *n_args, **{**n_kw, "with_app_command": False}
                                 )(n_prepared)
+                            _apply_aliases(cmd, n_aliases)
                             cmd.example = n_example
                             cmd.parameters = n_params
                             return cmd
@@ -369,7 +457,7 @@ def _hybrid_group(name: str | None = None, **attrs: Any):
 def slash_hybrid(name: str | None = None, **attrs: Any):
     """slash-only command: no prefix registration, added in cog_load."""
     description = attrs.get("description")
-    example, params, guild_only, guilds, dms, groupchats, _, _ = _pop_hybrid_attrs(attrs)
+    example, params, guild_only, guilds, dms, groupchats, _, _, _ = _pop_hybrid_attrs(attrs)
     guilds, _dms, _gcs = _resolve_contexts(
         guild_only=guild_only,
         guilds=guilds,

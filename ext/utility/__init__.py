@@ -318,7 +318,7 @@ class Snipe(commands.Cog):
     )
     @has_permissions(manage_messages=True)
     async def clearsnipe(self, ctx: Context) -> None:
-        """Clear all deleted messages from snipe."""
+        """Clear all deleted messages that can be sniped."""
         from core.discord.views.confirm import ConfirmView
 
         view = ConfirmView(ctx)
