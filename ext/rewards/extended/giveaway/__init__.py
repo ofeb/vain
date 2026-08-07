@@ -390,6 +390,7 @@ class Giveaway(commands.Cog):
 
     @giveaway.command(
         name="reroll",
+        aliases=["rr"],
         description="Reroll winners for an ended giveaway",
         guild_only=True,
         usage="[message id/link] [winners]",
@@ -464,6 +465,7 @@ class Giveaway(commands.Cog):
 
     @giveaway.command(
         name="end",
+        aliases=["e", "stop"],
         description="End an active giveaway early",
         guild_only=True,
         usage="[message id/link]",
@@ -500,6 +502,7 @@ class Giveaway(commands.Cog):
 
     @giveaway.group(
         name="edit",
+        aliases=["ed"],
         description="Edit options and limits for a specific giveaway",
         guild_only=True,
     )
@@ -511,6 +514,7 @@ class Giveaway(commands.Cog):
 
     @giveaway_edit.command(
         name="maxlevel",
+        aliases=["ml"],
         description="Set the maximum level requirement for giveaway entry",
         guild_only=True,
     )
@@ -558,6 +562,7 @@ class Giveaway(commands.Cog):
 
     @giveaway_edit.command(
         name="prize",
+        aliases=["p"],
         description="Change prize for a giveaway",
         guild_only=True,
     )
@@ -607,6 +612,7 @@ class Giveaway(commands.Cog):
 
     @giveaway_edit.command(
         name="duration",
+        aliases=["d"],
         description="Change the end date for a giveaway",
         guild_only=True,
     )
@@ -667,6 +673,7 @@ class Giveaway(commands.Cog):
 
     @giveaway.command(
         name="start",
+        aliases=["s", "create", "launch"],
         description="Launch a giveaway in a channel",
         guild_only=True,
         usage="[channel] <prize>, <duration> [--winners n] [--requirement …]",
@@ -849,7 +856,7 @@ class Giveaway(commands.Cog):
 
     @giveaway.group(
         name="customize",
-        aliases=["custom", "cfg"],
+        aliases=["custom", "cfg", "config"],
         invoke_without_command=True,
         description="Customize giveaway embeds, join method, buttons, and DM-on-win",
         guild_only=True,
@@ -881,7 +888,7 @@ class Giveaway(commands.Cog):
 
     @giveaway_customize.command(
         name="embed",
-        aliases=["panel", "message"],
+        aliases=["panel", "message", "script"],
         description="Set a custom giveaway panel embed/script",
         usage="[script|clear]",
         example=",giveaway customize embed {title: {prize}}$v{description: Ends soon · hosted by {host}}",
@@ -908,6 +915,7 @@ class Giveaway(commands.Cog):
 
     @giveaway_customize.group(
         name="join",
+        aliases=["joinmethod"],
         invoke_without_command=True,
         description="Configure how users join giveaways (button or reaction)",
     )
@@ -943,6 +951,7 @@ class Giveaway(commands.Cog):
 
     @customize_join.command(
         name="type",
+        aliases=["method"],
         description="Set join type to button or reaction",
     )
     @has_permissions(manage_guild=True)
@@ -951,7 +960,7 @@ class Giveaway(commands.Cog):
 
     @customize_join.command(
         name="reaction",
-        aliases=["emoji", "react"],
+        aliases=["emoji", "react", "joinreaction"],
         description="Set the reaction emoji used to join",
         example=",giveaway customize join reaction 🎉",
     )
@@ -977,7 +986,7 @@ class Giveaway(commands.Cog):
 
     @giveaway_customize.command(
         name="button",
-        aliases=["btn"],
+        aliases=["btn", "joinbutton"],
         description="Set enter button label and emoji",
         usage="[label] [emoji]",
         example=",giveaway customize button Enter 🎉",
@@ -1016,7 +1025,7 @@ class Giveaway(commands.Cog):
 
     @giveaway_customize.command(
         name="showentries",
-        aliases=["entries", "showentry"],
+        aliases=["entries", "showentry", "showentries"],
         description="Toggle showing entry count on the giveaway panel",
         usage="<on|off>",
         example=",giveaway customize showentries off",
@@ -1045,7 +1054,7 @@ class Giveaway(commands.Cog):
 
     @giveaway_customize.group(
         name="dmonwin",
-        aliases=["dm", "dmonswin"],
+        aliases=["dm", "dmonswin", "dmonswin"],
         invoke_without_command=True,
         description="Toggle DMing winners (default: off)",
         usage="[on|off]",
@@ -1126,7 +1135,7 @@ class Giveaway(commands.Cog):
     
     @giveaway.group(
         name="dmonwin",
-        aliases=["dmonswin"],
+        aliases=["dmonswin", "dmonswin"],
         invoke_without_command=True,
         description="Alias for giveaway customize dmonwin (default off)",
         guild_only=True,
