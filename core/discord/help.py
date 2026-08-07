@@ -151,7 +151,7 @@ _COG_MAP: dict[str, str] = {
     "Fun":         "Fun",
     "Roleplay":    "Fun",
     "Manipulation":"Fun",
-    # nested under category packages still map correctly via cog key
+    
     "Misc":        "Fun",
     "Miscellaneous": "Miscellaneous",
     "Music":       "Music",
@@ -1230,7 +1230,7 @@ class HelpMenu(ui.LayoutView):
 
 
 class GroupHelpMenu(ui.LayoutView):
-    """Group/family help with prev/next/cancel buttons inside the V2 container."""
+    """Group/family help — forward · delete · backward · search (blue)."""
 
     def __init__(
         self,
@@ -1244,35 +1244,7 @@ class GroupHelpMenu(ui.LayoutView):
         self.index = 0
         self.accent = accent
         self.msg: discord.Message | None = None
-
-        self.body = ui.TextDisplay(self._page_text())
-        self.container = ui.Container(accent_colour=accent)
-        self.container.add_item(self.body)
-
-        if len(self.pages) > 1:
-            self.btn_row = ui.ActionRow()
-            self.prev_btn = ui.Button(
-                style=discord.ButtonStyle.secondary,
-                emoji=discord.PartialEmoji.from_str(emojis.paginator.previous),
-            )
-            self.next_btn = ui.Button(
-                style=discord.ButtonStyle.secondary,
-                emoji=discord.PartialEmoji.from_str(emojis.paginator.next),
-            )
-            self.cancel_btn = ui.Button(
-                style=discord.ButtonStyle.danger,
-                emoji=discord.PartialEmoji.from_str(emojis.paginator.cancel),
-            )
-            self.prev_btn.callback = self._prev
-            self.next_btn.callback = self._next
-            self.cancel_btn.callback = self._cancel
-            self.btn_row.add_item(self.prev_btn)
-            self.btn_row.add_item(self.next_btn)
-            self.btn_row.add_item(self.cancel_btn)
-            self.container.add_item(self.btn_row)
-            self._sync_buttons()
-
-        self.add_item(self.container)
+        self._rebuild()
 
     def _page_info(self) -> str | None:
         if len(self.pages) <= 1:
@@ -1281,8 +1253,6 @@ class GroupHelpMenu(ui.LayoutView):
 
     def _page_text(self) -> str:
         cmd = self.pages[self.index]
-        
-        
         is_shell = (
             isinstance(cmd, Group)
             and not getattr(cmd, "invoke_without_command", False)
@@ -1294,11 +1264,34 @@ class GroupHelpMenu(ui.LayoutView):
             page_info=self._page_info(),
         )
 
-    def _sync_buttons(self) -> None:
-        if len(self.pages) <= 1:
-            return
-        self.prev_btn.disabled = self.index <= 0
-        self.next_btn.disabled = self.index >= len(self.pages) - 1
+    def _cmd_label(self, cmd: Command) -> str:
+        return command_display_name(cmd)
+
+    def _cmd_desc(self, cmd: Command) -> str:
+        doc = (cmd.short_doc or cmd.description or cmd.help or "…").strip()
+        return (doc.splitlines()[0] if doc else "…")[:100]
+
+    def _rebuild(self) -> None:
+        from core.discord.views.paginate import build_pager_row
+
+        self.clear_items()
+        body = ui.TextDisplay(self._page_text())
+        
+        accent = self.accent or getattr(self.ctx.bot, "color", None) or color.base
+        container = ui.Container(accent_colour=accent)
+        container.add_item(body)
+        if len(self.pages) > 1:
+            container.add_item(ui.Separator(visible=True))
+            container.add_item(
+                build_pager_row(
+                    on_next=self._next,
+                    on_prev=self._prev,
+                    on_delete=self._cancel,
+                    on_search=self._goto,
+                    show_search=True,
+                )
+            )
+        self.add_item(container)
 
     async def interaction_check(self, inter: Interaction) -> bool:
         if inter.user.id == self.ctx.author.id:
@@ -1318,16 +1311,51 @@ class GroupHelpMenu(ui.LayoutView):
     async def _prev(self, inter: Interaction) -> None:
         if self.index > 0:
             self.index -= 1
-        self.body.content = self._page_text()
-        self._sync_buttons()
+        self._rebuild()
         await inter.response.edit_message(view=self)
 
     async def _next(self, inter: Interaction) -> None:
         if self.index < len(self.pages) - 1:
             self.index += 1
-        self.body.content = self._page_text()
-        self._sync_buttons()
+        self._rebuild()
         await inter.response.edit_message(view=self)
+
+    async def _goto(self, inter: Interaction) -> None:
+        from core.discord.views.paginate import PageJumpSelect
+
+        total = len(self.pages)
+        options: list[SelectOption] = []
+        for i, cmd in enumerate(self.pages[:25]):
+            options.append(
+                SelectOption(
+                    label=self._cmd_label(cmd)[:100],
+                    value=str(i),
+                    description=self._cmd_desc(cmd),
+                )
+            )
+
+        async def on_pick(interaction: Interaction, value: str) -> None:
+            try:
+                idx = int(value)
+            except ValueError:
+                idx = 0
+            if 0 <= idx < len(self.pages):
+                self.index = idx
+            self._rebuild()
+            if interaction.response.is_done():
+                if self.msg is not None:
+                    with contextlib.suppress(discord.HTTPException):
+                        await self.msg.edit(view=self)
+            else:
+                await interaction.response.edit_message(view=self)
+
+        picker = PageJumpSelect(
+            title=f"Search for a command (1-{total})..",
+            options=options,
+            on_pick=on_pick,
+            author_id=self.ctx.author.id,
+        )
+        await inter.response.send_message(view=picker, ephemeral=True)
 
     async def _cancel(self, inter: Interaction) -> None:
         await inter.response.defer()
@@ -1337,7 +1365,6 @@ class GroupHelpMenu(ui.LayoutView):
         self.stop()
 
     async def on_timeout(self) -> None:
-        
         if self.msg is None:
             return
         body = ui.TextDisplay(self._page_text())
@@ -1347,9 +1374,9 @@ class GroupHelpMenu(ui.LayoutView):
         bare.add_item(container)
         with contextlib.suppress(discord.HTTPException):
             await self.msg.edit(view=bare)
-        self.stop()
 
     async def start(self) -> discord.Message:
+        self._rebuild()
         kw: dict[str, Any] = {"view": self}
         if self.ctx.message and not self.ctx.interaction:
             kw["reference"] = self.ctx.message.to_reference(fail_if_not_exists=False)

@@ -59,8 +59,12 @@ class emojis:
     class paginator:
         previous: str = "<:paginator_previous:1511706003836633288>"
         next: str = "<:paginator_next:1511706003853279353>"
-        navigate: str = "<:paginator_navigate:1511706003672928286>"
-        cancel: str = "<:paginator_cancel:1511706003303825571>"
+        navigate: str = "<:search:1479154501066817600>"
+        cancel: str = "<:delete:1535040504516055191>"
+        search: str = "<:search:1479154501066817600>"
+        delete: str = "<:delete:1535040504516055191>"
+        left: str = "⬅️"
+        right: str = "➡️"
 
     class interface:
         lock: str = "<:interface_lock:1511706000007106721>"
@@ -134,9 +138,8 @@ class api:
     twitch_client_id: str = ""
     twitch_client_secret: str = ""
     llm: str = "gemini-2.5-flash-lite"
-    # Social content API (OpenAPI at api-1.json) — Instagram, TikTok, etc.
-    guilt_base: str = "https://scl.guilt.bot"
-    guilt_key: str = ""
+    
+    social_base: str = "https://scl.guilt.bot"
 
     class lastfm:
         key: str = ""

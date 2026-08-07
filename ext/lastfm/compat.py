@@ -14,7 +14,7 @@ class _NullCache:
         def deco(fn: Callable) -> Callable:
             return fn
 
-        # support @cache(ttl=...) and bare usage
+        
         if args and callable(args[0]) and not kwargs:
             return args[0]
         return deco

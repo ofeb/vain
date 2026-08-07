@@ -62,7 +62,7 @@ class TicketControlView(discord.ui.View):
         super().__init__(timeout=None)
         self.cog = cog
 
-        # Rebuild buttons with config emojis
+        
         self.clear_items()
         self.add_item(
             discord.ui.Button(

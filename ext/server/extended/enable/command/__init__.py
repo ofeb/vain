@@ -3,11 +3,12 @@ from __future__ import annotations
 import re
 from typing import Optional, Union
 
-from discord import Embed, Member, TextChannel
+from discord import Embed, Member, Role, TextChannel
 from discord.ext.commands import (
     BadArgument,
     CommandError,
     MemberConverter,
+    RoleConverter,
     TextChannelConverter,
     group,
 )
@@ -23,24 +24,24 @@ from core.tools.hierarchy import (
 
 
 def _cmd_label(command) -> str:
-    
     return str(getattr(command, "qualified_name", command)).lower()
 
 
 _CHANNEL_MENTION = re.compile(r"^(<#\d+>)\s+(.+)$", re.DOTALL)
 _USER_MENTION = re.compile(r"^(<@!?\d+>)\s+(.+)$", re.DOTALL)
+_ROLE_MENTION = re.compile(r"^(<@&\d+>)\s+(.+)$", re.DOTALL)
 
 
 class CommandEnableCommands(Package):
-    """enable commands per channel or server-wide"""
+    """enable commands per channel, member, role, or server-wide"""
 
     async def _resolve_target_and_command(
         self,
         ctx,
         *,
         payload: str,
-    ) -> tuple[Optional[Union[TextChannel, Member]], object]:
-        """Parse ``[channel|member] <command>``."""
+    ) -> tuple[Optional[Union[TextChannel, Member, Role, str]], object]:
+        """Parse ``[channel|member|role|server|guild] <command>``."""
         text = (payload or "").strip()
         if not text:
             raise CommandError("provide a command to enable")
@@ -57,19 +58,30 @@ class CommandEnableCommands(Package):
             command = await CommandConverter().convert(ctx, m.group(2).strip())
             return target, command
 
+        m = _ROLE_MENTION.match(text)
+        if m:
+            target = await RoleConverter().convert(ctx, m.group(1))
+            command = await CommandConverter().convert(ctx, m.group(2).strip())
+            return target, command
+
         parts = text.split()
-        target: Optional[Union[TextChannel, Member]] = None
+        target: Optional[Union[TextChannel, Member, Role, str]] = None
         command_text = text
 
         if len(parts) >= 2:
             head, rest = parts[0], " ".join(parts[1:])
-            for converter in (MemberConverter(), TextChannelConverter()):
-                try:
-                    target = await converter.convert(ctx, head)
-                    command_text = rest
-                    break
-                except (BadArgument, CommandError):
-                    continue
+            head_l = head.lower()
+            if head_l in {"server", "guild", "global"}:
+                target = "server"
+                command_text = rest
+            else:
+                for converter in (MemberConverter(), RoleConverter(), TextChannelConverter()):
+                    try:
+                        target = await converter.convert(ctx, head)
+                        command_text = rest
+                        break
+                    except (BadArgument, CommandError):
+                        continue
 
         command = await CommandConverter().convert(ctx, command_text)
         return target, command
@@ -103,29 +115,87 @@ class CommandEnableCommands(Package):
         name="enablecommand",
         aliases=["ecmd"],
         description=(
-            "Enable a disabled command in a channel (defaults to this channel) "
-            "or for a member"
+            "Enable a disabled command in a channel/role/member/server "
+            "(defaults to this channel)"
         ),
-        usage="[channel or member] <command>",
+        usage="[channel|member|role|server] <command>",
         example=",enablecommand #general snipe",
         invoke_without_command=True,
     )
     @has_permissions(manage_channels=True)
     async def enablecommand(self, ctx, *, payload: str = None):
-        """Enable a command in a channel/member. No channel → this channel."""
+        """Enable a command. No target → this channel."""
         if not payload:
             return await ctx.send_help(ctx.command)
 
         target, command = await self._resolve_target_and_command(ctx, payload=payload)
         name = _cmd_label(command)
 
-        
         if target is None:
             target = ctx.channel
 
-        if is_member_like(target):
-            
+        
+        if isinstance(target, Role):
+            existing = await self.db.fetchval(
+                """
+                SELECT 1 FROM command_restrictions
+                WHERE guild_id = $1 AND command = $2 AND role_id = $3
+                """,
+                ctx.guild.id,
+                name,
+                target.id,
+            )
+            if existing:
+                return await ctx.fail(
+                    f"{target.mention} already has exclusive access to `{name}`"
+                )
+            await self.db.execute(
+                """
+                INSERT INTO command_restrictions (guild_id, command, role_id)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (guild_id, command, role_id) DO NOTHING
+                """,
+                ctx.guild.id,
+                name,
+                target.id,
+            )
+            await ctx.bot.invalidate_command_access_cache(ctx.guild.id, name)
+            return await ctx.success(
+                f"{target.mention} can now **exclusively** use `{name}`"
+            )
+
+        if is_member_like(target) and isinstance(target, Member):
             await ensure_member_hierarchy(ctx, target, bot_hierarchy=False)
+            
+            record = await self.db.fetchrow(
+                """SELECT * FROM disabled_commands WHERE guild_id = $1 AND lower(command) = lower($2)""",
+                ctx.guild.id,
+                name,
+            )
+            if not record:
+                return await ctx.fail(
+                    f"`{name}` was already **enabled** {target_phrase(target)}"
+                )
+            try:
+                raw_ids = record["object_ids"]
+            except Exception:
+                raw_ids = getattr(record, "object_ids", None) or []
+            try:
+                raw_types = record["object_types"]
+            except Exception:
+                raw_types = getattr(record, "object_types", None) or []
+            obj_ids = [int(x) for x in (raw_ids or [])]
+            obj_types = list(raw_types or [])
+            if int(target.id) not in obj_ids:
+                return await ctx.fail(
+                    f"`{name}` was already **enabled** {target_phrase(target)}"
+                )
+            idx = obj_ids.index(int(target.id))
+            obj_ids.pop(idx)
+            if idx < len(obj_types):
+                obj_types.pop(idx)
+            await self._save_disabled(ctx, name, obj_ids, obj_types)
+            return await ctx.success(f"**enabled** `{name}` {target_phrase(target)}")
 
         record = await self.db.fetchrow(
             """SELECT * FROM disabled_commands WHERE guild_id = $1 AND lower(command) = lower($2)""",
@@ -133,7 +203,13 @@ class CommandEnableCommands(Package):
             name,
         )
 
-        target_id = int(target.id)
+        if target == "server":
+            target_id = int(ctx.guild.id)
+            phrase = "in this **server**"
+        else:
+            target_id = int(getattr(target, "id"))
+            phrase = target_phrase(target)
+
         if record:
             try:
                 raw_ids = record["object_ids"]
@@ -150,7 +226,7 @@ class CommandEnableCommands(Package):
 
         if not record or target_id not in obj_ids:
             return await ctx.fail(
-                f"`{name}` was already **enabled** {target_phrase(target)}"
+                f"`{name}` was already **enabled** {phrase}"
             )
 
         idx = obj_ids.index(target_id)
@@ -158,7 +234,7 @@ class CommandEnableCommands(Package):
         if idx < len(obj_types):
             obj_types.pop(idx)
         await self._save_disabled(ctx, name, obj_ids, obj_types)
-        return await ctx.success(f"**enabled** `{name}` {target_phrase(target)}")
+        return await ctx.success(f"**enabled** `{name}` {phrase}")
 
     @enablecommand.command(
         name="list",
@@ -176,23 +252,36 @@ class CommandEnableCommands(Package):
         if not data:
             raise CommandError("no commands are currently disabled")
 
-        def resolve(obj_id: int):
+        def resolve(obj_id: int, kind: str | None = None):
+            kind_l = (kind or "").lower()
+            if kind_l in {"guild", "server"} or obj_id == ctx.guild.id:
+                return "server"
+            if kind_l == "role":
+                return ctx.guild.get_role(obj_id)
             if m := ctx.guild.get_member(obj_id):
                 return m
             if ch := ctx.guild.get_channel(obj_id):
                 return ch
-            return None
+            return ctx.guild.get_role(obj_id)
 
         lines = []
         for row in data:
             if not row.object_ids:
                 continue
-            for oid in row.object_ids:
-                obj = resolve(oid)
-                if obj:
-                    lines.append(
-                        f"**{row.command}** — disabled {target_phrase(obj)}"
-                    )
+            ids = list(row.object_ids or [])
+            kinds = list(row.object_types or [])
+            for i, oid in enumerate(ids):
+                kind = kinds[i] if i < len(kinds) else None
+                obj = resolve(int(oid), kind)
+                if obj == "server":
+                    lines.append(f"**{row.command}** — disabled in this **server**")
+                elif obj is not None:
+                    if isinstance(obj, Role):
+                        lines.append(f"**{row.command}** — role lock {obj.mention}")
+                    else:
+                        lines.append(
+                            f"**{row.command}** — disabled {target_phrase(obj)}"
+                        )
         if not lines:
             raise CommandError("no commands are currently disabled")
         numbered = [f"`{i}` {ln}" for i, ln in enumerate(lines, start=1)]
@@ -211,7 +300,7 @@ class CommandEnableCommands(Package):
     )
     @has_permissions(manage_channels=True)
     async def enablecommand_all(self, ctx, *, command: CommandConverter):
-        """enable command everywhere (clears all channel/member disables)"""
+        """enable command everywhere (clears all channel/member/role/server disables)"""
         name = _cmd_label(command)
         record = await self.db.fetchrow(
             """SELECT * FROM disabled_commands WHERE guild_id = $1 AND lower(command) = lower($2)""",
@@ -234,4 +323,4 @@ class CommandEnableCommands(Package):
             name,
         )
         await ctx.bot.invalidate_command_access_cache(ctx.guild.id, name)
-        return await ctx.success(f"**enabled** `{name}` in all channels")
+        return await ctx.success(f"**enabled** `{name}` in this **server**")

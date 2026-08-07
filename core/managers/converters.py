@@ -76,7 +76,7 @@ class EmbedConverter(commands.Converter):
     async def convert(self, ctx: commands.Context, argument: str):
         from core.tools.embed import maybe_wrap_embed_script
 
-        # maybe_wrap also converts discohook JSON → {embed}$v… / plain
+        
         return ScriptType(maybe_wrap_embed_script(argument))
 
 

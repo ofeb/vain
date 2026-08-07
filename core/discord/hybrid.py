@@ -275,6 +275,92 @@ def _hybrid_group(name: str | None = None, **attrs: Any):
             return sub_deco
 
         grp.command = sub_command
+
+        _orig_group = getattr(grp, "group", None)
+        if callable(_orig_group):
+
+            def sub_group(*args: Any, **kw: Any):
+                sub_example = kw.pop("example", None)
+                sub_params = kw.pop("parameters", {})
+                sub_guild_only = kw.pop("guild_only", False)
+                sub_servers = kw.pop("guilds", None)
+                sub_dms = kw.pop("dms", None)
+                sub_gcs = kw.pop("groupchats", None)
+                if not kw.pop("slash", True):
+                    kw["with_app_command"] = False
+                kw.pop("dm_enabled", None)
+                kw.pop("cls", None)
+                if "invoke_without_command" not in kw:
+                    kw["invoke_without_command"] = True
+                sg, sd, sc = _resolve_contexts(
+                    guild_only=sub_guild_only,
+                    guilds=sub_servers,
+                    dms=sub_dms,
+                    groupchats=sub_gcs,
+                )
+
+                def sub_deco(sub_fn):
+                    sub_prepared = _inject_descriptions(
+                        _wrap_callback(sub_fn, guilds=sg, dms=sd, groupchats=sc),
+                        sub_params,
+                    )
+                    gname = kw.get("name") or sub_fn.__name__
+                    try:
+                        nested = _orig_group(*args, **kw)(sub_prepared)
+                    except (TypeError, ValueError) as e:
+                        log.warning(
+                            "hybrid group /%s slash failed (%s), prefix-only", gname, e
+                        )
+                        nested = _orig_group(*args, **{**kw, "with_app_command": False})(
+                            sub_prepared
+                        )
+                    nested.example = sub_example
+                    nested.parameters = sub_params
+                    
+                    _nested_orig_command = nested.command
+
+                    def nested_command(*n_args: Any, **n_kw: Any):
+                        n_example = n_kw.pop("example", None)
+                        n_params = n_kw.pop("parameters", {})
+                        n_guild_only = n_kw.pop("guild_only", False)
+                        n_servers = n_kw.pop("guilds", None)
+                        n_dms = n_kw.pop("dms", None)
+                        n_gcs = n_kw.pop("groupchats", None)
+                        if not n_kw.pop("slash", True):
+                            n_kw["with_app_command"] = False
+                        n_kw.pop("dm_enabled", None)
+                        n_kw.pop("cls", None)
+                        ng, nd, nc = _resolve_contexts(
+                            guild_only=n_guild_only,
+                            guilds=n_servers,
+                            dms=n_dms,
+                            groupchats=n_gcs,
+                        )
+
+                        def nested_deco(n_fn):
+                            n_prepared = _inject_descriptions(
+                                _wrap_callback(n_fn, guilds=ng, dms=nd, groupchats=nc),
+                                n_params,
+                            )
+                            try:
+                                cmd = _nested_orig_command(*n_args, **n_kw)(n_prepared)
+                            except (TypeError, ValueError):
+                                cmd = _nested_orig_command(
+                                    *n_args, **{**n_kw, "with_app_command": False}
+                                )(n_prepared)
+                            cmd.example = n_example
+                            cmd.parameters = n_params
+                            return cmd
+
+                        return nested_deco
+
+                    nested.command = nested_command
+                    return nested
+
+                return sub_deco
+
+            grp.group = sub_group  # type: ignore[method-assign]
+
         return grp
 
     return deco

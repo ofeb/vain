@@ -111,7 +111,7 @@ class Config:
                 PRIMARY KEY (guild_id, channel_id, message_id, emoji)
             )
             """,
-            # legacy alias table some installs still use
+            
             """
             CREATE TABLE IF NOT EXISTS starboard_entries (
                 guild_id BIGINT NOT NULL,
@@ -211,7 +211,7 @@ class Config:
             return 0
 
     async def get_star_message_id(self, message_id: int, channel_id: int) -> int | None:
-        # prefer new table, fall back to legacy
+        
         for table, col in (
             ("starboard_entry", "star_id"),
             ("starboard_entries", "starboard_message_id"),
@@ -310,7 +310,7 @@ class Config:
                 continue
 
 
-# Back-compat aliases used by older call sites
+
 class Settings(Config):
     @classmethod
     async def fetch(cls, bot: Vain, guild: Guild) -> Config:

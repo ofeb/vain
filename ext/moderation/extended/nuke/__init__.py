@@ -159,7 +159,7 @@ class Nuke(Package):
         await self.update_channels_by_id(old.id, new.id, old.guild.id)
 
     async def update_channels_by_id(self, old_id: int, new_id: int, guild_id: int) -> None:
-        # Deduped list of (table, column, is_array) rewired after a channel nuke.
+        
         tables = [
             ("guilds", "welcome_channel_id", False),
             ("guilds", "leave_channel_id", False),

@@ -46,7 +46,7 @@ class LastfmHTTP(ClientSession):
         kwargs["params"] = params
         method = params.get("method", "?")
         log.debug("lastfm GET %s", method)
-        # base path for Last.fm REST
+        
         if args and isinstance(args[0], str) and not args[0].startswith("http"):
             url = f"{BASE_URL}/2.0/"
             args = (url, *args[1:])

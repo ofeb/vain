@@ -65,8 +65,13 @@ class SnipeEvents(commands.Cog):
             return
         if before.content == after_content:
             return
-        
-        await self.bot.snipes.add_entry("editsnipe", before)
+
+        await self.bot.snipes.add_entry(
+            "editsnipe",
+            before,
+            after_content=str(after_content),
+            jump_url=getattr(before, "jump_url", "") or "",
+        )
 
     @commands.Cog.listener("on_raw_reaction_remove")
     async def on_raw_reaction_remove(

@@ -1,11 +1,51 @@
+from __future__ import annotations
+
+from contextlib import suppress
+
 from discord.ext.commands import group, CommandError
 from discord import Message
+import discord
 
+from config import emojis
 from core.discord.package import Package
 from core.managers.converters import EmbedConverter
 from core.managers.permissions import has_permissions
 
 from .views import embed_script_from_message, sync_stored_pagination
+
+
+def _not_pagination(message: Message) -> CommandError:
+    return CommandError(
+        f"[`this message`]({message.jump_url}) is **not a pagination**"
+    )
+
+
+def _parse_reaction_emoji(raw: str | None) -> str:
+    text = (raw or "").strip()
+    if not text or text.lower() in {"default", "none", "reset", "-"}:
+        return ""
+    return text
+
+
+async def _apply_pagination_reactions(
+    message: Message,
+    *,
+    left: str | None = None,
+    right: str | None = None,
+) -> tuple[str, str]:
+    """Ensure left/right reaction controls exist on a pagination message."""
+    left_emoji = left or getattr(emojis.paginator, "left", "⬅️") or "⬅️"
+    right_emoji = right or getattr(emojis.paginator, "right", "➡️") or "➡️"
+
+    
+    with suppress(discord.HTTPException):
+        await message.clear_reactions()
+
+    with suppress(discord.HTTPException):
+        await message.add_reaction(left_emoji)
+    with suppress(discord.HTTPException):
+        await message.add_reaction(right_emoji)
+    return left_emoji, right_emoji
 
 
 async def _ensure_paginator_row(package: Package, ctx, message: Message) -> tuple[list[str], int]:
@@ -23,8 +63,8 @@ async def _ensure_paginator_row(package: Package, ctx, message: Message) -> tupl
     if row:
         return list(row["pages"] or []), int(row["current_page"] or 0)
 
-    if message.author.id != package.bot.user.id:
-        raise CommandError("that message isnt a paginator")
+    if package.bot.user is None or message.author.id != package.bot.user.id:
+        raise _not_pagination(message)
 
     try:
         code = embed_script_from_message(message)
@@ -104,7 +144,7 @@ class PaginationCommands(Package):
             message.id,
         )
         if not row:
-            raise CommandError("that message isnt a paginator")
+            raise _not_pagination(message)
         pages = list(row["pages"] or [])
         idx = page_id - 1 if page_id > 0 else page_id
         try:
@@ -185,7 +225,7 @@ class PaginationCommands(Package):
             message.id,
         )
         if not row:
-            raise CommandError("that message isnt a paginator")
+            raise _not_pagination(message)
         pages = list(row["pages"] or [])
         if len(pages) <= 1:
             raise CommandError("that paginator only has **one page**")
@@ -197,13 +237,123 @@ class PaginationCommands(Package):
             pages=pages,
             current_page=int(row["current_page"] or 0),
         )
+        await _apply_pagination_reactions(message)
         return await ctx.success("pagination buttons restored")
+
+    @pagination.group(
+        name="edit",
+        description="Edit pagination controls",
+        invoke_without_command=True,
+    )
+    @has_permissions(manage_messages=True)
+    async def pagination_edit(self, ctx):
+        return await ctx.send_help(ctx.command)
+
+    @pagination_edit.command(
+        name="reaction",
+        aliases=["reactions", "emoji", "emojis"],
+        description="Set left/right reaction emojis for a pagination message",
+        usage="<message> [left|right] [emoji|default]",
+        example=",pagination edit reaction 123 right ➡️",
+    )
+    @has_permissions(manage_messages=True)
+    async def pagination_edit_reaction(
+        self,
+        ctx,
+        message: Message,
+        side: str = None,
+        *,
+        emoji: str = None,
+    ):
+        """pagination edit reaction <message> [left|right] [emoji|default]"""
+        row = await self.db.fetchrow(
+            """
+            SELECT pages, current_page, left_emoji, right_emoji
+            FROM pagination
+            WHERE guild_id = $1 AND channel_id = $2 AND message_id = $3
+            """,
+            ctx.guild.id,
+            message.channel.id,
+            message.id,
+        )
+        if not row:
+            
+            row = await self.db.fetchrow(
+                """
+                SELECT pages, current_page
+                FROM pagination
+                WHERE guild_id = $1 AND channel_id = $2 AND message_id = $3
+                """,
+                ctx.guild.id,
+                message.channel.id,
+                message.id,
+            )
+        if not row:
+            raise _not_pagination(message)
+
+        pages = list(row["pages"] or [])
+        if len(pages) <= 1:
+            raise CommandError("that paginator only has **one page**")
+
+        current_left = None
+        current_right = None
+        with suppress(Exception):
+            current_left = row["left_emoji"]
+        with suppress(Exception):
+            current_right = row["right_emoji"]
+
+        side_l = (side or "").strip().lower()
+        if side_l in {"", "both", "default", "reset"}:
+            left_val = emojis.paginator.left
+            right_val = emojis.paginator.right
+            if side_l in {"default", "reset"} or not side_l:
+                pass
+            
+        elif side_l in {"left", "l", "prev", "previous", "back", "backward"}:
+            parsed = _parse_reaction_emoji(emoji)
+            left_val = parsed or emojis.paginator.left
+            right_val = current_right or emojis.paginator.right
+        elif side_l in {"right", "r", "next", "forward", "fwd"}:
+            parsed = _parse_reaction_emoji(emoji)
+            right_val = parsed or emojis.paginator.right
+            left_val = current_left or emojis.paginator.left
+        else:
+            raise CommandError("use `left` or `right` (or `default`)")
+
+        
+        with suppress(Exception):
+            await self.db.execute(
+                """
+                UPDATE pagination
+                SET left_emoji = $1, right_emoji = $2
+                WHERE guild_id = $3 AND channel_id = $4 AND message_id = $5
+                """,
+                left_val,
+                right_val,
+                ctx.guild.id,
+                message.channel.id,
+                message.id,
+            )
+
+        await sync_stored_pagination(
+            self.bot,
+            guild_id=ctx.guild.id,
+            channel_id=message.channel.id,
+            message=message,
+            pages=pages,
+            current_page=int(row["current_page"] or 0),
+        )
+        await _apply_pagination_reactions(message, left=left_val, right=right_val)
+        return await ctx.success(
+            f"set reactions on [`this message`]({message.jump_url}) "
+            f"→ left {left_val} · right {right_val}"
+        )
 
     @pagination.command(name="set", description="Set up an existing embed to be paginated")
     @has_permissions(manage_messages=True)
     async def pagination_set(self, ctx, message: Message):
         """convert embed to paginator"""
-        if message.author.id != self.bot.user.id:
+        if self.bot.user is None or message.author.id != self.bot.user.id:
             raise CommandError("that message must be sent by **me**")
         try:
             code = embed_script_from_message(message)
@@ -249,7 +399,7 @@ class PaginationCommands(Package):
             message.id,
         )
         if not row:
-            raise CommandError("that message isnt a paginator")
+            raise _not_pagination(message)
         await self.db.execute(
             """
             DELETE FROM pagination
@@ -279,7 +429,7 @@ class PaginationCommands(Package):
             message.id,
         )
         if not row:
-            raise CommandError("that message isnt a paginator")
+            raise _not_pagination(message)
         pages = list(row["pages"] or [])
         idx = page_id - 1 if page_id > 0 else page_id
         try:

@@ -98,25 +98,10 @@ class LastFMPagedView(discord.ui.View):
             with contextlib.suppress(discord.HTTPException):
                 await self.message.edit(view=None)
 
+    
     @discord.ui.button(
         label="",
-        style=discord.ButtonStyle.primary,
-        emoji=discord.PartialEmoji.from_str(emojis.paginator.previous),
-    )
-    async def prev_button(
-        self,
-        interaction: discord.Interaction,
-        _: discord.ui.Button,
-    ) -> None:
-        self.index = (self.index - 1) % len(self.pages)
-        await interaction.response.edit_message(
-            embed=self.pages[self.index],
-            view=self,
-        )
-
-    @discord.ui.button(
-        label="",
-        style=discord.ButtonStyle.primary,
+        style=discord.ButtonStyle.secondary,
         emoji=discord.PartialEmoji.from_str(emojis.paginator.next),
     )
     async def next_button(
@@ -133,22 +118,11 @@ class LastFMPagedView(discord.ui.View):
     @discord.ui.button(
         label="",
         style=discord.ButtonStyle.secondary,
-        emoji=discord.PartialEmoji.from_str(emojis.paginator.navigate),
-    )
-    async def skip_button(
-        self,
-        interaction: discord.Interaction,
-        _: discord.ui.Button,
-    ) -> None:
-        if len(self.pages) <= 1:
-            await interaction.response.defer()
-            return
-        await interaction.response.send_modal(SkipToPageModal(self))
-
-    @discord.ui.button(
-        label="",
-        style=discord.ButtonStyle.danger,
-        emoji=discord.PartialEmoji.from_str(emojis.paginator.cancel),
+        emoji=discord.PartialEmoji.from_str(
+            getattr(emojis.paginator, "delete", None)
+            or emojis.paginator.cancel
+            or "<:delete:1535040504516055191>"
+        ),
     )
     async def close_button(
         self,
@@ -159,6 +133,41 @@ class LastFMPagedView(discord.ui.View):
         if self.message:
             with contextlib.suppress(discord.HTTPException, discord.NotFound):
                 await self.message.delete()
+
+    @discord.ui.button(
+        label="",
+        style=discord.ButtonStyle.secondary,
+        emoji=discord.PartialEmoji.from_str(emojis.paginator.previous),
+    )
+    async def prev_button(
+        self,
+        interaction: discord.Interaction,
+        _: discord.ui.Button,
+    ) -> None:
+        self.index = (self.index - 1) % len(self.pages)
+        await interaction.response.edit_message(
+            embed=self.pages[self.index],
+            view=self,
+        )
+
+    @discord.ui.button(
+        label="",
+        style=discord.ButtonStyle.primary,
+        emoji=discord.PartialEmoji.from_str(
+            getattr(emojis.paginator, "search", None)
+            or emojis.paginator.navigate
+            or "<:search:1479154501066817600>"
+        ),
+    )
+    async def skip_button(
+        self,
+        interaction: discord.Interaction,
+        _: discord.ui.Button,
+    ) -> None:
+        if len(self.pages) <= 1:
+            await interaction.response.defer()
+            return
+        await interaction.response.send_modal(SkipToPageModal(self))
 
 async def send_pages(ctx: Context, pages: list[discord.Embed]) -> None:
     if len(pages) <= 1:

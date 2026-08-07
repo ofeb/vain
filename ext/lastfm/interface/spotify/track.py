@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional, cast
 
-from typing import Any as Client, Any as SimpleArtist  # optional
+from typing import Any as Client, Any as SimpleArtist  
 from ext.lastfm.compat import duration
 from pydantic import BaseModel
 

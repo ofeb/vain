@@ -35,10 +35,19 @@ class SocialPost:
 
     @property
     def profile_url(self) -> str:
-        if self.platform == "tiktok":
-            return f"https://www.tiktok.com/@{self.username}"
-        if self.platform == "instagram":
-            return f"https://www.instagram.com/{self.username}/"
+        user = (self.username or "").lstrip("@")
+        plat = (self.platform or "").lower()
+        if plat == "tiktok" and user:
+            return f"https://www.tiktok.com/@{user}"
+        if plat == "instagram" and user:
+            return f"https://www.instagram.com/{user}/"
+        if plat in {"twitter", "x"} and user:
+            return f"https://x.com/{user}"
+        if plat == "youtube" and user:
+            handle = user if user.startswith("@") else f"@{user}"
+            return f"https://www.youtube.com/{handle}"
+        if plat == "telegram" and user:
+            return f"https://t.me/{user}"
         return self.url
 
 

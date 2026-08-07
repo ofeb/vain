@@ -8,11 +8,10 @@ import tempfile
 import textwrap
 import urllib.parse
 from pathlib import Path
-from typing import Any, Iterable, Optional, Sequence, TYPE_CHECKING
+from typing import Any, Optional, TYPE_CHECKING
 
 import aiohttp
 import discord
-from discord import ui
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from core.discord.package import Package
@@ -21,454 +20,18 @@ from core.discord.ctx import Context
 from core.discord.hybrid import describe, group, hybrid
 from core.managers.permissions import has_permissions
 from config import color
-from colorthief import ColorThief
 
-from core.discord.views.embed import body, caption, c2
+from core.discord.views.embed import body, c2
 
-_TIKTOK_FOOTER_ICON = "https://cdn-icons-png.flaticon.com/512/3046/3046121.png"
-_INSTAGRAM_FOOTER_ICON = "https://cdn-icons-png.flaticon.com/512/2111/2111463.png"
-def _linkify_caption(caption: str, platform: str) -> str:
-    """Turn #hashtags into markdown links (heist-style)."""
-    text = (caption or "").replace("```", "`\u200b`\u200b`").strip()
-    if not text:
-        return ""
-    if platform == "tiktok":
-        base = "https://tiktok.com/tag/"
-    else:
-        base = "https://www.instagram.com/explore/tags/"
-
-    def _hash(m: re.Match[str]) -> str:
-        tag = m.group(1)
-        return f"[#{tag}](<{base}{tag}>)"
-
-    def _mention(m: re.Match[str]) -> str:
-        user = m.group(1)
-        if platform == "tiktok":
-            return f"[@{user}](<https://www.tiktok.com/@{user}>)"
-        return f"[@{user}](<https://www.instagram.com/{user}/>)"
-
-    text = re.sub(r"#(\w+)", _hash, text)
-    text = re.sub(r"@(\w+)", _mention, text)
-    return text[:1900]
-
-def _compact_count(n: int | float | None) -> str:
-    try:
-        value = int(n or 0)
-    except Exception:
-        return "0"
-    if value < 1000:
-        return str(value)
-    if value < 1_000_000:
-        text = f"{value / 1000:.1f}".rstrip("0").rstrip(".")
-        return f"{text}k"
-    text = f"{value / 1_000_000:.1f}".rstrip("0").rstrip(".")
-    return f"{text}m"
-
-def build_social_repost_container(
-    *,
-    platform: str,
-    username: str,
-    display_name: str | None = None,
-    caption: str = "",
-    media_urls: list[str] | None = None,
-    avatar_url: str | None = None,
-    source_url: str = "",
-    accent: int | None = None,
-    like_count: int = 0,
-    comment_count: int = 0,
-    save_count: int = 0,
-    share_count: int = 0,
-    region: str | None = None,
-    music_title: str | None = None,
-    music_author: str | None = None,
-    music_url: str | None = None,
-    attachment: discord.File | None = None,
-    attachment_filename: str | None = None,
-    page_index: int = 0,
-    page_total: int = 1,
-) -> list[ui.Container]:
-    """Components V2 social repost panel.
-
-    Uploaded videos/images use **MediaGallery** (type 12) with
-    ``attachment://filename`` so Discord shows an inline player (not File type 13).
-    """
-    from config import emojis
-
-    accent = accent or 0x2A2B2F
-    c = ui.Container(accent_colour=int(accent))
-    name = display_name or username or "unknown"
-    user = (username or "unknown").lstrip("@")
-    plat = (platform or "").lower()
-    if plat == "tiktok":
-        profile = f"https://www.tiktok.com/@{user}"
-        platform_label = "TikTok"
-        watch_label = "Open on TikTok"
-    else:
-        profile = f"https://www.instagram.com/{user}/"
-        platform_label = "Instagram"
-        watch_label = "Open on Instagram"
-
-    title_line = f"**{name}**"
-    handle_line = f"-# {emojis.human} [@{user}]({profile}) · **{platform_label}**"
-    header_md = f"{title_line}\n{handle_line}"
-    if avatar_url:
-        try:
-            c.add_item(
-                ui.Section(
-                    ui.TextDisplay(header_md),
-                    accessory=ui.Thumbnail(media=str(avatar_url)),
-                )
-            )
-        except Exception:
-            c.add_item(ui.TextDisplay(header_md))
-    else:
-        c.add_item(ui.TextDisplay(header_md))
-
-    linked = _linkify_caption(caption, plat if plat in {"tiktok", "instagram"} else "instagram")
-    if linked:
-        c.add_item(ui.Separator(visible=True))
-        quoted = "\n".join(f"> {line}" if line else ">" for line in linked.splitlines())
-        c.add_item(ui.TextDisplay(quoted[:1900]))
-
-    if music_title:
-        music_label = music_title
-        if music_author:
-            music_label = f"{music_title} — {music_author}"
-        c.add_item(ui.Separator(visible=False))
-        if music_url:
-            c.add_item(ui.TextDisplay(f"-# {emojis.music} [{music_label}]({music_url})"))
-        else:
-            c.add_item(ui.TextDisplay(f"-# {emojis.music} {music_label}"))
-
-    urls = [u for u in (media_urls or []) if u]
-    if page_total < 1:
-        page_total = 1
-    page_index = max(0, min(page_index, max(page_total - 1, 0)))
-    current = urls[page_index] if urls and page_index < len(urls) else (urls[0] if urls else None)
-
-    
-    
-    file_name = attachment_filename or (attachment.filename if attachment is not None else None)
-    media_item: discord.MediaGalleryItem | None = None
-    if file_name:
-        try:
-            if attachment is not None:
-                media_item = discord.MediaGalleryItem(attachment)
-            else:
-                media_item = discord.MediaGalleryItem(f"attachment://{file_name}")
-        except Exception:
-            try:
-                media_item = discord.MediaGalleryItem(f"attachment://{file_name}")
-            except Exception:
-                media_item = None
-    elif current:
-        try:
-            media_item = discord.MediaGalleryItem(str(current))
-        except Exception:
-            media_item = None
-
-    if media_item is not None:
-        c.add_item(ui.Separator(visible=True))
-        try:
-            c.add_item(ui.MediaGallery(media_item))
-        except Exception:
-            if current:
-                c.add_item(ui.TextDisplay(f"[media]({current})"))
-    elif current:
-        c.add_item(ui.Separator(visible=True))
-        c.add_item(ui.TextDisplay(f"[media]({current})"))
-
-    stats_bits = [
-        f"{emojis.likes} **{_compact_count(like_count)}**",
-        f"{emojis.comments} **{_compact_count(comment_count)}**",
-        f"{emojis.saves} **{_compact_count(save_count)}**",
-    ]
-    repost_emoji = getattr(emojis, "reposts", None) or emojis.repost
-    if share_count:
-        stats_bits.append(f"{repost_emoji} **{_compact_count(share_count)}**")
-    if region:
-        stats_bits.append(f"{emojis.region} {region}")
-
-    c.add_item(ui.Separator(visible=True))
-    footer_bits = [" · ".join(stats_bits)]
-    if page_total > 1:
-        footer_bits.append(f"slide **{page_index + 1}**/**{page_total}**")
-    c.add_item(ui.TextDisplay("-# " + "  ·  ".join(footer_bits)))
-
-    link = source_url or profile
-    row = ui.ActionRow(
-        ui.Button(style=discord.ButtonStyle.link, label=watch_label, url=link)
-    )
-    c.add_item(ui.Separator(visible=False))
-    c.add_item(row)
-    return [c]
-
-def layout_from_items(
-    items: Iterable[ui.Item],
-    *,
-    timeout: float | None = 180,
-) -> ui.LayoutView:
-    layout = ui.LayoutView(timeout=timeout)
-    for item in items:
-        layout.add_item(item)
-    return layout
-
-class SocialRepostView(ui.LayoutView):
-    """Paginated multi-image social repost (TikTok photos / IG carousels).
-
-    For videos, pass ``attachment_filename`` matching the ``discord.File``
-    uploaded with the message so MediaGallery can play ``attachment://name``.
-    """
-
-    def __init__(
-        self,
-        *,
-        platform: str,
-        username: str,
-        media_urls: list[str],
-        display_name: str | None = None,
-        caption: str = "",
-        avatar_url: str | None = None,
-        source_url: str = "",
-        accent: int | None = None,
-        like_count: int = 0,
-        comment_count: int = 0,
-        save_count: int = 0,
-        share_count: int = 0,
-        region: str | None = None,
-        music_title: str | None = None,
-        music_author: str | None = None,
-        music_url: str | None = None,
-        attachment_filename: str | None = None,
-        owner_id: int | None = None,
-        timeout: float | None = 180,
-    ) -> None:
-        super().__init__(timeout=timeout)
-        self.platform = platform
-        self.username = username
-        self.display_name = display_name
-        self.caption = caption
-        self.avatar_url = avatar_url
-        self.source_url = source_url
-        self.accent = accent
-        self.like_count = like_count
-        self.comment_count = comment_count
-        self.save_count = save_count
-        self.share_count = share_count
-        self.region = region
-        self.music_title = music_title
-        self.music_author = music_author
-        self.music_url = music_url
-        self.attachment_filename = attachment_filename
-        self.media_urls = [u for u in media_urls if u]
-        self.index = 0
-        self.owner_id = owner_id
-        self.message: discord.Message | None = None
-        self._rebuild()
-
-    def _kwargs(self) -> dict[str, Any]:
-        return {
-            "platform": self.platform,
-            "username": self.username,
-            "display_name": self.display_name,
-            "caption": self.caption,
-            "media_urls": self.media_urls,
-            "avatar_url": self.avatar_url,
-            "source_url": self.source_url,
-            "accent": self.accent,
-            "like_count": self.like_count,
-            "comment_count": self.comment_count,
-            "save_count": self.save_count,
-            "share_count": self.share_count,
-            "region": self.region,
-            "music_title": self.music_title,
-            "music_author": self.music_author,
-            "music_url": self.music_url,
-            "attachment_filename": self.attachment_filename,
-            "page_index": self.index,
-            "page_total": max(len(self.media_urls), 1),
-        }
-
-    def _rebuild(self) -> None:
-        from config import emojis as _e
-
-        self.clear_items()
-        containers = build_social_repost_container(**self._kwargs())
-        container = containers[0]
-
-        if len(self.media_urls) > 1:
-            container.add_item(ui.Separator(visible=True))
-            row = ui.ActionRow()
-            prev = ui.Button(
-                style=discord.ButtonStyle.secondary,
-                emoji=discord.PartialEmoji.from_str(_e.paginator.previous),
-                disabled=self.index <= 0,
-            )
-            nav = ui.Button(
-                style=discord.ButtonStyle.secondary,
-                emoji=discord.PartialEmoji.from_str(_e.paginator.navigate),
-                label=f"{self.index + 1}/{len(self.media_urls)}",
-                disabled=True,
-            )
-            nxt = ui.Button(
-                style=discord.ButtonStyle.secondary,
-                emoji=discord.PartialEmoji.from_str(_e.paginator.next),
-                disabled=self.index >= len(self.media_urls) - 1,
-            )
-
-            async def _prev(interaction: discord.Interaction) -> None:
-                if self.owner_id and interaction.user.id != self.owner_id:
-                    await interaction.response.send_message("not your repost.", ephemeral=True)
-                    return
-                self.index = max(0, self.index - 1)
-                self._rebuild()
-                await interaction.response.edit_message(view=self)
-
-            async def _next(interaction: discord.Interaction) -> None:
-                if self.owner_id and interaction.user.id != self.owner_id:
-                    await interaction.response.send_message("not your repost.", ephemeral=True)
-                    return
-                self.index = min(len(self.media_urls) - 1, self.index + 1)
-                self._rebuild()
-                await interaction.response.edit_message(view=self)
-
-            prev.callback = _prev  # type: ignore[method-assign]
-            nxt.callback = _next  # type: ignore[method-assign]
-            row.add_item(prev)
-            row.add_item(nav)
-            row.add_item(nxt)
-            container.add_item(row)
-
-        self.add_item(container)
-
-    async def on_timeout(self) -> None:
-        if self.message is None:
-            return
-        try:
-            
-            bare = layout_from_items(
-                build_social_repost_container(**self._kwargs()),
-                timeout=None,
-            )
-            await self.message.edit(view=bare)
-        except Exception:
-            pass
-
-def _rgb_to_int(r: int, g: int, b: int) -> int:
-    return (int(r) << 16) + (int(g) << 8) + int(b)
-
-def _color_vibrance(rgb: tuple[int, int, int]) -> float:
-    """Higher = more saturated / vivid (prefer over muddy greys)."""
-    r, g, b = (x / 255.0 for x in rgb)
-    mx, mn = max(r, g, b), min(r, g, b)
-    if mx <= 0:
-        return 0.0
-    sat = (mx - mn) / mx
-    return sat * mx
-
-def _pick_accent_from_palette(
-    dominant: tuple[int, int, int],
-    palette: list[tuple[int, int, int]] | None = None,
-) -> tuple[int, int, int]:
-    """Pick the most vivid swatch so accents match creator art, not greys."""
-    candidates = [dominant]
-    if palette:
-        candidates.extend(palette)
-    usable = [
-        c
-        for c in candidates
-        if 30 < sum(c) < 720 and _color_vibrance(c) >= 0.08
-    ]
-    if not usable:
-        usable = list(candidates)
-    best = max(usable, key=_color_vibrance)
-    r, g, b = best
-    if r + g + b < 90:
-        r, g, b = min(r + 70, 255), min(g + 70, 255), min(b + 70, 255)
-    return (r, g, b)
-
-def _colorthief_from_bytes(data: bytes) -> int | None:
-    if not data or len(data) < 64:
-        return None
-    head = data.lstrip()[:20]
-    if head.startswith((b"<", b"{", b"[")) or head.upper().startswith(b"<!DOCTYPE"):
-        return None
-    try:
-        ct = ColorThief(io.BytesIO(data))
-        dominant = ct.get_color(quality=1)
-        try:
-            palette = ct.get_palette(color_count=6, quality=1) or []
-        except Exception:
-            palette = []
-        r, g, b = _pick_accent_from_palette(dominant, list(palette))
-        return _rgb_to_int(r, g, b)
-    except Exception:
-        return None
-
-async def get_dominant_color(
-    url: str,
-    fallback: int = 0x5865F2,
-    *,
-    referer: str | None = None,
-) -> int:
-    """Fetch image and return a vivid dominant colour via colorthief."""
-    if not url:
-        return fallback
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-        ),
-        "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-    }
-    if referer:
-        headers["Referer"] = referer
-    try:
-        timeout = aiohttp.ClientTimeout(total=12)
-        async with aiohttp.ClientSession(headers=headers, timeout=timeout) as session:
-            async with session.get(str(url), allow_redirects=True) as resp:
-                if resp.status != 200:
-                    return fallback
-                data = await resp.read()
-        color = await asyncio.to_thread(_colorthief_from_bytes, data)
-        return color if color is not None else fallback
-    except Exception:
-        return fallback
-
-async def get_bot_dominant_color(bot) -> int:
-    if bot.user and bot.user.display_avatar:
-        return await get_dominant_color(str(bot.user.display_avatar.url))
-    return 0x5865F2
-
-async def get_repost_accent_color(
-    bot,
-    *,
-    avatar_url: str | None = None,
-    thumbnail_url: str | None = None,
-    platform: str | None = None,
-) -> int:
-    """Accent from creator avatar (then video thumb); fall back to bot colour."""
-    bot_color = await get_bot_dominant_color(bot)
-    plat = (platform or "").lower()
-    referer = (
-        "https://www.tiktok.com/"
-        if plat == "tiktok"
-        else "https://www.instagram.com/"
-        if plat == "instagram"
-        else None
-    )
-
-    for candidate in (avatar_url, thumbnail_url):
-        if not candidate:
-            continue
-        color = await get_dominant_color(
-            str(candidate),
-            fallback=0,
-            referer=referer,
-        )
-        if color:
-            return color
-    return bot_color
+from .ui import (
+    SocialRepostView,
+    build_profile_container,
+    build_social_repost_container,
+    get_bot_dominant_color,
+    get_dominant_color,
+    get_repost_accent_color,
+    layout_from_items,
+)
 
 from core.networks.media.compress import discord_upload_limit, fit_for_discord
 from core.networks.social import Instagram, TikTok, is_instagram_url, is_tiktok_url
@@ -528,59 +91,58 @@ def _ytdlp_download_sync(url: str, output_dir: str) -> dict:
             "thumbnail": info.get("thumbnail", ""),
         }
 
+
 class Socials(Package):
-    """Social media feeds and notifications."""
+    """Social media lookup, reposts, and feed configuration."""
 
     def __init__(self, bot: Vain):
         super().__init__(bot)
         self._filters = {}
 
-    async def _get_instagram_info(self, username: str) -> Optional[dict]:
-        """Profile lookup via scl.guilt.bot."""
-        from .guilt import instagram_user
+    async def _send_profile(self, ctx: Context, containers: list) -> None:
+        view = layout_from_items(containers, timeout=180)
+        await ctx.send(view=view)
 
-        data = await instagram_user(username.lstrip("@"))
-        if not data:
-            return None
-        # Normalize common response shapes
-        user = data.get("user") or data.get("graphql", {}).get("user") or data
-        if not isinstance(user, dict):
-            return None
-        followers = (
-            user.get("followers")
-            or user.get("follower_count")
-            or (user.get("edge_followed_by") or {}).get("count")
-            or 0
-        )
-        following = (
-            user.get("following")
-            or user.get("following_count")
-            or (user.get("edge_follow") or {}).get("count")
-            or 0
-        )
-        posts = (
-            user.get("posts")
-            or user.get("media_count")
-            or (user.get("edge_owner_to_timeline_media") or {}).get("count")
-            or 0
-        )
-        return {
-            "username": user.get("username") or username.lstrip("@"),
-            "full_name": user.get("full_name") or user.get("fullName") or user.get("name") or "",
-            "bio": user.get("biography") or user.get("bio") or "",
-            "followers": followers,
-            "following": following,
-            "posts": posts,
-            "is_private": bool(user.get("is_private") or user.get("isPrivate")),
-            "is_verified": bool(user.get("is_verified") or user.get("isVerified")),
-            "avatar": (
-                user.get("profile_pic_url_hd")
-                or user.get("profile_pic_url")
-                or user.get("avatar")
-                or user.get("profilePicUrl")
+    async def _media_list_preview(
+        self,
+        ctx: Context,
+        *,
+        title: str,
+        items: list[dict],
+        empty: str,
+    ) -> None:
+        if not items:
+            await ctx.fail(empty)
+            return
+        lines: list[str] = []
+        for i, item in enumerate(items[:12], 1):
+            if not isinstance(item, dict):
+                continue
+            code = (
+                item.get("code")
+                or item.get("shortcode")
+                or item.get("id")
+                or item.get("pk")
                 or ""
-            ),
-        }
+            )
+            cap = (
+                item.get("caption")
+                or item.get("text")
+                or item.get("desc")
+                or item.get("title")
+                or ""
+            )
+            if isinstance(cap, dict):
+                cap = cap.get("text") or ""
+            cap = str(cap).replace("\n", " ").strip()[:80]
+            label = f"`{code}`" if code else f"#{i}"
+            lines.append(f"**{i}.** {label}" + (f" — {cap}" if cap else ""))
+        embed = c2(color=color.base, title=title, message="\n".join(lines) or empty)
+        await ctx.send(embed=embed)
+
+    
+    
+    
 
     @group(
         name="socials",
@@ -592,12 +154,8 @@ class Socials(Package):
     async def socials(self, ctx: Context) -> None:
         await ctx.send_help(ctx.command)
 
-    @socials.command(
-        name="twitter",
-        description="Follow or unfollow a Twitter/X account",
-        aliases=["x"],
-    )
-    @describe(handle="Twitter handle (without @)", action="add or remove")
+    @socials.command(name="twitter", description="Follow or unfollow an X account", aliases=["x"])
+    @describe(handle="X handle (without @)", action="add or remove")
     @has_permissions(manage_guild=True)
     async def socials_twitter(self, ctx: Context, action: str, *, handle: str) -> None:
         handle = handle.strip("@")
@@ -608,10 +166,7 @@ class Socials(Package):
         else:
             await ctx.warn("Use `add` or `remove`.")
 
-    @socials.command(
-        name="twitch",
-        description="Follow or unfollow a Twitch channel",
-    )
+    @socials.command(name="twitch", description="Follow or unfollow a Twitch channel")
     @describe(channel="Twitch channel name", action="add or remove")
     @has_permissions(manage_guild=True)
     async def socials_twitch(self, ctx: Context, action: str, *, channel: str) -> None:
@@ -622,11 +177,7 @@ class Socials(Package):
         else:
             await ctx.warn("Use `add` or `remove`.")
 
-    @socials.command(
-        name="youtube",
-        description="Follow or unfollow a YouTube channel",
-        aliases=["yt"],
-    )
+    @socials.command(name="youtube", description="Follow or unfollow a YouTube channel", aliases=["yt"])
     @describe(channel="YouTube channel name or ID", action="add or remove")
     @has_permissions(manage_guild=True)
     async def socials_youtube(self, ctx: Context, action: str, *, channel: str) -> None:
@@ -637,10 +188,7 @@ class Socials(Package):
         else:
             await ctx.warn("Use `add` or `remove`.")
 
-    @socials.command(
-        name="tiktok",
-        description="Follow or unfollow a TikTok account for feed",
-    )
+    @socials.command(name="tiktok", description="Follow or unfollow a TikTok account for feed")
     @describe(username="TikTok username", action="add or remove")
     @has_permissions(manage_guild=True)
     async def socials_tiktok(self, ctx: Context, action: str, *, username: str) -> None:
@@ -652,105 +200,316 @@ class Socials(Package):
         else:
             await ctx.warn("Use `add` or `remove`.")
 
-    @socials.command(
-        name="list",
-        description="View all configured social feeds",
-        aliases=["all"],
-    )
+    @socials.command(name="instagram", description="Follow or unfollow an Instagram account for feed", aliases=["ig"])
+    @describe(username="Instagram username", action="add or remove")
+    @has_permissions(manage_guild=True)
+    async def socials_instagram(self, ctx: Context, action: str, *, username: str) -> None:
+        username = username.strip("@")
+        if action.lower() in ("add", "follow", "set"):
+            await ctx.success(f"Now tracking **@{username}** on Instagram.")
+        elif action.lower() in ("remove", "unfollow", "del", "delete"):
+            await ctx.success(f"Stopped tracking **@{username}**.")
+        else:
+            await ctx.warn("Use `add` or `remove`.")
+
+    @socials.command(name="list", description="View all configured social feeds", aliases=["all"])
     @has_permissions(manage_guild=True)
     async def socials_list(self, ctx: Context) -> None:
-        embed = c2(
-            color=color.base,
-            title="Social Feeds",
-            message="No social feeds configured.",
-        )
+        embed = c2(color=color.base, title="Social Feeds", message="No social feeds configured.")
         await ctx.send(embed=embed)
 
-    @group(
+    
+    
+    
+
+    @hybrid(
         name="instagram",
-        description="Look up Instagram profiles",
-        invoke_without_command=True,
+        description="Instagram profiles, posts, stories & highlights",
         aliases=["ig"],
+        group=True,
+        invoke_without_command=True,
+        guilds=True,
+        dms=True,
+        groupchats=True,
     )
-    async def instagram(self, ctx: Context, *, username: str = None) -> None:
+    @describe(username="Instagram username")
+    async def instagram(self, ctx: Context, *, username: str | None = None) -> None:
         if not username:
             await ctx.send_help(ctx.command)
             return
+        await ctx.invoke(self.instagram_user, username=username)
 
-        data = await self._get_instagram_info(username)
-        if not data:
-            await ctx.fail(f"Could not find Instagram user `{username}`.")
-            return
+    @instagram.command(name="user", description="Look up an Instagram profile", aliases=["profile", "p"])
+    @describe(username="Instagram username")
+    async def instagram_user(self, ctx: Context, *, username: str) -> None:
+        from .api import instagram_user as api_user, parse_instagram_user
 
-        bio = data["bio"][:200] or "No bio"
-        embed = c2(
-            color=color.base,
-            title=f"{data['full_name'] or data['username']} (@{data['username']})",
-            message=bio,
-        )
-        embed.set_thumbnail(url=data["avatar"])
-        embed.add_field(name="Followers", value=body(f"{data['followers']:,}"), inline=True)
-        embed.add_field(name="Following", value=body(f"{data['following']:,}"), inline=True)
-        embed.add_field(name="Posts", value=body(f"{data['posts']:,}"), inline=True)
-        embed.add_field(name="Private", value=body("Yes" if data["is_private"] else "No"), inline=True)
-        embed.add_field(name="Verified", value=body("Yes" if data["is_verified"] else "No"), inline=True)
-        await ctx.send(embed=embed)
+        uname = username.strip().lstrip("@")
+        async with ctx.typing():
+            raw = await api_user(uname)
+            data = parse_instagram_user(raw or {}, username=uname)
+            if not data:
+                
+                client = Instagram()
+                try:
+                    prof = await client.profile(uname)
+                finally:
+                    await client.close()
+                if not prof:
+                    await ctx.fail(f"Could not find Instagram user `{uname}`.")
+                    return
+                data = {
+                    "username": prof.get("username") or uname,
+                    "full_name": prof.get("full_name") or uname,
+                    "bio": prof.get("biography") or "",
+                    "followers": int(prof.get("follower_count") or 0),
+                    "following": int(prof.get("following_count") or 0),
+                    "posts": int(prof.get("media_count") or 0),
+                    "is_private": bool(prof.get("is_private")),
+                    "is_verified": bool(prof.get("is_verified")),
+                    "avatar": prof.get("profile_pic_url_hd") or prof.get("profile_pic_url") or "",
+                }
+            accent = await get_repost_accent_color(
+                self.bot, avatar_url=data.get("avatar") or None, platform="instagram"
+            )
+            containers = build_profile_container(
+                platform="instagram",
+                username=data["username"],
+                display_name=data.get("full_name") or data["username"],
+                bio=data.get("bio") or "",
+                avatar_url=data.get("avatar") or None,
+                followers=int(data.get("followers") or 0),
+                following=int(data.get("following") or 0),
+                posts=int(data.get("posts") or 0),
+                is_private=bool(data.get("is_private")),
+                is_verified=bool(data.get("is_verified")),
+                accent=accent,
+            )
+            await self._send_profile(ctx, containers)
 
-    @group(
-        name="tiktok",
-        description="Download and lookup TikTok content",
+    @instagram.command(name="repost", description="Repost an Instagram post or reel", aliases=["post", "reel"])
+    @describe(url="Instagram post/reel URL")
+    async def instagram_repost(self, ctx: Context, *, url: str) -> None:
+        async with ctx.typing():
+            try:
+                await self._repost(ctx, url)
+            except Exception as e:
+                await ctx.fail(f"Repost failed: {str(e)[:150]}")
+
+    @instagram.command(name="stories", description="List active Instagram stories", aliases=["story"])
+    @describe(username="Instagram username")
+    async def instagram_stories(self, ctx: Context, *, username: str) -> None:
+        from .api import instagram_user_stories
+
+        uname = username.strip().lstrip("@")
+        async with ctx.typing():
+            items = await instagram_user_stories(uname)
+            await self._media_list_preview(
+                ctx,
+                title=f"Instagram stories · @{uname}",
+                items=items,
+                empty=f"No stories for `@{uname}` (private or empty).",
+            )
+
+    @instagram.command(name="highlights", description="List Instagram highlight reels", aliases=["highlight", "hl"])
+    @describe(username="Instagram username")
+    async def instagram_highlights(self, ctx: Context, *, username: str) -> None:
+        from .api import instagram_user_highlights
+
+        uname = username.strip().lstrip("@")
+        async with ctx.typing():
+            items = await instagram_user_highlights(uname)
+            await self._media_list_preview(
+                ctx,
+                title=f"Instagram highlights · @{uname}",
+                items=items,
+                empty=f"No highlights for `@{uname}`.",
+            )
+
+    @instagram.command(name="trending", description="Instagram trending posts", aliases=["explore"])
+    @describe(count="How many posts (1-12)")
+    async def instagram_trending(self, ctx: Context, count: int = 4) -> None:
+        from .api import instagram_trending, parse_instagram_post
+
+        async with ctx.typing():
+            items = await instagram_trending(count=max(1, min(int(count or 4), 12)))
+            if not items:
+                await ctx.fail("No trending posts right now.")
+                return
+            lines = []
+            for i, raw in enumerate(items[:12], 1):
+                post = parse_instagram_post(raw) if isinstance(raw, dict) else None
+                if post:
+                    lines.append(
+                        f"**{i}.** [@{post.username}]({post.url}) — {(post.caption or '')[:70]}"
+                    )
+                else:
+                    lines.append(f"**{i}.** post")
+            await ctx.send(embed=c2(color=color.base, title="Instagram trending", message="\n".join(lines)))
+
+    @instagram.command(name="posts", description="Recent posts from an Instagram user")
+    @describe(username="Instagram username", count="How many posts (1-24)")
+    async def instagram_posts(self, ctx: Context, username: str, count: int = 12) -> None:
+        from .api import instagram_user_posts
+
+        uname = username.strip().lstrip("@")
+        async with ctx.typing():
+            items = await instagram_user_posts(uname, count=max(1, min(int(count or 12), 24)))
+            await self._media_list_preview(
+                ctx,
+                title=f"Instagram posts · @{uname}",
+                items=items,
+                empty=f"No posts for `@{uname}`.",
+            )
+
+    @instagram.group(
+        name="reposter",
+        description="Instagram auto-reposter settings",
         invoke_without_command=True,
-        aliases=["tt"],
+        aliases=["auto"],
     )
-    async def tiktok(self, ctx: Context, *, url: str = None) -> None:
-        if not url:
+    @has_permissions(manage_guild=True)
+    async def instagram_reposter(self, ctx: Context) -> None:
+        await ctx.send_help(ctx.command)
+
+    @instagram_reposter.command(name="toggle", description="Toggle Instagram link auto-repost in this guild")
+    @has_permissions(manage_guild=True)
+    async def instagram_reposter_toggle(self, ctx: Context) -> None:
+        
+        key = f"ig_reposter:{getattr(ctx.guild, 'id', 0)}"
+        cur = bool(self._filters.get(key))
+        self._filters[key] = not cur
+        state = "enabled" if not cur else "disabled"
+        await ctx.success(f"Instagram auto-reposter **{state}** for this server.")
+
+    @instagram_reposter.command(name="prefix", description="Set optional prefix required before IG links to auto-repost")
+    @describe(prefix="Prefix text, or `none` to clear")
+    @has_permissions(manage_guild=True)
+    async def instagram_reposter_prefix(self, ctx: Context, *, prefix: str = "none") -> None:
+        key = f"ig_reposter_prefix:{getattr(ctx.guild, 'id', 0)}"
+        if prefix.strip().lower() in {"none", "off", "clear", "-"}:
+            self._filters.pop(key, None)
+            await ctx.success("Instagram auto-reposter prefix cleared.")
+            return
+        self._filters[key] = prefix.strip()
+        await ctx.success(f"Instagram auto-reposter prefix set to `{prefix.strip()}`.")
+
+    
+    
+    
+
+    @hybrid(
+        name="tiktok",
+        description="TikTok profiles, posts, FYP & downloads",
+        aliases=["tt"],
+        group=True,
+        invoke_without_command=True,
+        guilds=True,
+        dms=True,
+        groupchats=True,
+    )
+    @describe(query="TikTok username or post URL")
+    async def tiktok(self, ctx: Context, *, query: str | None = None) -> None:
+        if not query:
             await ctx.send_help(ctx.command)
             return
-        await ctx.invoke(self.tiktok_download, url=url)
+        q = query.strip()
+        if is_tiktok_url(q) or "vm.tiktok" in q or "vt.tiktok" in q or "/video/" in q:
+            await ctx.invoke(self.tiktok_repost, url=q)
+            return
+        await ctx.invoke(self.tiktok_user, username=q)
 
-    @tiktok.command(
-        name="download",
-        description="Download a TikTok video by URL",
-        aliases=["dl", "get"],
-    )
+    @tiktok.command(name="user", description="Look up a TikTok profile", aliases=["profile", "p"])
+    @describe(username="TikTok username")
+    async def tiktok_user(self, ctx: Context, *, username: str) -> None:
+        from .api import parse_tiktok_user, tiktok_user as api_user
+
+        uname = username.strip().lstrip("@")
+        async with ctx.typing():
+            raw = await api_user(uname)
+            data = parse_tiktok_user(raw or {}, username=uname)
+            if not data:
+                client = TikTok()
+                try:
+                    data = await client.user(uname)
+                finally:
+                    await client.close()
+            if not data:
+                await ctx.fail(f"Could not find TikTok user `@{uname}`.")
+                return
+            
+            if "uniqueId" not in data and "username" in data:
+                data = {
+                    "uniqueId": data.get("username") or uname,
+                    "nickname": data.get("nickname") or data.get("display_name") or uname,
+                    "avatarLarger": data.get("avatar") or data.get("avatarLarger") or "",
+                    "signature": data.get("signature") or data.get("bio") or "",
+                    "followerCount": int(data.get("followerCount") or data.get("followers") or 0),
+                    "followingCount": int(data.get("followingCount") or data.get("following") or 0),
+                    "heartCount": int(data.get("heartCount") or data.get("likes") or 0),
+                    "videoCount": int(data.get("videoCount") or data.get("videos") or 0),
+                    "verified": bool(data.get("verified")),
+                    "is_private": bool(data.get("is_private") or data.get("private")),
+                }
+            avatar = data.get("avatarLarger") or data.get("avatar") or ""
+            accent = await get_repost_accent_color(
+                self.bot, avatar_url=avatar or None, platform="tiktok"
+            )
+            containers = build_profile_container(
+                platform="tiktok",
+                username=data.get("uniqueId") or uname,
+                display_name=data.get("nickname") or uname,
+                bio=data.get("signature") or "",
+                avatar_url=avatar or None,
+                followers=int(data.get("followerCount") or 0),
+                following=int(data.get("followingCount") or 0),
+                likes=int(data.get("heartCount") or 0),
+                posts=int(data.get("videoCount") or 0) or None,
+                is_private=bool(data.get("is_private") or data.get("privateAccount")),
+                is_verified=bool(data.get("verified")),
+                accent=accent,
+            )
+            await self._send_profile(ctx, containers)
+
+    @tiktok.command(name="repost", description="Repost a TikTok video or photo set", aliases=["post", "video"])
+    @describe(url="TikTok post URL")
+    async def tiktok_repost(self, ctx: Context, *, url: str) -> None:
+        async with ctx.typing():
+            try:
+                await self._repost(ctx, url)
+            except Exception as e:
+                await ctx.fail(f"Repost failed: {str(e)[:150]}")
+
+    @tiktok.command(name="download", description="Download a TikTok video by URL", aliases=["dl", "get"])
+    @describe(url="TikTok post URL")
     async def tiktok_download(self, ctx: Context, *, url: str) -> None:
         async with ctx.typing():
             try:
                 loop = asyncio.get_running_loop()
                 with tempfile.TemporaryDirectory(prefix="tiktok-") as tmp:
-                    result = await loop.run_in_executor(
-                        None, _ytdlp_download_sync, url, tmp
-                    )
+                    result = await loop.run_in_executor(None, _ytdlp_download_sync, url, tmp)
                     if not result or not result.get("filepath"):
                         await ctx.fail("Could not download that TikTok video.")
                         return
-
                     filepath = result["filepath"]
                     if not os.path.exists(filepath):
                         await ctx.fail("Downloaded file not found.")
                         return
-
                     if os.path.getsize(filepath) > 100 * 1024 * 1024:
                         await ctx.fail("File is too large to process.")
                         return
-
                     with open(filepath, "rb") as f:
                         data = f.read()
-
                     filename = result.get("filename", "tiktok.mp4")
                     file = await self._prepare_file(ctx, data, filename=filename)
                     if file is None:
                         return
                     await ctx.send(file=file)
-
             except Exception as e:
                 await ctx.fail(f"Download failed: {str(e)[:200]}")
 
-    @tiktok.command(
-        name="info",
-        description="Get information about a TikTok video",
-        aliases=["details"],
-    )
+    @tiktok.command(name="info", description="Get information about a TikTok video", aliases=["details"])
+    @describe(url="TikTok post URL")
     async def tiktok_info(self, ctx: Context, *, url: str) -> None:
         client = TikTok()
         try:
@@ -765,22 +524,325 @@ class Socials(Package):
             f"**Likes:** `{post.like_count:,}` · **Comments:** `{post.comment_count:,}`",
             f"**Shares:** `{post.share_count:,}` · **Saves:** `{post.save_count:,}`",
         ]
+        if post.play_count:
+            lines.append(f"**Plays:** `{post.play_count:,}`")
         if post.music_title:
             lines.append(f"**Music:** {post.music_title}")
         if post.caption:
             lines.append(f"**Caption:** {post.caption[:300]}")
-        embed = c2(
-            color=color.base,
-            title="TikTok Video",
-            message="\n".join(lines),
-        )
+        embed = c2(color=color.base, title="TikTok Video", message="\n".join(lines))
         if post.avatar_url:
             embed.set_thumbnail(url=post.avatar_url)
         await ctx.send(embed=embed)
 
+    @tiktok.command(name="fyp", description="TikTok For You sample", aliases=["feed"])
+    @describe(limit="How many posts (1-12)", region="Optional 2-letter region")
+    async def tiktok_fyp(self, ctx: Context, limit: int = 8, region: str | None = None) -> None:
+        from .api import parse_tiktok_post, tiktok_fyp
+
+        async with ctx.typing():
+            items = await tiktok_fyp(limit=max(1, min(int(limit or 8), 12)), region=region)
+            if not items:
+                await ctx.fail("FYP unavailable right now.")
+                return
+            lines = []
+            for i, raw in enumerate(items[:12], 1):
+                post = parse_tiktok_post(raw) if isinstance(raw, dict) else None
+                if post:
+                    lines.append(f"**{i}.** [@{post.username}]({post.url}) — {(post.caption or '')[:70]}")
+                else:
+                    lines.append(f"**{i}.** post")
+            await ctx.send(embed=c2(color=color.base, title="TikTok FYP", message="\n".join(lines)))
+
+    @tiktok.command(name="posts", description="Recent posts from a TikTok user")
+    @describe(username="TikTok username", limit="How many (1-20)")
+    async def tiktok_posts(self, ctx: Context, username: str, limit: int = 12) -> None:
+        from .api import tiktok_user_posts
+
+        uname = username.strip().lstrip("@")
+        async with ctx.typing():
+            items = await tiktok_user_posts(uname, limit=max(1, min(int(limit or 12), 20)))
+            await self._media_list_preview(
+                ctx,
+                title=f"TikTok posts · @{uname}",
+                items=items,
+                empty=f"No posts for `@{uname}`.",
+            )
+
+    
+    
+    
+
+    @hybrid(
+        name="x",
+        description="X (Twitter) profiles and posts",
+        aliases=["twitter", "twt"],
+        group=True,
+        invoke_without_command=True,
+        guilds=True,
+        dms=True,
+        groupchats=True,
+    )
+    @describe(query="X handle or status URL")
+    async def x(self, ctx: Context, *, query: str | None = None) -> None:
+        if not query:
+            await ctx.send_help(ctx.command)
+            return
+        q = query.strip()
+        if "status/" in q or re.search(r"(?:x|twitter)\.com/.+/status/\d+", q, re.I):
+            await ctx.invoke(self.x_repost, url=q)
+            return
+        await ctx.invoke(self.x_user, username=q)
+
+    @x.command(name="user", description="Look up an X profile", aliases=["profile", "p"])
+    @describe(username="X handle")
+    async def x_user(self, ctx: Context, *, username: str) -> None:
+        from .api import parse_twitter_user, twitter_user
+
+        uname = username.strip().lstrip("@")
+        async with ctx.typing():
+            raw = await twitter_user(uname)
+            data = parse_twitter_user(raw or {}, username=uname)
+            if not data:
+                await ctx.fail(f"Could not find X user `@{uname}`.")
+                return
+            accent = await get_repost_accent_color(
+                self.bot, avatar_url=data.get("avatar") or None, platform="twitter"
+            )
+            containers = build_profile_container(
+                platform="twitter",
+                username=data["username"],
+                display_name=data.get("name") or data["username"],
+                bio=data.get("bio") or "",
+                avatar_url=data.get("avatar") or None,
+                followers=int(data.get("followers") or 0),
+                following=int(data.get("following") or 0),
+                posts=int(data.get("statuses") or 0) or None,
+                likes=int(data.get("likes") or 0) if data.get("likes") else None,
+                is_private=bool(data.get("is_private")),
+                is_verified=bool(data.get("is_verified")),
+                accent=accent,
+            )
+            await self._send_profile(ctx, containers)
+
+    @x.command(name="repost", description="Repost an X status", aliases=["post", "status", "tweet"])
+    @describe(url="X/Twitter status URL")
+    async def x_repost(self, ctx: Context, *, url: str) -> None:
+        async with ctx.typing():
+            try:
+                await self._repost(ctx, url)
+            except Exception as e:
+                await ctx.fail(f"Repost failed: {str(e)[:150]}")
+
+    @x.command(name="tweets", description="Recent tweets from a user", aliases=["posts"])
+    @describe(username="X handle")
+    async def x_tweets(self, ctx: Context, *, username: str) -> None:
+        from .api import twitter_user_tweets
+
+        uname = username.strip().lstrip("@")
+        async with ctx.typing():
+            items = await twitter_user_tweets(uname)
+            await self._media_list_preview(
+                ctx,
+                title=f"X posts · @{uname}",
+                items=items,
+                empty=f"No tweets for `@{uname}`.",
+            )
+
+    
+    
+    
+
+    @hybrid(
+        name="youtube",
+        description="YouTube channels, videos & shorts",
+        aliases=["yt"],
+        group=True,
+        invoke_without_command=True,
+        guilds=True,
+        dms=True,
+        groupchats=True,
+    )
+    @describe(query="Channel handle, video URL, or shorts URL")
+    async def youtube(self, ctx: Context, *, query: str | None = None) -> None:
+        if not query:
+            await ctx.send_help(ctx.command)
+            return
+        q = query.strip()
+        if "youtu" in q.lower() and (
+            "watch" in q or "shorts" in q or "youtu.be" in q.lower()
+        ):
+            await ctx.invoke(self.youtube_repost, url=q)
+            return
+        await ctx.invoke(self.youtube_user, channel=q)
+
+    @youtube.command(name="user", description="Look up a YouTube channel", aliases=["channel", "c", "profile"])
+    @describe(channel="Channel handle or ID")
+    async def youtube_user(self, ctx: Context, *, channel: str) -> None:
+        from .api import parse_youtube_channel, youtube_channel
+
+        ch = channel.strip().lstrip("@")
+        async with ctx.typing():
+            raw = await youtube_channel(ch)
+            data = parse_youtube_channel(raw or {}, channel=ch)
+            if not data:
+                await ctx.fail(f"Could not find YouTube channel `{ch}`.")
+                return
+            accent = await get_repost_accent_color(
+                self.bot, avatar_url=data.get("avatar") or None, platform="youtube"
+            )
+            extras = []
+            if data.get("views"):
+                extras.append(("Views", int(data["views"])))
+            if data.get("videos"):
+                extras.append(("Videos", int(data["videos"])))
+            containers = build_profile_container(
+                platform="youtube",
+                username=data.get("handle") or ch,
+                display_name=data.get("name") or ch,
+                bio=data.get("description") or "",
+                avatar_url=data.get("avatar") or None,
+                profile_url=data.get("url") or None,
+                followers=int(data.get("subscribers") or 0),
+                following=0,
+                extra_stats=extras or None,
+                is_verified=bool(data.get("is_verified")),
+                accent=accent,
+            )
+            
+            
+            await self._send_profile(ctx, containers)
+
+    @youtube.command(name="repost", description="Repost a YouTube video or short", aliases=["video", "short", "shorts"])
+    @describe(url="YouTube video or shorts URL")
+    async def youtube_repost(self, ctx: Context, *, url: str) -> None:
+        async with ctx.typing():
+            try:
+                await self._repost(ctx, url)
+            except Exception as e:
+                await ctx.fail(f"Repost failed: {str(e)[:150]}")
+
+    @youtube.command(name="shorts", description="Recent shorts from a channel")
+    @describe(channel="Channel handle", limit="How many (1-20)")
+    async def youtube_shorts(self, ctx: Context, channel: str, limit: int = 10) -> None:
+        from .api import youtube_channel_shorts
+
+        ch = channel.strip().lstrip("@")
+        async with ctx.typing():
+            items = await youtube_channel_shorts(ch, limit=max(1, min(int(limit or 10), 20)))
+            await self._media_list_preview(
+                ctx,
+                title=f"YouTube shorts · @{ch}",
+                items=items,
+                empty=f"No shorts for `{ch}`.",
+            )
+
+    @youtube.command(name="videos", description="Recent videos from a channel")
+    @describe(channel="Channel handle", limit="How many (1-20)")
+    async def youtube_videos(self, ctx: Context, channel: str, limit: int = 10) -> None:
+        from .api import youtube_channel_videos
+
+        ch = channel.strip().lstrip("@")
+        async with ctx.typing():
+            items = await youtube_channel_videos(ch, limit=max(1, min(int(limit or 10), 20)))
+            await self._media_list_preview(
+                ctx,
+                title=f"YouTube videos · @{ch}",
+                items=items,
+                empty=f"No videos for `{ch}`.",
+            )
+
+    
+    
+    
+
+    @hybrid(
+        name="telegram",
+        description="Telegram users and channels",
+        aliases=["tg"],
+        group=True,
+        invoke_without_command=True,
+        guilds=True,
+        dms=True,
+        groupchats=True,
+    )
+    @describe(username="Telegram username")
+    async def telegram(self, ctx: Context, *, username: str | None = None) -> None:
+        if not username:
+            await ctx.send_help(ctx.command)
+            return
+        await ctx.invoke(self.telegram_user, username=username)
+
+    @telegram.command(name="user", description="Look up a Telegram user", aliases=["profile", "p"])
+    @describe(username="Telegram username")
+    async def telegram_user(self, ctx: Context, *, username: str) -> None:
+        from .api import parse_telegram_user, telegram_user as api_user
+
+        uname = username.strip().lstrip("@")
+        async with ctx.typing():
+            raw = await api_user(uname)
+            data = parse_telegram_user(raw or {}, username=uname)
+            if not data:
+                await ctx.fail(f"Could not find Telegram user `@{uname}`.")
+                return
+            accent = await get_repost_accent_color(
+                self.bot, avatar_url=data.get("avatar") or None, platform="telegram"
+            )
+            extras = []
+            if data.get("is_bot"):
+                extras.append(("Bot", "yes"))
+            if data.get("is_premium"):
+                extras.append(("Premium", "yes"))
+            containers = build_profile_container(
+                platform="telegram",
+                username=data.get("username") or uname,
+                display_name=data.get("name") or uname,
+                bio=data.get("bio") or "",
+                avatar_url=data.get("avatar") or None,
+                followers=0,
+                following=0,
+                extra_stats=extras or None,
+                is_verified=bool(data.get("is_verified")),
+                accent=accent,
+            )
+            await self._send_profile(ctx, containers)
+
+    @telegram.command(name="channel", description="Look up a Telegram channel", aliases=["ch"])
+    @describe(username="Channel username")
+    async def telegram_channel(self, ctx: Context, *, username: str) -> None:
+        from .api import parse_telegram_channel, telegram_channel as api_ch
+
+        uname = username.strip().lstrip("@")
+        async with ctx.typing():
+            raw = await api_ch(uname)
+            data = parse_telegram_channel(raw or {}, username=uname)
+            if not data:
+                await ctx.fail(f"Could not find Telegram channel `@{uname}`.")
+                return
+            accent = await get_repost_accent_color(
+                self.bot, avatar_url=data.get("avatar") or None, platform="telegram"
+            )
+            containers = build_profile_container(
+                platform="telegram",
+                username=data.get("username") or uname,
+                display_name=data.get("name") or uname,
+                bio=data.get("bio") or "",
+                avatar_url=data.get("avatar") or None,
+                followers=int(data.get("members") or 0),
+                following=0,
+                is_private=bool(data.get("is_private")),
+                is_verified=bool(data.get("is_verified")),
+                accent=accent,
+            )
+            await self._send_profile(ctx, containers)
+
+    
+    
+    
+
     @hybrid(
         name="repost",
-        description="Repost TikTok posts / Instagram reels",
+        description="Repost TikTok, Instagram, X, or YouTube media",
         example=",repost https://www.instagram.com/reel/xxxx",
         guilds=True,
         dms=True,
@@ -793,6 +855,7 @@ class Socials(Package):
                 await self._repost(ctx, url)
             except Exception as e:
                 await ctx.fail(f"Repost failed: {str(e)[:150]}")
+
 
     @staticmethod
     def _is_video_url(u: str) -> bool:
@@ -948,20 +1011,31 @@ class Socials(Package):
             ext = os.path.splitext(result.get("filename") or "media.mp4")[1] or ".mp4"
             return await self._prepare_file(ctx, data, filename=f"{platform}{ext}")
 
-    async def _repost(self, ctx: Context, url: str) -> None:
-        """Fetch TikTok/Instagram media and send Components V2 repost panel.
 
-        Videos attach as a file under the panel. Multi-image sets (TikTok photos /
-        Instagram carousels) paginate like the help menu.
+    async def _repost(self, ctx: Context, url: str) -> None:
+        """Fetch social media and send Components V2 repost panel.
+
+        Supports TikTok, Instagram, X/Twitter, and YouTube (incl. shorts).
+        Videos attach as a file; multi-image sets paginate.
         """
+        from .api import (
+            fetch_twitter_social_post,
+            fetch_youtube_social_post,
+            twitter_status_id_from_url,
+            youtube_video_id_from_url,
+        )
 
         url = (url or "").strip()
         if not url:
-            await ctx.warn("Provide a TikTok or Instagram URL.")
+            await ctx.warn("Provide a TikTok, Instagram, X, or YouTube URL.")
             return
+        if not url.startswith("http"):
+            url = "https://" + url
 
         post: SocialPost | None = None
-        if is_tiktok_url(url) or "vm.tiktok" in url or "vt.tiktok" in url:
+        lu = url.lower()
+
+        if is_tiktok_url(url) or "vm.tiktok" in lu or "vt.tiktok" in lu:
             client = TikTok()
             try:
                 post = await client.post(url)
@@ -973,8 +1047,38 @@ class Socials(Package):
                 post = await client.post(url)
             finally:
                 await client.close()
+        elif "twitter.com" in lu or "x.com" in lu or twitter_status_id_from_url(url):
+            post = await fetch_twitter_social_post(url)
+        elif "youtu" in lu or youtube_video_id_from_url(url):
+            post = await fetch_youtube_social_post(url)
+            if post is None:
+                
+                upload = await self._ytdlp_file(ctx, url, "youtube")
+                if upload is None:
+                    await ctx.fail("Could not fetch that YouTube video.")
+                    return
+                view = SocialRepostView(
+                    platform="youtube",
+                    username="youtube",
+                    display_name="YouTube",
+                    caption="",
+                    media_urls=[],
+                    source_url=url,
+                    attachment_filename=upload.filename,
+                    owner_id=ctx.author.id,
+                    play_count=0,
+                )
+                try:
+                    upload.fp.seek(0)
+                except Exception:
+                    pass
+                msg = await ctx.send(file=upload, view=view)
+                view.message = msg
+                return
         else:
-            await ctx.warn("Only **TikTok** and **Instagram** links are supported.")
+            await ctx.warn(
+                "Supported links: **TikTok**, **Instagram**, **X**, **YouTube** (videos/shorts)."
+            )
             return
 
         if post is None:
@@ -984,12 +1088,14 @@ class Socials(Package):
         media_urls = [u for u in (post.media_urls or []) if u]
         video_urls = [u for u in media_urls if self._is_video_url(u)]
         image_urls = [u for u in media_urls if not self._is_video_url(u)]
-        
+
         wants_video = bool(
             video_urls
             or post.is_video
             or "/reel" in (post.url or url).lower()
             or "/video/" in (post.url or url).lower()
+            or "/shorts/" in (post.url or url).lower()
+            or (post.platform or "").lower() == "youtube"
         )
         limit = self._upload_limit(ctx)
         thumb = None
@@ -1004,16 +1110,15 @@ class Socials(Package):
 
         upload: discord.File | None = None
         display_media = image_urls[:]
-        
+
         post_id = post.raw.get("id") if isinstance(post.raw, dict) else None
-        if post_id and str(post_id).isdigit():
+        if post_id and str(post_id).replace("-", "").isalnum():
             video_filename = f"{post_id}.mp4"
         else:
             video_filename = f"{(post.platform or 'video').lower()}.mp4"
 
         if wants_video:
             data: bytes | None = None
-            
             candidates = list(dict.fromkeys([*video_urls, *media_urls]))
             for media_url in candidates:
                 blob = await self._download_bytes(
@@ -1023,19 +1128,22 @@ class Socials(Package):
                     data = blob
                     break
             if data:
-                upload = await self._prepare_file(
-                    ctx, data, filename=video_filename
-                )
+                upload = await self._prepare_file(ctx, data, filename=video_filename)
                 if upload is None:
                     return
             else:
                 upload = await self._ytdlp_file(ctx, post.url or url, post.platform)
                 if upload is None:
-                    await ctx.fail("Could not download that video.")
-                    return
-            
-            display_media = []
-            video_filename = upload.filename or video_filename
+                    
+                    if image_urls:
+                        display_media = image_urls
+                        wants_video = False
+                    else:
+                        await ctx.fail("Could not download that video.")
+                        return
+            if upload is not None:
+                display_media = []
+                video_filename = upload.filename or video_filename
         elif image_urls:
             display_media = image_urls
         else:
@@ -1060,6 +1168,7 @@ class Socials(Package):
             comment_count=post.comment_count,
             save_count=post.save_count,
             share_count=post.share_count,
+            play_count=getattr(post, "play_count", 0) or 0,
             region=post.region,
             music_title=post.music_title,
             music_author=post.music_author,
@@ -1070,8 +1179,6 @@ class Socials(Package):
 
         send_kw: dict = {"view": view}
         if upload is not None:
-            
-            
             try:
                 upload.fp.seek(0)
             except Exception:
@@ -1101,7 +1208,6 @@ class Socials(Package):
                         "Video is too large for Discord even after compression."
                     )
                     return
-                
                 view.attachment_filename = name
                 view._rebuild()
                 msg = await ctx.send(
@@ -1111,6 +1217,7 @@ class Socials(Package):
                 view.message = msg
             else:
                 raise
+
 
     async def _generate_quote_image(
         self,

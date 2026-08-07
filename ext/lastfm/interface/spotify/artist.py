@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from typing import Any as Client  # optional
+from typing import Any as Client  
 from pydantic import BaseModel
 
 

@@ -1,4 +1,4 @@
-"""Instagram post client — vain.rest primary (docs: https://vain.rest/docs)."""
+"""Instagram post client — scl.guilt.bot primary, vain.rest fallback."""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ import re
 from typing import Optional
 from urllib.parse import urlparse
 
-from core.api import VainRest
 from .models import SocialPost
 
 log = logging.getLogger("vain.social.instagram")
@@ -38,14 +37,16 @@ def shortcode_from_url(url: str) -> str | None:
 
 
 class Instagram:
-    """Instagram post client powered by vain.rest (``/instagram/media`` etc.)."""
+    """Instagram post client powered by scl.guilt.bot (vain.rest fallback)."""
 
     def __init__(self, session=None) -> None:
         self._session = session
         self._api = None
 
-    def _client(self) -> VainRest:
+    def _client(self):
         if self._api is None:
+            from core.api import VainRest
+
             self._api = VainRest()
         return self._api
 
@@ -53,7 +54,7 @@ class Instagram:
         self._api = None
 
     async def post(self, url: str) -> Optional[SocialPost]:
-        """Primary: GET /instagram/media?url=… (vain.rest)."""
+        """Fetch post: guilt first, then vain.rest."""
         code = shortcode_from_url(url)
         if not code:
             return None
@@ -64,6 +65,32 @@ class Instagram:
             else f"https://www.instagram.com/p/{code}/"
         )
 
+        
+        try:
+            from ext.social.api import fetch_instagram_social_post, instagram_user, parse_instagram_user
+
+            post = await fetch_instagram_social_post(clean)
+            if post is not None:
+                if (not post.avatar_url or post.display_name == post.username) and post.username not in (
+                    "",
+                    "unknown",
+                ):
+                    try:
+                        raw_user = await instagram_user(post.username)
+                        parsed = parse_instagram_user(raw_user or {}, username=post.username)
+                        if parsed:
+                            if parsed.get("avatar") and not post.avatar_url:
+                                post.avatar_url = parsed["avatar"]
+                            if parsed.get("full_name"):
+                                post.display_name = parsed["full_name"]
+                    except Exception as exc:
+                        log.debug("ig profile enrich failed: %s", exc)
+                if post.media_urls or post.caption:
+                    return post
+        except Exception as exc:
+            log.debug("social-api ig post failed: %s", exc)
+
+        
         try:
             resolved = await self._client().instagram_resolve_media(clean)
         except Exception as exc:
@@ -81,7 +108,6 @@ class Instagram:
         avatar_url: str | None = None
         display = author
 
-        
         if author and author != "unknown":
             try:
                 user = await self._client().instagram_get_user(author)
@@ -111,6 +137,29 @@ class Instagram:
         username = (username or "").strip().lstrip("@")
         if not username:
             return None
+
+        try:
+            from ext.social.api import instagram_user, parse_instagram_user
+
+            raw = await instagram_user(username)
+            parsed = parse_instagram_user(raw or {}, username=username)
+            if parsed:
+                return {
+                    "pk": parsed.get("pk") or "",
+                    "username": parsed["username"],
+                    "full_name": parsed["full_name"],
+                    "is_private": parsed["is_private"],
+                    "is_verified": parsed["is_verified"],
+                    "media_count": parsed["posts"],
+                    "follower_count": parsed["followers"],
+                    "following_count": parsed["following"],
+                    "biography": parsed["bio"],
+                    "profile_pic_url": parsed["avatar"],
+                    "profile_pic_url_hd": parsed["avatar"],
+                }
+        except Exception as exc:
+            log.debug("social-api ig profile failed: %s", exc)
+
         try:
             user = await self._client().instagram_get_user(username)
             return {

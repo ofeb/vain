@@ -14,7 +14,7 @@ class Interface(View):
 
     @classmethod
     def from_message(cls, message: Message, /, **kwargs: object) -> "Interface":
-        # Accept and ignore View.from_message kwargs (e.g. timeout) for compatibility.
+        
         _ = kwargs
         view = cls()
         for component in message.components:

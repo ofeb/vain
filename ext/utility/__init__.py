@@ -4,11 +4,12 @@ import datetime
 from typing import TYPE_CHECKING
 
 import discord
+from discord import ui
 from discord.ext import commands
 
 from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe
-from core.discord.views.paginate import PaginateView
+from core.discord.views.paginate import PaginateView, layout_from_items, send_pages
 from config import color, emojis
 from core.managers.permissions import has_permissions
 from core.tools.snipe import SnipeError
@@ -18,48 +19,6 @@ from core.discord.views.embed import c2, reply_embed
 if TYPE_CHECKING:
     from .events import SnipeEvents
 
-class SnipePaginateView(PaginateView):
-    def __init__(self, ctx: Context, pages: list[discord.Embed], snipe_type: str, snipe_store):
-        super().__init__(ctx, pages)
-        self.snipe_type = snipe_type
-        self.snipe_store = snipe_store
-        remove_btn = discord.ui.Button(
-            style=discord.ButtonStyle.danger,
-            emoji=discord.PartialEmoji.from_str(emojis.remove),
-        )
-        remove_btn.callback = self._remove_cb
-        self.add_item(remove_btn)
-
-    async def _remove_cb(self, interaction: discord.Interaction) -> None:
-        try:
-            await self.snipe_store.delete_entry(self.ctx.channel, self.snipe_type, self.index + 1)
-            del self.pages[self.index]
-        except SnipeError:
-            await interaction.response.send_message(
-                embed=reply_embed(
-                    color=color.warn,
-                    message=f"{emojis.warn} No snipe found at this index.",
-                ),
-                ephemeral=True,
-            )
-            return
-
-        if not self.pages:
-            await interaction.response.edit_message(
-                embed=reply_embed(
-                    color=color.base,
-                    message=f"{emojis.approve} All snipes cleared for {self.ctx.channel.mention}",
-                ),
-                view=None,
-            )
-            self.stop()
-            return
-
-        self.index = min(self.index, len(self.pages) - 1)
-        payload = self._current()
-        if not self.pages:
-            payload["view"] = None
-        await interaction.response.edit_message(**payload)
 
 def _format_when(ts_raw) -> tuple[str, datetime.datetime]:
     if isinstance(ts_raw, (int, float)):
@@ -68,54 +27,127 @@ def _format_when(ts_raw) -> tuple[str, datetime.datetime]:
         ts = ts_raw if ts_raw.tzinfo else ts_raw.replace(tzinfo=datetime.timezone.utc)
     else:
         ts = datetime.datetime.now(tz=datetime.timezone.utc)
-    absolute = discord.utils.format_dt(ts, style="F")
     relative = discord.utils.format_dt(ts, style="R")
-    return f"{absolute} · {relative}", ts
+    return relative, ts
 
-def _build_snipe_embed(snipe: dict, index: int, total: int, snipe_type: str) -> discord.Embed:
-    content = snipe.get("content") or ""
-    if content and any(
-        x in content.lower()
+
+def _filter_invites(content: str) -> str:
+    text = content or ""
+    lower = text.lower()
+    if any(
+        x in lower
         for x in ("discord.gg/", "discord.com/invite", "discordapp.com/invite")
     ):
-        content = "*invite link filtered*"
+        return "*invite link filtered*"
+    return text
 
+
+def _author_name(snipe: dict) -> str:
     author = snipe.get("author") or {}
-    label = {
-        "snipe": "Deleted",
-        "editsnipe": "Edited",
-        "reactionsnipe": "Reaction",
-    }.get(snipe_type, "Deleted")
-    when, ts = _format_when(snipe.get("timestamp", 0))
+    return str(author.get("name") or "unknown")
 
-    
-    parts = []
-    if content:
-        parts.append(content)
+
+def _author_mention(snipe: dict) -> str:
+    author = snipe.get("author") or {}
+    uid = author.get("id")
+    if uid:
+        return f"<@{uid}>"
+    return f"**{_author_name(snipe)}**"
+
+
+def _snipe_accent(bot=None) -> int:
+    """Bot base embed color for snipe C2 containers."""
+    if bot is not None:
+        value = getattr(bot, "color", None)
+        if value is not None:
+            try:
+                return int(value)
+            except Exception:
+                pass
+    return int(color.base)
+
+
+def _build_delete_container(snipe: dict, *, accent: int | None = None) -> ui.Container:
+    """Deleted message — header + divider + body (inspired, not 1:1)."""
+    container = ui.Container(accent_colour=accent if accent is not None else color.base)
+    name = _author_name(snipe)
+    when, _ = _format_when(snipe.get("timestamp", 0))
+    container.add_item(ui.TextDisplay(f"**{name}** - {when}"))
+    container.add_item(ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small))
+
+    body = _filter_invites(snipe.get("content") or "")
+    if body.strip():
+        container.add_item(ui.TextDisplay(body[:3900]))
     else:
-        parts.append("*no text content*")
-    parts.append("")
-    parts.append(f"**{label}:**\n{when}")
+        container.add_item(ui.TextDisplay("-# no text"))
 
-    embed = discord.Embed(
-        color=color.base,
-        description="\n".join(parts),
-        timestamp=ts,
+    media = (snipe.get("attachments") or snipe.get("stickers") or [None])[0]
+    if media:
+        try:
+            container.add_item(ui.MediaGallery(discord.MediaGalleryItem(str(media))))
+        except Exception:
+            container.add_item(ui.TextDisplay(f"[attachment]({media})"))
+    return container
+
+
+def _build_edit_container(snipe: dict, *, accent: int | None = None) -> ui.Container:
+    """Edited message card — before/after blocks."""
+    container = ui.Container(accent_colour=accent if accent is not None else color.base)
+    name = _author_name(snipe)
+    when, _ = _format_when(snipe.get("timestamp", 0))
+    jump = snipe.get("jump_url") or snipe.get("message") or ""
+
+    container.add_item(ui.TextDisplay(f"Edited message by **{name}**"))
+    if jump:
+        container.add_item(ui.TextDisplay(f"[Jump to message]({jump}) - {when}"))
+    else:
+        container.add_item(ui.TextDisplay(f"-# {when}"))
+
+    container.add_item(ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small))
+
+    before = _filter_invites(snipe.get("content") or "") or "-# empty"
+    after_raw = snipe.get("after")
+    after = (
+        _filter_invites(str(after_raw))
+        if after_raw is not None
+        else "-# unknown"
     )
-    embed.set_footer(text=f"page {index} of {total}")
+    container.add_item(ui.TextDisplay(f"**Before**\n{before[:1800]}"))
+    container.add_item(ui.TextDisplay(f"**After**\n{after[:1800]}"))
+    return container
 
-    if author:
-        embed.set_author(
-            name=author.get("name") or "Unknown",
-            icon_url=author.get("avatar") or None,
-        )
 
-    if att := snipe.get("attachments"):
-        embed.set_image(url=att[0])
-    elif sticks := snipe.get("stickers"):
-        embed.set_image(url=sticks[0])
+def _build_reaction_container(snipe: dict, *, accent: int | None = None) -> ui.Container:
+    """Reaction removal — compact quoted line with jump link."""
+    container = ui.Container(accent_colour=accent if accent is not None else color.base)
+    jump = snipe.get("message") or ""
+    reaction = snipe.get("reaction", "")
+    if isinstance(reaction, str) and reaction.startswith("https://cdn.discordapp.com/"):
+        reaction_display = f"[emoji]({reaction})"
+    else:
+        reaction_display = str(reaction) if reaction else "?"
 
-    return embed
+    who = _author_mention(snipe)
+    if jump:
+        msg_bit = f"[`this message`]({jump})"
+    else:
+        msg_bit = "`a message`"
+
+    container.add_item(
+        ui.TextDisplay(f"> -# {who} reacted with {reaction_display} to {msg_bit}")
+    )
+    return container
+
+
+def _build_snipe_container(
+    snipe: dict, kind: str, *, accent: int | None = None
+) -> ui.Container:
+    if kind == "editsnipe":
+        return _build_edit_container(snipe, accent=accent)
+    if kind == "reactionsnipe":
+        return _build_reaction_container(snipe, accent=accent)
+    return _build_delete_container(snipe, accent=accent)
+
 
 async def _send_snipe_pages(
     ctx: Context,
@@ -131,17 +163,35 @@ async def _send_snipe_pages(
         await ctx.fail(empty_message)
         return
 
-    if total == 1:
-        await ctx.send(embed=_build_snipe_embed(entry, 1, 1, kind))
-        return
-
     prefix = store._prefix(kind)
     key = store._key(prefix, ctx.channel.id)
     data = list(store.data.get(key, []))
-    pages = [_build_snipe_embed(e, i, total, kind) for i, e in enumerate(data, start=1)]
-    view = SnipePaginateView(ctx, pages, kind, store)
-    view.index = min(max(index - 1, 0), len(pages) - 1)
+    accent = _snipe_accent(ctx.bot)
+    pages = [_build_snipe_container(e, kind, accent=accent) for e in data]
+    start = min(max(index - 1, 0), max(len(pages) - 1, 0))
+
+    async def on_delete_page(page_index: int) -> None:
+        try:
+            await store.delete_entry(ctx.channel, kind, page_index + 1)
+        except SnipeError:
+            pass
+
+    if total == 1:
+        
+        layout = layout_from_items([pages[0]])
+        await ctx.send(view=layout)
+        return
+
+    view = PaginateView(
+        ctx,
+        pages,
+        start_index=start,
+        show_goto=True,
+        on_delete_page=on_delete_page,
+        search_title=f"Search for a page (1-{len(pages)})..",
+    )
     await view.start()
+
 
 class Snipe(commands.Cog):
     """Message sniping system."""
@@ -196,45 +246,12 @@ class Snipe(commands.Cog):
         """Retrieve a deleted reaction from a message."""
         if index < 1:
             index = 1
-        try:
-            snipe_data = await self.bot.snipes.get_entry(
-                ctx.channel, type="reactionsnipe", index=index
-            )
-        except SnipeError:
-            return await ctx.fail(
-                f"There are no removed reactions for {ctx.channel.mention}"
-            )
-
-        snipe = snipe_data[0]
-        total = snipe_data[1]
-        reaction = snipe.get("reaction", "")
-        if isinstance(reaction, str) and reaction.startswith("https://cdn.discordapp.com/"):
-            reaction_display = f"[emoji]({reaction})"
-        else:
-            reaction_display = str(reaction)
-
-        when, _ = _format_when(snipe.get("timestamp", 0))
-        author_name = (snipe.get("author") or {}).get("name", "Unknown")
-        jump = snipe.get("message") or ""
-
-        desc = (
-            f"**{author_name}** removed {reaction_display}\n\n"
-            f"**Removed:**\n{when}"
+        await _send_snipe_pages(
+            ctx,
+            kind="reactionsnipe",
+            index=index,
+            empty_message=f"There are no removed reactions for {ctx.channel.mention}",
         )
-        if jump:
-            desc += f"\n-# [jump to message]({jump})"
-
-        embed = discord.Embed(
-            color=color.base,
-            description=desc,
-        )
-        author = snipe.get("author") or {}
-        if author.get("avatar"):
-            embed.set_author(name=author_name, icon_url=author.get("avatar"))
-        else:
-            embed.set_author(name=author_name)
-        embed.set_footer(text=f"page {index} of {total}")
-        await ctx.send(embed=embed)
 
     @hybrid(
         name="clearsnipe",
@@ -280,7 +297,9 @@ class Snipe(commands.Cog):
         )
 
         if not data:
-            await ctx.fail(f"No reactions logged for the [message]({message.jump_url}) provided")
+            await ctx.fail(
+                f"No reactions logged for the [message]({message.jump_url}) provided"
+            )
             return
 
         rows = []
@@ -288,12 +307,15 @@ class Snipe(commands.Cog):
             user = self.bot.get_user(record.user_id)
             if not user:
                 user = await self.bot.fetch_user(record.user_id)
-            rows.append(f"`{i}` **{str(user)}** added {str(record.reaction)} {discord.utils.format_dt(record.ts, style='R')}")
+            rows.append(
+                f"`{i}` **{str(user)}** added {str(record.reaction)} "
+                f"{discord.utils.format_dt(record.ts, style='R')}"
+            )
 
         embed = c2(
             color=color.base,
             title="Reaction history",
-            message="",
+            message="\n".join(rows[:20]),
             timestamp=False,
         )
         embed.url = message.jump_url
@@ -301,8 +323,7 @@ class Snipe(commands.Cog):
             name=str(ctx.author.display_name),
             icon_url=ctx.author.display_avatar.url,
         )
-
-        await ctx.send(embed=embed)
+        await ctx.paginate(embed, rows)
 
     @hybrid(
         name="removesnipe",
@@ -319,10 +340,11 @@ class Snipe(commands.Cog):
         except SnipeError:
             await ctx.fail(f"No snipe found at index `{index}`")
 
+
 async def setup(bot: commands.Bot):
     from .events import SnipeEvents
 
     await bot.add_cog(Snipe(bot))
-    
+
     if bot.get_cog("SnipeEvents") is None:
         await bot.add_cog(SnipeEvents(bot))

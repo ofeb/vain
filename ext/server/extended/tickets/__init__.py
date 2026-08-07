@@ -52,7 +52,7 @@ STYLE_MAP = {
     "red": ButtonStyle.danger,
 }
 
-# Juno default open message (used when guild has no custom open_embed / button template)
+
 DEFAULT_OPEN_TITLE = "Ticket Created"
 DEFAULT_OPEN_DESCRIPTION = "Staff will be with you shortly"
 
@@ -110,7 +110,7 @@ class Tickets(Package):
         except Exception as exc:
             logger.warning("Could not fully sync ticket schema: %s", exc)
 
-    # ── inactivity ──────────────────────────────────────────────────────────
+    
 
     @loop(minutes=5)
     async def _inactivity_loop(self) -> None:
@@ -146,7 +146,7 @@ class Tickets(Package):
                 to_delete,
             )
 
-    # ── open ticket interaction ─────────────────────────────────────────────
+    
 
     @Cog.listener("on_interaction")
     async def on_ticket_interaction(self, interaction: Interaction) -> None:
@@ -309,7 +309,7 @@ class Tickets(Package):
         template = (record.get("template") or settings.open_embed or "").strip()
 
         if template:
-            # Prefer embed script parser when it looks like embed code
+            
             try:
                 await self.bot.send_embed(
                     channel,
@@ -322,7 +322,7 @@ class Tickets(Package):
                 )
                 return
             except TypeError:
-                # older send_embed may not accept view=
+                
                 try:
                     msg = await self.bot.send_embed(
                         channel,
@@ -338,7 +338,7 @@ class Tickets(Package):
                 except Exception:
                     pass
             except Exception:
-                # Fall through to plain replace
+                
                 content = (
                     template.replace("{user.mention}", user.mention)
                     .replace("{user.name}", getattr(user, "display_name", str(user)))
@@ -350,7 +350,7 @@ class Tickets(Package):
                     await channel.send(content=content, view=view)
                 return
 
-        # Juno default
+        
         embed = Embed(
             title=DEFAULT_OPEN_TITLE,
             description=DEFAULT_OPEN_DESCRIPTION,
@@ -367,7 +367,7 @@ class Tickets(Package):
             "DELETE FROM tickets.open WHERE channel_id = $1", channel.id
         )
 
-    # ── command group ───────────────────────────────────────────────────────
+    
 
     @group(
         name="ticket",
@@ -380,7 +380,7 @@ class Tickets(Package):
     async def ticket(self, ctx) -> Message:
         return await ctx.send_help()
 
-    # panel
+    
 
     @ticket.command(
         name="panel",
@@ -403,7 +403,7 @@ class Tickets(Package):
             f"`{ctx.clean_prefix}tc button` / `{ctx.clean_prefix}tc dropdown`."
         )
 
-    # inactivity
+    
 
     @ticket.group(
         name="inactivity",
@@ -460,7 +460,7 @@ class Tickets(Package):
         await settings.upsert(inactivity_timeout=None)
         return await ctx.success("Inactivity auto-close has been disabled.")
 
-    # limit
+    
 
     @ticket.command(
         name="limit",
@@ -481,7 +481,7 @@ class Tickets(Package):
             return await ctx.success("Open-ticket limit removed.")
         return await ctx.success(f"Maximum open tickets set to **{amount}**.")
 
-    # staff
+    
 
     @ticket.group(
         name="staff",
@@ -519,7 +519,7 @@ class Tickets(Package):
         )
         return await ctx.send(embed=embed)
 
-    # blacklist
+    
 
     @ticket.group(
         name="blacklist",
@@ -563,7 +563,7 @@ class Tickets(Package):
         )
         return await ctx.send(embed=embed)
 
-    # transcripts destinations
+    
 
     @ticket.group(
         name="transcript",
@@ -646,7 +646,7 @@ class Tickets(Package):
         )
         return await ctx.send(embed=embed)
 
-    # ── opening (embed + buttons) ───────────────────────────────────────────
+    
 
     @ticket.group(
         name="opening",
@@ -712,7 +712,7 @@ class Tickets(Package):
     async def ticket_opening_embed_test(self, ctx):
         settings = await Settings.fetch(self.bot, ctx.guild)
         fake_record: dict = {"template": settings.open_embed}
-        # Build a temporary control view for preview only
+        
         control = TicketControlView(self)
 
         class _I:
@@ -758,7 +758,7 @@ class Tickets(Package):
         category: Optional[CategoryChannel] = None,
         topic: Optional[str] = None,
     ):
-        # No args → modal UX
+        
         if identifier is None and label is None:
             return await ctx.send(
                 embed=Embed(
@@ -773,7 +773,7 @@ class Tickets(Package):
                 view=_OpeningAddTrigger(self),
             )
 
-        # identifier-only with no label → treat identifier as label
+        
         if label is None:
             label = identifier
             identifier = None
@@ -838,7 +838,7 @@ class Tickets(Package):
     async def ticket_opening_button_remove(self, ctx, identifier: str):
         return await self.ticket_button_remove(ctx, identifier)
 
-    # legacy button group (still works; opening button is preferred)
+    
 
     @ticket.group(
         name="button",
@@ -930,7 +930,7 @@ class Tickets(Package):
     async def ticket_button_emoji(self, ctx):
         return await self.ticket_opening_button_emoji(ctx)
 
-    # dropdown
+    
 
     @ticket.group(
         name="dropdown",
@@ -1057,7 +1057,7 @@ class Tickets(Package):
             await self._refresh_panel(message, ctx.guild.id)
         return await ctx.success(f"Dropdown `{identifier}` removed.")
 
-    # in-ticket staff commands
+    
 
     @ticket.command(
         name="add",
@@ -1156,7 +1156,7 @@ class Tickets(Package):
                 reason=f"Closed by {ctx.author} ({ctx.author.id})"
             )
 
-    # ── interaction button handlers ─────────────────────────────────────────
+    
 
     async def _fetch_open_ticket(self, channel_id: int) -> Optional[dict]:
         row = await self.db.fetchrow(
@@ -1320,7 +1320,7 @@ class Tickets(Package):
                 description="Manual transcript export (ticket still open).",
             )
 
-    # ── opening button helpers (modal / select callbacks) ───────────────────
+    
 
     async def _add_opening_button(
         self,
@@ -1349,7 +1349,7 @@ class Tickets(Package):
         else:
             identifier = identifier.lower().replace(" ", "-")[:32]
 
-        # default open emoji from config when none provided
+        
         if not emoji:
             emoji = getattr(emojis.ticket, "open", None) or None
 
@@ -1477,10 +1477,10 @@ class Tickets(Package):
 
     async def _refresh_panel(self, message: Message, guild_id: int) -> None:
         """Rebuild the panel view from the database and edit the message."""
-        # Prefer preserving non-ticket components from the live message
+        
         try:
             interface = Interface.from_message(message)
-            # Drop existing ticket.create controls; keep anything else
+            
             for child in list(interface.children):
                 cid = getattr(child, "custom_id", None) or ""
                 if str(cid).startswith("ticket.create"):

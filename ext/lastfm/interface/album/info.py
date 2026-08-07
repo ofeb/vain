@@ -15,8 +15,8 @@ class ImageItem(BaseModel):
         return self.text
 
 
-# class FieldAttr(BaseModel):
-#     rank: int
+
+
 
 
 class Artist(BaseModel):

@@ -73,7 +73,7 @@ class StarboardEvents(commands.Cog):
         if member is None or member.bot:
             return
 
-        # ignore lists
+        
         if starboard.ignore_entries:
             raw = starboard.ignore_entries
             try:

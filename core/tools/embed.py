@@ -311,11 +311,11 @@ def discohook_to_script(text: str) -> str | None:
     else:
         return None
 
-    # Prefer first embed as classic embed script; plain content alone is fine
+    
     if embeds:
         script = _discohook_embed_to_script(embeds[0])
         if content:
-            # content goes as message content field
+            
             if script.startswith("{embed}"):
                 script = script.replace("{embed}", f"{{embed}}$v{{content: {content}}}", 1)
             else:
@@ -338,7 +338,7 @@ def maybe_wrap_embed_script(text: str) -> str:
     stripped = str(text).strip()
     if not stripped:
         return stripped
-    # Discohook JSON first (before is_embed_script treats "{" as embed)
+    
     converted = discohook_to_script(stripped)
     if converted is not None:
         return converted

@@ -111,10 +111,10 @@ def _discover_extensions(ext_dir: str = "ext") -> tuple[str, ...]:
             if child.name.startswith("_") or child.name in _SKIP_DIRS:
                 continue
             if child.is_dir():
-                # Package with setup → load it
+                
                 if (child / "__init__.py").exists() and _has_setup_entry(child):
                     _add_package(child)
-                    # Also load sibling cogs under package/extended/*/
+                    
                     ext_dir = child / "extended"
                     if ext_dir.is_dir():
                         for sub in sorted(ext_dir.iterdir()):
@@ -127,9 +127,9 @@ def _discover_extensions(ext_dir: str = "ext") -> tuple[str, ...]:
                             ):
                                 _add_package(sub)
                     continue
-                # Category / namespace folder → scan one level deeper
+                
                 _scan_dir(child, depth=depth + 1)
-                # Also allow loose .py modules inside category folders
+                
                 for py_file in sorted(child.glob("*.py")):
                     _add_module(py_file)
                 continue
@@ -137,7 +137,7 @@ def _discover_extensions(ext_dir: str = "ext") -> tuple[str, ...]:
                 _add_module(child)
 
     _scan_dir(base)
-    # de-dupe while preserving order
+    
     seen: set[str] = set()
     unique: list[str] = []
     for item in found:
@@ -385,9 +385,14 @@ class Vain(commands.AutoShardedBot):
             "extensions finished (%.1fs)", time.perf_counter() - extensions_started
         )
 
-        from ext.server.extended.pagination.views import register_stored_paginations
+        from ext.server.extended.pagination.views import (
+            PaginationReactionListener,
+            register_stored_paginations,
+        )
 
         await register_stored_paginations(self)
+        if self.get_cog("PaginationReactionListener") is None:
+            await self.add_cog(PaginationReactionListener(self))
 
         log.info("syncing global slash commands")
         sync_started = time.perf_counter()
@@ -497,10 +502,9 @@ class Vain(commands.AutoShardedBot):
             if rows:
                 allowed = {r.role_id for r in rows}
                 if not (allowed & {r.id for r in ctx.author.roles}):
-                    mentions = ", ".join(
-                        r.mention for rid in allowed if (r := ctx.guild.get_role(rid))
+                    raise commands.CheckFailure(
+                        f"**you are not allowed** to use the `{cmd_name}`\n\ncommand"
                     )
-                    raise commands.CheckFailure(f"only {mentions} can use `{cmd_name}`")
 
         if ctx.command is not None and ctx.guild is not None and not is_help:
             cmd_name = ctx.command.qualified_name.lower()
@@ -510,19 +514,92 @@ class Vain(commands.AutoShardedBot):
                 lambda: self._load_disabled_commands(ctx.guild.id, cmd_name),
             )
             if disabled:
-                blocked = self._blocked_ids(
+                object_ids = (
                     disabled.get("object_ids")
                     if isinstance(disabled, dict)
                     else getattr(disabled, "object_ids", None)
                 )
+                object_types = (
+                    disabled.get("object_types")
+                    if isinstance(disabled, dict)
+                    else getattr(disabled, "object_types", None)
+                ) or []
+                blocked = self._blocked_ids(object_ids)
+                types = list(object_types)
+
+                
+                role_ids = {
+                    oid
+                    for oid, kind in zip(blocked, types)
+                    if str(kind).lower() == "role"
+                }
+                if role_ids:
+                    member_roles = {r.id for r in getattr(ctx.author, "roles", []) or []}
+                    if not (role_ids & member_roles):
+                        raise commands.CheckFailure(
+                            f"**you are not allowed** to use the `{cmd_name}`\n\ncommand"
+                        )
+
                 if ctx.author.id in blocked:
                     raise commands.CheckFailure(
-                        "this command has been **disabled** for you!"
+                        f"**you are not allowed** to use the `{cmd_name}`\n\ncommand"
                     )
+
+                
+                guild_blocked = any(
+                    str(kind).lower() in {"guild", "server"}
+                    for kind in types
+                ) or (ctx.guild.id in blocked)
+                if guild_blocked:
+                    raise commands.CheckFailure(
+                        f"> The `{cmd_name}` command is **disabled in this server**"
+                    )
+
                 if ctx.channel.id in blocked:
                     raise commands.CheckFailure(
-                        "this command has been **disabled** in this channel!"
+                        f"> The `{cmd_name}` command is **disabled in this channel**"
                     )
+
+            
+            cog = getattr(ctx.command, "cog", None)
+            module_name = None
+            if cog is not None:
+                module_name = (
+                    getattr(cog, "qualified_name", None)
+                    or cog.__class__.__name__
+                )
+                module_name = str(module_name).lower().replace(" ", "")
+            if module_name:
+                mod_row = await self.remember(
+                    f"disabledmod:{ctx.guild.id}:{module_name}",
+                    _ACCESS_TTL,
+                    lambda mn=module_name: self.db.fetchrow(
+                        """
+                        SELECT channel_ids FROM disabled_modules
+                        WHERE guild_id = $1 AND lower(module) = lower($2)
+                        """,
+                        ctx.guild.id,
+                        mn,
+                    ),
+                )
+                if mod_row:
+                    channel_ids = list(
+                        getattr(mod_row, "channel_ids", None)
+                        or (mod_row.get("channel_ids") if hasattr(mod_row, "get") else [])
+                        or []
+                    )
+                    label = module_name
+                    all_text = [c.id for c in ctx.guild.text_channels]
+                    if channel_ids and all(
+                        cid in set(int(x) for x in channel_ids) for cid in all_text
+                    ):
+                        raise commands.CheckFailure(
+                            f"> The `{label}` module is **disabled in this server**"
+                        )
+                    if ctx.channel.id in {int(x) for x in channel_ids}:
+                        raise commands.CheckFailure(
+                            f"> The `{label}` module is **disabled in this channel**"
+                        )
 
         if ctx.guild is not None:
             me = ctx.channel.permissions_for(ctx.guild.me)

@@ -888,7 +888,7 @@ class Lastfm(LastfmEvents, Package):
             rendered = await self._render_lastfm_script(
                 ctx, username, track, member, script
             )
-            # Allow embed / container / plain via Script.data
+            
             try:
                 sc = embed_builder.Script(rendered, user=target_user)
                 payload = await sc.data(
@@ -911,7 +911,7 @@ class Lastfm(LastfmEvents, Package):
             emb = payload.get("embed")
             if emb is not None and (emb.color is None or emb.color.value == 0):
                 emb.color = color
-            # send
+            
             send_kw = dict(payload)
             if np_reply and ctx.message and not ctx.interaction:
                 send_kw["reference"] = ctx.message.to_reference(
@@ -936,7 +936,7 @@ class Lastfm(LastfmEvents, Package):
         if image:
             art_url = image[-1].get("#text") or image[0].get("#text")
 
-        # Aesthetic default: clean description layout, no bulky fields
+        
         if mode == "minimal":
             desc = (
                 f"**[{track_name}]({url})**\n"
@@ -967,7 +967,7 @@ class Lastfm(LastfmEvents, Package):
             icon_url=target_user.display_avatar.url,
         )
         if art_url:
-            # large cover art for default aesthetic
+            
             if mode == "default":
                 embed.set_image(url=art_url)
             else:
@@ -3135,7 +3135,7 @@ class Lastfm(LastfmEvents, Package):
                 return
             await ctx.success("Cleared your **custom Last.fm embed**.")
             return
-        # Accept {embed}, {container}, discohook JSON, or plain text
+        
         normalized = embed_builder.maybe_wrap_embed_script(script)
         await self.bot.db.set_lastfm_custom_embed(
             ctx.author.id, normalized, np_reply=np_reply_flag

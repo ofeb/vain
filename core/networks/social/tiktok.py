@@ -92,12 +92,26 @@ class TikTok:
     async def post(self, url: str) -> Optional[SocialPost]:
         """Fetch full post metadata + media URL for a TikTok share link.
 
-        Order: **vain.rest** → tikwm / yt-dlp / tikmate (parallel fallbacks).
+        Order: **social API** → vain.rest → tikwm / yt-dlp / tikmate.
         """
         resolved = await self.resolve_url(url)
         ids = self.parse_ids(resolved)
 
         
+        try:
+            from ext.social.api import fetch_tiktok_social_post
+
+            api_post = await fetch_tiktok_social_post(resolved or url)
+            if api_post and (api_post.media_urls or api_post.caption):
+                if ids.get("username") and api_post.username == "unknown":
+                    api_post.username = ids["username"] or api_post.username
+                if not api_post.display_name:
+                    api_post.display_name = api_post.username
+                api_post.url = api_post.url or resolved
+                return api_post
+        except Exception as exc:
+            log.debug("social-api tiktok post failed: %s", exc)
+
         primary = await self._from_vain_rest(resolved, ids)
         if primary and primary.media_urls:
             if ids.get("username") and primary.username == "unknown":
@@ -107,7 +121,6 @@ class TikTok:
             primary.url = primary.url or resolved
             return primary
 
-        
         tasks = [
             asyncio.create_task(self._from_tikwm(resolved)),
             asyncio.create_task(self._from_ytdlp(resolved)),
@@ -236,10 +249,33 @@ class TikTok:
         return post.raw if post and post.raw else (post.__dict__ if post else None)
 
     async def user(self, username: str) -> Optional[dict]:
-        """Best-effort public profile lookup — vain.rest first."""
+        """Best-effort public profile lookup — social API first, then vain.rest."""
         username = (username or "").strip().lstrip("@")
         if not username:
             return None
+
+        try:
+            from ext.social.api import parse_tiktok_user, tiktok_user
+
+            raw = await tiktok_user(username)
+            parsed = parse_tiktok_user(raw or {}, username=username)
+            if parsed:
+                return {
+                    "uniqueId": parsed["uniqueId"],
+                    "nickname": parsed["nickname"],
+                    "avatarLarger": parsed.get("avatarLarger") or "",
+                    "avatar": parsed.get("avatarLarger") or "",
+                    "signature": parsed.get("signature") or "",
+                    "followerCount": parsed.get("followerCount") or 0,
+                    "followingCount": parsed.get("followingCount") or 0,
+                    "heartCount": parsed.get("heartCount") or 0,
+                    "videoCount": parsed.get("videoCount") or 0,
+                    "verified": parsed.get("verified") or False,
+                    "id": parsed.get("id") or "",
+                    "source": "social-api",
+                }
+        except Exception as exc:
+            log.debug("social-api tiktok profile failed: %s", exc)
 
         try:
             from core.api import VainRest

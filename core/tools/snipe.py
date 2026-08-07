@@ -48,21 +48,33 @@ class Snipe:
     async def add_entry(
         self,
         kind: str,
-        message: typing.Union[discord.Message, tuple],
+        message: typing.Union[discord.Message, tuple, dict],
+        *,
+        after_content: str | None = None,
+        jump_url: str | None = None,
     ) -> dict:
         """Store a snipe entry for a channel."""
         kind_l = (kind or "snipe").lower()
         now_ts = datetime.datetime.utcnow().timestamp()
 
+        if isinstance(message, dict):
+            entry = dict(message)
+            entry.setdefault("timestamp", now_ts)
+            channel_id = int(entry.pop("channel_id"))
+            self._store(self._key(self._prefix(kind_l), channel_id), entry)
+            return entry
+
         if isinstance(message, discord.Message):
             author = message.author
             entry = {
-                
                 "timestamp": now_ts,
                 "created_at": message.created_at.timestamp()
                 if message.created_at
                 else now_ts,
                 "content": message.content or "",
+                "after": after_content if after_content is not None else None,
+                "jump_url": jump_url or getattr(message, "jump_url", "") or "",
+                "message_id": message.id,
                 "embeds": [
                     e.to_dict()
                     for e in message.embeds[:8]
@@ -76,7 +88,9 @@ class Snipe:
                     for e in message.embeds
                     if e.type == "image" and (e.thumbnail or e.image)
                 ],
-                "stickers": [str(s.url) for s in message.stickers if getattr(s, "url", None)],
+                "stickers": [
+                    str(s.url) for s in message.stickers if getattr(s, "url", None)
+                ],
                 "author": {
                     "id": author.id,
                     "name": getattr(author, "display_name", None) or author.name,
@@ -88,26 +102,28 @@ class Snipe:
             self._store(self._key(self._prefix(kind_l), message.channel.id), entry)
             return entry
 
-        
-        msg, reaction, user = message
-        channel = getattr(msg, "channel", None)
-        channel_id = getattr(channel, "id", None) if channel is not None else None
-        if channel_id is None:
-            return {}
-        entry = {
-            "timestamp": now_ts,
-            "message": getattr(msg, "jump_url", ""),
-            "reaction": str(reaction),
-            "author": {
-                "id": user.id,
-                "name": getattr(user, "display_name", None) or user.name,
-                "avatar": str(user.display_avatar.url)
-                if getattr(user, "display_avatar", None)
-                else "",
-            },
-        }
-        self._store(self._key("rs-", channel_id), entry)
-        return entry
+        if isinstance(message, tuple) and len(message) >= 3:
+            msg, reaction, user = message[0], message[1], message[2]
+            channel = getattr(msg, "channel", None)
+            channel_id = getattr(channel, "id", None) if channel is not None else None
+            if channel_id is None:
+                return {}
+            entry = {
+                "timestamp": now_ts,
+                "message": jump_url or getattr(msg, "jump_url", ""),
+                "reaction": str(reaction),
+                "author": {
+                    "id": user.id,
+                    "name": getattr(user, "display_name", None) or user.name,
+                    "avatar": str(user.display_avatar.url)
+                    if getattr(user, "display_avatar", None)
+                    else "",
+                },
+            }
+            self._store(self._key("rs-", channel_id), entry)
+            return entry
+
+        return {}
 
     async def add_reaction_history(
         self, payload: discord.RawReactionActionEvent

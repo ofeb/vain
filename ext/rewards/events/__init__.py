@@ -67,7 +67,7 @@ class LevelingEvents:
         content = (message.content or "").lstrip()
         if not content:
             return False
-        # Mentions as prefix: "<@bot> help"
+        
         me = getattr(message.guild, "me", None) or getattr(self.bot, "user", None)
         if me is not None and (
             content.startswith(f"<@{me.id}>") or content.startswith(f"<@!{me.id}>")
@@ -114,7 +114,7 @@ class LevelingEvents:
                     ("{guild}", guild.name),
                 ]
             )
-        # Longest placeholder first
+        
         for key, value in sorted(pairs, key=lambda kv: len(kv[0]), reverse=True):
             text = text.replace(key, value)
         return text
@@ -157,7 +157,7 @@ class LevelingEvents:
             if dest is None:
                 dest = guild.get_channel(cid)
             if dest is None:
-                # Cache miss / uncached thread — try API
+                
                 try:
                     fetched = await self.bot.fetch_channel(cid)
                     fetched_guild = getattr(fetched, "guild", None)
@@ -250,7 +250,7 @@ class LevelingEvents:
 
         lock = self._xp_locks[user_id]
         async with lock:
-            # Re-check cooldown under lock so concurrent messages don't double-grant
+            
             now = time.monotonic()
             last = self._xp_cd.get(key, 0.0)
             if now - last < XP_COOLDOWN:
@@ -381,7 +381,7 @@ class LevelingEvents:
                     pass
             return
 
-        # Highest reward only — drop lower reward roles when present
+        
         by_level: dict[int, list[discord.Role]] = {}
         for r in rewards:
             role = guild.get_role(int(r["role_id"]))
