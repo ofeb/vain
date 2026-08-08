@@ -240,6 +240,7 @@ class LevelingEvents:
         ):
             channel_ctx = dest
 
+        mentions = discord.AllowedMentions(users=True, roles=False, everyone=False)
         try:
             return await self.bot.send_embed(
                 dest,
@@ -248,11 +249,14 @@ class LevelingEvents:
                 user=member,
                 guild=guild,
                 channel=channel_ctx,
+                allowed_mentions=mentions,
             )
         except Exception as first:
             log.debug("send_embed level-up failed: %s", first, exc_info=True)
             try:
-                return await dest.send(content=text[:2000])
+                return await dest.send(
+                    content=text[:2000], allowed_mentions=mentions
+                )
             except Exception as second:
                 log.warning(
                     "level-up message failed dest=%r guild=%s: %s",

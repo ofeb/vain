@@ -259,18 +259,20 @@ class PaginationCommands(Package):
         emoji: str = None,
     ):
         """pagination edit reaction <message> [left|right] [emoji|default]"""
-        row = await self.db.fetchrow(
-            """
-            SELECT pages, current_page, left_emoji, right_emoji
-            FROM pagination
-            WHERE guild_id = $1 AND channel_id = $2 AND message_id = $3
-            """,
-            ctx.guild.id,
-            message.channel.id,
-            message.id,
-        )
+        try:
+            row = await self.db.fetchrow(
+                """
+                SELECT pages, current_page, left_emoji, right_emoji
+                FROM pagination
+                WHERE guild_id = $1 AND channel_id = $2 AND message_id = $3
+                """,
+                ctx.guild.id,
+                message.channel.id,
+                message.id,
+            )
+        except Exception:
+            row = None
         if not row:
-            
             row = await self.db.fetchrow(
                 """
                 SELECT pages, current_page

@@ -207,6 +207,20 @@ CREATE TABLE IF NOT EXISTS monitor.seen (
     PRIMARY KEY (platform, item_id)
 );
 
+CREATE TABLE IF NOT EXISTS pagination (
+    guild_id BIGINT NOT NULL,
+    channel_id BIGINT NOT NULL,
+    message_id BIGINT NOT NULL,
+    creator_id BIGINT,
+    pages TEXT[],
+    current_page INT DEFAULT 0,
+    left_emoji TEXT,
+    right_emoji TEXT,
+    PRIMARY KEY (guild_id, channel_id, message_id)
+);
+ALTER TABLE pagination ADD COLUMN IF NOT EXISTS left_emoji TEXT;
+ALTER TABLE pagination ADD COLUMN IF NOT EXISTS right_emoji TEXT;
+
 CREATE INDEX IF NOT EXISTS idx_monitor_tiktok_guild ON monitor.tiktok(guild_id);
 CREATE INDEX IF NOT EXISTS idx_monitor_instagram_guild ON monitor.instagram(guild_id);
 CREATE INDEX IF NOT EXISTS idx_monitor_twitter_guild ON monitor.twitter(guild_id);

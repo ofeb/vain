@@ -20,18 +20,21 @@ async def _stored_reaction_emojis(
     channel_id: int,
     message_id: int,
 ) -> tuple[str, str]:
-    row = await bot.db.fetchrow(
-        """
-        SELECT left_emoji, right_emoji
-        FROM pagination
-        WHERE guild_id = $1 AND channel_id = $2 AND message_id = $3
-        """,
-        guild_id,
-        channel_id,
-        message_id,
-    )
     left = emojis.paginator.left
     right = emojis.paginator.right
+    try:
+        row = await bot.db.fetchrow(
+            """
+            SELECT left_emoji, right_emoji
+            FROM pagination
+            WHERE guild_id = $1 AND channel_id = $2 AND message_id = $3
+            """,
+            guild_id,
+            channel_id,
+            message_id,
+        )
+    except Exception:
+        row = None
     if row:
         with suppress(Exception):
             left = row["left_emoji"] or left
@@ -167,11 +170,12 @@ async def register_stored_paginations(bot: Vain) -> None:
         if not pages:
             continue
         index = min(max(int(row["current_page"] or 0), 0), len(pages) - 1)
-        script = Script(pages[index], bot.user)
-        payload = await script.data(True)
-        payload["view"] = None
-        with suppress(discord.HTTPException):
-            await message.edit(**payload)
+        if message.components:
+            script = Script(pages[index], bot.user)
+            payload = await script.data(True)
+            payload["view"] = None
+            with suppress(discord.HTTPException):
+                await message.edit(**payload)
         left, right = await _stored_reaction_emojis(
             bot,
             guild_id=int(row["guild_id"]),
@@ -231,7 +235,7 @@ class PaginationReactionListener(commands.Cog):
 
         row = await self.bot.db.fetchrow(
             """
-            SELECT pages, current_page, left_emoji, right_emoji
+            SELECT pages, current_page
             FROM pagination
             WHERE guild_id = $1 AND channel_id = $2 AND message_id = $3
             """,
@@ -240,28 +244,17 @@ class PaginationReactionListener(commands.Cog):
             payload.message_id,
         )
         if not row:
-            row = await self.bot.db.fetchrow(
-                """
-                SELECT pages, current_page
-                FROM pagination
-                WHERE guild_id = $1 AND channel_id = $2 AND message_id = $3
-                """,
-                payload.guild_id,
-                payload.channel_id,
-                payload.message_id,
-            )
-        if not row:
             return
         pages = list(row["pages"] or [])
         if len(pages) <= 1:
             return
 
-        left = emojis.paginator.left
-        right = emojis.paginator.right
-        with suppress(Exception):
-            left = row["left_emoji"] or left
-        with suppress(Exception):
-            right = row["right_emoji"] or right
+        left, right = await _stored_reaction_emojis(
+            self.bot,
+            guild_id=payload.guild_id,
+            channel_id=payload.channel_id,
+            message_id=payload.message_id,
+        )
 
         direction = self._match_side(payload.emoji, left, right)
         if direction is None:
