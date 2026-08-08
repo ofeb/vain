@@ -263,6 +263,9 @@ class LevelingEvents:
                 )
                 if not cfg:
                     return
+                # Soft-disabled rows keep config/XP but grant no XP.
+                if "enabled" in cfg and not bool(cfg.get("enabled")):
+                    return
 
                 ignored_users = self._parse_list(cfg.get("users"))
                 ignored_roles = self._parse_list(cfg.get("roles"))

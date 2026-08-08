@@ -172,15 +172,30 @@ class PaginationCommands(Package):
         )
         return await ctx.success("page updated")
 
-    @pagination.command(name="reset", aliases=["clear"], description="Remove every existing pagination in guild")
+    @pagination.command(
+        name="reset",
+        aliases=["clear"],
+        description="Remove every existing pagination in guild. This cannot be undone.",
+    )
     @has_permissions(administrator=True)
     async def pagination_reset(self, ctx):
         """wipe server paginators"""
+        from core.discord.views.confirm import ConfirmView
+
+        view = ConfirmView(ctx)
+        ok = await view.prompt(
+            "Clear **all** paginators for this server? "
+            "This action **cannot be undone**."
+        )
+        if not ok:
+            return await ctx.warn("Pagination reset **cancelled**")
         await self.db.execute(
             """DELETE FROM pagination WHERE guild_id = $1""",
             ctx.guild.id,
         )
-        return await ctx.success("all paginators cleared")
+        return await ctx.success(
+            "All paginators cleared. This action cannot be undone."
+        )
 
     @pagination.command(name="list", aliases=["ls", "show", "view"], description="View all existing pagination embeds")
     @has_permissions(manage_messages=True)

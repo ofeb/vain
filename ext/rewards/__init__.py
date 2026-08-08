@@ -394,6 +394,11 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
                             await self.db.execute(s)
             except Exception:
                 pass
+        if getattr(self.db, "pool", None) is not None:
+            with contextlib.suppress(Exception):
+                await self.db.execute(
+                    "ALTER TABLE leveling ADD COLUMN IF NOT EXISTS enabled BOOLEAN NOT NULL DEFAULT TRUE"
+                )
 
     def _calc_target(self, level: int) -> int:
         return max(int((100 * level + 1) ** 0.9), 50)
@@ -410,9 +415,17 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         )
         return dict(row) if row else None
 
+    def _cfg_is_enabled(self, cfg: dict | None) -> bool:
+        if not cfg:
+            return False
+        # Missing column on old rows treats as enabled when the row exists.
+        if "enabled" not in cfg:
+            return True
+        return bool(cfg.get("enabled"))
+
     async def _require_enabled(self, ctx) -> dict | None:
         cfg = await self._get_cfg(ctx.guild.id)
-        if not cfg:
+        if not cfg or not self._cfg_is_enabled(cfg):
             await ctx.warn(
                 f"Leveling is not enabled — use `{ctx.clean_prefix}leveling enable`"
             )
@@ -506,19 +519,27 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
 
     @leveling.command(
         name="enable",
+        aliases=["on"],
         description="Turn the leveling system on for this server",
         example=",leveling enable",
     )
     @has_permissions(manage_guild=True)
     async def leveling_enable(self, ctx):
-        if await self.db.fetchrow(
-            "SELECT 1 FROM leveling WHERE guild_id = $1", ctx.guild.id
-        ):
+        cfg = await self._get_cfg(ctx.guild.id)
+        if cfg and self._cfg_is_enabled(cfg):
             return await ctx.warn("Leveling is already **enabled**")
+        if cfg:
+            await self.db.execute(
+                "UPDATE leveling SET enabled = TRUE WHERE guild_id = $1",
+                ctx.guild.id,
+            )
+            return await ctx.success(
+                "Leveling system is now **enabled** — previous configuration and XP kept"
+            )
         await self.db.execute(
             """INSERT INTO leveling
-               (guild_id, message, multiplier, booster, stack, command)
-               VALUES ($1, $2, 1.0, 1.0, false, false)""",
+               (guild_id, message, multiplier, booster, stack, command, enabled)
+               VALUES ($1, $2, 1.0, 1.0, false, false, true)""",
             ctx.guild.id,
             "Nice work {user.mention} — you reached **Level {level}**!",
         )
@@ -526,35 +547,30 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
 
     @leveling.command(
         name="disable",
-        description="Disable leveling and wipe all XP (confirmation required)",
+        aliases=["off"],
+        description="Disable leveling without deleting configuration or XP",
         example=",leveling disable",
     )
     @has_permissions(manage_guild=True)
     async def leveling_disable(self, ctx):
-        if not await self._require_enabled(ctx):
-            return
-        view = ConfirmView(ctx.author.id)
-        msg = await ctx.send(
-            embed=Embed(
-                color=0xED4245,
-                description=(
-                    f"{ctx.author.mention}: Disable leveling and **wipe all XP**?"
-                ),
-            ),
-            view=view,
-        )
-        await view.wait()
-        with contextlib.suppress(Exception):
-            await msg.edit(view=None)
-        if not view.value:
-            return await ctx.warn("Leveling disable **cancelled**")
+        cfg = await self._get_cfg(ctx.guild.id)
+        if not cfg:
+            return await ctx.warn(
+                f"Leveling is not configured — use `{ctx.clean_prefix}leveling enable`"
+            )
+        if not self._cfg_is_enabled(cfg):
+            return await ctx.warn(
+                f"Leveling is already **disabled** — "
+                f"use `{ctx.clean_prefix}leveling enable` to turn it back on"
+            )
         await self.db.execute(
-            "DELETE FROM leveling WHERE guild_id = $1", ctx.guild.id
+            "UPDATE leveling SET enabled = FALSE WHERE guild_id = $1",
+            ctx.guild.id,
         )
-        await self.db.execute(
-            "DELETE FROM level_user WHERE guild_id = $1", ctx.guild.id
+        return await ctx.success(
+            "Leveling **disabled** — configuration and XP kept. "
+            f"Use `{ctx.clean_prefix}leveling wipe` to delete everything"
         )
-        return await ctx.success("Leveling disabled and statistics wiped")
 
     @leveling.command(
         name="channel",
@@ -772,20 +788,25 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
 
     @leveling.command(
         name="reset",
-        description="Reset a member's XP (or everyone with no member)",
+        description="Reset a member's XP (or everyone with no member). This cannot be undone.",
         example=",leveling reset @user",
         usage="[member]",
     )
     @has_permissions(manage_guild=True)
     async def leveling_reset(self, ctx, member: Member = None):
-        if not await self._require_enabled(ctx):
-            return
+        if not await self._get_cfg(ctx.guild.id):
+            return await ctx.warn(
+                f"Leveling is not configured — use `{ctx.clean_prefix}leveling enable`"
+            )
         view = ConfirmView(ctx.author.id)
         target = member.mention if member else "**everyone**"
         msg = await ctx.send(
             embed=Embed(
                 color=0xED4245,
-                description=f"{ctx.author.mention}: Reset level stats for {target}?",
+                description=(
+                    f"{ctx.author.mention}: Reset level stats for {target}? "
+                    "This action **cannot be undone**."
+                ),
             ),
             view=view,
         )
@@ -798,13 +819,66 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
             await self.db.execute(
                 "DELETE FROM level_user WHERE guild_id = $1", ctx.guild.id
             )
-            return await ctx.success("Reset level stats for **all** members")
+            return await ctx.success(
+                "Reset level stats for **all** members. This action cannot be undone."
+            )
         await self.db.execute(
             "DELETE FROM level_user WHERE guild_id = $1 AND user_id = $2",
             ctx.guild.id,
             member.id,
         )
-        return await ctx.success(f"Reset level stats for {member.mention}")
+        return await ctx.success(
+            f"Reset level stats for {member.mention}. This action cannot be undone."
+        )
+
+    @leveling.command(
+        name="wipe",
+        aliases=["deleteconfig", "purge"],
+        description="Delete leveling configuration and all XP. This cannot be undone.",
+        example=",leveling wipe",
+    )
+    @has_permissions(manage_guild=True)
+    async def leveling_wipe(self, ctx):
+        cfg = await self._get_cfg(ctx.guild.id)
+        if not cfg:
+            return await ctx.warn("Leveling is not configured for this server")
+        view = ConfirmView(ctx.author.id)
+        msg = await ctx.send(
+            embed=Embed(
+                color=0xED4245,
+                description=(
+                    f"{ctx.author.mention}: Delete **all** leveling configuration and XP? "
+                    "This action **cannot be undone**."
+                ),
+            ),
+            view=view,
+        )
+        await view.wait()
+        with contextlib.suppress(Exception):
+            await msg.edit(view=None)
+        if not view.value:
+            return await ctx.warn("Leveling wipe **cancelled**")
+        await self.db.execute(
+            "DELETE FROM leveling WHERE guild_id = $1", ctx.guild.id
+        )
+        await self.db.execute(
+            "DELETE FROM level_user WHERE guild_id = $1", ctx.guild.id
+        )
+        with contextlib.suppress(Exception):
+            await self.db.execute(
+                "DELETE FROM level_rewards WHERE guild_id = $1", ctx.guild.id
+            )
+        with contextlib.suppress(Exception):
+            await self.db.execute(
+                "DELETE FROM level_multiplier WHERE guild_id = $1", ctx.guild.id
+            )
+        with contextlib.suppress(Exception):
+            await self.db.execute(
+                "DELETE FROM level_multiplier_voice WHERE guild_id = $1", ctx.guild.id
+            )
+        return await ctx.success(
+            "Leveling configuration and XP **deleted**. This action cannot be undone."
+        )
 
     @leveling.command(
         name="leaderboard",

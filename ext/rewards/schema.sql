@@ -13,8 +13,11 @@ CREATE TABLE IF NOT EXISTS leveling (
     command         BOOLEAN DEFAULT FALSE,
     roles           TEXT DEFAULT '[]',
     channels        TEXT DEFAULT '[]',
-    users           TEXT DEFAULT '[]'
+    users           TEXT DEFAULT '[]',
+    enabled         BOOLEAN NOT NULL DEFAULT TRUE
 );
+
+ALTER TABLE leveling ADD COLUMN IF NOT EXISTS enabled BOOLEAN NOT NULL DEFAULT TRUE;
 
 CREATE TABLE IF NOT EXISTS level_user (
     guild_id    BIGINT NOT NULL,

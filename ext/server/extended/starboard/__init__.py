@@ -113,11 +113,22 @@ class Starboard(Package):
     @starboard.command(name="clear", aliases=["reset", "purge"])
     @has_permissions(manage_guild=True)
     async def starboard_clear(self, ctx: Context) -> Message:
-        """Remove every starboard in this server."""
+        """Remove every starboard in this server. This cannot be undone."""
+        from core.discord.views.confirm import ConfirmView
+
+        view = ConfirmView(ctx)
+        ok = await view.prompt(
+            "Remove **every** starboard in this server? "
+            "This action **cannot be undone**."
+        )
+        if not ok:
+            return await ctx.warn("Starboard clear **cancelled**")
         count = await Config.clear(self.bot, ctx.guild)
         if count <= 0:
             return await ctx.warn("No starboards exist for this server")
-        return await ctx.success(f"Removed **{count}** starboard(s)")
+        return await ctx.success(
+            f"Removed **{count}** starboard(s). This action cannot be undone."
+        )
 
     @starboard.command(name="list", aliases=["ls", "show", "view", "config"])
     @has_permissions(manage_guild=True)

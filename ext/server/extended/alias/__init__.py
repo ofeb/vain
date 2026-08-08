@@ -116,12 +116,23 @@ class AliasCommands(Package):
     @alias.command(
         name="reset",
         aliases=["clear"],
-        description="Reset every alias for all commands",
+        description="Reset every alias for all commands. This cannot be undone.",
     )
     @has_permissions(manage_guild=True)
     async def alias_reset(self, ctx):
         """wipe all aliases"""
+        from core.discord.views.confirm import ConfirmView
+
+        view = ConfirmView(ctx)
+        ok = await view.prompt(
+            "Clear **all** command aliases for this server? "
+            "This action **cannot be undone**."
+        )
+        if not ok:
+            return await ctx.warn("Alias reset **cancelled**")
         await self.db.execute(
             """DELETE FROM aliases WHERE guild_id = $1""", ctx.guild.id
         )
-        return await ctx.success("all aliases cleared")
+        return await ctx.success(
+            "All aliases cleared. This action cannot be undone."
+        )

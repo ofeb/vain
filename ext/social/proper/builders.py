@@ -217,7 +217,7 @@ class _BaseBuilder:
 
     def __init__(self, author_id: int, accent: int | None = None):
         self.author_id = author_id
-        
+
         self.data: dict[str, str] = {
             "content": "",
             "title": "",
@@ -238,12 +238,124 @@ class _BaseBuilder:
         self.fields: list[dict[str, str]] = []
         self.buttons: list[dict[str, str]] = []
         self.images: list[str] = []
+        # Ordered container pieces so dividers can sit between title/description/etc.
+        # Each entry: {"type": "title"|"description"|"author"|"footer"|"field"|"divider"|"images"|"thumbnail", ...}
+        self.blocks: list[dict[str, Any]] = []
         self.message: discord.Message | None = None
         self.preview_message: discord.Message | None = None
         self._stopped = False
         self._fallback_accent = (
             int(accent) & 0xFFFFFF if accent is not None else 0x2B2D31
         )
+
+    def _block_indices(self, typ: str) -> list[int]:
+        return [i for i, b in enumerate(self.blocks) if b.get("type") == typ]
+
+    def _upsert_singleton_block(self, typ: str, payload: dict[str, Any]) -> None:
+        """Update the first block of ``typ`` in place, or append a new one."""
+        for i, b in enumerate(self.blocks):
+            if b.get("type") == typ:
+                self.blocks[i] = {"type": typ, **payload}
+                return
+        self.blocks.append({"type": typ, **payload})
+
+    def _remove_singleton_block(self, typ: str) -> None:
+        self.blocks = [b for b in self.blocks if b.get("type") != typ]
+
+    def _sync_block_from_data(self, key: str) -> None:
+        """Keep ordered blocks aligned when simple data fields change (container)."""
+        if self.kind != "container":
+            return
+        if key == "title":
+            val = (self.data.get("title") or "").strip()
+            if val:
+                self._upsert_singleton_block("title", {"value": val})
+            else:
+                self._remove_singleton_block("title")
+        elif key == "description":
+            val = (self.data.get("description") or "").strip()
+            if val:
+                self._upsert_singleton_block("description", {"value": val})
+            else:
+                self._remove_singleton_block("description")
+        elif key == "author":
+            if (self.data.get("author") or "").strip():
+                self._upsert_singleton_block(
+                    "author",
+                    {
+                        "name": self.data.get("author") or "",
+                        "icon": self.data.get("author_icon") or "",
+                        "url": self.data.get("author_url") or "",
+                    },
+                )
+            else:
+                self._remove_singleton_block("author")
+        elif key == "footer":
+            if (self.data.get("footer") or "").strip() or self._truthy("footer_timestamp"):
+                self._upsert_singleton_block(
+                    "footer",
+                    {
+                        "text": self.data.get("footer") or "",
+                        "timestamp": "1" if self._truthy("footer_timestamp") else "0",
+                    },
+                )
+            else:
+                self._remove_singleton_block("footer")
+        elif key == "thumbnail":
+            val = (self.data.get("thumbnail") or "").strip()
+            if val:
+                self._upsert_singleton_block("thumbnail", {"value": val})
+            else:
+                self._remove_singleton_block("thumbnail")
+        elif key == "images":
+            if self.images:
+                self._upsert_singleton_block(
+                    "images",
+                    {"urls": list(self.images[:_MAX_IMAGES])},
+                )
+            else:
+                self._remove_singleton_block("images")
+
+    def _insert_divider_block(
+        self,
+        *,
+        spacing: str = "1",
+        after: str = "",
+    ) -> None:
+        block = {"type": "divider", "spacing": spacing if spacing in {"1", "2"} else "1"}
+        after = (after or "").strip().lower()
+        if not after or after in {"end", "bottom", "last", "buttons"}:
+            self.blocks.append(block)
+            return
+        # Map aliases
+        target = after
+        if target in {"desc", "description"}:
+            target = "description"
+        elif target in {"img", "image", "gallery", "images"}:
+            target = "images"
+        elif target in {"field", "fields"}:
+            target = "field"
+        elif target in {"thumb", "thumbnail"}:
+            target = "thumbnail"
+        # Insert after the last matching block of that type
+        idx = None
+        for i, b in enumerate(self.blocks):
+            if b.get("type") == target:
+                idx = i
+        if idx is None:
+            self.blocks.append(block)
+        else:
+            self.blocks.insert(idx + 1, block)
+
+    def _pop_last_divider(self) -> bool:
+        for i in range(len(self.blocks) - 1, -1, -1):
+            if self.blocks[i].get("type") == "divider":
+                self.blocks.pop(i)
+                return True
+        return False
+
+    def _divider_count(self) -> int:
+        return sum(1 for b in self.blocks if b.get("type") == "divider")
 
 
 
@@ -336,11 +448,20 @@ class _BaseBuilder:
                 )
         else:
             n_img = len(self.images)
+            head_n = min(n_img, 5)
+            tail_n = max(0, n_img - 5)
             opts.append(
                 discord.SelectOption(
-                    label=f"Images ({n_img}/{_MAX_IMAGES})",
-                    value="images",
-                    description="Up to 10 gallery images (ordered)",
+                    label=f"Images 1–5 ({head_n}/5)",
+                    value="images_1_5",
+                    description="Gallery images 1 through 5",
+                )
+            )
+            opts.append(
+                discord.SelectOption(
+                    label=f"Images 6–10 ({tail_n}/5)",
+                    value="images_6_10",
+                    description="Gallery images 6 through 10",
                 )
             )
             if n_img:
@@ -350,13 +471,22 @@ class _BaseBuilder:
                         value="images_clear",
                     )
                 )
+            n_div = self._divider_count()
             opts.append(
                 discord.SelectOption(
-                    label="Divider / Separator",
+                    label=f"Add Divider / Separator ({n_div})",
                     value="divider",
-                    description="visible + spacing 1 or 2",
+                    description="spacing · optional after: title/description/…",
                 )
             )
+            if n_div:
+                opts.append(
+                    discord.SelectOption(
+                        label="Remove previous divider",
+                        value="divider_remove",
+                        description="Drop the last divider in order",
+                    )
+                )
             opts.append(
                 discord.SelectOption(
                     label=f"Add Field-like block ({len(self.fields)}/{_MAX_FIELDS})",
@@ -371,13 +501,6 @@ class _BaseBuilder:
                         value="field_remove",
                     )
                 )
-            opts.append(
-                discord.SelectOption(
-                    label="New Action Row break",
-                    value="actionrow",
-                    description="Start a fresh button row in the script",
-                )
-            )
 
         n = len(self.buttons)
         opts.append(
@@ -415,58 +538,124 @@ class _BaseBuilder:
         parts = [mode]
         if self.data.get("content"):
             parts.append(f"$v{{content: {self.data['content']}}}")
-        if self.data.get("title"):
-            parts.append(f"$v{{title: {self.data['title']}}}")
-        if self.data.get("description"):
-            parts.append(f"$v{{description: {self.data['description']}}}")
-        
+
         color_raw = (self.data.get("color") or "").strip().lstrip("#")
         if color_raw:
             parts.append(f"$v{{color: #{color_raw}}}")
         if self.data.get("url") and self.kind == "embed":
             parts.append(f"$v{{url: {self.data['url']}}}")
-        if self.data.get("author"):
-            named = [f"name: {self.data['author']}"]
-            if self.data.get("author_icon"):
-                named.append(f"icon: {self.data['author_icon']}")
-            if self.data.get("author_url"):
-                named.append(f"url: {self.data['author_url']}")
-            parts.append(f"$v{{author: {' && '.join(named)}}}")
-        if self.data.get("footer"):
-            named = [f"text: {self.data['footer']}"]
-            if self.data.get("footer_icon"):
-                named.append(f"icon: {self.data['footer_icon']}")
-            parts.append(f"$v{{footer: {' && '.join(named)}}}")
-        if self._truthy("footer_timestamp") and self.kind == "embed":
-            parts.append("$v{timestamp}")
-        if self.kind == "container" and self._truthy("divider"):
-            spacing = (self.data.get("divider_spacing") or "1").strip() or "1"
-            parts.append(f"$v{{separator: divider: true && spacing: {spacing}}}")
-        if self.kind == "embed" and self.data.get("image"):
-            parts.append(f"$v{{image: {self.data['image']}}}")
-        if self.kind == "container" and self.images:
-            joined = " && ".join(u for u in self.images[:_MAX_IMAGES] if u)
-            if joined:
-                parts.append(f"$v{{image: {joined}}}")
-        elif self.kind == "container" and self.data.get("image"):
-            parts.append(f"$v{{image: {self.data['image']}}}")
-        if self.data.get("thumbnail"):
-            parts.append(f"$v{{thumbnail: {self.data['thumbnail']}}}")
-        for field in self.fields[:_MAX_FIELDS]:
-            name = field.get("name") or "Field"
-            value = field.get("value") or "​"
-            inline = field.get("inline") == "1"
-            if self.kind == "embed":
-                named = [f"name: {name}", f"value: {value}"]
-                if inline:
-                    named.append("inline: true")
-                parts.append(f"$v{{field: {' && '.join(named)}}}")
-            else:
-                parts.append(f"$v{{field: name: {name} && value: {value}}}")
 
-        for i, btn in enumerate(self.buttons[:_MAX_BUILDER_BUTTONS]):
-            if self.kind == "container" and i > 0 and i % 5 == 0:
-                parts.append("$v{actionrow}")
+        if self.kind == "container" and self.blocks:
+            # Emit in user-chosen order so dividers stay between pieces.
+            for block in self.blocks:
+                typ = block.get("type")
+                if typ == "title":
+                    val = (block.get("value") or self.data.get("title") or "").strip()
+                    if val:
+                        parts.append(f"$v{{title: {val}}}")
+                elif typ == "description":
+                    val = (
+                        block.get("value") or self.data.get("description") or ""
+                    ).strip()
+                    if val:
+                        parts.append(f"$v{{description: {val}}}")
+                elif typ == "author":
+                    name = (block.get("name") or self.data.get("author") or "").strip()
+                    if not name:
+                        continue
+                    named = [f"name: {name}"]
+                    icon = (
+                        block.get("icon") or self.data.get("author_icon") or ""
+                    ).strip()
+                    url = (
+                        block.get("url") or self.data.get("author_url") or ""
+                    ).strip()
+                    if icon:
+                        named.append(f"icon: {icon}")
+                    if url:
+                        named.append(f"url: {url}")
+                    parts.append(f"$v{{author: {' && '.join(named)}}}")
+                elif typ == "footer":
+                    text = (
+                        block.get("text") or self.data.get("footer") or ""
+                    ).strip()
+                    if text:
+                        named = [f"text: {text}"]
+                        if self.data.get("footer_icon"):
+                            named.append(f"icon: {self.data['footer_icon']}")
+                        parts.append(f"$v{{footer: {' && '.join(named)}}}")
+                elif typ == "thumbnail":
+                    val = (
+                        block.get("value") or self.data.get("thumbnail") or ""
+                    ).strip()
+                    if val:
+                        parts.append(f"$v{{thumbnail: {val}}}")
+                elif typ == "images":
+                    urls = list(block.get("urls") or self.images or [])[:_MAX_IMAGES]
+                    urls = [u for u in urls if u]
+                    # Two gallery tags (1–5 and 6–10) so they stay separate groups
+                    if urls[:5]:
+                        parts.append(f"$v{{image: {' && '.join(urls[:5])}}}")
+                    if urls[5:10]:
+                        parts.append(f"$v{{image: {' && '.join(urls[5:10])}}}")
+                elif typ == "field":
+                    name = block.get("name") or "Field"
+                    value = block.get("value") or "​"
+                    parts.append(f"$v{{field: name: {name} && value: {value}}}")
+                elif typ == "divider":
+                    spacing = (block.get("spacing") or "1").strip() or "1"
+                    parts.append(
+                        f"$v{{separator: divider: true && spacing: {spacing}}}"
+                    )
+        else:
+            # Embed path (and container fallback with empty blocks).
+            if self.data.get("title"):
+                parts.append(f"$v{{title: {self.data['title']}}}")
+            if self.data.get("description"):
+                parts.append(f"$v{{description: {self.data['description']}}}")
+            if self.data.get("author"):
+                named = [f"name: {self.data['author']}"]
+                if self.data.get("author_icon"):
+                    named.append(f"icon: {self.data['author_icon']}")
+                if self.data.get("author_url"):
+                    named.append(f"url: {self.data['author_url']}")
+                parts.append(f"$v{{author: {' && '.join(named)}}}")
+            if self.data.get("footer"):
+                named = [f"text: {self.data['footer']}"]
+                if self.data.get("footer_icon"):
+                    named.append(f"icon: {self.data['footer_icon']}")
+                parts.append(f"$v{{footer: {' && '.join(named)}}}")
+            if self._truthy("footer_timestamp") and self.kind == "embed":
+                parts.append("$v{timestamp}")
+            if self.kind == "embed" and self.data.get("image"):
+                parts.append(f"$v{{image: {self.data['image']}}}")
+            if self.kind == "container" and self.images:
+                urls = [u for u in self.images[:_MAX_IMAGES] if u]
+                if urls[:5]:
+                    parts.append(f"$v{{image: {' && '.join(urls[:5])}}}")
+                if urls[5:10]:
+                    parts.append(f"$v{{image: {' && '.join(urls[5:10])}}}")
+            elif self.kind == "container" and self.data.get("image"):
+                parts.append(f"$v{{image: {self.data['image']}}}")
+            if self.data.get("thumbnail"):
+                parts.append(f"$v{{thumbnail: {self.data['thumbnail']}}}")
+            for field in self.fields[:_MAX_FIELDS]:
+                name = field.get("name") or "Field"
+                value = field.get("value") or "​"
+                inline = field.get("inline") == "1"
+                if self.kind == "embed":
+                    named = [f"name: {name}", f"value: {value}"]
+                    if inline:
+                        named.append("inline: true")
+                    parts.append(f"$v{{field: {' && '.join(named)}}}")
+                else:
+                    parts.append(f"$v{{field: name: {name} && value: {value}}}")
+
+        if self.kind == "embed":
+            # Fields already emitted above for embed.
+            pass
+
+        for btn in self.buttons[:_MAX_BUILDER_BUTTONS]:
             parts.append(_button_script_chunk(btn))
         if len(parts) == 1:
             return f"{mode}$v{{description: }}"
@@ -548,87 +737,183 @@ class _BaseBuilder:
                 emb.description = "​"
         return emb
 
-    def _preview_container(self) -> ui.LayoutView:
-        layout = ui.LayoutView(timeout=None)
-        container = ui.Container()
-
-        
-        _ = self._accent()
-
-        lines: list[str] = []
-        if self.data.get("author"):
-            lines.append(f"**{self.data['author']}**")
-        if self.data.get("title"):
-            lines.append(f"## {self.data['title']}")
-        if self.data.get("description"):
-            lines.append(self.data["description"])
-        for field in self.fields[:_MAX_FIELDS]:
-            name = field.get("name") or "Field"
-            value = field.get("value") or "​"
-            lines.append(f"**{name}**\n{value}")
-        if self.data.get("footer"):
-            foot = _strip_subtext(self.data["footer"])
-            if self._truthy("footer_timestamp"):
-                now = discord.utils.utcnow()
-                foot = f"{foot} · Today at {now.strftime('%H:%M')}" if foot else f"Today at {now.strftime('%H:%M')}"
-            if foot:
-                lines.append(f"-# {foot}")
-        elif self._truthy("footer_timestamp"):
-            now = discord.utils.utcnow()
-            lines.append(f"-# Today at {now.strftime('%H:%M')}")
-
-        body = "\n".join(lines) if lines else "​"
-        accessory = (
-            (self.data.get("thumbnail") or "").strip()
-            or (self.data.get("author_icon") or "").strip()
-        )
-        if accessory.startswith("http"):
+    def _add_separator(self, container: ui.Container, spacing_raw: str = "1") -> None:
+        try:
+            large = (spacing_raw or "1").strip() in {"2", "large", "big", "lg"}
+            spacing_enum = getattr(discord, "SeparatorSpacing", None)
+            if spacing_enum is not None:
+                sp = spacing_enum.large if large else spacing_enum.small
+                container.add_item(ui.Separator(visible=True, spacing=sp))
+            else:
+                container.add_item(ui.Separator(visible=True))
+        except Exception:
             try:
-                container.add_item(
-                    ui.Section(
-                        ui.TextDisplay(body),
-                        accessory=ui.Thumbnail(media=accessory),
-                    )
-                )
+                container.add_item(ui.Separator(visible=True))
             except Exception:
-                container.add_item(ui.TextDisplay(body))
-        else:
-            container.add_item(ui.TextDisplay(body))
+                pass
 
-        if self._truthy("divider"):
-            try:
-                spacing_raw = (self.data.get("divider_spacing") or "1").strip()
-                large = spacing_raw in {"2", "large", "big", "lg"}
-                spacing_enum = getattr(discord, "SeparatorSpacing", None)
-                if spacing_enum is not None:
-                    sp = spacing_enum.large if large else spacing_enum.small
-                    container.add_item(ui.Separator(visible=True, spacing=sp))
-                else:
-                    container.add_item(ui.Separator(visible=True))
-            except Exception:
-                try:
-                    container.add_item(ui.Separator(visible=True))
-                except Exception:
-                    pass
-
-        image_urls = [u for u in self.images[:_MAX_IMAGES] if str(u).startswith("http")]
+    def _add_gallery(self, container: ui.Container, urls: list[str]) -> None:
+        """Add gallery item(s); split into groups of 5 (1–5 and 6–10)."""
+        image_urls = [u for u in urls[:_MAX_IMAGES] if str(u).startswith("http")]
         if not image_urls:
-            single = (self.data.get("image") or "").strip()
-            if single.startswith("http"):
-                image_urls = [single]
-        if image_urls:
+            return
+        for start in range(0, len(image_urls), 5):
+            chunk = image_urls[start : start + 5]
             try:
                 gallery = ui.MediaGallery()
-                for image in image_urls:
+                for image in chunk:
                     gallery.add_item(media=image)
                 container.add_item(gallery)
             except Exception:
                 try:
                     container.add_item(
                         ui.MediaGallery(
-                            *[discord.MediaGalleryItem(image) for image in image_urls]
+                            *[discord.MediaGalleryItem(image) for image in chunk]
                         )
                     )
+                except Exception:
+                    pass
+
+    def _preview_container(self) -> ui.LayoutView:
+        layout = ui.LayoutView(timeout=None)
+        container = ui.Container()
+
+        _ = self._accent()
+
+        # Prefer ordered blocks so dividers sit between title/description/etc.
+        blocks = list(self.blocks) if self.blocks else None
+        if blocks is None:
+            # Legacy fallback when blocks empty
+            lines: list[str] = []
+            if self.data.get("author"):
+                lines.append(f"**{self.data['author']}**")
+            if self.data.get("title"):
+                lines.append(f"## {self.data['title']}")
+            if self.data.get("description"):
+                lines.append(self.data["description"])
+            for field in self.fields[:_MAX_FIELDS]:
+                name = field.get("name") or "Field"
+                value = field.get("value") or "​"
+                lines.append(f"**{name}**\n{value}")
+            if self.data.get("footer"):
+                foot = _strip_subtext(self.data["footer"])
+                if self._truthy("footer_timestamp"):
+                    now = discord.utils.utcnow()
+                    foot = (
+                        f"{foot} · Today at {now.strftime('%H:%M')}"
+                        if foot
+                        else f"Today at {now.strftime('%H:%M')}"
+                    )
+                if foot:
+                    lines.append(f"-# {foot}")
+            elif self._truthy("footer_timestamp"):
+                now = discord.utils.utcnow()
+                lines.append(f"-# Today at {now.strftime('%H:%M')}")
+
+            body = "\n".join(lines) if lines else "​"
+            accessory = (
+                (self.data.get("thumbnail") or "").strip()
+                or (self.data.get("author_icon") or "").strip()
+            )
+            if accessory.startswith("http"):
+                try:
+                    container.add_item(
+                        ui.Section(
+                            ui.TextDisplay(body),
+                            accessory=ui.Thumbnail(media=accessory),
+                        )
+                    )
+                except Exception:
+                    container.add_item(ui.TextDisplay(body))
+            else:
+                container.add_item(ui.TextDisplay(body))
+
+            if self._truthy("divider"):
+                self._add_separator(
+                    container, self.data.get("divider_spacing") or "1"
+                )
+
+            image_urls = [
+                u for u in self.images[:_MAX_IMAGES] if str(u).startswith("http")
+            ]
+            if not image_urls:
+                single = (self.data.get("image") or "").strip()
+                if single.startswith("http"):
+                    image_urls = [single]
+            self._add_gallery(container, image_urls)
+        else:
+            pending_lines: list[str] = []
+            pending_thumb: str | None = None
+
+            def _flush_text() -> None:
+                nonlocal pending_lines, pending_thumb
+                if not pending_lines and not pending_thumb:
+                    return
+                body = "\n".join(pending_lines) if pending_lines else "​"
+                accessory = (pending_thumb or "").strip()
+                if accessory.startswith("http"):
+                    try:
+                        container.add_item(
+                            ui.Section(
+                                ui.TextDisplay(body),
+                                accessory=ui.Thumbnail(media=accessory),
+                            )
+                        )
+                    except Exception:
+                        container.add_item(ui.TextDisplay(body))
+                else:
+                    container.add_item(ui.TextDisplay(body))
+                pending_lines = []
+                pending_thumb = None
+
+            for block in blocks:
+                typ = block.get("type")
+                if typ == "divider":
+                    _flush_text()
+                    self._add_separator(container, block.get("spacing") or "1")
+                elif typ == "images":
+                    _flush_text()
+                    urls = list(block.get("urls") or self.images or [])
+                    self._add_gallery(container, urls)
+                elif typ == "title":
+                    val = (block.get("value") or "").strip()
+                    if val:
+                        pending_lines.append(f"## {val}")
+                elif typ == "description":
+                    val = (block.get("value") or "").strip()
+                    if val:
+                        pending_lines.append(val)
+                elif typ == "author":
+                    name = (block.get("name") or "").strip()
+                    icon = (block.get("icon") or "").strip()
+                    if name:
+                        pending_lines.append(f"**{name}**")
+                    if icon.startswith("http") and not pending_thumb:
+                        pending_thumb = icon
+                elif typ == "footer":
+                    foot = _strip_subtext(block.get("text") or "")
+                    if (block.get("timestamp") or "") == "1" or self._truthy(
+                        "footer_timestamp"
+                    ):
+                        now = discord.utils.utcnow()
+                        stamp = f"Today at {now.strftime('%H:%M')}"
+                        foot = f"{foot} · {stamp}" if foot else stamp
+                    if foot:
+                        pending_lines.append(f"-# {foot}")
+                elif typ == "field":
+                    name = block.get("name") or "Field"
+                    value = block.get("value") or "​"
+                    pending_lines.append(f"**{name}**\n{value}")
+                elif typ == "thumbnail":
+                    val = (block.get("value") or "").strip()
+                    if val.startswith("http"):
+                        pending_thumb = val
+
+            _flush_text()
+            # If nothing was rendered, show placeholder
+            if not getattr(container, "children", None):
+                try:
+                    container.add_item(ui.TextDisplay("​"))
                 except Exception:
                     pass
 
@@ -759,24 +1044,56 @@ class _BaseBuilder:
             await self.refresh()
             return
 
-        if key == "images":
-            
-            editing_tail = len(self.images) >= 5
-            if editing_tail:
+        if key in {"images", "images_1_5", "images_6_10"}:
+            if key == "images_6_10" or (
+                key == "images" and len(self.images) >= 5
+            ):
                 values = await self._run_modal(
                     inter,
                     f"Gallery Images 6–{_MAX_IMAGES}",
                     [
-                        ("img6", "Image 6 URL", False, 500, self.images[5] if len(self.images) > 5 else ""),
-                        ("img7", "Image 7 URL", False, 500, self.images[6] if len(self.images) > 6 else ""),
-                        ("img8", "Image 8 URL", False, 500, self.images[7] if len(self.images) > 7 else ""),
-                        ("img9", "Image 9 URL", False, 500, self.images[8] if len(self.images) > 8 else ""),
-                        ("img10", "Image 10 URL", False, 500, self.images[9] if len(self.images) > 9 else ""),
+                        (
+                            "img6",
+                            "Image 6 URL",
+                            False,
+                            500,
+                            self.images[5] if len(self.images) > 5 else "",
+                        ),
+                        (
+                            "img7",
+                            "Image 7 URL",
+                            False,
+                            500,
+                            self.images[6] if len(self.images) > 6 else "",
+                        ),
+                        (
+                            "img8",
+                            "Image 8 URL",
+                            False,
+                            500,
+                            self.images[7] if len(self.images) > 7 else "",
+                        ),
+                        (
+                            "img9",
+                            "Image 9 URL",
+                            False,
+                            500,
+                            self.images[8] if len(self.images) > 8 else "",
+                        ),
+                        (
+                            "img10",
+                            "Image 10 URL",
+                            False,
+                            500,
+                            self.images[9] if len(self.images) > 9 else "",
+                        ),
                     ],
                 )
                 if values is None:
                     return
-                head = self.images[:5]
+                head = list(self.images[:5])
+                while len(head) < 5:
+                    head.append("")
                 tail = [
                     (values.get("img6") or "").strip(),
                     (values.get("img7") or "").strip(),
@@ -784,17 +1101,49 @@ class _BaseBuilder:
                     (values.get("img9") or "").strip(),
                     (values.get("img10") or "").strip(),
                 ]
-                self.images = [u for u in (*head, *tail) if u][:_MAX_IMAGES]
+                # Keep empty head slots only if tail has content beyond them
+                merged = list(head) + tail
+                self.images = [u for u in merged if u][:_MAX_IMAGES]
             else:
                 values = await self._run_modal(
                     inter,
-                    f"Gallery Images 1–5 (re-open for 6–{_MAX_IMAGES})",
+                    "Gallery Images 1–5",
                     [
-                        ("img1", "Image 1 URL", False, 500, self.images[0] if len(self.images) > 0 else ""),
-                        ("img2", "Image 2 URL", False, 500, self.images[1] if len(self.images) > 1 else ""),
-                        ("img3", "Image 3 URL", False, 500, self.images[2] if len(self.images) > 2 else ""),
-                        ("img4", "Image 4 URL", False, 500, self.images[3] if len(self.images) > 3 else ""),
-                        ("img5", "Image 5 URL", False, 500, self.images[4] if len(self.images) > 4 else ""),
+                        (
+                            "img1",
+                            "Image 1 URL",
+                            False,
+                            500,
+                            self.images[0] if len(self.images) > 0 else "",
+                        ),
+                        (
+                            "img2",
+                            "Image 2 URL",
+                            False,
+                            500,
+                            self.images[1] if len(self.images) > 1 else "",
+                        ),
+                        (
+                            "img3",
+                            "Image 3 URL",
+                            False,
+                            500,
+                            self.images[2] if len(self.images) > 2 else "",
+                        ),
+                        (
+                            "img4",
+                            "Image 4 URL",
+                            False,
+                            500,
+                            self.images[3] if len(self.images) > 3 else "",
+                        ),
+                        (
+                            "img5",
+                            "Image 5 URL",
+                            False,
+                            500,
+                            self.images[4] if len(self.images) > 4 else "",
+                        ),
                     ],
                 )
                 if values is None:
@@ -809,12 +1158,14 @@ class _BaseBuilder:
                 tail = self.images[5:_MAX_IMAGES] if len(self.images) > 5 else []
                 self.images = [u for u in (*batch, *tail) if u][:_MAX_IMAGES]
             self.data["image"] = self.images[0] if self.images else ""
+            self._sync_block_from_data("images")
             await self.refresh()
             return
 
         if key == "images_clear":
             self.images.clear()
             self.data["image"] = ""
+            self._remove_singleton_block("images")
             if not inter.response.is_done():
                 await inter.response.defer()
             await self.refresh()
@@ -841,14 +1192,28 @@ class _BaseBuilder:
             name = (values.get("name") or "").strip() or "Field"
             value = (values.get("value") or "").strip() or "​"
             inline_raw = (values.get("inline") or "").lower().strip()
-            inline = "1" if inline_raw in {"yes", "y", "true", "1", "on", "inline"} else "0"
-            self.fields.append({"name": name, "value": value, "inline": inline})
+            inline = (
+                "1"
+                if inline_raw in {"yes", "y", "true", "1", "on", "inline"}
+                else "0"
+            )
+            entry = {"name": name, "value": value, "inline": inline}
+            self.fields.append(entry)
+            if self.kind == "container":
+                self.blocks.append(
+                    {"type": "field", "name": name, "value": value, "inline": inline}
+                )
             await self.refresh()
             return
 
         if key == "field_remove":
             if self.fields:
                 self.fields.pop()
+            if self.kind == "container":
+                for i in range(len(self.blocks) - 1, -1, -1):
+                    if self.blocks[i].get("type") == "field":
+                        self.blocks.pop(i)
+                        break
             if not inter.response.is_done():
                 await inter.response.defer()
             await self.refresh()
@@ -856,21 +1221,26 @@ class _BaseBuilder:
 
         if key == "field_clear":
             self.fields.clear()
+            if self.kind == "container":
+                self.blocks = [b for b in self.blocks if b.get("type") != "field"]
             if not inter.response.is_done():
                 await inter.response.defer()
             await self.refresh()
             return
 
-        if key == "actionrow":
-            
-            
-            
+        if key == "divider_remove":
+            removed = self._pop_last_divider()
+            self.data["divider"] = "1" if self._divider_count() else "0"
             if not inter.response.is_done():
-                await inter.response.send_message(
-                    "Next buttons will start a **new action row** in the script "
-                    "(every 5 buttons also auto-break).",
-                    ephemeral=True,
-                )
+                if removed:
+                    await inter.response.defer()
+                else:
+                    await inter.response.send_message(
+                        "No divider to remove.",
+                        ephemeral=True,
+                    )
+                    return
+            await self.refresh()
             return
 
         if key == "divider":
@@ -879,28 +1249,29 @@ class _BaseBuilder:
                 "Divider / Separator",
                 [
                     (
-                        "divider",
-                        "on or off",
-                        False,
-                        10,
-                        "on" if self._truthy("divider") else "off",
-                    ),
-                    (
                         "divider_spacing",
                         "Spacing 1 (small) or 2 (large)",
                         False,
                         10,
                         self.data.get("divider_spacing") or "1",
                     ),
+                    (
+                        "after",
+                        "Place after (optional): title, description, author, footer, field, images, thumbnail — blank = end",
+                        False,
+                        40,
+                        "",
+                    ),
                 ],
             )
-            if values:
-                val = (values.get("divider") or "").lower().strip()
-                self.data["divider"] = (
-                    "1" if val in {"on", "yes", "true", "1", "enable"} else "0"
-                )
-                sp = (values.get("divider_spacing") or "1").strip()
-                self.data["divider_spacing"] = "2" if sp in {"2", "large", "big", "lg"} else "1"
+            if values is None:
+                return
+            sp = (values.get("divider_spacing") or "1").strip()
+            spacing = "2" if sp in {"2", "large", "big", "lg"} else "1"
+            self.data["divider_spacing"] = spacing
+            after = (values.get("after") or "").strip()
+            self._insert_divider_block(spacing=spacing, after=after)
+            self.data["divider"] = "1"
             await self.refresh()
             return
 
@@ -910,14 +1281,27 @@ class _BaseBuilder:
                 "Author",
                 [
                     ("author", "Name", False, 256, self.data.get("author") or ""),
-                    ("author_icon", "Icon URL", False, 500, self.data.get("author_icon") or ""),
-                    ("author_url", "URL", False, 500, self.data.get("author_url") or ""),
+                    (
+                        "author_icon",
+                        "Icon URL",
+                        False,
+                        500,
+                        self.data.get("author_icon") or "",
+                    ),
+                    (
+                        "author_url",
+                        "URL",
+                        False,
+                        500,
+                        self.data.get("author_url") or "",
+                    ),
                 ],
             )
             if values:
                 for k in ("author", "author_icon", "author_url"):
                     if k in values:
                         self.data[k] = (values[k] or "").strip()
+                self._sync_block_from_data("author")
             await self.refresh()
             return
 
@@ -927,7 +1311,13 @@ class _BaseBuilder:
                 "Footer",
                 [
                     ("footer", "Text", True, 2048, self.data.get("footer") or ""),
-                    ("footer_icon", "Icon URL", False, 500, self.data.get("footer_icon") or ""),
+                    (
+                        "footer_icon",
+                        "Icon URL",
+                        False,
+                        500,
+                        self.data.get("footer_icon") or "",
+                    ),
                     (
                         "footer_timestamp",
                         "Timestamp yes/no",
@@ -946,6 +1336,7 @@ class _BaseBuilder:
                 self.data["footer_timestamp"] = (
                     "1" if ts in {"on", "yes", "true", "1", "y"} else "0"
                 )
+                self._sync_block_from_data("footer")
             await self.refresh()
             return
 
@@ -972,6 +1363,8 @@ class _BaseBuilder:
             self.data[key] = (values[key] or "").strip()
             if key == "color":
                 self.data[key] = self.data[key].lstrip("#")
+            if key in {"title", "description", "thumbnail"}:
+                self._sync_block_from_data(key)
         await self.refresh()
 
     async def handle_approve(self, inter: discord.Interaction) -> None:

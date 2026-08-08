@@ -1230,19 +1230,40 @@ class Antinuke(AntinukeEvents, Package):
         usage="",
     )
     async def antinuke_disable(self, ctx):
-        """Disable all antinuke modules."""
+        """Disable all antinuke modules without deleting configuration."""
         modules = ["ban", "kick", "channel", "role", "webhook", "emoji", "vanity", "botadd"]
+        config = await self._guild_config(ctx.guild.id)
         for module in modules:
-            await self._commit_module(ctx.guild.id, module, {"status": False, "punishment": "kick"})
+            cfg = getattr(config, module)
+            payload = {
+                "status": False,
+                "punishment": getattr(cfg, "punishment", "kick"),
+                "threshold": getattr(cfg, "threshold", 3),
+                "command": getattr(cfg, "command", False),
+            }
+            await self._commit_module(ctx.guild.id, module, payload)
         await self._load_config(ctx.guild.id)
-        return await ctx.success("All **antinuke modules** are now **disabled**.")
+        return await ctx.success(
+            "All **antinuke modules** are now **disabled** — configuration kept. "
+            f"Use `{ctx.clean_prefix}antinuke reset` to delete everything."
+        )
 
     @antinuke.command(
         name="reset",
         usage="",
     )
     async def antinuke_reset(self, ctx):
-        """Reset all antinuke configuration for this server."""
+        """Reset all antinuke configuration for this server. This cannot be undone."""
+        from core.discord.views.confirm import ConfirmView
+
+        view = ConfirmView(ctx)
+        ok = await view.prompt(
+            "Reset **all** antinuke configuration for this server? "
+            "This action **cannot be undone**."
+        )
+        if not ok:
+            return await ctx.warn("Antinuke reset **cancelled**")
+
         await self.bot.db.execute(
             "DELETE FROM antinuke WHERE guild_id = $1",
             ctx.guild.id,
@@ -1255,7 +1276,9 @@ class Antinuke(AntinukeEvents, Package):
         for key in list(self._stale_cmd_actions):
             if key[0] == ctx.guild.id:
                 self._stale_cmd_actions.pop(key, None)
-        return await ctx.success("Antinuke configuration has been **reset**.")
+        return await ctx.success(
+            "Antinuke configuration has been **reset**. This action cannot be undone."
+        )
 
 
 async def setup(bot: Vain) -> None:

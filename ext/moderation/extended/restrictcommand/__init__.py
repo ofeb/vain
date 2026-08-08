@@ -167,13 +167,25 @@ class Restrictcommand(Package):
     @restrictcommand.command(
         name="reset",
         aliases=["clear", "wipe"],
-        description="Removes every restricted command",
+        description="Removes every restricted command. This cannot be undone.",
     )
     @has_permissions(manage_guild=True)
     async def restrictcommand_reset(self, ctx):
         """reset all command restrictions"""
+        from core.discord.views.confirm import ConfirmView
+
+        view = ConfirmView(ctx)
+        ok = await view.prompt(
+            "Clear **all** command restrictions for this server? "
+            "This action **cannot be undone**."
+        )
+        if not ok:
+            return await ctx.warn("Command restrictions reset **cancelled**")
         result = await self.db.execute(
             "DELETE FROM command_restrictions WHERE guild_id = $1",
             ctx.guild.id,
         )
-        return await ctx.success(f"Cleared all command restrictions ({result})")
+        return await ctx.success(
+            f"Cleared all command restrictions ({result}). "
+            "This action cannot be undone."
+        )

@@ -310,14 +310,14 @@ class BumpReminder(BumpReminderEvents, Package):
 
     @bumpreminder.command(
         name="disable",
-        aliases=["remove", "reset"],
-        description="Disable Disboard bump reminders and delete this guild's configuration.",
+        aliases=["off"],
+        description="Disable Disboard bump reminders without deleting this guild's configuration.",
         guild_only=True,
     )
     @has_permissions(manage_guild=True)
     @cooldown(1, 5, BucketType.guild)
     async def bumpreminder_disable(self, ctx: Context):
-        """Disable Disboard bump reminders and delete this guild's configuration."""
+        """Disable Disboard bump reminders without deleting this guild's configuration."""
         if ctx.guild is None:
             return await ctx.warn("Guild only")
         if getattr(self.bot.db, "pool", None) is None:
@@ -326,11 +326,52 @@ class BumpReminder(BumpReminderEvents, Package):
         settings = await Settings.fetch(self.bot, ctx.guild)
         if not await Settings.exists(self.bot, ctx.guild):
             return await ctx.warn("Bump reminder is not configured for this guild")
+        if not settings.enabled:
+            return await ctx.warn(
+                f"Bump reminder is already **disabled** — "
+                f"use `{ctx.clean_prefix}bumpreminder enable` to turn it back on"
+            )
 
+        await settings.upsert(enabled=False)
+        self._reminder_sent.discard(ctx.guild.id)
+        return await ctx.success(
+            "Disboard bump reminders **disabled** — configuration kept "
+            f"(channel, role, messages). Use `{ctx.clean_prefix}bumpreminder reset` to delete everything"
+        )
+
+    @bumpreminder.command(
+        name="reset",
+        aliases=["remove", "clear", "delete"],
+        description="Delete this guild's bump reminder configuration. This cannot be undone.",
+        guild_only=True,
+    )
+    @has_permissions(manage_guild=True)
+    @cooldown(1, 5, BucketType.guild)
+    async def bumpreminder_reset(self, ctx: Context):
+        """Delete this guild's bump reminder configuration. This cannot be undone."""
+        if ctx.guild is None:
+            return await ctx.warn("Guild only")
+        if getattr(self.bot.db, "pool", None) is None:
+            return await ctx.warn("Database is unavailable")
+
+        if not await Settings.exists(self.bot, ctx.guild):
+            return await ctx.warn("Bump reminder is not configured for this guild")
+
+        from core.discord.views.confirm import ConfirmView
+
+        view = ConfirmView(ctx)
+        ok = await view.prompt(
+            "Reset **all** bump reminder settings for this guild? "
+            "This action **cannot be undone**."
+        )
+        if not ok:
+            return await ctx.warn("Bump reminder reset **cancelled**")
+
+        settings = await Settings.fetch(self.bot, ctx.guild)
         await settings.delete()
         self._reminder_sent.discard(ctx.guild.id)
         return await ctx.success(
-            "Disboard bump reminders **disabled** and this guild's configuration deleted"
+            "Bump reminder configuration **deleted**. This action cannot be undone."
         )
 
     @bumpreminder.command(

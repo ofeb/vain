@@ -645,6 +645,14 @@ class PaginateView(discord.ui.LayoutView):
         with suppress(Exception):
             picker.message = await interaction.original_response()
 
+    async def _delete_invoke_message(self) -> None:
+        """Remove the prefix command message that opened this pager, if any."""
+        invoke = getattr(self.ctx, "message", None)
+        if invoke is None or getattr(self.ctx, "interaction", None) is not None:
+            return
+        with suppress(discord.HTTPException, discord.Forbidden):
+            await invoke.delete()
+
     async def _cancel(self, interaction: discord.Interaction) -> None:
         if self.on_delete_page is not None and self.pages:
             try:
@@ -661,6 +669,7 @@ class PaginateView(discord.ui.LayoutView):
                 if interaction.message is not None:
                     with suppress(discord.HTTPException):
                         await interaction.message.delete()
+                await self._delete_invoke_message()
                 self.stop()
                 return
             self.index = min(self.index, len(self.pages) - 1)
@@ -674,6 +683,7 @@ class PaginateView(discord.ui.LayoutView):
         elif self.message is not None:
             with suppress(discord.HTTPException):
                 await self.message.delete()
+        await self._delete_invoke_message()
         self.stop()
 
     async def start(self) -> discord.Message:

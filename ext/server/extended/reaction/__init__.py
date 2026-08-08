@@ -90,17 +90,28 @@ class Reaction(ReactionEvents, Package):
 
     @reaction_group.command(
         name="clear",
-        description="Removes every reaction trigger in guild",
+        description="Removes every reaction trigger in guild. This cannot be undone.",
         aliases=["reset"],
     )
     @has_permissions(manage_expressions=True)
     async def reaction_clear(self, ctx: Context) -> None:
-        """Removes every reaction trigger in guild."""
+        """Removes every reaction trigger in guild. This cannot be undone."""
+        from core.discord.views.confirm import ConfirmView
+
+        view = ConfirmView(ctx)
+        ok = await view.prompt(
+            "Clear **all** auto reactions for this server? "
+            "This action **cannot be undone**."
+        )
+        if not ok:
+            return await ctx.warn("Auto reaction clear **cancelled**")
         await self.bot.db.execute(
             "DELETE FROM auto_reactions WHERE guild_id = $1",
             ctx.guild.id,
         )
-        await ctx.success("Cleared all auto reactions")
+        await ctx.success(
+            "Cleared all auto reactions. This action cannot be undone."
+        )
 
     @reaction_group.command(
         name="add",

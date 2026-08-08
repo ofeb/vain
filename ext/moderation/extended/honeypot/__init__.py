@@ -441,7 +441,38 @@ class Honeypot(Package):
             if isinstance(existing, discord.TextChannel):
                 return await ctx.warn(
                     f"Honeypot is already armed in {existing.mention} — "
-                    f"use `{ctx.clean_prefix}honeypot disable` first"
+                    f"use `{ctx.clean_prefix}honeypot disable` to turn it off"
+                )
+
+        # Re-arm an existing trap channel after a soft disable.
+        if row and row.get("channel_id") and not row.get("enabled"):
+            existing = ctx.guild.get_channel(int(row["channel_id"]))
+            if isinstance(existing, discord.TextChannel):
+                punishments = _normalize_punishments(row.get("punishments"))
+                caught = int(row.get("caught") or 0)
+                setup_row = {
+                    "channel_id": existing.id,
+                    "caught": caught,
+                    "punishments": punishments,
+                    "embed_script": row.get("embed_script"),
+                }
+                try:
+                    msg = await self._post_trap_message(
+                        existing, caught, row=setup_row
+                    )
+                except (discord.Forbidden, discord.HTTPException):
+                    return await ctx.fail("Couldn't post the honeypot trap message")
+                await self._upsert(
+                    ctx.guild.id,
+                    channel_id=existing.id,
+                    message_id=msg.id,
+                    punishments=punishments,
+                    caught=caught,
+                    enabled=True,
+                    embed_script=setup_row.get("embed_script"),
+                )
+                return await ctx.success(
+                    f"Honeypot re-armed in {existing.mention} — previous configuration kept"
                 )
 
         me = ctx.guild.me
@@ -506,37 +537,76 @@ class Honeypot(Package):
 
     @honeypot.command(
         name="disable",
-        aliases=["remove", "delete", "unset"],
-        description="Disable the honeypot and remove its channel.",
+        aliases=["off", "disarm"],
+        description="Disable the honeypot without deleting configuration or the trap channel.",
     )
     @has_permissions(manage_guild=True)
     @cooldown(1, 10, BucketType.guild)
     async def honeypot_disable(self, ctx):
-        """Disable the honeypot and remove its channel."""
+        """Disable the honeypot without deleting configuration or the trap channel."""
         if ctx.guild is None:
             return await ctx.warn("This command can only be used in a server")
         if getattr(self.db, "pool", None) is None:
             return await ctx.warn("Database is unavailable")
 
         row = await self._get_row(ctx.guild.id)
-        if not row or not row.get("enabled"):
-            return await ctx.warn("Honeypot is not currently **enabled**")
+        if not row:
+            return await ctx.warn("Honeypot is not configured for this server")
+        if not row.get("enabled"):
+            return await ctx.warn(
+                f"Honeypot is already **disabled** — "
+                f"use `{ctx.clean_prefix}honeypot setup` to arm it again"
+            )
+
+        await self._upsert(ctx.guild.id, enabled=False)
+        return await ctx.success(
+            "Honeypot **disabled** — configuration and channel kept. "
+            f"Use `{ctx.clean_prefix}honeypot reset` to delete everything"
+        )
+
+    @honeypot.command(
+        name="reset",
+        aliases=["remove", "delete", "unset", "clear"],
+        description="Delete honeypot configuration and remove its channel. This cannot be undone.",
+    )
+    @has_permissions(manage_guild=True)
+    @cooldown(1, 10, BucketType.guild)
+    async def honeypot_reset(self, ctx):
+        """Delete honeypot configuration and remove its channel. This cannot be undone."""
+        if ctx.guild is None:
+            return await ctx.warn("This command can only be used in a server")
+        if getattr(self.db, "pool", None) is None:
+            return await ctx.warn("Database is unavailable")
+
+        row = await self._get_row(ctx.guild.id)
+        if not row:
+            return await ctx.warn("Honeypot is not configured for this server")
+
+        from core.discord.views.confirm import ConfirmView
+
+        view = ConfirmView(ctx)
+        ok = await view.prompt(
+            "Reset **all** honeypot settings and delete the trap channel? "
+            "This action **cannot be undone**."
+        )
+        if not ok:
+            return await ctx.warn("Honeypot reset **cancelled**")
 
         channel_id = row.get("channel_id")
         channel = ctx.guild.get_channel(int(channel_id)) if channel_id else None
         if isinstance(channel, discord.TextChannel):
             with contextlib.suppress(discord.Forbidden, discord.HTTPException):
                 await channel.delete(
-                    reason=f"Honeypot disabled by {ctx.author} ({ctx.author.id})"
+                    reason=f"Honeypot reset by {ctx.author} ({ctx.author.id})"
                 )
 
-        await self._upsert(
+        await self.db.execute(
+            "DELETE FROM honeypot WHERE guild_id = $1",
             ctx.guild.id,
-            channel_id=None,
-            message_id=None,
-            enabled=False,
         )
-        return await ctx.success("Honeypot has been **disabled** and the channel removed")
+        return await ctx.success(
+            "Honeypot configuration **deleted**. This action cannot be undone."
+        )
 
     @honeypot.command(
         name="alerts",

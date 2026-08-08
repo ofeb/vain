@@ -23,6 +23,7 @@ class Record(TypedDict, total=False):
     roles: str
     channels: str
     users: str
+    enabled: bool
 
 
 class Settings:
@@ -38,12 +39,15 @@ class Settings:
         self.record = dict(record)
 
     def __bool__(self) -> bool:
-        return bool(self.record.get("guild_id"))
+        return bool(self.record.get("guild_id")) and self.enabled
 
     @property
     def enabled(self) -> bool:
-        
-        return bool(self.record.get("guild_id"))
+        if not self.record.get("guild_id"):
+            return False
+        if "enabled" not in self.record:
+            return True
+        return bool(self.record.get("enabled"))
 
     @property
     def multiplier(self) -> float:
@@ -84,6 +88,7 @@ class Settings:
             "roles": "[]",
             "channels": "[]",
             "users": "[]",
+            "enabled": False,
         }
 
     @classmethod

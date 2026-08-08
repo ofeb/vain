@@ -337,12 +337,30 @@ class VoiceMaster(VoiceMasterEvents, Package):
     @has_permissions(manage_guild=True)
     @commands.cooldown(1, 60, commands.BucketType.guild)
     async def voicemaster_reset(self, ctx: Context) -> None:
-        """Reset server configuration for VoiceMaster."""
+        """Reset server configuration for VoiceMaster and delete its channels. This cannot be undone."""
+        existing = await self.bot.db.fetchrow(
+            "SELECT category_id, interface_id, channel_id FROM voicemaster_configuration WHERE guild_id = $1",
+            ctx.guild.id,
+        )
+        if not existing:
+            return await ctx.warn("The server is not configured")
+
+        from core.discord.views.confirm import ConfirmView
+
+        view = ConfirmView(ctx)
+        ok = await view.prompt(
+            "Reset VoiceMaster and **delete** its category/channels? "
+            "This action **cannot be undone**. "
+            f"(Use `{ctx.clean_prefix}voicemaster unset` to remove config and keep channels.)"
+        )
+        if not ok:
+            return await ctx.warn("VoiceMaster reset **cancelled**")
+
         row = await self.bot.db.fetchrow(
             "DELETE FROM voicemaster_configuration WHERE guild_id = $1 RETURNING category_id, interface_id, channel_id",
-            ctx.guild.id
+            ctx.guild.id,
         )
-        
+
         if row:
             for channel_id in row:
                 channel = ctx.guild.get_channel(channel_id)
@@ -351,7 +369,9 @@ class VoiceMaster(VoiceMasterEvents, Package):
                         await channel.delete()
                     except discord.HTTPException:
                         pass
-            await ctx.success("VoiceMaster configuration reset")
+            await ctx.success(
+                "VoiceMaster configuration **reset**. This action cannot be undone."
+            )
         else:
             await ctx.warn("The server is not configured")
 

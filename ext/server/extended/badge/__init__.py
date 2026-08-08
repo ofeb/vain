@@ -89,11 +89,38 @@ class BadgeCommands(Package):
     @colorme.command(
         name="disable",
         aliases=["off"],
-        description="prevent users from using colorme",
+        description="prevent users from using colorme without deleting color roles",
     )
     @has_permissions(manage_guild=True)
     async def colorme_disable(self, ctx):
-        """turn off colorme"""
+        """turn off colorme without deleting color roles"""
+        await self.db.execute(
+            """INSERT INTO config (guild_id, colorme) VALUES($1, $2) ON CONFLICT(guild_id) DO UPDATE SET colorme = excluded.colorme""",
+            ctx.guild.id, False,
+        )
+        return await ctx.success(
+            f"colorme **disabled** — color roles kept. "
+            f"use `{ctx.clean_prefix}colorme reset` to delete everything"
+        )
+
+    @colorme.command(
+        name="reset",
+        aliases=["remove", "clear", "delete"],
+        description="delete colorme color roles and turn it off. this cannot be undone",
+    )
+    @has_permissions(manage_guild=True)
+    async def colorme_reset(self, ctx):
+        """delete colorme color roles and turn it off"""
+        from core.discord.views.confirm import ConfirmView
+
+        view = ConfirmView(ctx)
+        ok = await view.prompt(
+            "Reset **all** colorme settings and delete color roles? "
+            "This action **cannot be undone**."
+        )
+        if not ok:
+            return await ctx.warn("colorme reset **cancelled**")
+
         await self.db.execute(
             """INSERT INTO config (guild_id, colorme) VALUES($1, $2) ON CONFLICT(guild_id) DO UPDATE SET colorme = excluded.colorme""",
             ctx.guild.id, False,
@@ -107,11 +134,13 @@ class BadgeCommands(Package):
             rid = int(val.split("-", 1)[1])
             role = ctx.guild.get_role(rid)
             if role:
-                await role.delete(reason="colorme disabled cleanup")
+                await role.delete(reason="colorme reset cleanup")
         await self.db.execute(
             """DELETE FROM color_roles WHERE guild_id = $1""", ctx.guild.id
         )
-        return await ctx.success("colorme disabled and color roles cleaned up")
+        return await ctx.success(
+            "colorme configuration and color roles **deleted**. this action cannot be undone"
+        )
 
     @colorme.command(name="cleanup", description="remove unused color roles")
     @has_permissions(manage_guild=True)

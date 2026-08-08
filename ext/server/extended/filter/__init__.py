@@ -61,10 +61,21 @@ class FilterCommands(Package):
         """filter help"""
         return await ctx.send_help()
 
-    @filter_.command(name="reset", description="Reset all legacy filtered words")
+    @filter_.command(
+        name="reset",
+        description="Reset all legacy filtered words. This cannot be undone.",
+    )
     @has_permissions(manage_guild=True)
     async def filter_reset(self, ctx):
         """clear word filter"""
+        from core.discord.views.confirm import ConfirmView
+
+        view = ConfirmView(ctx)
+        ok = await view.prompt(
+            "Clear **all** legacy filtered words? This action **cannot be undone**."
+        )
+        if not ok:
+            return await ctx.warn("Word filter reset **cancelled**")
         rule = next(
             (
                 r
@@ -83,7 +94,9 @@ class FilterCommands(Package):
             ),
             reason=f"filter reset by {ctx.author}",
         )
-        return await ctx.success("word filter cleared")
+        return await ctx.success(
+            "Word filter cleared. This action cannot be undone."
+        )
 
     @filter_.group(
         name="caps",

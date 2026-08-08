@@ -113,18 +113,24 @@ class PinCommands(Package):
         )
         return await ctx.success(f"archive channel set to {channel.mention}")
 
-    @pins.command(name="reset", description="Reset the pin archival config")
+    @pins.command(
+        name="reset",
+        description="Reset the pin archival config. This cannot be undone.",
+    )
     @has_permissions(manage_guild=True)
     async def pins_reset(self, ctx):
         """clear pin config"""
-        from ext.information.proper.views import confirm
-        prompt = await ctx.warning("clear the pin archive config?")
-        ok = await confirm(self, ctx, prompt, ctx.author)
+        from core.discord.views.confirm import ConfirmView
+
+        view = ConfirmView(ctx)
+        ok = await view.prompt(
+            "Clear the pin archive config? This action **cannot be undone**."
+        )
         if not ok:
-            return await prompt.delete()
+            return await ctx.warn("Pin archive reset **cancelled**")
         await self.db.execute(
             """DELETE FROM pin_config WHERE guild_id = $1""", ctx.guild.id
         )
-        return await prompt.edit(
-            embed=await ctx.success("pin archive config cleared", return_embed=True)
+        return await ctx.success(
+            "Pin archive config cleared. This action cannot be undone."
         )

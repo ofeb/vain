@@ -70,20 +70,26 @@ class SetCommands(Package):
             f"gave {role.mention}: {', '.join(f'`{p}`' for p in permissions)}"
         )
 
-    @fakepermissions.command(name="reset", description="clear all fake permissions")
+    @fakepermissions.command(
+        name="reset",
+        description="clear all fake permissions. this cannot be undone",
+    )
     @has_permissions(server_owner=True)
     async def fakepermissions_reset(self, ctx):
         """wipe fake perms"""
-        from ext.information.proper.views import confirm
-        prompt = await ctx.warning("clear all fake permissions?")
-        ok = await confirm(self, ctx, prompt, ctx.author)
+        from core.discord.views.confirm import ConfirmView
+
+        view = ConfirmView(ctx)
+        ok = await view.prompt(
+            "Clear **all** fake permissions? This action **cannot be undone**."
+        )
         if not ok:
-            return await prompt.delete()
+            return await ctx.warn("Fake permissions reset **cancelled**")
         await self.db.execute(
             """DELETE FROM fake_permissions WHERE guild_id = $1""", ctx.guild.id
         )
-        return await prompt.edit(
-            embed=await ctx.success("fake permissions cleared", return_embed=True)
+        return await ctx.success(
+            "Fake permissions cleared. This action cannot be undone."
         )
 
     @fakepermissions.command(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from contextlib import suppress
 from io import BytesIO
 from typing import TYPE_CHECKING, Any
 
@@ -20,17 +21,125 @@ if TYPE_CHECKING:
     from core.discord.ctx import Context
 
 
-class _StealButton(ui.Button):
-    """Stable steal button for LayoutView rebuilds."""
+_STEAL_FOOTER_HINT = (
+    "(use the rename button to change the name and then press steal)"
+)
 
-    def __init__(self, parent: "StealPaginateView", **kwargs: Any) -> None:
+
+def _warn_only_invoker(invoker: discord.abc.User, clicker: discord.abc.User) -> discord.Embed:
+    return reply_embed(
+        color=color.warn,
+        message=(
+            f"{emojis.warn} {clicker.mention}: "
+            f"Only {invoker.mention} can use this button"
+        ),
+    )
+
+
+class _RenameModal(ui.Modal, title="Rename"):
+    name_input: ui.TextInput = ui.TextInput(
+        label="New name",
+        placeholder="letters, numbers, underscore · 2–32 chars",
+        min_length=2,
+        max_length=32,
+        required=True,
+    )
+
+    def __init__(self, parent: "StealPaginateView", index: int, current: str) -> None:
+        super().__init__(timeout=120)
+        self._steal_parent = parent
+        self._index = index
+        self.name_input.default = (current or "")[:32]
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        parent = self._steal_parent
+        invoker = parent.ctx.author
+        if interaction.user.id != invoker.id:
+            await interaction.response.send_message(
+                embed=_warn_only_invoker(invoker, interaction.user),
+                ephemeral=True,
+            )
+            return
+
+        raw = str(self.name_input.value or "").strip()
+        clean = re.sub(r"[^a-zA-Z0-9_]", "", raw)
+        max_len = 30 if parent.kind == "sticker" else 32
+        clean = clean[:max_len]
+        if len(clean) < 2:
+            await interaction.response.send_message(
+                embed=reply_embed(
+                    color=color.warn,
+                    message=(
+                        f"{emojis.warn} {interaction.user.mention}: "
+                        f"Name must be **2–{max_len}** letters, numbers, or underscores"
+                    ),
+                ),
+                ephemeral=True,
+            )
+            return
+
+        if not parent.items or self._index >= len(parent.items):
+            await interaction.response.send_message(
+                embed=reply_embed(
+                    color=color.warn,
+                    message=f"{emojis.warn} Nothing left to rename.",
+                ),
+                ephemeral=True,
+            )
+            return
+
+        parent.items[self._index]["name"] = clean
+        parent._refresh_page(self._index)
+        parent._sync_search_option(self._index)
+        parent.index = self._index
+        parent._rebuild()
+
+        if not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=True)
+
+        target = parent.message
+        if target is not None:
+            with suppress(discord.HTTPException):
+                await target.edit(view=parent)
+
+        with suppress(discord.HTTPException):
+            await interaction.followup.send(
+                embed=reply_embed(
+                    color=color.base,
+                    message=(
+                        f"{emojis.approve} Renamed to `{clean}` — "
+                        "press **Steal** when ready"
+                    ),
+                ),
+                ephemeral=True,
+            )
+
+
+class _StealActionButton(ui.Button):
+    """Stable steal/rename/delete button for LayoutView rebuilds."""
+
+    def __init__(self, parent: "StealPaginateView", action: str, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._steal_parent = parent
+        self._action = action
 
     async def callback(self, interaction: discord.Interaction) -> None:
         view = self.view or self._steal_parent
-        if isinstance(view, StealPaginateView):
+        if not isinstance(view, StealPaginateView):
+            return
+        if interaction.user.id != view.ctx.author.id:
+            if not interaction.response.is_done():
+                await interaction.response.send_message(
+                    embed=_warn_only_invoker(view.ctx.author, interaction.user),
+                    ephemeral=True,
+                )
+            return
+        if self._action == "steal":
             await view._steal_cb(interaction)
+        elif self._action == "rename":
+            await view._rename_cb(interaction)
+        elif self._action == "delete":
+            await view._cancel(interaction)
 
 
 class StealPaginateView(PaginateView):
@@ -53,24 +162,113 @@ class StealPaginateView(PaginateView):
             search_placeholder="Search by name…",
         )
 
+    def _footer_for(self, index: int, total: int) -> str:
+        return f"{_STEAL_FOOTER_HINT} · {index}/{total}"
+
+    def _build_embed(self, data: dict, index: int, total: int) -> discord.Embed:
+        name = data.get("name") or ("sticker" if self.kind == "sticker" else "emoji")
+        if self.kind == "sticker":
+            lines = (
+                f"**Sticker:** `{name}`",
+                f"**ID:** {data.get('id') or '—'}",
+            )
+        else:
+            lines = (
+                f"**Emoji:** `:{name}:`",
+                f"**ID:** {data.get('id') or '—'}",
+            )
+        embed = discord.Embed(
+            color=color.base,
+            description=compose(
+                body(*lines),
+                caption(self._footer_for(index, total)),
+            ),
+        )
+        if data.get("url"):
+            embed.set_thumbnail(url=data["url"])
+        return embed
+
+    def _refresh_page(self, index: int) -> None:
+        if index < 0 or index >= len(self.items):
+            return
+        total = len(self.items)
+        self.pages[index] = self._build_embed(self.items[index], index + 1, total)
+        # Keep page footers in sync after a rename (totals unchanged).
+        for i in range(len(self.items)):
+            if i == index:
+                continue
+            if i < len(self.pages) and isinstance(self.pages[i], discord.Embed):
+                self.pages[i] = self._build_embed(self.items[i], i + 1, total)
+
+    def _sync_search_option(self, index: int) -> None:
+        if not self.search_options or index < 0 or index >= len(self.items):
+            return
+        name = str(self.items[index].get("name") or "")
+        sid = str(self.items[index].get("id") or "—")
+        label = (f":{name}:" if self.kind != "sticker" else name)[:100]
+        value = str(index)
+        for opt in self.search_options:
+            if str(opt.value) == value:
+                opt.label = label or opt.label
+                opt.description = f"ID {sid}"[:100]
+                break
+
     def _page_container(self) -> ui.Container:
         container = super()._page_container()
-        
         try:
             row = ui.ActionRow()
             row.add_item(
-                _StealButton(
+                _StealActionButton(
                     self,
+                    "rename",
+                    style=discord.ButtonStyle.secondary,
+                    emoji="✏️",
+                    label="Rename",
+                    custom_id=f"vain:steal:rename:{self.kind}:{id(self)}",
+                )
+            )
+            row.add_item(
+                _StealActionButton(
+                    self,
+                    "steal",
                     style=discord.ButtonStyle.secondary,
                     emoji="✂",
                     label="Steal",
-                    custom_id=f"vain:steal:{self.kind}:{id(self)}",
+                    custom_id=f"vain:steal:steal:{self.kind}:{id(self)}",
                 )
             )
+            # Single-page scans still need a way to dismiss bot + invoke messages.
+            if not needs_pagination(self.pages):
+                from core.discord.views.paginate import _safe_emoji, _PAGER_DELETE
+
+                del_emoji = _safe_emoji(
+                    getattr(emojis.paginator, "delete", None)
+                    or getattr(emojis.paginator, "cancel", None),
+                    _PAGER_DELETE,
+                )
+                row.add_item(
+                    _StealActionButton(
+                        self,
+                        "delete",
+                        style=discord.ButtonStyle.secondary,
+                        emoji=del_emoji,
+                        custom_id=f"vain:steal:delete:{self.kind}:{id(self)}",
+                    )
+                )
             container.add_item(row)
         except Exception:
             pass
         return container
+
+    async def _rename_cb(self, interaction: discord.Interaction) -> None:
+        if not self.items:
+            if not interaction.response.is_done():
+                await interaction.response.defer(ephemeral=True)
+            return
+        item = self.items[self.index]
+        current = str(item.get("name") or "")
+        modal = _RenameModal(self, self.index, current)
+        await interaction.response.send_modal(modal)
 
     async def _steal_cb(self, interaction: discord.Interaction) -> None:
         if not self.items:
@@ -119,11 +317,13 @@ class StealPaginateView(PaginateView):
                 ephemeral=True,
             )
             return
+        name = str(emoji_data.get("name") or "emoji")
+        name = re.sub(r"[^a-zA-Z0-9_]", "", name)[:32] or "emoji"
         async with aiohttp.ClientSession() as session:
             async with session.get(emoji_data["url"]) as resp:
                 image_data = await resp.read()
         emoji = await guild.create_custom_emoji(
-            name=emoji_data["name"],
+            name=name,
             image=image_data,
         )
         await interaction.response.send_message(
@@ -141,7 +341,11 @@ class StealPaginateView(PaginateView):
         sticker_data: dict,
     ) -> None:
         url = sticker_data.get("url")
-        name = (sticker_data.get("name") or "sticker")[:30]
+        name = re.sub(
+            r"[^a-zA-Z0-9_]",
+            "",
+            str(sticker_data.get("name") or "sticker"),
+        )[:30] or "sticker"
         if not url:
             await interaction.response.send_message(
                 embed=reply_embed(
@@ -233,7 +437,6 @@ class Steal(Package):
         emojis_found = _parse_emoji(target)
 
         if not emojis_found:
-            
             try:
                 channel_id, message_id = self._parse_message_link(target)
                 channel = ctx.guild.get_channel(channel_id)
@@ -248,7 +451,6 @@ class Steal(Package):
                 emojis_found = []
 
         if not emojis_found:
-            
             needle = target.strip().strip(":").lower()
             if needle and re.fullmatch(r"[a-zA-Z0-9_]{2,32}", needle):
                 seen: dict[str, dict] = {}
@@ -274,11 +476,14 @@ class Steal(Package):
         stolen = []
         for emoji_data in emojis_found:
             try:
+                name = re.sub(
+                    r"[^a-zA-Z0-9_]", "", str(emoji_data.get("name") or "emoji")
+                )[:32] or "emoji"
                 async with aiohttp.ClientSession() as session:
                     async with session.get(emoji_data["url"]) as resp:
                         image_data = await resp.read()
                 emoji = await ctx.guild.create_custom_emoji(
-                    name=emoji_data["name"],
+                    name=name,
                     image=image_data,
                 )
                 stolen.append(emoji)
@@ -313,6 +518,7 @@ class Steal(Package):
 
         pages = []
         search_options = []
+        total = len(emojis_found)
         for i, emoji_data in enumerate(emojis_found, start=1):
             name = emoji_data["name"]
             embed = discord.Embed(
@@ -322,7 +528,7 @@ class Steal(Package):
                         f"**Emoji:** `:{name}:`",
                         f"**ID:** {emoji_data['id']}",
                     ),
-                    caption(f"{name} · {i}/{len(emojis_found)}"),
+                    caption(f"{_STEAL_FOOTER_HINT} · {i}/{total}"),
                 ),
             )
             embed.set_thumbnail(url=emoji_data["url"])
@@ -389,6 +595,9 @@ class Steal(Package):
         stolen = []
         for data in stickers_found:
             try:
+                name = re.sub(
+                    r"[^a-zA-Z0-9_]", "", str(data.get("name") or "sticker")
+                )[:30] or "sticker"
                 async with aiohttp.ClientSession() as session:
                     async with session.get(data["url"]) as resp:
                         image_data = await resp.read()
@@ -400,7 +609,7 @@ class Steal(Package):
                     filename = "sticker.json"
                 file = discord.File(BytesIO(image_data), filename=filename)
                 sticker = await ctx.guild.create_sticker(
-                    name=data["name"],
+                    name=name,
                     description=data.get("description") or f"Stolen by {ctx.author}",
                     emoji=data.get("emoji") or "✂️",
                     file=file,
@@ -436,6 +645,7 @@ class Steal(Package):
 
         pages = []
         search_options = []
+        total = len(found)
         for i, data in enumerate(found, start=1):
             name = data["name"]
             embed = discord.Embed(
@@ -445,7 +655,7 @@ class Steal(Package):
                         f"**Sticker:** `{name}`",
                         f"**ID:** {data.get('id') or '—'}",
                     ),
-                    caption(f"{name} · {i}/{len(found)}"),
+                    caption(f"{_STEAL_FOOTER_HINT} · {i}/{total}"),
                 ),
             )
             if data.get("url"):

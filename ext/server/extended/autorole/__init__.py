@@ -97,6 +97,7 @@ class Autorole(commands.Cog):
             color=color.base,
             description=(
                 "> This will **clear every autorole** for this server.\n"
+                "> This action **cannot be undone**.\n"
                 "> Are you sure you want to do this?\n"
             ),
         )
@@ -104,7 +105,9 @@ class Autorole(commands.Cog):
             return await ctx.warn("Reset **cancelled**")
         settings = await AutoroleSettings.fetch(self.bot, ctx.guild)
         await settings.delete_all()
-        await ctx.success("Successfully cleared auto roles")
+        await ctx.success(
+            "Successfully cleared auto roles. This action cannot be undone."
+        )
 
     @autorole.command(
         name="add",
@@ -173,6 +176,7 @@ class Autorole(commands.Cog):
             color=color.base,
             description=(
                 "> This will **clear every button role** for this server.\n"
+                "> This action **cannot be undone**.\n"
                 "> Are you sure you want to do this?\n"
             ),
         )
@@ -195,7 +199,9 @@ class Autorole(commands.Cog):
             "DELETE FROM button_roles WHERE guild_id = $1",
             ctx.guild.id,
         )
-        await ctx.success("Successfully cleared all button roles")
+        await ctx.success(
+            "Successfully cleared all button roles. This action cannot be undone."
+        )
 
     @buttonrole.command(
         name="removeall",
@@ -361,6 +367,7 @@ class Autorole(commands.Cog):
             color=color.base,
             description=(
                 "> This will **clear every reaction role** for this server.\n"
+                "> This action **cannot be undone**.\n"
                 "> Are you sure you want to do this?\n"
             ),
         )
@@ -370,7 +377,9 @@ class Autorole(commands.Cog):
             "DELETE FROM reaction_role WHERE guild_id = $1",
             ctx.guild.id,
         )
-        await ctx.success("Successfully cleared all reaction roles")
+        await ctx.success(
+            "Successfully cleared all reaction roles. This action cannot be undone."
+        )
 
     @reactionrole.command(
         name="remove",

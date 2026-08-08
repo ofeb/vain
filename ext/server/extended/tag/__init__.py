@@ -196,11 +196,15 @@ class TagCommands(TagEvents, Package):
     async def tag_reset(self, ctx: commands.Context) -> None:
         assert ctx.guild is not None
         view = ConfirmView(ctx)
-        if not await view.prompt("Reset **all** server tag settings?"):
-            return
+        if not await view.prompt(
+            "Reset **all** server tag settings? This action **cannot be undone**."
+        ):
+            return await ctx.warn("Tag reset **cancelled**")
         settings = await Settings.fetch(self.bot, ctx.guild)
         await settings.upsert(role_ids=[], channel_id=None, template=None)
-        await ctx.success("Cleared server tag rewards")
+        await ctx.success(
+            "Cleared server tag rewards. This action cannot be undone."
+        )
 
 
 Tag = TagCommands

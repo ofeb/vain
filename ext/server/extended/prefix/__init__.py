@@ -67,18 +67,30 @@ class PrefixCommands(Package):
     @prefix.command(
         name="reset",
         aliases=["rs"],
-        description="reset guild prefixes to default",
+        description="reset guild prefixes to default. this cannot be undone",
     )
     @has_permissions(manage_guild=True)
     async def prefix_reset(self, ctx):
         """wipe custom prefixes"""
+        from core.discord.views.confirm import ConfirmView
+
+        view = ConfirmView(ctx)
+        ok = await view.prompt(
+            f"Reset server prefixes to `{bot_config.prefix}`? "
+            "This action **cannot be undone**."
+        )
+        if not ok:
+            return await ctx.warn("Prefix reset **cancelled**")
         await self.db.execute(
             """INSERT INTO config (guild_id, prefixes) VALUES($1, $2) ON CONFLICT(guild_id) DO UPDATE SET prefixes = excluded.prefixes""",
             ctx.guild.id,
             [bot_config.prefix],
         )
         await ctx.bot.invalidate_prefix_cache(guild_id=ctx.guild.id)
-        return await ctx.success(f"server prefixes reset to `{bot_config.prefix}`")
+        return await ctx.success(
+            f"Server prefixes reset to `{bot_config.prefix}`. "
+            "This action cannot be undone."
+        )
 
     @prefix.command(
         name="remove",

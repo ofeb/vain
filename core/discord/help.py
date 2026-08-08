@@ -1357,6 +1357,10 @@ class GroupHelpMenu(ui.LayoutView):
         if inter.message:
             with contextlib.suppress(discord.HTTPException):
                 await inter.message.delete()
+        # Also remove the ,help <group> invoke when it was a prefix command.
+        if self.ctx.message and not self.ctx.interaction:
+            with contextlib.suppress(discord.HTTPException):
+                await self.ctx.message.delete()
         self.stop()
 
     async def on_timeout(self) -> None:

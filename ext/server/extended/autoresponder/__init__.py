@@ -288,13 +288,28 @@ class AutoresponderCommands(Package):
     async def autoresponder(self, ctx):
         return await ctx.send_help(ctx.command)
 
-    @autoresponder.command(name="reset", aliases=["clear"], description="Remove every auto response")
+    @autoresponder.command(
+        name="reset",
+        aliases=["clear"],
+        description="Remove every auto response. This cannot be undone.",
+    )
     @has_permissions(manage_channels=True)
     async def autoresponder_reset(self, ctx):
+        from core.discord.views.confirm import ConfirmView
+
+        view = ConfirmView(ctx)
+        ok = await view.prompt(
+            "Clear **all** autoresponders for this server? "
+            "This action **cannot be undone**."
+        )
+        if not ok:
+            return await ctx.warn("Autoresponder reset **cancelled**")
         await self.db.execute("DELETE FROM auto_responders WHERE guild_id = $1", ctx.guild.id)
         await self.db.execute("DELETE FROM autoresponder_exclusive WHERE guild_id = $1", ctx.guild.id)
         await self.db.execute("DELETE FROM autoresponder_roles WHERE guild_id = $1", ctx.guild.id)
-        return await ctx.success("all autoresponders cleared")
+        return await ctx.success(
+            "All autoresponders cleared. This action cannot be undone."
+        )
 
     @autoresponder.command(name="variables", aliases=["vars"], description="View a list of available variables")
     @has_permissions(manage_channels=True)

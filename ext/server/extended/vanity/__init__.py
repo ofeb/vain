@@ -295,15 +295,18 @@ class VanityCommands(VanityEvents, Package):
         assert ctx.guild is not None
         view = ConfirmView(ctx)
         ok = await view.prompt(
-            "Reset **all** vanity settings? This cannot be undone."
+            "Reset **all** vanity settings? This action **cannot be undone**."
         )
         if not ok:
-            return
+            return await ctx.warn("Vanity reset **cancelled**")
         settings = await Settings.fetch(self.bot, ctx.guild)
         await settings.upsert(
             role_ids=[], channel_id=None, template=None, strict=False
         )
-        await ctx.success("No longer awarding members for advertising vanity")
+        await ctx.success(
+            "No longer awarding members for advertising vanity. "
+            "This action cannot be undone."
+        )
 
 
 Vanity = VanityCommands

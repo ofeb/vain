@@ -507,11 +507,14 @@ class Antiraid(AntiraidEvents, Package):
     )
     @has_permissions(manage_guild=True)
     async def antiraid_disable(self, ctx):
-        """Disable all antiraid modules."""
+        """Disable all antiraid modules without deleting configuration."""
         await self._store_module(ctx.guild.id, "massjoin", enabled=False)
         await self._store_module(ctx.guild.id, "avatar", enabled=False)
         await self._store_module(ctx.guild.id, "newaccounts", enabled=False)
-        await ctx.success("All **antiraid modules** are now **disabled**.")
+        await ctx.success(
+            "All **antiraid modules** are now **disabled** — configuration kept. "
+            f"Use `{ctx.clean_prefix}antiraid reset` to delete everything."
+        )
 
     @antiraid.command(
         name="reset",
@@ -519,7 +522,17 @@ class Antiraid(AntiraidEvents, Package):
     )
     @has_permissions(manage_guild=True)
     async def antiraid_reset(self, ctx):
-        """Reset all antiraid configuration for this server."""
+        """Reset all antiraid configuration for this server. This cannot be undone."""
+        from core.discord.views.confirm import ConfirmView
+
+        view = ConfirmView(ctx)
+        ok = await view.prompt(
+            "Reset **all** antiraid configuration for this server? "
+            "This action **cannot be undone**."
+        )
+        if not ok:
+            return await ctx.warn("Antiraid reset **cancelled**")
+
         unlocked = await self._enable_chat(ctx.guild)
         await self.bot.db.execute(
             "DELETE FROM antiraid_config WHERE guild_id = $1",
@@ -542,6 +555,9 @@ class Antiraid(AntiraidEvents, Package):
         suffix = ""
         if unlocked:
             suffix = f" and **{unlocked}** channel{'s' if unlocked != 1 else ''} unlocked"
-        await ctx.success(f"Antiraid configuration has been **reset**{suffix}.")
+        await ctx.success(
+            f"Antiraid configuration has been **reset**{suffix}. "
+            "This action cannot be undone."
+        )
 async def setup(bot: Vain) -> None:
     await bot.add_cog(Antiraid(bot))
