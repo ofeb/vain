@@ -1,17 +1,18 @@
 from __future__ import annotations
 
-import discord
-from discord.ext.commands import command, group
+import asyncio
+import contextlib
+import aiohttp
+from io import BytesIO
 
 import discord
+from discord.ext.commands import command, group
+from colorthief import ColorThief
+
 from core.discord.hybrid import hybrid
 from core.discord.package import Package
 from core.discord.views.paginate import send_pages
 from core.tools.embed import BadEmbed, ParseError, PreparedScript, parse
-import asyncio
-import aiohttp
-from io import BytesIO
-from colorthief import ColorThief
 
 from core.discord.views.embed import compose, body, caption, c2
 
@@ -762,6 +763,19 @@ class Server(
         # Sticky message runtime state (used by StickymessageCommands mixin)
         self._msg_counts: dict[int, int] = defaultdict(int)
         self._last_activity: dict = {}
+        self._pending_repost: set[int] = set()
+        self._last_repost_at: dict[int, float] = {}
+        self._worker_task = None
+        from asyncio import Queue as _Queue
+
+        self._queue = _Queue()
+
+    async def cog_load(self) -> None:
+        # Mixin cog_load methods are not chained by discord.py — start sticky here.
+        with contextlib.suppress(Exception):
+            await StickymessageCommands._ensure_schema(self)  # type: ignore[misc]
+        with contextlib.suppress(Exception):
+            StickymessageCommands._ensure_runtime(self)  # type: ignore[misc]
 
 async def setup(bot: Vain) -> None:
     """load server extension"""

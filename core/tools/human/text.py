@@ -2,21 +2,37 @@
 shorten join ordinal plural and markdown utils.
 all functions are pure no side effects"""
 
-from typing import Optional, Sequence, Union
+from typing import Sequence, Union
 
 
-def join(seq: Sequence[str], delim: str = ", ", final: str = "or", md: str = "") -> str:
+def join(
+    seq: Sequence[str],
+    delim: str = ", ",
+    final: str = "or",
+    md: str = "",
+    *,
+    markdown: str | None = None,
+) -> str:
     """join a list of strings with a final word.
     eg join(['a','b','c']) returns 'a, b or c'.
-    md wraps each item eg backtick for code"""
-    n = len(seq)
+    md/markdown wraps each item eg backtick for code"""
+    wrap = markdown if markdown is not None else md
+    items = [str(item) for item in seq if str(item)]
+    n = len(items)
     if n == 0:
         return ""
     if n == 1:
-        return f"{md}{seq[0]}{md}"
+        return f"{wrap}{items[0]}{wrap}"
     if n == 2:
-        return f"{md}{seq[0]}{md} {final} {md}{seq[1]}{md}"
-    return delim.join(f"{md}{i}{md}" for i in seq[:-1]) + f" {final} {md}{seq[-1]}{md}"
+        return f"{wrap}{items[0]}{wrap} {final} {wrap}{items[1]}{wrap}"
+    return (
+        delim.join(f"{wrap}{i}{wrap}" for i in items[:-1])
+        + f" {final} {wrap}{items[-1]}{wrap}"
+    )
+
+
+# legacy alias used across server filter commands
+human_join = join
 
 
 def shorten(value: str, length: int = 20) -> str:
@@ -32,7 +48,7 @@ def ordinal(n: int) -> str:
     return "%d%s" % (n, "tsnrhtdd"[(n // 10 % 10 != 1) * (n % 10 < 4) * n % 10 :: 4])
 
 
-def plural(value: Union[int, list], singular: str, plural_form: str = None) -> str:
+def plural(value: Union[int, list], singular: str, plural_form: str | None = None) -> str:
     """return singular or plural word based on count"""
     count = len(value) if isinstance(value, list) else value
     word = plural_form or f"{singular}s"

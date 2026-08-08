@@ -483,7 +483,7 @@ class Nuke(Package):
     )
     @has_permissions(administrator=True)
     async def autonuke_variables(self, ctx):
-        return await self.nuke_variables(ctx)
+        return await self.nuke_variables.callback(self, ctx)
 
     @autonuke.group(
         name="change",

@@ -232,7 +232,7 @@ class Fortnite(Package):
         aliases=["fnshop"],
     )
     async def fortniteshop(self, ctx: Context) -> None:
-        await self.fortnite_itemshop(ctx)
+        await self.fortnite_itemshop.callback(self, ctx)
 
 async def setup(bot: Vain):
     await bot.add_cog(Fortnite(bot))

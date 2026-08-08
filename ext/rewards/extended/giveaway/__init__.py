@@ -956,7 +956,7 @@ class Giveaway(commands.Cog):
     )
     @has_permissions(manage_guild=True)
     async def customize_join_type(self, ctx: Context, join_type: str) -> None:
-        await self.customize_join(ctx, join_type)
+        await self.customize_join.callback(self, ctx, join_type)
 
     @customize_join.command(
         name="reaction",
@@ -1142,17 +1142,17 @@ class Giveaway(commands.Cog):
     )
     @has_permissions(manage_guild=True)
     async def dmonwin(self, ctx: Context, state: str = None) -> None:
-        await self.customize_dmonwin(ctx, state)
+        await self.customize_dmonwin.callback(self, ctx, state)
 
     @dmonwin.command(name="on", description="Enable DMing winners")
     @has_permissions(manage_guild=True)
     async def dmonwin_on(self, ctx: Context) -> None:
-        await self.customize_dmonwin_on(ctx)
+        await self.customize_dmonwin_on.callback(self, ctx)
 
     @dmonwin.command(name="off", description="Disable DMing winners")
     @has_permissions(manage_guild=True)
     async def dmonwin_off(self, ctx: Context) -> None:
-        await self.customize_dmonwin_off(ctx)
+        await self.customize_dmonwin_off.callback(self, ctx)
 
     @dmonwin.command(
         name="script",
@@ -1161,7 +1161,7 @@ class Giveaway(commands.Cog):
     )
     @has_permissions(manage_guild=True)
     async def dmonwin_script(self, ctx: Context, *, script: str = None) -> None:
-        await self.customize_dmonwin_script(ctx, script=script)
+        await self.customize_dmonwin_script.callback(self, ctx, script=script)
 
 async def setup(bot: commands.Bot):
     """Load the Giveaway cog + events."""

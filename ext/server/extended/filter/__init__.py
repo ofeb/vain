@@ -10,8 +10,8 @@ from discord import (
 )
 from core.managers.permissions import has_permissions
 from core.discord.package import Package
-from lib.classes.flags.automod import FilterFlags, SpamFilterFlags
-from lib.classes.builtins import human_join
+from core.tools.flags.automod import FilterFlags, SpamFilterFlags
+from core.tools.human import human_join
 import re
 
 

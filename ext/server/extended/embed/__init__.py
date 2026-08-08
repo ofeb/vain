@@ -178,7 +178,7 @@ class EmbedCommands(Package):
     @describe(name="Template name", script="New embed script")
     @has_permissions(manage_messages=True)
     async def editembed(self, ctx: Context, name: str, *, script: str) -> None:
-        await self.embed_edit(ctx, name, script=script)
+        await self.embed_edit.callback(self, ctx, name, script=script)
 
     async def _send_embed_script(self, ctx: Context, script: str) -> None:
         """Parse and send an embed or container script (respects {embed}/{container})."""

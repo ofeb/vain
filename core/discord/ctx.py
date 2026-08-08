@@ -383,12 +383,16 @@ class Context(commands.Context):
         embed: discord.Embed,
         *,
         return_embed: bool = False,
+        raw_embed: bool = False,
         **kwargs,
     ):
         if return_embed:
             return embed
         kwargs.setdefault("mention_author", False)
-        
+        # Status replies (success/warn/deny) keep classic embed colours.
+        if raw_embed:
+            kwargs["raw_embed"] = True
+
         try:
             return await self.send(embed=embed, **kwargs)
         except discord.NotFound:
@@ -403,7 +407,7 @@ class Context(commands.Context):
                 return None
 
     async def success(self, message: str, **kw):
-        """send a success reply as a C2 embed lookalike"""
+        """send a success reply with approve colour"""
         emoji = await self._get_emoji("success")
         return await self._send_embed_response(
             self._message_embed(
@@ -411,11 +415,12 @@ class Context(commands.Context):
                 emoji=emoji,
                 color_value=await self._get_color("approve"),
             ),
+            raw_embed=True,
             **kw,
         )
 
     async def fail(self, message: str, **kw):
-        """send a failure reply as a C2 embed lookalike"""
+        """send a failure reply with deny colour"""
         emoji = await self._get_emoji("deny")
         return await self._send_embed_response(
             self._message_embed(
@@ -423,11 +428,12 @@ class Context(commands.Context):
                 emoji=emoji,
                 color_value=await self._get_color("deny"),
             ),
+            raw_embed=True,
             **kw,
         )
 
     async def warn(self, message: str, **kw):
-        """send a warning reply as a C2 embed lookalike"""
+        """send a warning reply with warn colour"""
         emoji = await self._get_emoji("warn")
         return await self._send_embed_response(
             self._message_embed(
@@ -435,6 +441,7 @@ class Context(commands.Context):
                 emoji=emoji,
                 color_value=await self._get_color("warn"),
             ),
+            raw_embed=True,
             **kw,
         )
 

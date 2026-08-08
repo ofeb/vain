@@ -95,7 +95,7 @@ class Soundcloud(Package):
     )
     @describe(query="Search query")
     async def soundcloud_search(self, ctx: Context, *, query: str) -> None:
-        await self.soundcloud.callback(ctx, query=query)
+        await self.soundcloud.callback(self, ctx, query=query)
 
     @soundcloud.command(
         name="info",

@@ -1,7 +1,7 @@
 from discord.ext.commands import group, CommandError
 from discord import Embed, TextChannel
 from core.discord.package import Package
-from lib.classes.converters import EVENT_MAPPING
+from core.managers.converters import EVENT_MAPPING
 
 
 from core.managers.converters import EventConverter

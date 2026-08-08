@@ -1,16 +1,6 @@
--- Schema restored. Full historical schema lives in git history (commit d177cbb).
--- Runtime migrations (e.g. boost cog_load) apply incremental ALTERs.
--- Below: complete schema with boost_messages supporting first + two-boosts slots.
-
 CREATE SCHEMA IF NOT EXISTS moderation;
 CREATE SCHEMA IF NOT EXISTS roleplay;
 CREATE SCHEMA IF NOT EXISTS pokemon;
-
--- NOTE: This file was truncated during an accidental overwrite and is being
--- rebuilt. The live database already has all tables from prior schema runs.
--- CREATE TABLE IF NOT EXISTS statements below cover the critical message tables
--- and the boost_messages dual-slot design. Remaining tables are created by
--- historical schema application and runtime migrations.
 
 CREATE TABLE IF NOT EXISTS join_messages (
     guild_id BIGINT NOT NULL,
@@ -45,13 +35,27 @@ CREATE TABLE IF NOT EXISTS sticky_message (
     channel_id BIGINT NOT NULL,
     code TEXT NOT NULL,
     last_message BIGINT,
-    message_limit INT NOT NULL DEFAULT 5,
-    interval_seconds INT NOT NULL DEFAULT 300,
+    message_limit INT NOT NULL DEFAULT 1,
+    interval_seconds INT NOT NULL DEFAULT 0,
     message_count INT NOT NULL DEFAULT 0,
     last_sent TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (guild_id, channel_id)
 );
+
+CREATE TABLE IF NOT EXISTS crypto_feeds (
+    guild_id BIGINT NOT NULL,
+    channel_id BIGINT NOT NULL,
+    coin_id TEXT NOT NULL,
+    coin_label TEXT NOT NULL,
+    last_price DOUBLE PRECISION,
+    last_change DOUBLE PRECISION,
+    last_market_cap DOUBLE PRECISION,
+    last_posted TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, channel_id, coin_id)
+);
+CREATE INDEX IF NOT EXISTS idx_crypto_feeds_coin ON crypto_feeds(coin_id);
 
 CREATE TABLE IF NOT EXISTS auto_responders (
     guild_id BIGINT NOT NULL,

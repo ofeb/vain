@@ -825,7 +825,7 @@ class Tickets(Package):
     )
     @has_permissions(manage_channels=True)
     async def ticket_opening_button_list(self, ctx):
-        return await self.ticket_button_list(ctx)
+        return await self.ticket_button_list.callback(self, ctx)
 
     @ticket_opening_button.command(
         name="remove",
@@ -836,7 +836,7 @@ class Tickets(Package):
     )
     @has_permissions(manage_channels=True)
     async def ticket_opening_button_remove(self, ctx, identifier: str):
-        return await self.ticket_button_remove(ctx, identifier)
+        return await self.ticket_button_remove.callback(self, ctx, identifier)
 
     
 
@@ -928,7 +928,7 @@ class Tickets(Package):
     )
     @has_permissions(manage_channels=True)
     async def ticket_button_emoji(self, ctx):
-        return await self.ticket_opening_button_emoji(ctx)
+        return await self.ticket_opening_button_emoji.callback(self, ctx)
 
     
 

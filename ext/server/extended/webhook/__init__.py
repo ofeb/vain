@@ -11,7 +11,7 @@ from discord.ext import commands
 from discord.ext.commands import CommandError, group
 
 from core.discord.package import Package
-from lib.classes.embed import Script
+from core.tools.embed import Script
 
 from core.managers.permissions import has_permissions
 

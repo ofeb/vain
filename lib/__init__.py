@@ -1,2 +1,0 @@
-"""legacy vain compatibility namespace."""
-

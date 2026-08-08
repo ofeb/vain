@@ -183,17 +183,35 @@ class Emoji(Package):
     @has_permissions(manage_expressions=True)
     async def emoji_stats(self, ctx):
         """show emote usage stats"""
-        emoji_data = await self.bot.db.fetch(
-            "SELECT emoji_name, uses FROM emoji_usage WHERE guild_id = $1 ORDER BY uses DESC LIMIT 10",
-            ctx.guild.id,
-        )
+        if ctx.guild is None:
+            return await ctx.warn("This command can only be used in a server")
+        try:
+            emoji_data = await self.bot.db.fetch(
+                "SELECT emoji_name, uses FROM emoji_usage WHERE guild_id = $1 ORDER BY uses DESC LIMIT 10",
+                ctx.guild.id,
+            )
+        except Exception:
+            emoji_data = None
 
         if not emoji_data:
-            return await ctx.send("No emoji usage data available")
+            # Fall back to listing server emotes when usage table is empty/missing.
+            emojis = list(ctx.guild.emojis)
+            if not emojis:
+                return await ctx.warn("No emoji usage data or server emotes available")
+            lines = [
+                f"**#{i}** {em} `{em.name}`"
+                for i, em in enumerate(sorted(emojis, key=lambda e: e.name.lower())[:10], start=1)
+            ]
+            e = c2(
+                title=f"Server emotes · {ctx.guild.name}",
+                message="\n".join(lines) + "\n-# usage tracking not available yet",
+                timestamp=False,
+            )
+            return await ctx.send(embed=e)
 
         lines = [
-            f"**#{i} {emoji['emoji_name']}** — `{emoji['uses']}` uses"
-            for i, emoji in enumerate(emoji_data, start=1)
+            f"**#{i} {row['emoji_name']}** — `{row['uses']}` uses"
+            for i, row in enumerate(emoji_data, start=1)
         ]
         e = c2(
             title=f"Top 10 Emojis in {ctx.guild.name}",
@@ -204,12 +222,61 @@ class Emoji(Package):
 
     @emoji.command(
         name="information",
-        description="View the most recent emote used",
+        aliases=["info", "i"],
+        description="Show info about a custom emoji",
+        example=",emoji information <:name:id>",
     )
-    @has_permissions(manage_expressions=True)
-    async def emoji_information(self, ctx, message_link: str):
-        """get emote info from message"""
-        await ctx.send("This feature would show emote information from the message")
+    async def emoji_information(self, ctx, *, emoji: str | None = None):
+        """Show id/name/url for a custom emoji (or the first emoji in a linked message)."""
+        token = (emoji or "").strip()
+        pe = _parse_partial_emoji(token.split()[0]) if token else None
+
+        # Optional message link: https://discord.com/channels/g/c/m
+        if pe is None and token and "channels/" in token:
+            try:
+                parts = token.rstrip("/").split("channels/")[-1].split("/")
+                if len(parts) >= 3:
+                    channel_id, message_id = int(parts[1]), int(parts[2])
+                    channel = self.bot.get_channel(channel_id) or await self.bot.fetch_channel(channel_id)
+                    msg = await channel.fetch_message(message_id)
+                    m = _EMOJI_RE.search(msg.content or "")
+                    if m:
+                        pe = discord.PartialEmoji(
+                            animated=bool(m.group(1)),
+                            name=m.group(2),
+                            id=int(m.group(3)),
+                        )
+            except Exception:
+                pe = None
+
+        if pe is None or not pe.id:
+            return await ctx.warn(
+                "Provide a custom emoji or message link "
+                f"— e.g. `{ctx.clean_prefix}emoji information <:name:id>`"
+            )
+
+        guild_emoji = None
+        if ctx.guild is not None:
+            guild_emoji = discord.utils.get(ctx.guild.emojis, id=pe.id)
+
+        lines = [
+            f"**name:** `{pe.name}`",
+            f"**id:** `{pe.id}`",
+            f"**animated:** {'yes' if pe.animated else 'no'}",
+            f"**url:** [open]({pe.url})",
+        ]
+        if guild_emoji is not None:
+            lines.append(f"**server:** this guild · available `{guild_emoji.available}`")
+            if guild_emoji.user:
+                lines.append(f"**added by:** {guild_emoji.user}")
+
+        e = c2(
+            title=f"Emoji · {pe.name}",
+            message="\n".join(lines),
+            timestamp=False,
+        )
+        e.set_thumbnail(url=str(pe.url))
+        await ctx.send(embed=e)
 
     @emoji.command(
         name="addmany",

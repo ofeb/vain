@@ -2242,7 +2242,7 @@ class Music(MusicEvents, Package):
     @hybrid(name="queue", description="View all tracks queued", group=True, invoke_without_command=True, guild_only=True)
     async def queue(self, ctx) -> None:
         if ctx.invoked_subcommand is None:
-            await self.queue_view(ctx)
+            await self.queue_view.callback(self, ctx)
 
     @queue.command(name="view", description="View all tracks queued", aliases=["list"])
     async def queue_view(self, ctx) -> None:

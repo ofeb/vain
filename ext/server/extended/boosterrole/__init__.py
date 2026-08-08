@@ -2,8 +2,8 @@ from typing import Optional, Union, List
 from discord.ext.commands import group, CommandError, ColourConverter as ColorConverter
 from discord import Embed, Role, Emoji, PartialEmoji, Color, Member
 from core.discord.package import Package
-from lib.classes.color import get_dominant_color
-from lib.classes.checks import is_booster
+from core.tools.color import get_dominant_color
+from core.tools.checks import is_booster
 import aiohttp
 import asyncio
 import random

@@ -70,7 +70,7 @@ class Spotify(Package):
         if track is None:
             return await ctx.send_help(ctx.command)
         if await self.api.is_linked(ctx.author.id):
-            return await self.spotify_play.callback(ctx, query=track)
+            return await self.spotify_play.callback(self, ctx, query=track)
         return await self._search_tracks(ctx, track)
 
     async def _search_tracks(self, ctx: Context, query: str) -> None:
@@ -399,7 +399,7 @@ class Spotify(Package):
     async def spotify_device(self, ctx: Context) -> None:
         if ctx.invoked_subcommand is not None:
             return
-        await self.spotify_device_list(ctx)
+        await self.spotify_device_list.callback(self, ctx)
 
     @spotify_device.command(name="list", description="List all current devices connected to your Spotify account")
     async def spotify_device_list(self, ctx: Context) -> None:
@@ -460,7 +460,7 @@ class Spotify(Package):
         music = ctx.bot.get_cog("Music")
         if music is None:
             return await ctx.warn("music cog isn't loaded")
-        await music.play.callback(ctx, query=query, next=False)
+        await music.play.callback(music, ctx, query=query, next=False)
 
     @spotify.command(name="search", description="Search for a track on Spotify")
     @describe(query="Track name to search for")

@@ -1,2 +1,0 @@
-"""legacy helper namespace compatibility."""
-

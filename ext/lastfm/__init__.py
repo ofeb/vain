@@ -663,7 +663,7 @@ class Lastfm(LastfmEvents, Package):
         """
         Integrate your Last.fm account with vain and view your scrobble stats
         """
-        return await self.lastfm_now(ctx)
+        return await self.lastfm_now.callback(self, ctx)
 
     @lastfm.command(name="login")
     async def lastfm_login(self, ctx: Context, username: str) -> None:
@@ -995,7 +995,7 @@ class Lastfm(LastfmEvents, Package):
         """
         Shows your current song playing from Last.fm
         """
-        await self.lastfm_now(ctx, query=query)
+        await self.lastfm_now.callback(self, ctx, query=query)
 
     @lastfm.command(name="recent", aliases=["recenttracks", "recents", "r", "rc"])
     async def lastfm_recent(self, ctx: Context, *, query: str | None = None) -> None:
@@ -3314,6 +3314,6 @@ class Lastfm(LastfmEvents, Package):
         """
         Clean up custom commands from absent members
         """
-        await self.lastfm_customcommand_cleanup(ctx)
+        await self.lastfm_customcommand_cleanup.callback(self, ctx)
 async def setup(bot: Vain) -> None:
     await bot.add_cog(Lastfm(bot))
