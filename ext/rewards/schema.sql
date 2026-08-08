@@ -4,6 +4,7 @@
 CREATE TABLE IF NOT EXISTS leveling (
     guild_id        BIGINT PRIMARY KEY,
     message         TEXT DEFAULT 'Nice work {user.mention} - you reached **Level {level}**!',
+    message_rolegain TEXT DEFAULT NULL,
     channel_id      BIGINT,
     multiplier      REAL DEFAULT 1.0,
     booster         REAL DEFAULT 1.0,
@@ -18,6 +19,7 @@ CREATE TABLE IF NOT EXISTS leveling (
 );
 
 ALTER TABLE leveling ADD COLUMN IF NOT EXISTS enabled BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE leveling ADD COLUMN IF NOT EXISTS message_rolegain TEXT DEFAULT NULL;
 
 CREATE TABLE IF NOT EXISTS level_user (
     guild_id    BIGINT NOT NULL,

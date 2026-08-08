@@ -386,7 +386,7 @@ class Tickets(Package):
         name="panel",
         description="Set an existing message as the ticket panel",
         example=",tc panel 123456789012345678",
-        usage="<message id | message link>",
+        usage="<message id or message link>",
     )
     @has_permissions(manage_channels=True)
     async def ticket_panel(self, ctx, message: Message):
@@ -579,7 +579,7 @@ class Tickets(Package):
         name="add",
         description="Add a channel (or DM) as a transcript destination",
         example=",tc transcript add #ticket-logs",
-        usage="<channel | dm>",
+        usage="<channel or dm>",
     )
     @has_permissions(manage_channels=True)
     async def ticket_transcript_add(self, ctx, target: Union[TextChannel, str]):

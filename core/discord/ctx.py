@@ -569,6 +569,8 @@ class Context(commands.Context):
             send_kw = dict(base_kw)
 
             send_kw.pop("suppress_embeds", None)
+            if content is not None:
+                send_kw["content"] = content
             if len(file_list) == 1:
                 send_kw["file"] = file_list[0]
             elif file_list:
@@ -580,6 +582,8 @@ class Context(commands.Context):
         if isinstance(view, discord.ui.LayoutView):
             send_kw = dict(base_kw)
             send_kw.pop("suppress_embeds", None)
+            if content is not None:
+                send_kw["content"] = content
             if len(file_list) == 1:
                 send_kw["file"] = file_list[0]
             elif file_list:

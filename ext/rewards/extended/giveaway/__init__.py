@@ -393,7 +393,7 @@ class Giveaway(commands.Cog):
         aliases=["rr"],
         description="Reroll winners for an ended giveaway",
         guild_only=True,
-        usage="[message id/link] [winners]",
+        usage="[message id or link] [winners]",
         example=",giveaway reroll 123456789012345678",
     )
     @describe(
@@ -468,7 +468,7 @@ class Giveaway(commands.Cog):
         aliases=["e", "stop"],
         description="End an active giveaway early",
         guild_only=True,
-        usage="[message id/link]",
+        usage="[message id or link]",
         example=",giveaway end",
     )
     @describe(target="Message id, jump link, or leave blank to use a reply")
@@ -890,7 +890,7 @@ class Giveaway(commands.Cog):
         name="embed",
         aliases=["panel", "message", "script"],
         description="Set a custom giveaway panel embed/script",
-        usage="[script|clear]",
+        usage="[script or clear]",
         example=",giveaway customize embed {title: {prize}}$v{description: Ends soon · hosted by {host}}",
     )
     @has_permissions(manage_guild=True)
@@ -1027,7 +1027,7 @@ class Giveaway(commands.Cog):
         name="showentries",
         aliases=["entries", "showentry", "show"],
         description="Toggle showing entry count on the giveaway panel",
-        usage="<on|off>",
+        usage="<on or off>",
         example=",giveaway customize showentries off",
     )
     @has_permissions(manage_guild=True)
@@ -1057,7 +1057,7 @@ class Giveaway(commands.Cog):
         aliases=["dm"],
         invoke_without_command=True,
         description="Toggle DMing winners (default: off)",
-        usage="[on|off]",
+        usage="[on or off]",
     )
     @has_permissions(manage_guild=True)
     async def customize_dmonwin(self, ctx: Context, state: str = None) -> None:
@@ -1107,7 +1107,7 @@ class Giveaway(commands.Cog):
         name="script",
         aliases=["message", "msg", "template"],
         description="Set a custom DM script for winners",
-        usage="[script|clear]",
+        usage="[script or clear]",
         example=",giveaway customize dmonwin script {embed}$v{title: You won!}$v{description: **{prize}** in {guild.name}}",
     )
     @has_permissions(manage_guild=True)

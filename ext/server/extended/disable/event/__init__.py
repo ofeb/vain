@@ -29,7 +29,7 @@ class EventDisableCommands(Package):
             event_token = tokens[0]
             channel = ctx.channel if isinstance(ctx.channel, TextChannel) else None
         else:
-            # Prefer first token as channel when it converts; otherwise last.
+            
             with contextlib.suppress(Exception):
                 ch = await TextChannelConverter().convert(ctx, tokens[0])
                 if isinstance(ch, TextChannel):

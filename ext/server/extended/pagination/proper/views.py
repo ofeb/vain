@@ -4,7 +4,6 @@ from contextlib import suppress
 from typing import TYPE_CHECKING
 
 import discord
-from discord import ui
 from discord.ext import commands
 
 from config import emojis
@@ -14,168 +13,51 @@ if TYPE_CHECKING:
     from core.vain import Vain
 
 
-def _custom_ids(message_id: int) -> dict[str, str]:
-    base = f"Vain:pag:{message_id}"
-    return {
-        "prev": f"{base}:prev",
-        "next": f"{base}:next",
-        "goto": f"{base}:goto",
-        "cancel": f"{base}:cancel",
-    }
+async def _stored_reaction_emojis(
+    bot: Vain,
+    *,
+    guild_id: int,
+    channel_id: int,
+    message_id: int,
+) -> tuple[str, str]:
+    row = await bot.db.fetchrow(
+        """
+        SELECT left_emoji, right_emoji
+        FROM pagination
+        WHERE guild_id = $1 AND channel_id = $2 AND message_id = $3
+        """,
+        guild_id,
+        channel_id,
+        message_id,
+    )
+    left = emojis.paginator.left
+    right = emojis.paginator.right
+    if row:
+        with suppress(Exception):
+            left = row["left_emoji"] or left
+        with suppress(Exception):
+            right = row["right_emoji"] or right
+    return left, right
 
 
-class _StoredSkipModal(ui.Modal, title="Skip to page"):
-    def __init__(self, view: "StoredPaginationView", total: int) -> None:
-        super().__init__(timeout=60)
-        self.view = view
-        self.page = ui.TextInput(
-            label="Page number",
-            placeholder=f"1-{total}",
-            required=True,
-            max_length=4,
-        )
-        self.add_item(self.page)
+async def _apply_pagination_reactions(
+    message: discord.Message,
+    *,
+    left: str | None = None,
+    right: str | None = None,
+) -> tuple[str, str]:
+    """Ensure left/right reaction controls exist on a pagination message."""
+    left_emoji = left or getattr(emojis.paginator, "left", "⬅️") or "⬅️"
+    right_emoji = right or getattr(emojis.paginator, "right", "➡️") or "➡️"
 
-    async def on_submit(self, interaction: discord.Interaction) -> None:
-        raw = str(self.page.value).strip()
-        if not raw.isdigit():
-            return await interaction.response.send_message(
-                "Provide a **valid page number**.",
-                ephemeral=True,
-            )
-        page_number = int(raw)
-        if page_number < 1 or page_number > len(self.view.pages):
-            return await interaction.response.send_message(
-                "That page is **out of range**.",
-                ephemeral=True,
-            )
-        await self.view.show_page(interaction, page_number - 1)
+    with suppress(discord.HTTPException):
+        await message.clear_reactions()
 
-
-class _StoredButton(ui.Button["StoredPaginationView"]):
-    def __init__(self, *, action: str, custom_id: str, **kwargs) -> None:
-        super().__init__(custom_id=custom_id, **kwargs)
-        self.action = action
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        view = self.view
-        if view is None:
-            return
-        if self.action == "cancel":
-            await interaction.response.defer()
-            if interaction.message is not None:
-                with suppress(discord.HTTPException):
-                    await interaction.message.delete()
-            await view.bot.db.execute(
-                """
-                DELETE FROM pagination
-                WHERE guild_id = $1 AND channel_id = $2 AND message_id = $3
-                """,
-                view.guild_id,
-                view.channel_id,
-                view.message_id,
-            )
-            view.stop()
-            return
-        if self.action == "goto":
-            return await interaction.response.send_modal(
-                _StoredSkipModal(view, len(view.pages))
-            )
-        if self.action == "prev":
-            return await view.show_page(interaction, view.index - 1)
-        if self.action == "next":
-            return await view.show_page(interaction, view.index + 1)
-
-
-class StoredPaginationView(ui.View):
-    """persistent button pagination for ,ce / pagination set messages."""
-
-    def __init__(
-        self,
-        bot: Vain,
-        *,
-        guild_id: int,
-        channel_id: int,
-        message_id: int,
-        pages: list[str],
-        current_page: int = 0,
-    ) -> None:
-        super().__init__(timeout=None)
-        self.bot = bot
-        self.guild_id = guild_id
-        self.channel_id = channel_id
-        self.message_id = message_id
-        self.pages = pages
-        self.index = min(max(current_page, 0), max(len(pages) - 1, 0))
-        ids = _custom_ids(message_id)
-        
-        
-        self.add_item(
-            _StoredButton(
-                action="prev",
-                style=discord.ButtonStyle.secondary,
-                emoji=discord.PartialEmoji.from_str(emojis.paginator.previous),
-                custom_id=ids["prev"],
-            )
-        )
-        self.add_item(
-            _StoredButton(
-                action="cancel",
-                style=discord.ButtonStyle.secondary,
-                emoji=discord.PartialEmoji.from_str(
-                    getattr(emojis.paginator, "delete", None)
-                    or emojis.paginator.cancel
-                    or "<:delete:1535040504516055191>"
-                ),
-                custom_id=ids["cancel"],
-            )
-        )
-        self.add_item(
-            _StoredButton(
-                action="next",
-                style=discord.ButtonStyle.secondary,
-                emoji=discord.PartialEmoji.from_str(emojis.paginator.next),
-                custom_id=ids["next"],
-            )
-        )
-        self.add_item(
-            _StoredButton(
-                action="goto",
-                style=discord.ButtonStyle.primary,
-                emoji=discord.PartialEmoji.from_str(
-                    getattr(emojis.paginator, "search", None)
-                    or emojis.paginator.navigate
-                    or "<:search:1479154501066817600>"
-                ),
-                custom_id=ids["goto"],
-            )
-        )
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        return True
-
-    async def _payload(self, index: int) -> dict:
-        script = Script(self.pages[index], self.bot.user)
-        return await script.data(True)
-
-    async def show_page(self, interaction: discord.Interaction, index: int) -> None:
-        if len(self.pages) <= 1:
-            return
-        self.index = index % len(self.pages)
-        await self.bot.db.execute(
-            """
-            UPDATE pagination
-            SET current_page = $1
-            WHERE guild_id = $2 AND channel_id = $3 AND message_id = $4
-            """,
-            self.index,
-            self.guild_id,
-            self.channel_id,
-            self.message_id,
-        )
-        payload = await self._payload(self.index)
-        payload["view"] = self
-        await interaction.response.edit_message(**payload)
+    with suppress(discord.HTTPException):
+        await message.add_reaction(left_emoji)
+    with suppress(discord.HTTPException):
+        await message.add_reaction(right_emoji)
+    return left_emoji, right_emoji
 
 
 async def sync_stored_pagination(
@@ -187,30 +69,34 @@ async def sync_stored_pagination(
     pages: list[str],
     current_page: int = 0,
 ) -> None:
-    """attach, refresh, or remove stored pagination buttons on a message."""
+    """Render a stored pagination and keep its left/right reaction controls."""
     index = min(max(current_page, 0), max(len(pages) - 1, 0))
     if len(pages) <= 1:
         if pages:
             script = Script(pages[index], bot.user)
             payload = await script.data(True)
             payload["view"] = None
-            await message.edit(**payload)
+            with suppress(discord.HTTPException):
+                await message.edit(**payload)
         else:
-            await message.edit(view=None)
+            with suppress(discord.HTTPException):
+                await message.edit(view=None)
+        with suppress(discord.HTTPException):
+            await message.clear_reactions()
         return
-    view = StoredPaginationView(
+
+    left, right = await _stored_reaction_emojis(
         bot,
         guild_id=guild_id,
         channel_id=channel_id,
         message_id=message.id,
-        pages=pages,
-        current_page=index,
     )
-    bot.add_view(view)
     script = Script(pages[index], bot.user)
     payload = await script.data(True)
-    payload["view"] = view
-    await message.edit(**payload)
+    payload["view"] = None
+    with suppress(discord.HTTPException):
+        await message.edit(**payload)
+    await _apply_pagination_reactions(message, left=left, right=right)
 
 
 async def show_stored_page_by_reaction(
@@ -249,24 +135,15 @@ async def show_stored_page_by_reaction(
         channel_id,
         message.id,
     )
-    view = StoredPaginationView(
-        bot,
-        guild_id=guild_id,
-        channel_id=channel_id,
-        message_id=message.id,
-        pages=pages,
-        current_page=index,
-    )
-    bot.add_view(view)
     script = Script(pages[index], bot.user)
     payload = await script.data(True)
-    payload["view"] = view
+    payload["view"] = None
     with suppress(discord.HTTPException):
         await message.edit(**payload)
 
 
 async def register_stored_paginations(bot: Vain) -> None:
-    """restore persistent pagination views after startup."""
+    """restore stored pagination messages without buttons and with reactions."""
     rows = await bot.db.fetch(
         """
         SELECT guild_id, channel_id, message_id, pages, current_page
@@ -276,22 +153,36 @@ async def register_stored_paginations(bot: Vain) -> None:
         cached=False,
     )
     for row in rows:
-        pages = list(row["pages"] or [])
-        if len(pages) <= 1:
+        channel = bot.get_channel(int(row["channel_id"]))
+        if channel is None:
+            with suppress(Exception):
+                channel = await bot.fetch_channel(int(row["channel_id"]))
+        if channel is None or not hasattr(channel, "fetch_message"):
             continue
-        view = StoredPaginationView(
+        try:
+            message = await channel.fetch_message(int(row["message_id"]))
+        except Exception:
+            continue
+        pages = list(row["pages"] or [])
+        if not pages:
+            continue
+        index = min(max(int(row["current_page"] or 0), 0), len(pages) - 1)
+        script = Script(pages[index], bot.user)
+        payload = await script.data(True)
+        payload["view"] = None
+        with suppress(discord.HTTPException):
+            await message.edit(**payload)
+        left, right = await _stored_reaction_emojis(
             bot,
             guild_id=int(row["guild_id"]),
             channel_id=int(row["channel_id"]),
             message_id=int(row["message_id"]),
-            pages=pages,
-            current_page=int(row["current_page"] or 0),
         )
-        bot.add_view(view)
+        await _apply_pagination_reactions(message, left=left, right=right)
 
 
 class PaginationReactionListener(commands.Cog):
-    """left/right reaction flips for stored pagination messages."""
+    """left/right reaction flips for stored pagination messages (Manage Server only)."""
 
     def __init__(self, bot: Vain) -> None:
         self.bot = bot
@@ -300,7 +191,7 @@ class PaginationReactionListener(commands.Cog):
         raw = str(emoji)
         left_s = str(left or emojis.paginator.left)
         right_s = str(right or emojis.paginator.right)
-        
+
         left_aliases = {left_s, "⬅️", "⬅", "◀️", "◀"}
         right_aliases = {right_s, "➡️", "➡", "▶️", "▶"}
         if raw in left_aliases or getattr(emoji, "name", None) in {
@@ -310,7 +201,7 @@ class PaginationReactionListener(commands.Cog):
             return -1
         if raw in right_aliases or getattr(emoji, "name", None) in {"arrow_right"}:
             return 1
-        
+
         eid = getattr(emoji, "id", None)
         if eid:
             if str(eid) in left_s:
@@ -326,6 +217,18 @@ class PaginationReactionListener(commands.Cog):
         if self.bot.user and payload.user_id == self.bot.user.id:
             return
 
+        member = payload.member
+        if member is None:
+            guild = self.bot.get_guild(payload.guild_id)
+            if guild is not None:
+                with suppress(Exception):
+                    member = guild.get_member(payload.user_id)
+                if member is None:
+                    with suppress(Exception):
+                        member = await guild.fetch_member(payload.user_id)
+        if member is None or not member.guild_permissions.manage_guild:
+            return
+
         row = await self.bot.db.fetchrow(
             """
             SELECT pages, current_page, left_emoji, right_emoji
@@ -337,7 +240,6 @@ class PaginationReactionListener(commands.Cog):
             payload.message_id,
         )
         if not row:
-            
             row = await self.bot.db.fetchrow(
                 """
                 SELECT pages, current_page
@@ -376,9 +278,10 @@ class PaginationReactionListener(commands.Cog):
         except Exception:
             return
 
-        
         with suppress(discord.HTTPException):
-            await message.remove_reaction(payload.emoji, discord.Object(id=payload.user_id))
+            await message.remove_reaction(
+                payload.emoji, discord.Object(id=payload.user_id)
+            )
 
         await show_stored_page_by_reaction(
             self.bot,

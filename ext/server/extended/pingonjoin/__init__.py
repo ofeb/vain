@@ -201,7 +201,7 @@ class PingOnJoinCommands(PingOnJoinEvents, Package):
         name="delete",
         aliases=["deletedelay", "autodelete"],
         invoke_without_command=True,
-        usage="[on|off|interval]",
+        usage="[on or off or interval]",
         example=",pingonjoin delete 10s",
         description="Auto-delete ping on join messages after a delay",
     )

@@ -877,24 +877,21 @@ class _BaseBuilder:
                 except Exception:
                     pass
 
-    def _preview_container(self) -> ui.LayoutView:
+    def _preview_container(self) -> tuple[str | None, ui.LayoutView]:
         layout = ui.LayoutView(timeout=None)
         container = ui.Container()
 
         _ = self._accent()
 
-        
-        
+        content: str | None = None
+
         blocks = list(self.blocks) if self.blocks else None
         if not blocks:
             blocks = None
         if blocks is None:
-            
+            content = (self.data.get("content") or "").strip() or None
             lines: list[str] = []
-            
-            
-            if self.data.get("content"):
-                lines.append(self.data["content"])
+
             if self.data.get("author"):
                 lines.append(f"**{self.data['author']}**")
             if self.data.get("title"):
@@ -954,6 +951,7 @@ class _BaseBuilder:
         else:
             pending_lines: list[str] = []
             pending_thumb: str | None = None
+            content_parts: list[str] = []
 
             def _flush_text() -> None:
                 nonlocal pending_lines, pending_thumb
@@ -986,9 +984,10 @@ class _BaseBuilder:
                     urls = list(block.get("urls") or self.images or [])
                     self._add_gallery(container, urls)
                 elif typ == "content":
+                    _flush_text()
                     val = (block.get("value") or "").strip()
                     if val:
-                        pending_lines.append(val)
+                        content_parts.append(val)
                 elif typ == "title":
                     val = (block.get("value") or "").strip()
                     if val:
@@ -1025,6 +1024,12 @@ class _BaseBuilder:
 
             _flush_text()
             
+            content = (
+                "\n".join(part for part in content_parts if part.strip()).strip()
+                or (self.data.get("content") or "").strip()
+                or None
+            )
+
             if not getattr(container, "children", None):
                 try:
                     container.add_item(ui.TextDisplay("​"))
@@ -1056,7 +1061,7 @@ class _BaseBuilder:
                         pass
 
         layout.add_item(container)
-        return layout
+        return content, layout
 
     async def refresh(self) -> None:
         if self._stopped or not self.message:
@@ -1098,10 +1103,12 @@ class _BaseBuilder:
                 except Exception:
                     pass
 
-        preview = self._preview_container()
+        preview_content, preview = self._preview_container()
         if self.preview_message is not None:
             try:
-                await self.preview_message.edit(content=None, embed=None, view=preview)
+                await self.preview_message.edit(
+                    content=preview_content, embed=None, view=preview
+                )
                 return
             except Exception:
                 with contextlib.suppress(Exception):
@@ -1110,7 +1117,9 @@ class _BaseBuilder:
 
         if channel is not None:
             try:
-                self.preview_message = await channel.send(view=preview)
+                self.preview_message = await channel.send(
+                    content=preview_content, view=preview
+                )
             except Exception:
                 self.preview_message = None
 
@@ -1631,7 +1640,8 @@ async def register_builders(bot: "Vain") -> None:
         m = await ctx.send(view=builder._controls())
         builder.message = m
         try:
-            preview = await ctx.send(view=builder._preview_container())
+            preview_content, preview_layout = builder._preview_container()
+            preview = await ctx.send(content=preview_content, view=preview_layout)
             builder.preview_message = preview
         except Exception:
             builder.preview_message = None

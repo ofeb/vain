@@ -5,15 +5,15 @@ BUMP_COOLDOWN = 7200
 DEFAULT_REMINDER_SCRIPT = (
     "{container}"
     "$v{content: {bumper.mention}}"
-    "$v{description: # Time to promote\n"
-    "**Disboard** is ready for another bump.\n\n"
+    "$v{description: **__Time to bump__**\n"
+    "The **Disboard** cooldown is over - this guild is falling off the list.\n\n"
     "Run </bump:947088344167366698> to keep this guild on the list.\n\n"
-    "-# Last bump · {bumper.display} · <t:{timestamp}:R>}"
+    "-# Last bump · {bumper.display} · <t:{bump.last}:R>}"
 )
 
 DEFAULT_THANKYOU_SCRIPT = (
     "{container}"
-    "$v{description: # Bump logged\n"
-    "Thanks {bumper.mention} - this guild is back on **Disboard**.\n\n"
-    "-# Next reminder in **2 hours** · <t:{timestamp}:R>}"
+    "$v{description: **__Bump logged__**\n"
+    "Thanks {bumper.mention} - **{guild.name}** is back on the Disboard list.\n\n"
+    "-# Next reminder · <t:{bump.next}:R>}"
 )

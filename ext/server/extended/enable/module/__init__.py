@@ -65,7 +65,7 @@ class ModuleEnableCommands(Package):
     @group(
         name="enablemodule",
         description="Enable a module in a channel/server (defaults to this channel)",
-        usage="[channel|server] <module>",
+        usage="[channel or server] <module>",
         example=",enablemodule #general server",
         invoke_without_command=True,
     )

@@ -468,9 +468,9 @@ class Role(Package):
         member_conv = commands.MemberConverter()
         role_conv = RoleConvert()
 
-        # Prefer the smallest member prefix whose remainder is a valid role.
-        # Walk member count from 1 upward so ",r nafim0509 member" binds role
-        # "member" instead of fuzzy-matching a second user named like "member".
+        
+        
+        
         for member_count in range(1, len(tokens)):
             member_tokens = tokens[:member_count]
             role_name = " ".join(tokens[member_count:]).strip()
@@ -493,7 +493,7 @@ class Role(Package):
             except Exception:
                 continue
 
-            # Deduplicate while preserving order
+            
             seen: set[int] = set()
             unique: list[discord.Member] = []
             for m in members:
@@ -1017,7 +1017,7 @@ class Role(Package):
         name="icon",
         description="Set a role icon from an emoji, URL, or image",
         example=",role icon @Role ⭐",
-        usage="(role) [emoji|url|attachment]",
+        usage="(role) [emoji or url or attachment]",
     )
     @has_permissions(manage_roles=True)
     async def role_icon(

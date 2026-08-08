@@ -27,27 +27,6 @@ def _parse_reaction_emoji(raw: str | None) -> str:
     return text
 
 
-async def _apply_pagination_reactions(
-    message: Message,
-    *,
-    left: str | None = None,
-    right: str | None = None,
-) -> tuple[str, str]:
-    """Ensure left/right reaction controls exist on a pagination message."""
-    left_emoji = left or getattr(emojis.paginator, "left", "⬅️") or "⬅️"
-    right_emoji = right or getattr(emojis.paginator, "right", "➡️") or "➡️"
-
-    
-    with suppress(discord.HTTPException):
-        await message.clear_reactions()
-
-    with suppress(discord.HTTPException):
-        await message.add_reaction(left_emoji)
-    with suppress(discord.HTTPException):
-        await message.add_reaction(right_emoji)
-    return left_emoji, right_emoji
-
-
 async def _ensure_paginator_row(package: Package, ctx, message: Message) -> tuple[list[str], int]:
     """return stored pages for a message, registering it from the live message when needed."""
     row = await package.db.fetchrow(
@@ -224,11 +203,11 @@ class PaginationCommands(Package):
     @pagination.command(
         name="restorereactions",
         aliases=["rr", "restore"],
-        description="Restore pagination buttons on an existing pagination embed",
+        description="Restore pagination reactions on an existing pagination embed",
     )
     @has_permissions(manage_messages=True)
     async def pagination_restorereactions(self, ctx, message: Message):
-        """restore paginator buttons"""
+        """restore paginator reactions"""
         row = await self.db.fetchrow(
             """
             SELECT pages, current_page
@@ -252,8 +231,7 @@ class PaginationCommands(Package):
             pages=pages,
             current_page=int(row["current_page"] or 0),
         )
-        await _apply_pagination_reactions(message)
-        return await ctx.success("pagination buttons restored")
+        return await ctx.success("pagination reactions restored")
 
     @pagination.group(
         name="edit",
@@ -268,7 +246,7 @@ class PaginationCommands(Package):
         name="reaction",
         aliases=["reactions", "emoji", "emojis"],
         description="Set left/right reaction emojis for a pagination message",
-        usage="<message> [left|right] [emoji|default]",
+        usage="<message> [left or right] [emoji or default]",
         example=",pagination edit reaction 123 right ➡️",
     )
     @has_permissions(manage_messages=True)
@@ -358,7 +336,6 @@ class PaginationCommands(Package):
             pages=pages,
             current_page=int(row["current_page"] or 0),
         )
-        await _apply_pagination_reactions(message, left=left_val, right=right_val)
         return await ctx.success(
             f"set reactions on [`this message`]({message.jump_url}) "
             f"→ left {left_val} · right {right_val}"
@@ -425,6 +402,8 @@ class PaginationCommands(Package):
             message.id,
         )
         await message.edit(view=None)
+        with suppress(discord.HTTPException):
+            await message.clear_reactions()
         return await ctx.success(
             f"deleted paginator [`{message.id}`]({message.jump_url})"
         )
@@ -462,6 +441,8 @@ class PaginationCommands(Package):
                 message.id,
             )
             await message.edit(view=None)
+            with suppress(discord.HTTPException):
+                await message.clear_reactions()
             return await ctx.success(
                 f"removed the last page and deleted [`{message.id}`]({message.jump_url})"
             )

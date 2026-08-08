@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import random
+import re
 import time
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any, Optional
@@ -22,6 +23,11 @@ XP_COOLDOWN = 45.0
 XP_MIN = 15
 XP_MAX = 25
 _COOLDOWN_PRUNE_EVERY = 500
+
+DEFAULT_LEVEL_ROLEGAIN = (
+    "{user.mention} has reached **level {level}** and was given "
+    "{role.mention} Role."
+)
 
 LevelDest = discord.abc.Messageable
 
@@ -87,9 +93,13 @@ class LevelingEvents:
         level: int,
         xp: Any = None,
         target_xp: Any = None,
+        role: Optional[discord.Role] = None,
     ) -> str:
         """Apply level-specific placeholders. Longer keys first so {user} cannot
-        clobber {user.mention} / {user.name}."""
+        clobber {user.mention} / {user.name}.
+
+        ``{role.mention or role.name}`` style expressions pick the first
+        non-empty placeholder alternative."""
         text = str(script)
         pairs = [
             ("{user.mention}", member.mention),
@@ -102,6 +112,14 @@ class LevelingEvents:
             ("{member}", member.mention),
             ("{level}", str(level)),
         ]
+        if role is not None:
+            pairs.extend(
+                [
+                    ("{role.mention}", role.mention),
+                    ("{role.name}", role.name),
+                    ("{role}", role.mention),
+                ]
+            )
         if xp is not None:
             pairs.append(("{xp}", str(int(float(xp)))))
         if target_xp is not None:
@@ -114,7 +132,18 @@ class LevelingEvents:
                     ("{guild}", guild.name),
                 ]
             )
-        
+
+        lookup = {key: value for key, value in pairs}
+
+        def _resolve_or(match: "re.Match[str]") -> str:
+            for alt in re.split(r"\s+or\s+", match.group(1)):
+                value = lookup.get("{" + alt.strip() + "}")
+                if value:
+                    return value
+            return ""
+
+        text = re.sub(r"\{([^{}]+ or [^{}]+)\}", _resolve_or, text)
+
         for key, value in sorted(pairs, key=lambda kv: len(kv[0]), reverse=True):
             text = text.replace(key, value)
         return text
@@ -194,6 +223,7 @@ class LevelingEvents:
         source_channel: Optional[discord.abc.Messageable] = None,
         xp: Any = None,
         target_xp: Any = None,
+        role: Optional[discord.Role] = None,
     ) -> Optional[discord.Message]:
         text = self._render_level_message(
             script,
@@ -202,6 +232,7 @@ class LevelingEvents:
             level=level,
             xp=xp,
             target_xp=target_xp,
+            role=role,
         )
         channel_ctx = source_channel
         if channel_ctx is None and isinstance(
@@ -361,14 +392,15 @@ class LevelingEvents:
         guild: discord.Guild,
         cfg: Any,
         level: int,
-    ) -> None:
+    ) -> list[discord.Role]:
+        """Apply role rewards for the new level and return the roles gained."""
         rewards = await self.bot.db.fetch(
             "SELECT role_id, level FROM level_rewards WHERE guild_id = $1 AND level <= $2",
             guild.id,
             level,
         )
         if not rewards:
-            return
+            return []
 
         stack = bool(cfg.get("stack"))
         if stack:
@@ -382,7 +414,7 @@ class LevelingEvents:
                     await member.add_roles(*to_add, reason="Level reward")
                 except Exception:
                     pass
-            return
+            return to_add
 
         
         by_level: dict[int, list[discord.Role]] = {}
@@ -391,7 +423,7 @@ class LevelingEvents:
             if role is not None:
                 by_level.setdefault(int(r["level"]), []).append(role)
         if not by_level:
-            return
+            return []
         highest = max(by_level)
         keep = set(by_level[highest])
         remove = []
@@ -412,6 +444,7 @@ class LevelingEvents:
                 await member.add_roles(*to_add, reason="Level reward")
             except Exception:
                 pass
+        return to_add
 
     async def _on_level_up(
         self,
@@ -427,8 +460,11 @@ class LevelingEvents:
         if guild is None or not isinstance(member, discord.Member):
             return
 
+        gained_roles: list[discord.Role] = []
         try:
-            await self._apply_level_rewards(member, guild, cfg, level)
+            gained_roles = (
+                await self._apply_level_rewards(member, guild, cfg, level) or []
+            )
         except Exception:
             log.exception(
                 "level rewards failed guild=%s user=%s level=%s",
@@ -437,9 +473,16 @@ class LevelingEvents:
                 level,
             )
 
-        script = cfg.get("message")
-        if not script or str(script).strip().lower() == "none":
-            return
+        if gained_roles:
+            script = cfg.get("message_rolegain")
+            if not script or str(script).strip().lower() == "none":
+                script = DEFAULT_LEVEL_ROLEGAIN
+            role = gained_roles[0]
+        else:
+            script = cfg.get("message")
+            if not script or str(script).strip().lower() == "none":
+                return
+            role = None
 
         dest = await self._resolve_level_destination(
             guild=guild,
@@ -459,4 +502,5 @@ class LevelingEvents:
             source_channel=message.channel,
             xp=xp,
             target_xp=target_xp,
+            role=role,
         )

@@ -206,7 +206,7 @@ class Reaction(ReactionEvents, Package):
     @reaction_group.command(
         name="strict",
         description="Toggle strict matching for a trigger (on/off)",
-        usage="<trigger|all> <on|off>",
+        usage="<trigger or all> <on or off>",
     )
     @has_permissions(manage_expressions=True)
     async def reaction_strict(self, ctx: Context, trigger: str, state: str = None) -> None:

@@ -379,7 +379,7 @@ class StickymessageCommands(Package):
         aliases=["changeinterval", "ci"],
         description="Change the auto-send interval for a sticky (disabled when limit is 1)",
         example=",stickymessage interval #general 10m",
-        usage="[channel] <interval|off>",
+        usage="[channel] <interval or off>",
     )
     @has_permissions(manage_guild=True)
     async def stickymessage_interval(self, ctx, *, args: str = ""):

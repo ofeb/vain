@@ -29,7 +29,7 @@ def parse_dt(value) -> datetime.datetime | None:
         return dt.astimezone(datetime.timezone.utc)
     if isinstance(value, (int, float)):
         ts = float(value)
-        # ms timestamps are typically 13+ digits
+        
         if ts > 1e12:
             ts /= 1000.0
         try:
@@ -47,7 +47,7 @@ def parse_dt(value) -> datetime.datetime | None:
         except ValueError:
             pass
         cleaned = raw.replace("Z", "+00:00")
-        # allow "2022-04-19 12:12:55" style
+        
         if " " in cleaned and "T" not in cleaned[:11]:
             cleaned = cleaned.replace(" ", "T", 1)
         try:

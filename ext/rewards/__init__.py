@@ -399,6 +399,10 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
                 await self.db.execute(
                     "ALTER TABLE leveling ADD COLUMN IF NOT EXISTS enabled BOOLEAN NOT NULL DEFAULT TRUE"
                 )
+            with contextlib.suppress(Exception):
+                await self.db.execute(
+                    "ALTER TABLE leveling ADD COLUMN IF NOT EXISTS message_rolegain TEXT DEFAULT NULL"
+                )
 
     def _calc_target(self, level: int) -> int:
         return max(int((100 * level + 1) ** 0.9), 50)
@@ -576,7 +580,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         name="channel",
         description="Set where level-up messages go (`any`, `dm`, or a channel)",
         example=",leveling channel #levels",
-        usage="<channel|any|dm>",
+        usage="<channel or any or dm>",
     )
     @has_permissions(manage_guild=True)
     async def leveling_channel(self, ctx, *, channel: str):
@@ -626,9 +630,13 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
 
     @leveling.command(
         name="message",
-        description="Set the level-up message script (embed/container/plain)",
+        description=(
+            "Set the level-up message script (embed/container/plain). "
+            "Add `--rolegain` to make it a role reward message that only sends "
+            "when the member gains a role from `,leveling rewards`"
+        ),
         example=",leveling message Nice {user.mention} - Level {level}!",
-        usage="<script|none>",
+        usage="<script or none> [--rolegain]",
     )
     @has_permissions(manage_guild=True)
     async def leveling_message(self, ctx, *, message: str = None):
@@ -636,21 +644,43 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
             return
         if message is None:
             return await ctx.send_help(ctx.command)
-        if message.strip().lower() == "none":
+        raw = str(message)
+        rolegain = False
+        kept = []
+        for word in raw.split():
+            if word.lower() == "--rolegain":
+                rolegain = True
+            else:
+                kept.append(word)
+        script = " ".join(kept).strip()
+        if not script:
+            return await ctx.send_help(ctx.command)
+        column = "message_rolegain" if rolegain else "message"
+        if script.lower() == "none":
             await self.db.execute(
-                "UPDATE leveling SET message = $1 WHERE guild_id = $2",
+                f"UPDATE leveling SET {column} = $1 WHERE guild_id = $2",
                 "none",
                 ctx.guild.id,
             )
-            return await ctx.success("Removed the level-up message")
+            return await ctx.success(
+                "Removed the level reward role message"
+                if rolegain
+                else "Removed the level-up message"
+            )
         await self.db.execute(
-            "UPDATE leveling SET message = $1 WHERE guild_id = $2",
-            message,
+            f"UPDATE leveling SET {column} = $1 WHERE guild_id = $2",
+            script,
             ctx.guild.id,
         )
+        if rolegain:
+            return await ctx.success(
+                "Level reward role message set - it only sends when a member "
+                f"gains a role from `{ctx.clean_prefix}leveling rewards`.\n"
+                f"```\n{script[:500]}\n```"
+            )
         return await ctx.success(
-            f"Level-up message set - it will send to the configured "
-            f"`{ctx.clean_prefix}leveling channel` destination.\n```\n{message[:500]}\n```"
+            "Level-up message set - it will send to the configured "
+            f"`{ctx.clean_prefix}leveling channel` destination.\n```\n{script[:500]}\n```"
         )
 
     @leveling.command(
@@ -974,7 +1004,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
     @leveling_rewards.command(
         name="add",
         description="Assign a role reward at a level",
-        example=",leveling rewards add 10 @Member",
+        example=",leveling rewards add 10 @Legendary",
         usage="<level> <role>",
     )
     @has_permissions(manage_guild=True)
@@ -1005,7 +1035,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
     @leveling_rewards.command(
         name="remove",
         description="Remove a role reward",
-        example=",leveling rewards remove @Member",
+        example=",leveling rewards remove @Legendary",
         usage="<role>",
     )
     @has_permissions(manage_guild=True)
@@ -1051,7 +1081,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         name="stack",
         description="Toggle stacking all reward roles vs highest only",
         example=",leveling rewards stack on",
-        usage="<on|off>",
+        usage="<on or off>",
     )
     @has_permissions(manage_guild=True)
     async def leveling_rewards_stack(self, ctx, option: str):
@@ -1110,7 +1140,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         name="add",
         description="Ignore a user, role, or channel for XP",
         example=",leveling ignore add #bots",
-        usage="<user|role|channel>",
+        usage="<user or role or channel>",
     )
     @has_permissions(manage_guild=True)
     async def leveling_ignore_add(
@@ -1132,7 +1162,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         name="remove",
         description="Remove someone from the XP ignore list",
         example=",leveling ignore remove #bots",
-        usage="<user|role|channel>",
+        usage="<user or role or channel>",
     )
     @has_permissions(manage_guild=True)
     async def leveling_ignore_remove(

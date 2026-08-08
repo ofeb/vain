@@ -118,7 +118,7 @@ class CommandEnableCommands(Package):
             "Enable a disabled command in a channel/role/member/server "
             "(defaults to this channel)"
         ),
-        usage="[channel|member|role|server] <command>",
+        usage="[channel or member or role or server] <command>",
         example=",enablecommand #general snipe",
         invoke_without_command=True,
     )

@@ -300,7 +300,7 @@ def _format_github_repo_date(iso: str) -> str:
     dt = parse_dt(iso)
     if dt is None:
         return "unknown"
-    # compact for repo rows
+    
     return human_date(dt)
 
 def _github_info_lines(user: dict[str, Any]) -> list[str]:

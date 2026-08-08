@@ -14,6 +14,7 @@ from urllib.parse import urlparse
 from core.discord.hybrid import hybrid
 from core.discord.package import Package
 from core.discord.views.paginate import send_pages
+from core.discord.views.rolepages import build_inrole_pages, build_roles_pages
 from core.managers.permissions import has_permissions
 from core.tools.embed import BadEmbed, ParseError, PreparedScript, parse
 
@@ -729,16 +730,28 @@ class ServerCommands(Package):
     )
     async def roles(self, ctx):
         """list all roles"""
-        lines = [r.mention for r in reversed(ctx.guild.roles) if r.name != "@everyone"]
-        if not lines:
+        roles = [r for r in reversed(ctx.guild.roles) if r.name != "@everyone"]
+        if not roles:
             from discord.ext.commands import CommandError
             raise CommandError("no roles in this server")
-        e = c2(
-            color=self.color,
-            title=f"Roles ({len(lines)})",
-            message=" ".join(lines),
-        )
-        await ctx.send(embed=e)
+        pages = build_roles_pages(ctx.guild, roles)
+        await send_pages(ctx, pages)
+
+    @command(
+        name="inrole",
+        aliases=["membersinrole", "withrole"],
+        description="List every member with a role",
+        usage="<role>",
+        example=",inrole members",
+    )
+    async def inrole(self, ctx, *, role: discord.Role):
+        """list members holding a role"""
+        members = role.members
+        if not members:
+            from discord.ext.commands import CommandError
+            raise CommandError(f"no members have {role.mention}")
+        pages = build_inrole_pages(role, members)
+        await send_pages(ctx, pages)
 
     @command(
         name="bots",
@@ -788,7 +801,7 @@ class ServerCommands(Package):
         name="seticon",
         aliases=["setservericon", "guildiconset"],
         description="Set or clear the server icon from an attachment or image url",
-        usage="[url|none]",
+        usage="[url or none]",
         example=",seticon https://i.imgur.com/icon.png",
     )
     @has_permissions(manage_guild=True)
@@ -805,7 +818,7 @@ class ServerCommands(Package):
         name="setbanner",
         aliases=["setserverbanner", "guildbannerset"],
         description="Set or clear the server banner from an attachment or image url (boost level 2+)",
-        usage="[url|none]",
+        usage="[url or none]",
         example=",setbanner https://i.imgur.com/banner.png",
     )
     @has_permissions(manage_guild=True)
@@ -824,7 +837,7 @@ class ServerCommands(Package):
         name="setsplash",
         aliases=["setserversplash", "guildsplashset", "setinvitesplash"],
         description="Set or clear the invite splash from an attachment or image url (boost level 1+)",
-        usage="[url|none]",
+        usage="[url or none]",
         example=",setsplash https://i.imgur.com/splash.png",
     )
     @has_permissions(manage_guild=True)

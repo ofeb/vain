@@ -191,7 +191,7 @@ class VanityCommands(VanityEvents, Package):
 
     @vanity.command(
         name="strict",
-        usage="<on|off>",
+        usage="<on or off>",
         example=",vr strict off",
         description="Toggle strict vanity matching (default: off)",
     )

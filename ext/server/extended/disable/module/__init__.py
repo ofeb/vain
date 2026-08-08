@@ -66,7 +66,7 @@ class ModuleDisableCommands(Package):
     @group(
         name="disablemodule",
         description="Disable a module in a channel/role/member/server (defaults to this channel)",
-        usage="[channel|member|role|server] <module>",
+        usage="[channel or member or role or server] <module>",
         example=",disablemodule #general server",
         invoke_without_command=True,
     )

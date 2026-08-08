@@ -12,6 +12,7 @@ from core.discord.ctx import Context
 from core.discord.hybrid import describe, hybrid
 from core.discord.package import Package
 from core.discord.views.paginate import send_pages
+from core.discord.views.rolepages import build_roleinfo_pages
 from config import color
 import asyncio
 from io import BytesIO
@@ -163,19 +164,16 @@ class InformationCommands(Package):
         except Exception:
             dom_color = color.base or 0xE1D2DE
 
-        info_lines = [
-            label_line("Commands", f"`{total_commands}`"),
-            label_line("Latency", f"`{latency}ms`"),
-            label_line("Uptime", uptime),
-            label_line("Guilds", f"`{guilds:,}`"),
-            label_line("Users", f"`{users:,}`"),
-            label_line("Shards", f"`{shard_count}`"),
-            label_line("Python", f"`{platform.python_version()}`"),
-            label_line("Started", started),
-        ]
-
         bot_name = bot.user.display_name if bot.user else "vain"
-        thumb = bot.user.display_avatar.url if bot.user else None
+
+        info_lines = [
+            f"**Guilds** — `{guilds:,}`",
+            f"**Users** — `{users:,}`",
+            f"**Commands** — `{total_commands}`",
+            f"**Shards** — `{shard_count}`",
+            f"**Latency** — `{latency}ms`",
+            f"**Uptime** — {uptime}",
+        ]
 
         buttons = [
             discord.ui.Button(
@@ -205,10 +203,10 @@ class InformationCommands(Package):
 
         layout = panel_layout(
             accent=dom_color,
-            title=bot_name,
-            subtitle="Bot Information",
+            title=f"__{bot_name}__",
+            subtitle=f"Since {started}",
             lines=info_lines,
-            thumbnail=thumb,
+            footer=f"{platform.system()} · Python {platform.python_version()}",
             buttons=buttons,
         )
         await ctx.send(view=layout)
@@ -304,27 +302,8 @@ class InformationCommands(Package):
     )
     @describe(role="Role to inspect")
     async def roleinfo(self, ctx: Context, role: discord.Role) -> None:
-        perms = [name.replace("_", " ").title() for name, value in role.permissions if value]
-        try:
-            dom = await get_bot_dominant_color(self.bot)
-        except Exception:
-            dom = color.base
-        embed = panel_embed(
-            title=role.name,
-            color=role.color if role.color.value else dom,
-            lines=[
-                label_line("ID", str(role.id)),
-                label_line("Members", str(len(role.members))),
-                label_line("Position", str(role.position)),
-                label_line("Mentionable", "Yes" if role.mentionable else "No"),
-                label_line("Hoisted", "Yes" if role.hoist else "No"),
-                label_line("Managed", "Yes" if role.managed else "No"),
-                label_line("Created", discord.utils.format_dt(role.created_at, style="R")),
-                label_line("Key Permissions", ", ".join(perms[:12]) if perms else "None"),
-            ],
-            timestamp=False,
-        )
-        await ctx.send(embed=embed)
+        pages = build_roleinfo_pages(role)
+        await send_pages(ctx, pages)
 
     @hybrid(
         name="memberinfo",

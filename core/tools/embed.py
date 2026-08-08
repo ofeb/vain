@@ -124,7 +124,6 @@ _SMART_EMBED_HINTS = (
     "{image:",
     "{thumbnail:",
     "{url:",
-    "{timestamp",
     "{button:",
     "{content:",
     "{message:",
@@ -158,7 +157,7 @@ def is_embed_script(raw: str) -> bool:
         return True
     lowered = stripped.lower()
     if stripped.startswith("{") and any(
-        lowered.startswith(f"{{{k}") for k in _EMBED_FIELD_KEYS
+        lowered.startswith(f"{{{k}") for k in _EMBED_FIELD_KEYS if k != "timestamp"
     ):
         return True
     
@@ -577,8 +576,6 @@ async def _send_button_message(interaction: discord.Interaction, script: str) ->
     """Reply ephemerally with plain text, embed, or container from a button script."""
     import contextlib
 
-    from discord import ui as d_ui
-
     raw = _unwrap_message_script(script)
     if not raw:
         if not interaction.response.is_done():
@@ -604,7 +601,7 @@ async def _send_button_message(interaction: discord.Interaction, script: str) ->
         if view is not None:
             kwargs["view"] = view
         
-        if payload.get("content") is not None and not isinstance(view, d_ui.LayoutView):
+        if payload.get("content") is not None:
             kwargs["content"] = payload["content"]
         if not kwargs:
             kwargs["content"] = raw[:2000]
@@ -958,13 +955,8 @@ async def parse_container(raw: str, sendable: bool = False) -> dict:
         payload = (part.payload or "").strip() if part.payload is not None else ""
 
         if key in {"content", "message"}:
-            
-            
             if payload:
-                try:
-                    container.add_item(ui.TextDisplay(payload))
-                except Exception:
-                    content = payload
+                content = payload
             continue
         if key == "autodelete":
             try:
@@ -1178,8 +1170,7 @@ async def parse_container(raw: str, sendable: bool = False) -> dict:
     layout.add_item(container)
     final: dict[str, Any] = {"view": layout}
     
-    
-    if content is not None and not getattr(container, "children", None):
+    if content is not None:
         final["content"] = content
     if delete_after is not None:
         final["delete_after"] = delete_after
@@ -1224,6 +1215,11 @@ async def parse(raw: str, sendable: bool = False) -> dict:
         part = Str(chunk)
         key = part.declaration or ""
         if part.payload is None:
+            if key.lower() in {"timestamp", "unix"}:
+                out["timestamp"] = (
+                    datetime.datetime.now(datetime.timezone.utc).isoformat()
+                )
+                continue
             return {"content": key}
 
         payload = part.payload.strip()
@@ -1902,9 +1898,18 @@ class Script:
             .replace("{member}", "{user}")
         )
         
+        protected: list[tuple[str, str]] = []
+        for flag in ("$v{timestamp}", "$v{unix}"):
+            if flag in content:
+                marker = f"\x00proto{len(protected)}\x00"
+                content = content.replace(flag, marker)
+                protected.append((marker, flag))
+
         replacements = self._replacements(**kwargs)
         for key in sorted(replacements.keys(), key=len, reverse=True):
             content = content.replace(key, replacements[key])
+        for marker, flag in protected:
+            content = content.replace(marker, flag)
         return content
 
     async def data(self, sendable: bool = False, **kwargs) -> dict[str, Any]:

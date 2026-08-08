@@ -388,7 +388,7 @@ class AutoresponderCommands(Package):
 
     @autoresponder.command(
         name="strict",
-        usage="<trigger|all> <on|off>",
+        usage="<trigger or all> <on or off>",
         example=",autoresponder strict website off",
         description="Toggle strict matching (default: off). Use 'all' for every trigger.",
     )
