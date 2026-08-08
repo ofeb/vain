@@ -69,33 +69,82 @@ def _button_script_chunk(btn: dict[str, str]) -> str:
     return f"$v{{button: {' && '.join(parts)}}}"
 
 
-def _make_preview_button(btn: dict[str, str], *, index: int) -> discord.ui.Button:
-    style_name = _normalize_btn_style(btn.get("style"))
-    label = ((btn.get("label") or "Button").strip() or "Button")[:80]
-    url = (btn.get("url") or "").strip()
-    emoji = (btn.get("emoji") or "").strip() or None
-    style = _discord_btn_style(style_name)
-    kwargs: dict[str, Any] = {"label": label}
-    if emoji:
-        kwargs["emoji"] = emoji
-    if style == discord.ButtonStyle.link:
-        href = (
-            url
-            if url.startswith(("http://", "https://"))
-            else (f"https://{url}" if url else "https://discord.com")
-        )
-        return discord.ui.Button(
-            style=discord.ButtonStyle.link,
-            url=href,
-            **kwargs,
-        )
-    
-    return discord.ui.Button(
-        style=style,
-        disabled=True,  
-        custom_id=f"builder:preview:{index}",
-        **kwargs,
-    )
+class _PreviewButton(discord.ui.Button):
+    """Clickable builder preview button — link opens URL; others show message ephemerally."""
+
+    def __init__(
+        self,
+        btn: dict[str, str],
+        *,
+        index: int,
+        owner_id: int | None = None,
+        row: int | None = None,
+    ):
+        style_name = _normalize_btn_style(btn.get("style"))
+        label = ((btn.get("label") or "Button").strip() or "Button")[:80]
+        url = (btn.get("url") or "").strip()
+        emoji = (btn.get("emoji") or "").strip() or None
+        style = _discord_btn_style(style_name)
+        kwargs: dict[str, Any] = {
+            "label": label,
+            "style": style,
+            "disabled": False,
+        }
+        if emoji:
+            kwargs["emoji"] = emoji
+        if row is not None:
+            kwargs["row"] = row
+        self.owner_id = owner_id
+        self.message_script = (btn.get("message") or "").strip() or None
+        if style == discord.ButtonStyle.link:
+            href = (
+                url
+                if url.startswith(("http://", "https://"))
+                else (f"https://{url}" if url else "https://discord.com")
+            )
+            kwargs["url"] = href
+            kwargs["style"] = discord.ButtonStyle.link
+            super().__init__(**kwargs)
+            return
+        kwargs["custom_id"] = f"builder:preview:{index}"
+        super().__init__(**kwargs)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if self.owner_id and interaction.user and interaction.user.id != self.owner_id:
+            if not interaction.response.is_done():
+                await interaction.response.send_message(
+                    f"Only <@{self.owner_id}> can use builder preview buttons.",
+                    ephemeral=True,
+                )
+            return
+        script = self.message_script
+        if not script:
+            if not interaction.response.is_done():
+                await interaction.response.send_message(
+                    "No message set on this button — add one in the button modal.",
+                    ephemeral=True,
+                )
+            return
+        try:
+            from core.tools.embed import _send_button_message
+
+            await _send_button_message(interaction, script)
+        except Exception:
+            if not interaction.response.is_done():
+                await interaction.response.send_message(
+                    "Couldn't open that button message.",
+                    ephemeral=True,
+                )
+
+
+def _make_preview_button(
+    btn: dict[str, str],
+    *,
+    index: int,
+    owner_id: int | None = None,
+    row: int | None = None,
+) -> discord.ui.Button:
+    return _PreviewButton(btn, index=index, owner_id=owner_id, row=row)
 
 
 def _strip_subtext(text: str) -> str:
@@ -529,6 +578,26 @@ class _BaseBuilder:
     def _controls(self) -> _BuilderControls:
         return _BuilderControls(self, field_options=self._field_options())
 
+    def _embed_preview_view(self) -> discord.ui.View:
+        """Controls + clickable preview buttons for the embed builder message."""
+        view = _BuilderControls(self, field_options=self._field_options())
+        # Classic views support rows 0–4; select is 0, approve/cancel are 1.
+        # Put preview buttons on rows 2–4 (up to 15).
+        max_preview = min(len(self.buttons), 15)
+        for i, btn in enumerate(self.buttons[:max_preview]):
+            try:
+                view.add_item(
+                    _make_preview_button(
+                        btn,
+                        index=i,
+                        owner_id=self.author_id,
+                        row=2 + (i // 5),
+                    )
+                )
+            except Exception:
+                pass
+        return view
+
     
     
     
@@ -926,7 +995,13 @@ class _BaseBuilder:
                 row = ui.ActionRow()
                 for j, btn in enumerate(self.buttons[i : i + 5]):
                     try:
-                        row.add_item(_make_preview_button(btn, index=i + j))
+                        row.add_item(
+                            _make_preview_button(
+                                btn,
+                                index=i + j,
+                                owner_id=self.author_id,
+                            )
+                        )
                     except Exception:
                         pass
                 if getattr(row, "children", None):
@@ -941,14 +1016,14 @@ class _BaseBuilder:
     async def refresh(self) -> None:
         if self._stopped or not self.message:
             return
-        
+
         content = (self.data.get("content") or "").strip() or None
         try:
             if self.kind == "embed":
                 await self.message.edit(
                     content=content,
                     embed=self._preview_embed(),
-                    view=self._controls(),
+                    view=self._embed_preview_view(),
                 )
             else:
                 await self.message.edit(
@@ -1445,12 +1520,11 @@ async def register_builders(bot: "Vain") -> None:
         example=",embedbuilder",
     )
     async def _run_eb(ctx: Context):
-        
         accent = getattr(ctx.bot, "color", None) or 0x2B2D31
         builder = EmbedBuilderView(ctx.author.id, accent=int(accent))
         m = await ctx.send(
             embed=builder._preview_embed(),
-            view=builder._controls(),
+            view=builder._embed_preview_view(),
             raw_embed=True,
         )
         builder.message = m
