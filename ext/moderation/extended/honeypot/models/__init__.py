@@ -11,8 +11,8 @@ _MISSING: Any = object()
 _DEFAULT_TRAP_SCRIPT = (
     "{container}"
     f"$v{{description: {emojis.warn} Don't send any messages here! {emojis.warn}}}"
-    "$v{description: This channel is a **trap** for **compromised accounts**}"
-    "$v{description: Anything posted here is**claimed as evidence** and the **compromised account** will be **softbanned**}"
+    "$v{description: > This channel is a **trap** for **compromised accounts**}"
+    "$v{description: > Anything posted here is**claimed as evidence** and the **compromised account** will be **softbanned**}"
     "$v{button: label: Caught: {honeypot.caught} && style: red && disabled: true}"
 )
 
@@ -80,8 +80,8 @@ def _trap_body(punishments: Iterable[str] | None = None) -> str:
         [
             f"### {emojis.warn} DO NOT SEND MESSAGES HERE! {emojis.warn}",
             "",
-            "> -# This channel is a **trap** for **compromised accounts**.",
-            f"> -# Anything posted here is**claimed as evidence** and the **compromised account** will be {phrase}!",
+            "> This channel is a **trap** for **compromised accounts**.",
+            f"> Anything posted here is**claimed as evidence** and the **compromised account** will be {phrase}!",
         ]
     )
 
