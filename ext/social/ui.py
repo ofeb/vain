@@ -42,6 +42,7 @@ def _linkify_caption(caption: str, platform: str) -> str:
 
 
 def _compact_count(n: int | float | None) -> str:
+    """Compact for repost meta (12.4k)."""
     try:
         value = int(n or 0)
     except Exception:
@@ -58,6 +59,14 @@ def _compact_count(n: int | float | None) -> str:
     return f"{text}b"
 
 
+def _full_count(n: int | float | None) -> str:
+    """Full comma-separated count for profile cards (678,403,773)."""
+    try:
+        return f"{int(n or 0):,}"
+    except Exception:
+        return "0"
+
+
 _PLATFORM_ACCENTS = {
     "tiktok": 0xFE2C55,
     "instagram": 0xE1306C,
@@ -65,6 +74,14 @@ _PLATFORM_ACCENTS = {
     "x": 0x1D9BF0,
     "youtube": 0xFF0000,
     "telegram": 0x2AABEE,
+    "twitch": 0x9146FF,
+    "snapchat": 0xFFFC00,
+    "pinterest": 0xE60023,
+}
+
+
+_PLATFORM_VERIFIED = {
+    "instagram": "<:ig_verified:1525867315265142945>",
 }
 
 
@@ -82,6 +99,11 @@ def _platform_label(platform: str) -> str:
         "twitter": "X",
         "youtube": "YouTube",
         "telegram": "Telegram",
+        "twitch": "Twitch",
+        "snapchat": "Snapchat",
+        "pinterest": "Pinterest",
+        "brave": "Brave",
+        "google": "Google",
     }.get(_platform_key(platform), (platform or "Social").title())
 
 
@@ -101,6 +123,12 @@ def _profile_url(platform: str, username: str) -> str:
         return f"https://www.youtube.com/{handle}"
     if plat == "telegram":
         return f"https://t.me/{user}"
+    if plat == "twitch":
+        return f"https://www.twitch.tv/{user}"
+    if plat == "snapchat":
+        return f"https://www.snapchat.com/add/{user}"
+    if plat == "pinterest":
+        return f"https://www.pinterest.com/{user}/"
     return ""
 
 
@@ -111,6 +139,9 @@ def _view_label(platform: str) -> str:
         "twitter": "View on X",
         "youtube": "View on YouTube",
         "telegram": "View on Telegram",
+        "twitch": "View on Twitch",
+        "snapchat": "View on Snapchat",
+        "pinterest": "View on Pinterest",
     }.get(_platform_key(platform), "View original")
 
 
@@ -149,6 +180,18 @@ def _format_stat_line(
         if comment_count:
             bits.append(f"{comments} comments")
         return " · ".join(bits) if bits else "YouTube"
+    if plat == "twitch":
+        bits = []
+        if play_count:
+            bits.append(f"{_compact_count(play_count)} views")
+        return " · ".join(bits) if bits else "Twitch"
+    if plat == "pinterest":
+        bits = []
+        if like_count:
+            bits.append(f"{likes} reactions")
+        if comment_count:
+            bits.append(f"{comments} comments")
+        return " · ".join(bits) if bits else "Pinterest"
     bits = [f"{likes} likes", f"{comments} comments"]
     if save_count:
         bits.append(f"{_compact_count(save_count)} saves")
@@ -194,20 +237,23 @@ def build_social_repost_container(
 
     plat = _platform_key(platform)
     if accent is None:
-        accent = _PLATFORM_ACCENTS.get(plat, 0x5865F2)
+        accent = _PLATFORM_ACCENTS.get(plat, 0xE1D2DE)
     c = ui.Container()
     _ = accent
+    _ = avatar_url
 
-    user = (username or "unknown").lstrip("@")
-    profile = _profile_url(plat, user)
+    raw_user = (username or "").lstrip("@").strip()
+    display = (display_name or "").strip()
+    user = raw_user or (display.lstrip("@") if display else "") or "unknown"
+    profile = _profile_url(plat, user if user != "unknown" else "")
 
     linked = _linkify_caption(
-        caption, plat if plat in {"tiktok", "instagram"} else "instagram"
+        caption, plat if plat in {"tiktok", "instagram", "twitter"} else "instagram"
     )
     if linked:
         c.add_item(ui.TextDisplay(linked[:1900]))
     else:
-        c.add_item(ui.TextDisplay(f"**{display_name or user}** · {_platform_label(plat)}"))
+        c.add_item(ui.TextDisplay(f"**{display or user}** · {_platform_label(plat)}"))
 
     urls = [u for u in (media_urls or []) if u]
     if page_total < 1:
@@ -259,8 +305,16 @@ def build_social_repost_container(
         share_count=share_count,
         play_count=play_count,
     )
+    if profile and user != "unknown":
+        handle_md = f"[@{user}](<{profile}>)"
+    elif user != "unknown":
+        handle_md = f"@{user}"
+    elif display:
+        handle_md = f"**{display}**"
+    else:
+        handle_md = _platform_label(plat)
     meta_lines = [
-        f"> [@{user}](<{profile}>)",
+        f"> {handle_md}",
         f"> {stats}",
     ]
     if page_total > 1:
@@ -320,35 +374,41 @@ def build_profile_container(
     is_private: bool = False,
     is_verified: bool = False,
     accent: int | None = None,
+    verified_emoji: str | None = None,
 ) -> list[ui.Container]:
-    """Profile card: Section+Thumbnail, divider, stats whisper.
+    """Profile card matching guilt C2 layout.
 
-    Layout:
-      ## Name (@handle) lock?
-      bio
-      [avatar thumb]
-      divider
-      -# **Followers:** `n` · **Following:** `n` · …
+    ## [Full Name (@username)](url) verified/lock
+    divider
+    -# **Followers:** `n` · **Following:** `n` · **Posts:** `n`
     """
     plat = _platform_key(platform)
     if accent is None:
-        accent = _PLATFORM_ACCENTS.get(plat, 0x5865F2)
-    user = (username or "unknown").lstrip("@")
-    name = (display_name or user).strip() or user
-    url = profile_url or _profile_url(plat, user)
-
-    lock = " 🔒" if is_private else ""
-    verify = " ✓" if is_verified else ""
-    if url:
-        title = f"## [{name}]({url}){verify}{lock}"
-        handle_line = f"[@{user}]({url})"
+        accent = _PLATFORM_ACCENTS.get(plat, 0xE1D2DE)
+    raw_user = (username or "").lstrip("@").strip()
+    user = raw_user or "unknown"
+    name = (display_name or "").strip()
+    if not name or name.lstrip("@").lower() == user.lower():
+        
+        label = f"@{user}" if user != "unknown" else "unknown"
     else:
-        title = f"## {name}{verify}{lock}"
-        handle_line = f"@{user}"
+        label = f"{name} (@{user})" if user != "unknown" else name
+    url = profile_url or _profile_url(plat, user if user != "unknown" else "")
+
+    badges: list[str] = []
+    if is_verified:
+        ve = (verified_emoji or "").strip() or _PLATFORM_VERIFIED.get(plat) or "✓"
+        badges.append(ve)
+    if is_private:
+        badges.append("🔒")
+    badge_s = (" " + " ".join(badges)) if badges else ""
+
+    if url and user != "unknown":
+        title = f"## [{label}]({url}){badge_s}"
+    else:
+        title = f"## {label}{badge_s}"
 
     body_bits = [title]
-    if name.lstrip("@").lower() != user.lower():
-        body_bits.append(f"-# {handle_line}")
     bio_clean = (bio or "").strip()
     if bio_clean:
         body_bits.append(bio_clean[:500])
@@ -378,18 +438,18 @@ def build_profile_container(
             pass
 
     stats: list[str] = [
-        f"**Followers:** `{_compact_count(followers)}`",
-        f"**Following:** `{_compact_count(following)}`",
+        f"**Followers:** `{_full_count(followers)}`",
+        f"**Following:** `{_full_count(following)}`",
     ]
     if likes is not None:
-        stats.append(f"**Likes:** `{_compact_count(likes)}`")
+        stats.append(f"**Likes:** `{_full_count(likes)}`")
     if posts is not None:
-        stats.append(f"**Posts:** `{_compact_count(posts)}`")
-    for label, value in extra_stats or []:
+        stats.append(f"**Posts:** `{_full_count(posts)}`")
+    for label_s, value in extra_stats or []:
         if isinstance(value, (int, float)):
-            stats.append(f"**{label}:** `{_compact_count(value)}`")
+            stats.append(f"**{label_s}:** `{_full_count(value)}`")
         else:
-            stats.append(f"**{label}:** `{value}`")
+            stats.append(f"**{label_s}:** `{value}`")
     c.add_item(ui.TextDisplay("-# " + " · ".join(stats)))
     return [c]
 
@@ -509,12 +569,14 @@ class SocialRepostView(ui.LayoutView):
         container = containers[0]
 
         plat = _platform_key(self.platform)
-        user = (self.username or "unknown").lstrip("@")
-        profile = _profile_url(plat, user)
+        raw_user = (self.username or "").lstrip("@").strip()
+        display = (self.display_name or "").strip()
+        user = raw_user or (display.lstrip("@") if display else "") or "unknown"
+        profile = _profile_url(plat, user if user != "unknown" else "")
         watch_label = _view_label(plat)
         link = self.source_url or profile
         if link and not str(link).startswith("http"):
-            link = profile
+            link = profile or self.source_url
 
         if len(self.media_urls) > 1:
             try:
@@ -686,7 +748,7 @@ def _colorthief_from_bytes(data: bytes) -> int | None:
 
 async def get_dominant_color(
     url: str,
-    fallback: int = 0x5865F2,
+    fallback: int = 0xE1D2DE,
     *,
     referer: str | None = None,
 ) -> int:
@@ -717,7 +779,7 @@ async def get_dominant_color(
 async def get_bot_dominant_color(bot) -> int:
     if bot.user and bot.user.display_avatar:
         return await get_dominant_color(str(bot.user.display_avatar.url))
-    return 0x5865F2
+    return 0xE1D2DE
 
 async def get_repost_accent_color(
     bot,
@@ -737,6 +799,9 @@ async def get_repost_accent_color(
         "twitter": "https://x.com/",
         "youtube": "https://www.youtube.com/",
         "telegram": "https://t.me/",
+        "twitch": "https://www.twitch.tv/",
+        "snapchat": "https://www.snapchat.com/",
+        "pinterest": "https://www.pinterest.com/",
     }.get(plat)
 
     for candidate in (avatar_url, thumbnail_url):

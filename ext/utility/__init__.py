@@ -326,12 +326,12 @@ class Snipe(commands.Cog):
         from core.discord.views.confirm import ConfirmView
 
         view = ConfirmView(ctx)
-        emb = discord.Embed(
-            color=color.base,
-            description=(
-                f"> This will **clear all snipes** for {ctx.channel.mention}.\n"
-                f"> Are you sure you want to do this?\n"
+        emb = c2(
+            message=(
+                f"This will **clear all snipes** for {ctx.channel.mention}.\n"
+                f"Are you sure you want to do this?"
             ),
+            timestamp=False,
         )
         if not await view.prompt(embed=emb):
             return await ctx.warn("Clearsnipe **cancelled**")

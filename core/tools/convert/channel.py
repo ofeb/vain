@@ -1,10 +1,10 @@
-"""Channel converter with fuzzy / partial name matching.
+"""Channel converter with smart / partial name matching.
 
 Accepts:
 - ``#txt`` / ``txt`` / ``TXT`` (name, case-insensitive)
 - ``<#id>`` mentions (and mangled pastes with zero-width chars)
 - raw snowflake IDs
-- partial names (``txt`` matches ``txt``, ``txt-logs``, etc.)
+- smart partials (``gen`` → ``・general・``, ``boost`` in decorative names)
 - fuzzy closest match as last resort
 
 Use ``ChannelConvert`` / ``TextChannelConvert`` in command signatures, or
@@ -22,24 +22,11 @@ from typing import Iterable, Optional, Sequence, Union
 import discord
 from discord.ext.commands import CommandError, Context, Converter
 
-try:
-    from fast_string_match import closest_match
-except ImportError:  
+from .regex import clean_query, regex_find
 
-    def closest_match(query: str, candidates: Sequence[str]):  # type: ignore
-        q = (query or "").lower()
-        if not q:
-            return None
-        for c in candidates:
-            if c.lower().startswith(q):
-                return c
-        for c in candidates:
-            if q in c.lower():
-                return c
-        return None
-
-
-_INVISIBLE_RE = re.compile(r"[\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff\u00ad]")
+_INVISIBLE_RE = re.compile(
+    "[​-‏‪-‮⁠-⁤﻿­]"
+)
 _MENTION_RE = re.compile(r"<#(\d{15,22})>")
 _ID_RE = re.compile(r"^\d{15,22}$")
 
@@ -62,22 +49,18 @@ def clean_channel_token(token: str) -> str:
     """Strip invisible paste junk, wrapping, and leading # / dots."""
     raw = _INVISIBLE_RE.sub("", (token or "")).strip()
     raw = raw.strip("`\"'")
-    
-    return raw
+    return clean_query(raw)
 
 
 def _normalize_name(token: str) -> str:
     """Turn a free-form token into a lowercase channel name candidate."""
     name = clean_channel_token(token)
-    
     name = _MENTION_RE.sub("", name)
     name = name.strip("<>")
-    
     prev = None
     while prev != name:
         prev = name
         name = _EDGE_JUNK_RE.sub("", name)
-    
     while name.startswith("."):
         name = name[1:]
     return name.strip().lower()
@@ -90,15 +73,8 @@ def _iter_guild_channels(guild: discord.Guild) -> Iterable[ChannelT]:
         yield ch
 
 
-def _name_candidates(channels: Iterable[ChannelT]) -> dict[str, ChannelT]:
-    """Map lower name → channel (first wins)."""
-    out: dict[str, ChannelT] = {}
-    for ch in channels:
-        name = getattr(ch, "name", None)
-        if not name:
-            continue
-        out.setdefault(str(name).lower(), ch)
-    return out
+def _channel_names(ch: ChannelT) -> list[str | None]:
+    return [getattr(ch, "name", None)]
 
 
 async def resolve_channel(
@@ -128,8 +104,7 @@ async def resolve_channel(
             return None
         return ch
 
-    
-    m = _MENTION_RE.search(raw)
+    m = _MENTION_RE.search(raw) or _MENTION_RE.search(str(token or ""))
     if m:
         cid = int(m.group(1))
         ch = guild.get_channel(cid) or guild.get_thread(cid)
@@ -142,7 +117,6 @@ async def resolve_channel(
         if got is not None:
             return got
 
-    
     bare_id = clean_channel_token(token).strip("<>#")
     bare_id = _INVISIBLE_RE.sub("", bare_id).strip()
     if _ID_RE.match(bare_id):
@@ -157,10 +131,10 @@ async def resolve_channel(
         if got is not None:
             return got
 
-    
     name = _normalize_name(raw)
     if not name:
         return None
+
     channels = list(_iter_guild_channels(guild))
     if text_only:
         channels = [
@@ -170,30 +144,8 @@ async def resolve_channel(
             or (allow_threads and isinstance(c, discord.Thread))
         ]
 
-    by_name = _name_candidates(channels)
-
-    
-    if name in by_name:
-        return _ok(by_name[name])
-
-    
-    prefix_hits = [c for n, c in by_name.items() if n.startswith(name)]
-    if prefix_hits:
-        prefix_hits.sort(key=lambda c: len(getattr(c, "name", "") or ""))
-        return _ok(prefix_hits[0])
-
-    
-    contains_hits = [c for n, c in by_name.items() if name in n]
-    if contains_hits:
-        contains_hits.sort(key=lambda c: len(getattr(c, "name", "") or ""))
-        return _ok(contains_hits[0])
-
-    
-    match = closest_match(name, list(by_name.keys()))
-    if match and match in by_name:
-        return _ok(by_name[match])
-
-    return None
+    hit = regex_find(name, channels, names_of=_channel_names, fuzzy=True)
+    return _ok(hit)
 
 
 class ChannelConvert(Converter):
@@ -223,7 +175,6 @@ def _make_soft_text_converter():
 
     class SoftTextChannelConverter(Base):  # type: ignore
         async def convert(self, ctx: Context, argument: str) -> discord.TextChannel:
-            
             ch = await resolve_channel(ctx, argument, text_only=True, allow_threads=False)
             if isinstance(ch, discord.TextChannel):
                 return ch
@@ -351,7 +302,6 @@ def patch_discord_channel_converters() -> None:
     SoftForum = _make_soft_forum_converter()
     SoftStage = _make_soft_stage_converter()
 
-    
     conv.TextChannelConverter = SoftText  # type: ignore
     conv.GuildChannelConverter = SoftGuild  # type: ignore
     conv.VoiceChannelConverter = SoftVoice  # type: ignore
@@ -360,7 +310,6 @@ def patch_discord_channel_converters() -> None:
     conv.ForumChannelConverter = SoftForum  # type: ignore
     conv.StageChannelConverter = SoftStage  # type: ignore
 
-    
     cmds.TextChannelConverter = SoftText  # type: ignore
     cmds.GuildChannelConverter = SoftGuild  # type: ignore
     cmds.VoiceChannelConverter = SoftVoice  # type: ignore
@@ -375,7 +324,6 @@ def patch_discord_channel_converters() -> None:
     except Exception:
         pass
 
-    
     mapping = conv.CONVERTER_MAPPING
     mapping[discord.TextChannel] = SoftText
     mapping[discord.abc.GuildChannel] = SoftGuild
@@ -384,5 +332,21 @@ def patch_discord_channel_converters() -> None:
     mapping[discord.CategoryChannel] = SoftCategory
     mapping[discord.ForumChannel] = SoftForum
     mapping[discord.StageChannel] = SoftStage
+
+    
+    try:
+        from .member import MemberConvert
+        from .role import RoleConvert
+
+        SoftMember = MemberConvert
+        SoftRole = RoleConvert
+        conv.MemberConverter = SoftMember  # type: ignore
+        conv.RoleConverter = SoftRole  # type: ignore
+        cmds.MemberConverter = SoftMember  # type: ignore
+        cmds.RoleConverter = SoftRole  # type: ignore
+        mapping[discord.Member] = SoftMember
+        mapping[discord.Role] = SoftRole
+    except Exception:
+        pass
 
     _PATCHED = True

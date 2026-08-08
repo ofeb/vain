@@ -48,6 +48,12 @@ class SocialPost:
             return f"https://www.youtube.com/{handle}"
         if plat == "telegram" and user:
             return f"https://t.me/{user}"
+        if plat == "twitch" and user:
+            return f"https://www.twitch.tv/{user}"
+        if plat == "snapchat" and user:
+            return f"https://www.snapchat.com/add/{user}"
+        if plat == "pinterest" and user:
+            return f"https://www.pinterest.com/{user}/"
         return self.url
 
 

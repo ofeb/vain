@@ -32,7 +32,7 @@ DEVLOG_GUILD_IGNORE: set[int] = {
 class OwnerEvents(Package):
     """Bot join/leave logging and periodic tasks"""
 
-async def get_dominant_color(url: str, fallback: int = 0x5865F2) -> int:
+async def get_dominant_color(url: str, fallback: int = 0xE1D2DE) -> int:
     """Fetch image and return dominant color using colorthief."""
     if not url:
         return fallback
@@ -60,7 +60,7 @@ async def get_dominant_color(url: str, fallback: int = 0x5865F2) -> int:
 async def get_bot_dominant_color(bot) -> int:
     if bot.user and bot.user.display_avatar:
         return await get_dominant_color(str(bot.user.display_avatar.url))
-    return 0x5865F2
+    return 0xE1D2DE
 
     @Package.listener()
     async def on_guild_join(self, guild: discord.Guild) -> None:
@@ -79,7 +79,7 @@ async def get_bot_dominant_color(bot) -> int:
         try:
             dom = await get_bot_dominant_color(self.bot)
         except Exception:
-            dom = 0xD4B8D0
+            dom = 0xE1D2DE
 
         
         lines = [

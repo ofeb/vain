@@ -303,7 +303,7 @@ class Tickets(Package):
         record: dict,
         view: TicketControlView,
     ) -> None:
-        """Send welcome content — button template > guild open_embed > Juno default."""
+        """Send welcome content — button template > guild open_embed > Vain default."""
         user = interaction.user
         guild = interaction.guild
         template = (record.get("template") or settings.open_embed or "").strip()
@@ -692,7 +692,7 @@ class Tickets(Package):
     @ticket_opening_embed.command(
         name="reset",
         aliases=["default", "clear", "remove"],
-        description="Reset the open message to the Juno default",
+        description="Reset the open message to the Vain default",
     )
     @has_permissions(manage_channels=True)
     async def ticket_opening_embed_reset(self, ctx):

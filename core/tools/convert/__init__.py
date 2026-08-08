@@ -13,6 +13,7 @@ from .channel import (
 )
 from .color import ColorConvert
 from .status import StatusConvert
+from .regex import clean_query, regex_find, regex_findall, score_name
 
 __all__ = [
     "MemberConvert",
@@ -24,4 +25,8 @@ __all__ = [
     "resolve_channel",
     "clean_channel_token",
     "patch_discord_channel_converters",
+    "clean_query",
+    "score_name",
+    "regex_find",
+    "regex_findall",
 ]

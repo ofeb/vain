@@ -7,7 +7,7 @@ from discord.ui import Button, Select, View
 
 
 class Interface(View):
-    """Rebuild a panel view from an existing message's components (Juno-style)."""
+    """Rebuild a panel view from an existing message's components."""
 
     def __init__(self) -> None:
         super().__init__(timeout=None)

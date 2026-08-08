@@ -43,12 +43,11 @@ def embed_to_container(
 ) -> ui.Container:
     """Convert a rich embed into a Components V2 container that mirrors embed layout.
 
-    Keeps title / author / description / fields / image / footer structure and
-    applies the embed's colour as the container accent strip so it still reads
-    like a classic embed.
+    Title / author / description / fields / image / footer are preserved.
+    No accent strip — C2 cards stay colourless.
     """
-    accent = _accent_from_embed(embed)
-    container = ui.Container(accent_colour=discord.Colour(accent)) if accent is not None else ui.Container()
+    _ = _accent_from_embed(embed)  
+    container = ui.Container()
 
     author_name = embed.author.name if embed.author else None
     author_icon = embed.author.icon_url if embed.author else None
@@ -152,7 +151,7 @@ def embed_to_container(
         footer = ""
         if has_footer:
             footer = str(embed.footer.text)
-        if has_ts:
+        if has_ts and embed.timestamp is not None:
             try:
                 ts = f"<t:{int(embed.timestamp.timestamp())}:R>"
                 footer = f"{footer} · {ts}" if footer else ts

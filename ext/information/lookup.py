@@ -16,8 +16,8 @@ from core.discord.views.embed import panel_embed
 def label_line(label: str, value: str) -> str:
     return f"**{label}**: {value}"
 
-WEATHER_COLOR = 0xD4B8D0
-DEFINE_COLOR = 0xBBA0D2
+WEATHER_COLOR = 0xE1D2DE
+DEFINE_COLOR = 0xC9B3C4
 CASHAPP_GREEN = 0xA8D8A8
 CASHAPP_FOOTER_ICON = "https://cash.app/favicon-32x32.png"
 GITHUB_CREATED_ICON = "https://cdn.discordapp.com/emojis/843537056541442068.png"

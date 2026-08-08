@@ -2025,15 +2025,15 @@ class Database:
     async def get_color(self, guild_id: int, user_id: int = None) -> dict:
         """Get colors with guild/user override"""
         default_color = {
-            "base": 0xC8A4C2,
+            "base": 0xE1D2DE,
             "approve": 0xA8D8A8,
             "warn": 0xF5D76E,
             "deny": 0xE07A7A,
-            "cooldown": 0xBBA0D2,
-            "settings": 0xD4B8D0,
-            "dark": 0x9B7A9E,
-            "information": 0x5865F2,
-            "shazam": 0xC2A8D0,
+            "cooldown": 0xC9B3C4,
+            "settings": 0xE1D2DE,
+            "dark": 0xA890A4,
+            "information": 0xE1D2DE,
+            "shazam": 0xD4C0D0,
         }
 
         guild_settings = await self.get_guild_customize(guild_id)

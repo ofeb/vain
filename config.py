@@ -92,13 +92,13 @@ class color:
     approve: int = 0xA8D8A8
     warn: int = 0xF5D76E
     deny: int = 0xE07A7A
-    base: int = 0x37255E
-    cooldown: int = 0xBBA0D2
-    settings: int = 0xD4B8D0
-    dark: int = 0x9B7A9E
-    shazam: int = 0xC2A8D0
-    voicemaster: int = 0xD1B5C8
-    unknown: int = 0xAFAFC8
+    base: int = 0xE1D2DE
+    cooldown: int = 0xC9B3C4
+    settings: int = 0xE1D2DE
+    dark: int = 0xA890A4
+    shazam: int = 0xD4C0D0
+    voicemaster: int = 0xDCC8D6
+    unknown: int = 0xC8B8C4
 
     @classmethod
     def update_base(cls, new_color: int) -> None:
@@ -138,8 +138,12 @@ class api:
     twitch_client_id: str = ""
     twitch_client_secret: str = ""
     llm: str = "gemini-2.5-flash-lite"
-    
+
     social_base: str = "https://scl.guilt.bot"
+    social_cf_client_id: str = "e263d488792e91ef3c26e324b4f8c1da.access"
+    social_cf_client_secret: str = (
+        "579b6bd1c5a0ecff20a58a7e1accac28fc286d4865e96314e5bb657d5c99c8c4"
+    )
 
     class lastfm:
         key: str = ""

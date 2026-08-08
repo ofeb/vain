@@ -116,7 +116,7 @@ def check_embed_helpers() -> None:
 def check_builders() -> None:
     from ext.social import builders
 
-    eb = builders.EmbedBuilderView(1, accent=0x5865F2)
+    eb = builders.EmbedBuilderView(1, accent=0xE1D2DE)
     assert eb._to_script().startswith("{embed}")
     eb.data["title"] = "Hello"
     eb.data["description"] = "World"
@@ -130,7 +130,7 @@ def check_builders() -> None:
     emb = eb._preview_embed()
     assert emb.title == "Hello"
 
-    cb = builders.ContainerBuilderView(1, accent=0x5865F2)
+    cb = builders.ContainerBuilderView(1, accent=0xE1D2DE)
     cb.data["title"] = "Hi"
     cb.data["description"] = "There"
     cb.data["divider"] = "1"

@@ -417,7 +417,7 @@ class LogEvents:
     @Package.listener()
     async def on_guild_role_create(self, role: discord.Role) -> None:
         count = self._track_bulk_event(role.guild.id, "role_create")
-        role_color = role.color.value if role.color.value else 0xD4B8D0
+        role_color = role.color.value if role.color.value else 0xE1D2DE
         if count >= self._BULK_THRESHOLD and count == self._BULK_THRESHOLD:
             lines = [f"**{count}** roles created in {role.guild.name}"]
             entry = await _get_audit_entry(role.guild, discord.AuditLogAction.role_create, role.id)

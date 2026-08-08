@@ -38,15 +38,15 @@ def c2(
 ) -> discord.Embed:
     """Build a compact embed that converts to a C2 lookalike on send.
 
-    Colour is kept so the container accent strip matches classic embeds.
+    No embed colour — C2 containers render without an accent strip.
+    ``color`` is accepted for call-site compatibility and ignored.
     """
+    _ = color
     description = compose(
         body(message),
         caption(footer) if footer else None,
     )
     embed = discord.Embed(description=description)
-    if color is not None:
-        embed.color = color
     if title:
         embed.title = title
     if author:
@@ -62,7 +62,7 @@ def reply_embed(
     message: str,
     subtitle: str | None = None,
 ) -> discord.Embed:
-    return c2(color=color, message=message, footer=subtitle, timestamp=False)
+    return c2(color=None, message=message, footer=subtitle, timestamp=False)
 
 
 def panel_embed(
@@ -77,13 +77,12 @@ def panel_embed(
     thumbnail: str | None = None,
     url: str | None = None,
 ) -> discord.Embed:
+    _ = color
     description = compose(
         body(*(lines or [])),
         caption(footer) if footer else None,
     )
     embed = discord.Embed(description=description or None, url=url)
-    if color is not None:
-        embed.color = color
     if title:
         embed.title = title
     if author:

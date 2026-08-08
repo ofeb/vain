@@ -182,13 +182,11 @@ class Miscellaneous(MiscellaneousEvents, Package):
 
         if language.lower() == "list":
             lines = [f"`{code}` — {name}" for code, name in sorted(lang_codes.items())]
-            embed = discord.Embed(
+            embed = c2(
                 title="Supported Languages",
-                color=color.base,
-                description=compose(
-                    body(*lines),
-                    caption(f"Use {ctx.clean_prefix}translate <language> <text> to translate"),
-                ),
+                message="\n".join(lines),
+                footer=f"Use {ctx.clean_prefix}translate <language> <text> to translate",
+                timestamp=False,
             )
             return await ctx.send(embed=embed)
 
@@ -225,16 +223,13 @@ class Miscellaneous(MiscellaneousEvents, Package):
             detected_name = lang_codes.get(detected_lang, detected_lang.title())
             target_name = lang_codes[lang_lower]
 
-            embed = discord.Embed(
+            embed = c2(
                 title=f"Translated from {detected_name} to {target_name}",
-                color=color.base,
-                description=compose(body(f"```{translated[:1000]}```")),
+                message=f"```{translated[:1000]}```",
+                author=ctx.author.display_name,
+                footer="Google Translate",
+                timestamp=False,
             )
-            embed.set_author(
-                name=ctx.author.display_name,
-                icon_url=ctx.author.display_avatar.url,
-            )
-            embed.set_footer(text="Google Translate", icon_url=GOOGLE_FOOTER_ICON)
             await ctx.send(embed=embed)
 
         except Exception as e:
@@ -248,41 +243,23 @@ class Miscellaneous(MiscellaneousEvents, Package):
     @describe(user="User to get info about")
     async def userinfo(self, ctx: Context, *, user: discord.Member = None) -> None:
         user = user or ctx.author
-        roles = [r.mention for r in user.roles if r != ctx.guild.default_role]
-        embed = discord.Embed(
-            color=user.color if user.color.value else color.base,
-            description=compose(caption(f"ID: {user.id}")),
-        )
-        embed.set_author(
-            name=f"{user.display_name} ({user})",
-            icon_url=user.display_avatar.url,
-        )
-        embed.set_thumbnail(url=user.display_avatar.url)
-        embed.add_field(
-            name="Created",
-            value=compose(
-                body(
-                    f"{discord.utils.format_dt(user.created_at, style='D')} ({discord.utils.format_dt(user.created_at, style='R')})",
-                ),
-            ),
-            inline=True,
-        )
+        roles = [r.mention for r in user.roles if r != ctx.guild.default_role] if ctx.guild else []
+        lines = [
+            f"**ID:** `{user.id}`",
+            f"**Created:** {discord.utils.format_dt(user.created_at, style='D')} ({discord.utils.format_dt(user.created_at, style='R')})",
+        ]
         joined = getattr(user, "joined_at", None)
         if joined:
-            embed.add_field(
-                name="Joined",
-                value=compose(
-                    body(
-                        f"{discord.utils.format_dt(joined, style='D')} ({discord.utils.format_dt(joined, style='R')})",
-                    ),
-                ),
-                inline=False,
+            lines.append(
+                f"**Joined:** {discord.utils.format_dt(joined, style='D')} ({discord.utils.format_dt(joined, style='R')})"
             )
-        embed.add_field(
-            name=f"Roles ({len(roles)})",
-            value=compose(body(" ".join(roles[:20]) if roles else "None")),
-            inline=True,
+        lines.append(f"**Roles ({len(roles)}):** {' '.join(roles[:20]) if roles else 'None'}")
+        embed = c2(
+            title=f"{user.display_name} ({user})",
+            message="\n".join(lines),
+            timestamp=False,
         )
+        embed.set_thumbnail(url=user.display_avatar.url)
         await ctx.send(embed=embed)
 
     @hybrid(
@@ -317,10 +294,10 @@ class Miscellaneous(MiscellaneousEvents, Package):
         for char in characters[:10]:
             code = f"U+{ord(char):04X}"
             entries.append(f"`{char}` — {code} — {char.name if hasattr(char, 'name') and char.name else 'character'}")
-        embed = discord.Embed(
+        embed = c2(
             title="Character Info",
-            color=color.base,
-            description=compose(body(*entries)),
+            message="\n".join(entries),
+            timestamp=False,
         )
         await ctx.send(embed=embed)
 
@@ -330,10 +307,10 @@ class Miscellaneous(MiscellaneousEvents, Package):
     )
     async def randomhex(self, ctx: Context) -> None:
         hex_val = f"{random.randint(0, 0xFFFFFF):06x}"
-        embed = discord.Embed(
+        embed = c2(
             title="Random Hex Color",
-            color=int(hex_val, 16),
-            description=compose(body(f"#{hex_val.upper()}")),
+            message=f"#{hex_val.upper()}",
+            timestamp=False,
         )
         embed.set_thumbnail(url=f"https://singlecolorimage.com/get/{hex_val}/200x200")
         await ctx.send(embed=embed)

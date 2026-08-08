@@ -85,7 +85,7 @@ def render_now_playing_card(
     position_ms: int,
     length_ms: int,
     album_art: bytes | None = None,
-    accent: int = 0x5865F2,
+    accent: int = 0xE1D2DE,
 ) -> bytes:
     """Card with opaque album-art background, title/artist, progress line + dot."""
     W, H = 900, 320

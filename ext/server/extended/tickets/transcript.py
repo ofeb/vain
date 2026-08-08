@@ -107,7 +107,7 @@ class Transcript:
         embed = Embed(
             title=f"Transcript — {channel_name}",
             description=description,
-            color=0x5865F2,
+            color=0xE1D2DE,
             timestamp=datetime.now(timezone.utc),
         )
         embed.set_footer(text=f"ID: {transcript.id}")

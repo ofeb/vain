@@ -83,7 +83,7 @@ class InformationEvents(Package):
         embed = Embed(
             title="Member Joined",
             description=f"{member.mention} joined the server",
-            color=0xD4B8D0
+            color=0xE1D2DE
         )
         embed.add_field(name="Account Age", value=f"{account_age} days", inline=True)
         embed.add_field(name="Account Created", value=member.created_at.strftime("%Y-%m-%d"), inline=True)
@@ -136,7 +136,7 @@ class InformationEvents(Package):
         embed = Embed(
             title="Message Edited",
             description=f"Message by {before.author.mention} was edited",
-            color=0xBBA0D2
+            color=0xC9B3C4
         )
         embed.add_field(name="Before", value=before.content[:1024] or "None", inline=False)
         embed.add_field(name="After", value=after.content[:1024] or "None", inline=False)
@@ -161,7 +161,7 @@ class InformationEvents(Package):
         embed = Embed(
             title="Message Deleted",
             description=f"Message by {message.author.mention} was deleted",
-            color=0xC2A8D0
+            color=0xD4C0D0
         )
         if message.content:
             embed.add_field(name="Content", value=message.content[:1024], inline=False)

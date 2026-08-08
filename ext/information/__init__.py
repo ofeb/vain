@@ -87,7 +87,7 @@ def layout_from_items(
 def panel_layout(**kwargs: Any) -> ui.LayoutView:
     return layout_from_items([panel_container(**kwargs)])
 
-async def get_dominant_color(url: str, fallback: int = 0x5865F2) -> int:
+async def get_dominant_color(url: str, fallback: int = 0xE1D2DE) -> int:
     """Fetch image and return dominant color using colorthief."""
     if not url:
         return fallback
@@ -115,7 +115,7 @@ async def get_dominant_color(url: str, fallback: int = 0x5865F2) -> int:
 async def get_bot_dominant_color(bot) -> int:
     if bot.user and bot.user.display_avatar:
         return await get_dominant_color(str(bot.user.display_avatar.url))
-    return 0x5865F2
+    return 0xE1D2DE
 
 from .lookup import (
     build_cashapp_embed,
@@ -161,7 +161,7 @@ class InformationCommands(Package):
         try:
             dom_color = await get_bot_dominant_color(bot)
         except Exception:
-            dom_color = color.base or 0x5865F2
+            dom_color = color.base or 0xE1D2DE
 
         info_lines = [
             label_line("Commands", f"`{total_commands}`"),

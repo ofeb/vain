@@ -113,3 +113,100 @@ CREATE INDEX IF NOT EXISTS idx_boost_messages_guild ON boost_messages(guild_id);
 CREATE INDEX IF NOT EXISTS idx_sticky_message_guild ON sticky_message(guild_id);
 CREATE INDEX IF NOT EXISTS idx_auto_responders_guild ON auto_responders(guild_id);
 CREATE INDEX IF NOT EXISTS idx_auto_reactions_guild ON auto_reactions(guild_id);
+
+CREATE SCHEMA IF NOT EXISTS monitor;
+
+CREATE TABLE IF NOT EXISTS monitor.tiktok (
+    guild_id BIGINT NOT NULL,
+    channel_id BIGINT NOT NULL,
+    user_id TEXT NOT NULL,
+    username TEXT NOT NULL,
+    template TEXT,
+    live_template TEXT,
+    reposts BOOLEAN NOT NULL DEFAULT FALSE,
+    lives BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS monitor.instagram (
+    guild_id BIGINT NOT NULL,
+    channel_id BIGINT NOT NULL,
+    user_id TEXT NOT NULL,
+    username TEXT NOT NULL,
+    template TEXT,
+    stories BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS monitor.twitter (
+    guild_id BIGINT NOT NULL,
+    channel_id BIGINT NOT NULL,
+    user_id TEXT NOT NULL,
+    username TEXT NOT NULL,
+    template TEXT,
+    retweets BOOLEAN NOT NULL DEFAULT TRUE,
+    replies BOOLEAN NOT NULL DEFAULT FALSE,
+    quotes BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS monitor.youtube (
+    guild_id BIGINT NOT NULL,
+    channel_id BIGINT NOT NULL,
+    user_id TEXT NOT NULL,
+    username TEXT NOT NULL,
+    template TEXT,
+    shorts BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS monitor.twitch (
+    guild_id BIGINT NOT NULL,
+    channel_id BIGINT NOT NULL,
+    user_id TEXT NOT NULL,
+    username TEXT NOT NULL,
+    template TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS monitor.pinterest (
+    guild_id BIGINT NOT NULL,
+    channel_id BIGINT NOT NULL,
+    user_id TEXT NOT NULL,
+    username TEXT NOT NULL,
+    board_id TEXT NOT NULL DEFAULT '',
+    board_name TEXT,
+    template TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, user_id, board_id)
+);
+
+CREATE TABLE IF NOT EXISTS monitor.snapchat (
+    guild_id BIGINT NOT NULL,
+    channel_id BIGINT NOT NULL,
+    user_id TEXT NOT NULL,
+    username TEXT NOT NULL,
+    template TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS monitor.seen (
+    platform TEXT NOT NULL,
+    item_id TEXT NOT NULL,
+    seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (platform, item_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_monitor_tiktok_guild ON monitor.tiktok(guild_id);
+CREATE INDEX IF NOT EXISTS idx_monitor_instagram_guild ON monitor.instagram(guild_id);
+CREATE INDEX IF NOT EXISTS idx_monitor_twitter_guild ON monitor.twitter(guild_id);
+CREATE INDEX IF NOT EXISTS idx_monitor_youtube_guild ON monitor.youtube(guild_id);
+CREATE INDEX IF NOT EXISTS idx_monitor_twitch_guild ON monitor.twitch(guild_id);
+CREATE INDEX IF NOT EXISTS idx_monitor_pinterest_guild ON monitor.pinterest(guild_id);
+CREATE INDEX IF NOT EXISTS idx_monitor_snapchat_guild ON monitor.snapchat(guild_id);

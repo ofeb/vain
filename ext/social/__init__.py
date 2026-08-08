@@ -98,10 +98,169 @@ class Socials(Package):
     def __init__(self, bot: Vain):
         super().__init__(bot)
         self._filters = {}
+        from .feeds import FeedStore, FeedWatcher
+
+        self.feeds = FeedStore(bot)
+        self.watcher = FeedWatcher(bot)
+
+    async def cog_load(self) -> None:
+        try:
+            self.watcher.start()
+        except Exception:
+            pass
+
+    async def cog_unload(self) -> None:
+        try:
+            self.watcher.stop()
+        except Exception:
+            pass
 
     async def _send_profile(self, ctx: Context, containers: list) -> None:
         view = layout_from_items(containers, timeout=180)
         await ctx.send(view=view)
+
+    async def _feed_add(
+        self,
+        ctx: Context,
+        platform: str,
+        handle: str,
+        channel: discord.TextChannel | discord.Thread | None = None,
+    ) -> None:
+        from .feeds import PLATFORMS, normalize_handle, valid_handle
+
+        if ctx.guild is None:
+            await ctx.warn("Feeds can only be configured in a server.")
+            return
+        uname = normalize_handle(handle)
+        if not valid_handle(uname):
+            await ctx.warn("Provide a valid username/handle.")
+            return
+        dest = channel or ctx.channel
+        if not isinstance(dest, (discord.TextChannel, discord.Thread)):
+            await ctx.warn("Pick a text channel for the feed.")
+            return
+        try:
+            await self.feeds.add(
+                platform,
+                guild_id=ctx.guild.id,
+                channel_id=dest.id,
+                username=uname,
+                user_id=uname.lower(),
+            )
+        except ValueError as exc:
+            await ctx.warn(str(exc))
+            return
+        except Exception as exc:
+            await ctx.fail(f"Could not save feed: {str(exc)[:120]}")
+            return
+        label = PLATFORMS.get(platform, {}).get("label", platform.title())
+        profile = PLATFORMS.get(platform, {}).get("profile")
+        link = profile(uname) if callable(profile) else uname
+        await ctx.success(
+            f"Tracking **[{label}]({link})** · `@{uname}` → {dest.mention}"
+        )
+
+    async def _feed_remove(self, ctx: Context, platform: str, handle: str) -> None:
+        from .feeds import PLATFORMS, normalize_handle
+
+        if ctx.guild is None:
+            await ctx.warn("Feeds can only be configured in a server.")
+            return
+        uname = normalize_handle(handle)
+        removed = await self.feeds.remove(platform, guild_id=ctx.guild.id, username=uname)
+        label = PLATFORMS.get(platform, {}).get("label", platform.title())
+        if removed:
+            await ctx.success(f"Stopped tracking **@{uname}** on {label}.")
+        else:
+            await ctx.warn(f"No {label} feed for **@{uname}**.")
+
+    async def _feed_list(self, ctx: Context, platform: str | None = None) -> None:
+        from .feeds import PLATFORMS, format_feed_list
+
+        if ctx.guild is None:
+            await ctx.warn("Feeds can only be listed in a server.")
+            return
+        if platform:
+            rows = await self.feeds.list(platform, ctx.guild.id)
+            body = format_feed_list(platform, rows, ctx.guild)
+            title = f"{PLATFORMS.get(platform, {}).get('label', platform)} feeds"
+            await ctx.send(embed=c2(color=color.base, title=title, message=body))
+            return
+        chunks: list[str] = []
+        for plat in PLATFORMS:
+            rows = await self.feeds.list(plat, ctx.guild.id)
+            if not rows:
+                continue
+            chunks.append(format_feed_list(plat, rows, ctx.guild))
+        if not chunks:
+            await ctx.send(
+                embed=c2(
+                    color=color.base,
+                    title="Social Feeds",
+                    message="No social feeds configured.\n-# Use `,socials <platform> add @user`",
+                )
+            )
+            return
+        await ctx.send(
+            embed=c2(color=color.base, title="Social Feeds", message="\n\n".join(chunks)[:3900])
+        )
+
+    async def _feed_migrate(
+        self,
+        ctx: Context,
+        platform: str,
+        source: discord.TextChannel | discord.Thread,
+        dest: discord.TextChannel | discord.Thread,
+    ) -> None:
+        from .feeds import PLATFORMS
+
+        if ctx.guild is None:
+            await ctx.warn("Feeds can only be migrated in a server.")
+            return
+        n = await self.feeds.migrate(
+            platform,
+            guild_id=ctx.guild.id,
+            from_channel_id=source.id,
+            to_channel_id=dest.id,
+        )
+        label = PLATFORMS.get(platform, {}).get("label", platform.title())
+        if n:
+            await ctx.success(
+                f"Moved **{n}** {label} feed(s) from {source.mention} → {dest.mention}."
+            )
+        else:
+            await ctx.warn(f"No {label} feeds in {source.mention}.")
+
+    async def _feed_message(
+        self,
+        ctx: Context,
+        platform: str,
+        template: str,
+        handle: str | None = None,
+    ) -> None:
+        from .feeds import PLATFORMS, normalize_handle
+
+        if ctx.guild is None:
+            await ctx.warn("Feeds can only be configured in a server.")
+            return
+        raw = (template or "").strip()
+        clear = raw.lower() in {"none", "off", "clear", "remove", "-"}
+        n = await self.feeds.set_template(
+            platform,
+            guild_id=ctx.guild.id,
+            template=None if clear else raw,
+            username=normalize_handle(handle) if handle else None,
+        )
+        label = PLATFORMS.get(platform, {}).get("label", platform.title())
+        if not n:
+            await ctx.warn(f"No {label} feeds matched.")
+            return
+        if clear:
+            await ctx.success(f"Cleared {label} notification template.")
+        else:
+            await ctx.success(
+                f"Set {label} template for **{n}** feed(s).\n-# vars: `{{user}}` `{{url}}` `{{platform}}`"
+            )
 
     async def _media_list_preview(
         self,
@@ -155,68 +314,141 @@ class Socials(Package):
         await ctx.send_help(ctx.command)
 
     @socials.command(name="twitter", description="Follow or unfollow an X account", aliases=["x"])
-    @describe(handle="X handle (without @)", action="add or remove")
+    @describe(action="add or remove", handle="X handle (without @)")
     @has_permissions(manage_guild=True)
     async def socials_twitter(self, ctx: Context, action: str, *, handle: str) -> None:
-        handle = handle.strip("@")
-        if action.lower() in ("add", "follow", "set"):
-            await ctx.success(f"Now tracking tweets from **@{handle}**.")
-        elif action.lower() in ("remove", "unfollow", "del", "delete"):
-            await ctx.success(f"Stopped tracking **@{handle}**.")
+        act = action.lower().strip()
+        if act in ("add", "follow", "set", "watch"):
+            await self._feed_add(ctx, "twitter", handle)
+        elif act in ("remove", "unfollow", "del", "delete", "rm"):
+            await self._feed_remove(ctx, "twitter", handle)
+        elif act in ("list", "show"):
+            await self._feed_list(ctx, "twitter")
         else:
-            await ctx.warn("Use `add` or `remove`.")
+            await ctx.warn("Use `add`, `remove`, or `list`.")
 
     @socials.command(name="twitch", description="Follow or unfollow a Twitch channel")
-    @describe(channel="Twitch channel name", action="add or remove")
+    @describe(action="add or remove", channel="Twitch channel name")
     @has_permissions(manage_guild=True)
     async def socials_twitch(self, ctx: Context, action: str, *, channel: str) -> None:
-        if action.lower() in ("add", "follow", "set"):
-            await ctx.success(f"Now tracking **{channel}** on Twitch.")
-        elif action.lower() in ("remove", "unfollow", "del", "delete"):
-            await ctx.success(f"Stopped tracking **{channel}**.")
+        act = action.lower().strip()
+        if act in ("add", "follow", "set", "watch"):
+            await self._feed_add(ctx, "twitch", channel)
+        elif act in ("remove", "unfollow", "del", "delete", "rm"):
+            await self._feed_remove(ctx, "twitch", channel)
+        elif act in ("list", "show"):
+            await self._feed_list(ctx, "twitch")
         else:
-            await ctx.warn("Use `add` or `remove`.")
+            await ctx.warn("Use `add`, `remove`, or `list`.")
 
     @socials.command(name="youtube", description="Follow or unfollow a YouTube channel", aliases=["yt"])
-    @describe(channel="YouTube channel name or ID", action="add or remove")
+    @describe(action="add or remove", channel="YouTube channel name or ID")
     @has_permissions(manage_guild=True)
     async def socials_youtube(self, ctx: Context, action: str, *, channel: str) -> None:
-        if action.lower() in ("add", "follow", "set"):
-            await ctx.success(f"Now tracking **{channel}** on YouTube.")
-        elif action.lower() in ("remove", "unfollow", "del", "delete"):
-            await ctx.success(f"Stopped tracking **{channel}**.")
+        act = action.lower().strip()
+        if act in ("add", "follow", "set", "watch"):
+            await self._feed_add(ctx, "youtube", channel)
+        elif act in ("remove", "unfollow", "del", "delete", "rm"):
+            await self._feed_remove(ctx, "youtube", channel)
+        elif act in ("list", "show"):
+            await self._feed_list(ctx, "youtube")
         else:
-            await ctx.warn("Use `add` or `remove`.")
+            await ctx.warn("Use `add`, `remove`, or `list`.")
 
     @socials.command(name="tiktok", description="Follow or unfollow a TikTok account for feed")
-    @describe(username="TikTok username", action="add or remove")
+    @describe(action="add or remove", username="TikTok username")
     @has_permissions(manage_guild=True)
     async def socials_tiktok(self, ctx: Context, action: str, *, username: str) -> None:
-        username = username.strip("@")
-        if action.lower() in ("add", "follow", "set"):
-            await ctx.success(f"Now tracking **@{username}** on TikTok.")
-        elif action.lower() in ("remove", "unfollow", "del", "delete"):
-            await ctx.success(f"Stopped tracking **@{username}**.")
+        act = action.lower().strip()
+        if act in ("add", "follow", "set", "watch"):
+            await self._feed_add(ctx, "tiktok", username)
+        elif act in ("remove", "unfollow", "del", "delete", "rm"):
+            await self._feed_remove(ctx, "tiktok", username)
+        elif act in ("list", "show"):
+            await self._feed_list(ctx, "tiktok")
         else:
-            await ctx.warn("Use `add` or `remove`.")
+            await ctx.warn("Use `add`, `remove`, or `list`.")
 
     @socials.command(name="instagram", description="Follow or unfollow an Instagram account for feed", aliases=["ig"])
-    @describe(username="Instagram username", action="add or remove")
+    @describe(action="add or remove", username="Instagram username")
     @has_permissions(manage_guild=True)
     async def socials_instagram(self, ctx: Context, action: str, *, username: str) -> None:
-        username = username.strip("@")
-        if action.lower() in ("add", "follow", "set"):
-            await ctx.success(f"Now tracking **@{username}** on Instagram.")
-        elif action.lower() in ("remove", "unfollow", "del", "delete"):
-            await ctx.success(f"Stopped tracking **@{username}**.")
+        act = action.lower().strip()
+        if act in ("add", "follow", "set", "watch"):
+            await self._feed_add(ctx, "instagram", username)
+        elif act in ("remove", "unfollow", "del", "delete", "rm"):
+            await self._feed_remove(ctx, "instagram", username)
+        elif act in ("list", "show"):
+            await self._feed_list(ctx, "instagram")
         else:
-            await ctx.warn("Use `add` or `remove`.")
+            await ctx.warn("Use `add`, `remove`, or `list`.")
+
+    @socials.command(name="pinterest", description="Follow or unfollow a Pinterest profile", aliases=["pin"])
+    @describe(action="add or remove", username="Pinterest username")
+    @has_permissions(manage_guild=True)
+    async def socials_pinterest(self, ctx: Context, action: str, *, username: str) -> None:
+        act = action.lower().strip()
+        if act in ("add", "follow", "set", "watch"):
+            await self._feed_add(ctx, "pinterest", username)
+        elif act in ("remove", "unfollow", "del", "delete", "rm"):
+            await self._feed_remove(ctx, "pinterest", username)
+        elif act in ("list", "show"):
+            await self._feed_list(ctx, "pinterest")
+        else:
+            await ctx.warn("Use `add`, `remove`, or `list`.")
+
+    @socials.command(name="snapchat", description="Follow or unfollow a Snapchat profile", aliases=["snap"])
+    @describe(action="add or remove", username="Snapchat username")
+    @has_permissions(manage_guild=True)
+    async def socials_snapchat(self, ctx: Context, action: str, *, username: str) -> None:
+        act = action.lower().strip()
+        if act in ("add", "follow", "set", "watch"):
+            await self._feed_add(ctx, "snapchat", username)
+        elif act in ("remove", "unfollow", "del", "delete", "rm"):
+            await self._feed_remove(ctx, "snapchat", username)
+        elif act in ("list", "show"):
+            await self._feed_list(ctx, "snapchat")
+        else:
+            await ctx.warn("Use `add`, `remove`, or `list`.")
 
     @socials.command(name="list", description="View all configured social feeds", aliases=["all"])
     @has_permissions(manage_guild=True)
     async def socials_list(self, ctx: Context) -> None:
-        embed = c2(color=color.base, title="Social Feeds", message="No social feeds configured.")
-        await ctx.send(embed=embed)
+        await self._feed_list(ctx, None)
+
+    @socials.command(name="migrate", description="Move feeds from one channel to another")
+    @describe(platform="Platform name", source="Current channel", destination="New channel")
+    @has_permissions(manage_guild=True)
+    async def socials_migrate(
+        self,
+        ctx: Context,
+        platform: str,
+        source: discord.TextChannel,
+        destination: discord.TextChannel,
+    ) -> None:
+        plat = platform.lower().strip()
+        if plat == "x":
+            plat = "twitter"
+        from .feeds import PLATFORMS
+
+        if plat not in PLATFORMS:
+            await ctx.warn("Platforms: " + ", ".join(sorted(PLATFORMS)))
+            return
+        await self._feed_migrate(ctx, plat, source, destination)
+
+    @socials.command(name="message", description="Set a custom feed notification template", aliases=["template", "msg"])
+    @describe(platform="Platform name", template="Template text, or `none` to clear")
+    @has_permissions(manage_guild=True)
+    async def socials_message(self, ctx: Context, platform: str, *, template: str) -> None:
+        plat = platform.lower().strip()
+        if plat == "x":
+            plat = "twitter"
+        from .feeds import PLATFORMS
+
+        if plat not in PLATFORMS:
+            await ctx.warn("Platforms: " + ", ".join(sorted(PLATFORMS)))
+            return
+        await self._feed_message(ctx, plat, template)
 
     
     
@@ -464,7 +696,7 @@ class Socials(Package):
                 followers=int(data.get("followerCount") or 0),
                 following=int(data.get("followingCount") or 0),
                 likes=int(data.get("heartCount") or 0),
-                posts=int(data.get("videoCount") or 0) or None,
+                posts=int(data.get("videoCount") or 0),
                 is_private=bool(data.get("is_private") or data.get("privateAccount")),
                 is_verified=bool(data.get("verified")),
                 accent=accent,
@@ -841,8 +1073,431 @@ class Socials(Package):
     
 
     @hybrid(
+        name="twitch",
+        description="Twitch profiles, live status & videos",
+        aliases=["ttv"],
+        group=True,
+        invoke_without_command=True,
+        guilds=True,
+        dms=True,
+        groupchats=True,
+    )
+    @describe(username="Twitch login")
+    async def twitch(self, ctx: Context, *, username: str | None = None) -> None:
+        if not username:
+            await ctx.send_help(ctx.command)
+            return
+        await ctx.invoke(self.twitch_user, username=username)
+
+    @twitch.command(name="user", description="Look up a Twitch profile", aliases=["profile", "p"])
+    @describe(username="Twitch login")
+    async def twitch_user(self, ctx: Context, *, username: str) -> None:
+        from .api import parse_twitch_user, twitch_user as api_user
+
+        uname = username.strip().lstrip("@")
+        async with ctx.typing():
+            raw = await api_user(uname)
+            data = parse_twitch_user(raw or {}, username=uname)
+            if not data:
+                await ctx.fail(f"Could not find Twitch user `{uname}`.")
+                return
+            accent = await get_repost_accent_color(
+                self.bot, avatar_url=data.get("avatar") or None, platform="twitch"
+            )
+            extras: list[tuple[str, int | str]] = []
+            if data.get("is_live"):
+                extras.append(("Live", "yes"))
+                if data.get("stream_title"):
+                    extras.append(("Title", str(data["stream_title"])[:80]))
+                if data.get("game"):
+                    extras.append(("Game", str(data["game"])[:40]))
+                if data.get("viewers"):
+                    extras.append(("Viewers", int(data["viewers"])))
+            if data.get("is_partner"):
+                extras.append(("Partner", "yes"))
+            containers = build_profile_container(
+                platform="twitch",
+                username=data.get("username") or uname,
+                display_name=data.get("display_name") or uname,
+                bio=data.get("bio") or "",
+                avatar_url=data.get("avatar") or None,
+                profile_url=data.get("url") or None,
+                followers=int(data.get("followers") or 0),
+                following=0,
+                extra_stats=extras or None,
+                is_verified=bool(data.get("is_partner")),
+                accent=accent,
+            )
+            await self._send_profile(ctx, containers)
+
+    @twitch.command(name="live", description="Check if a Twitch channel is live")
+    @describe(username="Twitch login")
+    async def twitch_live(self, ctx: Context, *, username: str) -> None:
+        from .api import parse_twitch_user, twitch_live, twitch_user as api_user
+
+        uname = username.strip().lstrip("@")
+        async with ctx.typing():
+            live = await twitch_live(uname)
+            raw = live or await api_user(uname)
+            data = parse_twitch_user(raw or {}, username=uname) if raw else None
+            if not data and not live:
+                await ctx.fail(f"Could not check Twitch live for `{uname}`.")
+                return
+            is_live = bool(
+                (data or {}).get("is_live")
+                or (isinstance(live, dict) and (live.get("is_live") or (live.get("stream") or {}).get("type") == "live"))
+            )
+            title = (data or {}).get("stream_title") or ""
+            game = (data or {}).get("game") or ""
+            viewers = (data or {}).get("viewers") or 0
+            if is_live:
+                bits = [f"**@{uname}** is **live**"]
+                if title:
+                    bits.append(str(title)[:200])
+                if game:
+                    bits.append(f"Playing **{game}**")
+                if viewers:
+                    bits.append(f"`{viewers}` watching")
+                await ctx.send(
+                    embed=c2(
+                        color=color.base,
+                        title="Twitch Live",
+                        message="\n".join(bits),
+                        footer=f"https://www.twitch.tv/{uname}",
+                    )
+                )
+            else:
+                await ctx.send(
+                    embed=c2(
+                        color=color.base,
+                        title="Twitch Live",
+                        message=f"**@{uname}** is offline.",
+                    )
+                )
+
+    @twitch.command(name="videos", description="Recent Twitch videos / VODs")
+    @describe(username="Twitch login")
+    async def twitch_videos(self, ctx: Context, *, username: str) -> None:
+        from .api import twitch_videos
+
+        uname = username.strip().lstrip("@")
+        async with ctx.typing():
+            items = await twitch_videos(uname)
+            await self._media_list_preview(
+                ctx,
+                title=f"Twitch videos · {uname}",
+                items=items,
+                empty=f"No videos for `{uname}`.",
+            )
+
+    @hybrid(
+        name="snapchat",
+        description="Snapchat public profiles",
+        aliases=["snap"],
+        group=True,
+        invoke_without_command=True,
+        guilds=True,
+        dms=True,
+        groupchats=True,
+    )
+    @describe(username="Snapchat username")
+    async def snapchat(self, ctx: Context, *, username: str | None = None) -> None:
+        if not username:
+            await ctx.send_help(ctx.command)
+            return
+        await ctx.invoke(self.snapchat_user, username=username)
+
+    @snapchat.command(name="user", description="Look up a Snapchat profile", aliases=["profile", "p"])
+    @describe(username="Snapchat username")
+    async def snapchat_user(self, ctx: Context, *, username: str) -> None:
+        from .api import parse_snapchat_user, snapchat_user as api_user
+
+        uname = username.strip().lstrip("@")
+        async with ctx.typing():
+            raw = await api_user(uname)
+            data = parse_snapchat_user(raw or {}, username=uname)
+            if not data:
+                await ctx.fail(f"Could not find Snapchat user `@{uname}`.")
+                return
+            accent = await get_repost_accent_color(
+                self.bot, avatar_url=data.get("avatar") or None, platform="snapchat"
+            )
+            extras: list[tuple[str, int | str]] = []
+            if data.get("subscribers"):
+                extras.append(("Subscribers", int(data["subscribers"])))
+            if data.get("has_story"):
+                extras.append(("Story", "active"))
+            containers = build_profile_container(
+                platform="snapchat",
+                username=data.get("username") or uname,
+                display_name=data.get("name") or uname,
+                bio=data.get("bio") or "",
+                avatar_url=data.get("avatar") or None,
+                profile_url=data.get("url") or None,
+                followers=int(data.get("subscribers") or 0),
+                following=0,
+                extra_stats=extras or None,
+                is_verified=bool(data.get("is_verified")),
+                accent=accent,
+            )
+            await self._send_profile(ctx, containers)
+
+    @hybrid(
+        name="pinterest",
+        description="Pinterest profiles, pins & search",
+        aliases=["pin"],
+        group=True,
+        invoke_without_command=True,
+        guilds=True,
+        dms=True,
+        groupchats=True,
+    )
+    @describe(query="Username or pin URL")
+    async def pinterest(self, ctx: Context, *, query: str | None = None) -> None:
+        if not query:
+            await ctx.send_help(ctx.command)
+            return
+        q = query.strip()
+        if "pinterest." in q.lower() and ("/pin/" in q.lower() or q.startswith("http")):
+            await ctx.invoke(self.pinterest_repost, url=q)
+            return
+        await ctx.invoke(self.pinterest_user, username=q)
+
+    @pinterest.command(name="user", description="Look up a Pinterest profile", aliases=["profile", "p"])
+    @describe(username="Pinterest username")
+    async def pinterest_user(self, ctx: Context, *, username: str) -> None:
+        from .api import parse_pinterest_user, pinterest_user as api_user
+
+        uname = username.strip().lstrip("@")
+        async with ctx.typing():
+            raw = await api_user(uname)
+            data = parse_pinterest_user(raw or {}, username=uname)
+            if not data:
+                await ctx.fail(f"Could not find Pinterest user `@{uname}`.")
+                return
+            accent = await get_repost_accent_color(
+                self.bot, avatar_url=data.get("avatar") or None, platform="pinterest"
+            )
+            extras: list[tuple[str, int | str]] = []
+            if data.get("pins"):
+                extras.append(("Pins", int(data["pins"])))
+            if data.get("boards"):
+                extras.append(("Boards", int(data["boards"])))
+            containers = build_profile_container(
+                platform="pinterest",
+                username=data.get("username") or uname,
+                display_name=data.get("name") or uname,
+                bio=data.get("bio") or "",
+                avatar_url=data.get("avatar") or None,
+                profile_url=data.get("url") or None,
+                followers=int(data.get("followers") or 0),
+                following=int(data.get("following") or 0),
+                extra_stats=extras or None,
+                is_private=bool(data.get("is_private")),
+                is_verified=bool(data.get("is_verified")),
+                accent=accent,
+            )
+            await self._send_profile(ctx, containers)
+
+    @pinterest.command(name="repost", description="Repost a Pinterest pin", aliases=["pin"])
+    @describe(url="Pinterest pin URL or id")
+    async def pinterest_repost(self, ctx: Context, *, url: str) -> None:
+        async with ctx.typing():
+            try:
+                await self._repost(ctx, url)
+            except Exception as e:
+                await ctx.fail(f"Repost failed: {str(e)[:150]}")
+
+    @pinterest.command(name="search", description="Search Pinterest pins")
+    @describe(query="Search query", limit="How many (1-12)")
+    async def pinterest_search(self, ctx: Context, query: str, limit: int = 8) -> None:
+        from .api import parse_pinterest_pin, pinterest_search
+
+        async with ctx.typing():
+            items = await pinterest_search(query, limit=max(1, min(int(limit or 8), 12)))
+            if not items:
+                await ctx.fail("No pins found.")
+                return
+            lines = []
+            for i, raw in enumerate(items[:12], 1):
+                post = parse_pinterest_pin(raw) if isinstance(raw, dict) else None
+                if post:
+                    lines.append(
+                        f"**{i}.** [@{post.username}]({post.url}) — {(post.caption or '')[:70]}"
+                    )
+                else:
+                    title = ""
+                    if isinstance(raw, dict):
+                        title = str(raw.get("title") or raw.get("grid_title") or "")[:70]
+                    lines.append(f"**{i}.** {title or 'pin'}")
+            await ctx.send(
+                embed=c2(color=color.base, title=f"Pinterest · {query}", message="\n".join(lines))
+            )
+
+    @hybrid(
+        name="brave",
+        description="Brave search & page scrape",
+        group=True,
+        invoke_without_command=True,
+        guilds=True,
+        dms=True,
+        groupchats=True,
+    )
+    @describe(query="Search query")
+    async def brave(self, ctx: Context, *, query: str | None = None) -> None:
+        if not query:
+            await ctx.send_help(ctx.command)
+            return
+        await ctx.invoke(self.brave_search, query=query)
+
+    @brave.command(name="search", description="Search the web via Brave", aliases=["s", "q"])
+    @describe(query="Search query")
+    async def brave_search(self, ctx: Context, *, query: str) -> None:
+        from .api import brave_search, parse_search_results
+
+        async with ctx.typing():
+            raw = await brave_search(query, count=8)
+            results = parse_search_results(raw)
+            if not results:
+                await ctx.fail("No Brave results.")
+                return
+            lines = []
+            for i, r in enumerate(results[:8], 1):
+                title = r.get("title") or r.get("url") or "result"
+                url = r.get("url") or ""
+                snip = (r.get("snippet") or "")[:90]
+                if url:
+                    lines.append(f"**{i}.** [{title}]({url})" + (f"\n> {snip}" if snip else ""))
+                else:
+                    lines.append(f"**{i}.** {title}")
+            await ctx.send(
+                embed=c2(color=color.base, title=f"Brave · {query[:80]}", message="\n".join(lines))
+            )
+
+    @brave.command(name="scrape", description="Scrape a URL via Brave")
+    @describe(url="Page URL")
+    async def brave_scrape(self, ctx: Context, *, url: str) -> None:
+        from .api import brave_scrape
+
+        async with ctx.typing():
+            data = await brave_scrape(url.strip())
+            if not data:
+                await ctx.fail("Could not scrape that URL.")
+                return
+            title = str(data.get("title") or data.get("name") or "Page")[:120]
+            text = str(
+                data.get("text")
+                or data.get("content")
+                or data.get("description")
+                or data.get("snippet")
+                or ""
+            )[:1500]
+            await ctx.send(
+                embed=c2(
+                    color=color.base,
+                    title=title,
+                    message=text or "_no text extracted_",
+                    footer=url.strip()[:200],
+                )
+            )
+
+    @brave.command(name="ai", description="Brave AI answer")
+    @describe(query="Question")
+    async def brave_ai(self, ctx: Context, *, query: str) -> None:
+        from .api import brave_ai
+
+        async with ctx.typing():
+            data = await brave_ai(query)
+            if not data:
+                await ctx.fail("Brave AI unavailable.")
+                return
+            answer = str(
+                data.get("answer")
+                or data.get("response")
+                or data.get("text")
+                or data.get("result")
+                or ""
+            )[:1800]
+            if not answer and isinstance(data.get("data"), dict):
+                answer = str(data["data"].get("answer") or data["data"].get("text") or "")[:1800]
+            if not answer:
+                await ctx.fail("Empty AI response.")
+                return
+            await ctx.send(
+                embed=c2(color=color.base, title="Brave AI", message=answer, footer=query[:120])
+            )
+
+    @hybrid(
+        name="google",
+        description="Google search & page scrape",
+        aliases=["g"],
+        group=True,
+        invoke_without_command=True,
+        guilds=True,
+        dms=True,
+        groupchats=True,
+    )
+    @describe(query="Search query")
+    async def google(self, ctx: Context, *, query: str | None = None) -> None:
+        if not query:
+            await ctx.send_help(ctx.command)
+            return
+        await ctx.invoke(self.google_search, query=query)
+
+    @google.command(name="search", description="Search the web via Google", aliases=["s", "q"])
+    @describe(query="Search query")
+    async def google_search(self, ctx: Context, *, query: str) -> None:
+        from .api import google_search, parse_search_results
+
+        async with ctx.typing():
+            raw = await google_search(query, count=8)
+            results = parse_search_results(raw)
+            if not results:
+                await ctx.fail("No Google results.")
+                return
+            lines = []
+            for i, r in enumerate(results[:8], 1):
+                title = r.get("title") or r.get("url") or "result"
+                url = r.get("url") or ""
+                snip = (r.get("snippet") or "")[:90]
+                if url:
+                    lines.append(f"**{i}.** [{title}]({url})" + (f"\n> {snip}" if snip else ""))
+                else:
+                    lines.append(f"**{i}.** {title}")
+            await ctx.send(
+                embed=c2(color=color.base, title=f"Google · {query[:80]}", message="\n".join(lines))
+            )
+
+    @google.command(name="scrape", description="Scrape a URL via Google path")
+    @describe(url="Page URL")
+    async def google_scrape(self, ctx: Context, *, url: str) -> None:
+        from .api import google_scrape
+
+        async with ctx.typing():
+            data = await google_scrape(url.strip())
+            if not data:
+                await ctx.fail("Could not scrape that URL.")
+                return
+            title = str(data.get("title") or data.get("name") or "Page")[:120]
+            text = str(
+                data.get("text")
+                or data.get("content")
+                or data.get("description")
+                or data.get("snippet")
+                or ""
+            )[:1500]
+            await ctx.send(
+                embed=c2(
+                    color=color.base,
+                    title=title,
+                    message=text or "_no text extracted_",
+                    footer=url.strip()[:200],
+                )
+            )
+
+    @hybrid(
         name="repost",
-        description="Repost TikTok, Instagram, X, or YouTube media",
+        description="Repost TikTok, Instagram, X, YouTube, or Pinterest media",
         example=",repost https://www.instagram.com/reel/xxxx",
         guilds=True,
         dms=True,
@@ -1015,19 +1670,25 @@ class Socials(Package):
     async def _repost(self, ctx: Context, url: str) -> None:
         """Fetch social media and send Components V2 repost panel.
 
-        Supports TikTok, Instagram, X/Twitter, and YouTube (incl. shorts).
+        Supports TikTok, Instagram, X/Twitter, YouTube, Pinterest, Twitch.
         Videos attach as a file; multi-image sets paginate.
         """
         from .api import (
             fetch_twitter_social_post,
             fetch_youtube_social_post,
+            parse_pinterest_pin,
+            parse_twitch_video,
+            pinterest_pin,
+            twitch_video,
             twitter_status_id_from_url,
             youtube_video_id_from_url,
         )
 
         url = (url or "").strip()
         if not url:
-            await ctx.warn("Provide a TikTok, Instagram, X, or YouTube URL.")
+            await ctx.warn(
+                "Provide a TikTok, Instagram, X, YouTube, Pinterest, or Twitch URL."
+            )
             return
         if not url.startswith("http"):
             url = "https://" + url
@@ -1052,7 +1713,6 @@ class Socials(Package):
         elif "youtu" in lu or youtube_video_id_from_url(url):
             post = await fetch_youtube_social_post(url)
             if post is None:
-                
                 upload = await self._ytdlp_file(ctx, url, "youtube")
                 if upload is None:
                     await ctx.fail("Could not fetch that YouTube video.")
@@ -1075,9 +1735,21 @@ class Socials(Package):
                 msg = await ctx.send(file=upload, view=view)
                 view.message = msg
                 return
+        elif "pinterest." in lu or "pin.it" in lu:
+            raw = await pinterest_pin(url)
+            post = parse_pinterest_pin(raw or {}, source_url=url) if raw else None
+        elif "twitch.tv" in lu:
+            m = re.search(r"twitch\.tv/videos/(\d+)", lu)
+            if m:
+                raw = await twitch_video(m.group(1))
+                post = parse_twitch_video(raw or {}, source_url=url) if raw else None
+            else:
+                await ctx.warn("Use a Twitch VOD URL (`twitch.tv/videos/...`), or `,twitch user`.")
+                return
         else:
             await ctx.warn(
-                "Supported links: **TikTok**, **Instagram**, **X**, **YouTube** (videos/shorts)."
+                "Supported links: **TikTok**, **Instagram**, **X**, **YouTube**, "
+                "**Pinterest**, **Twitch** VODs."
             )
             return
 

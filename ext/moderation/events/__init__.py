@@ -176,7 +176,7 @@ class ModerationEvents(Package):
 
         embed = panel_embed(
             title="Role Changes",
-            color=0xD4B8D0,
+            color=0xE1D2DE,
             lines=lines,
         )
         await log_channel.send(embed=embed)

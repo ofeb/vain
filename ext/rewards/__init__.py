@@ -12,8 +12,9 @@ from discord import Embed, File, HTTPException, Interaction, Member, Message, Ro
 from discord.ext import commands
 from discord.ext.commands import Author, BucketType, cooldown, group, command
 from discord.ui import Button, View
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFont
 
+from config import color as bot_color
 from core.discord.mixin import _Meta
 from core.discord.package import Package
 from core.managers.permissions import has_permissions
@@ -21,16 +22,19 @@ from core.managers.permissions import has_permissions
 from .events import LevelingEvents
 
 
-_FONT_CANDIDATES = [
-    r"C:\Windows\Fonts\arialbd.ttf",
+_FONT_BOLD = [
     r"C:\Windows\Fonts\segoeuib.ttf",
-    r"C:\Windows\Fonts\arial.ttf",
-    r"C:\Windows\Fonts\segoeui.ttf",
+    r"C:\Windows\Fonts\arialbd.ttf",
+    r"C:\Windows\Fonts\calibrib.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+]
+_FONT_REG = [
+    r"C:\Windows\Fonts\segoeui.ttf",
+    r"C:\Windows\Fonts\arial.ttf",
+    r"C:\Windows\Fonts\calibri.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    "/usr/share/fonts/SlidesCarnival/google/Inter/static/Inter_18pt-Bold.ttf",
-    "/usr/share/fonts/SlidesCarnival/google/Inter/static/Inter_18pt-SemiBold.ttf",
-    "/usr/share/fonts/SlidesCarnival/google/Poppins/Poppins-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
 ]
 
 _VALID_MULTIS = (
@@ -38,13 +42,61 @@ _VALID_MULTIS = (
 )
 
 
-def _load_font(size: int, *, bold: bool = False) -> ImageFont.ImageFont:
-    for path in _FONT_CANDIDATES:
+_CARD_BG = (22, 24, 32, 255)
+_CARD_PANEL = (32, 34, 44, 255)
+_TRACK = (48, 50, 62, 255)
+_TEXT = (245, 246, 250, 255)
+_MUTED = (158, 162, 178, 255)
+_SOFT = (190, 194, 210, 255)
+
+
+def _load_font(size: int, *, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    for path in (_FONT_BOLD if bold else _FONT_REG):
         try:
             return ImageFont.truetype(path, size)
         except Exception:
             continue
+    
+    if bold:
+        for path in _FONT_REG:
+            try:
+                return ImageFont.truetype(path, size)
+            except Exception:
+                continue
     return ImageFont.load_default()
+
+
+def _hex_rgb(value: int) -> tuple[int, int, int]:
+    value = int(value) & 0xFFFFFF
+    return ((value >> 16) & 0xFF, (value >> 8) & 0xFF, value & 0xFF)
+
+
+def _lerp(a: int, b: int, t: float) -> int:
+    return int(a + (b - a) * t)
+
+
+def _text_width(draw: ImageDraw.ImageDraw, text: str, font) -> float:
+    try:
+        return float(draw.textlength(text, font=font))
+    except Exception:
+        box = draw.textbbox((0, 0), text, font=font)
+        return float(box[2] - box[0])
+
+
+def _fit_text(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    font,
+    max_width: float,
+) -> str:
+    text = (text or "").strip() or "User"
+    if _text_width(draw, text, font) <= max_width:
+        return text
+    ell = "…"
+    cut = text
+    while cut and _text_width(draw, cut + ell, font) > max_width:
+        cut = cut[:-1]
+    return (cut + ell) if cut else ell
 
 
 def _circle_mask(size: int) -> Image.Image:
@@ -53,15 +105,43 @@ def _circle_mask(size: int) -> Image.Image:
     return mask
 
 
-def _circular_avatar(avatar: Image.Image, size: int = 148) -> Image.Image:
+def _circular_avatar(avatar: Image.Image, size: int) -> Image.Image:
     avatar = avatar.convert("RGBA").resize((size, size), Image.Resampling.LANCZOS)
     out = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     out.paste(avatar, (0, 0), _circle_mask(size))
     return out
 
 
-def _rounded_rect(draw: ImageDraw.ImageDraw, xy, radius: int, fill) -> None:
-    draw.rounded_rectangle(xy, radius=radius, fill=fill)
+def _round_mask(size: tuple[int, int], radius: int) -> Image.Image:
+    mask = Image.new("L", size, 0)
+    ImageDraw.Draw(mask).rounded_rectangle((0, 0, size[0] - 1, size[1] - 1), radius=radius, fill=255)
+    return mask
+
+
+def _gradient_bar(
+    width: int,
+    height: int,
+    start: tuple[int, int, int],
+    end: tuple[int, int, int],
+    radius: int,
+) -> Image.Image:
+    """Horizontal accent gradient clipped to a rounded rect."""
+    if width <= 0 or height <= 0:
+        return Image.new("RGBA", (max(width, 1), max(height, 1)), (0, 0, 0, 0))
+    grad = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    px = grad.load()
+    assert px is not None
+    for x in range(width):
+        t = x / max(width - 1, 1)
+        r = _lerp(start[0], end[0], t)
+        g = _lerp(start[1], end[1], t)
+        b = _lerp(start[2], end[2], t)
+        for y in range(height):
+            px[x, y] = (r, g, b, 255)
+    mask = _round_mask((width, height), radius)
+    out = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    out.paste(grad, (0, 0), mask)
+    return out
 
 
 def _draw_rank_base(
@@ -75,85 +155,131 @@ def _draw_rank_base(
     accent: int,
     avatar_rgba: Image.Image,
 ) -> Image.Image:
-    """Static rank card frame + text + avatar (transparent outside rounded card)."""
-    W, H = 900, 260
-    progress = min(float(xp) / float(target_xp), 1.0) if target_xp > 0 else 0.0
-    ar = (accent >> 16) & 0xFF
-    ag = (accent >> 8) & 0xFF
-    ab = accent & 0xFF
+    """Clean static rank card — solid PNG-safe layout, brand accent bar."""
+    W, H = 934, 280
+    progress = 0.0
+    if target_xp and target_xp > 0:
+        progress = max(0.0, min(float(xp) / float(target_xp), 1.0))
+
+    ar, ag, ab = _hex_rgb(accent)
+    
+    er = _lerp(ar, 255, 0.28)
+    eg = _lerp(ag, 255, 0.28)
+    eb = _lerp(ab, 255, 0.28)
 
     
-    base = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(base)
+    canvas = Image.new("RGBA", (W, H), _CARD_BG)
+    layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(layer)
 
     
-    panel = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    pd = ImageDraw.Draw(panel)
-    _rounded_rect(pd, [0, 0, W - 1, H - 1], 28, (28, 30, 48, 255))
-    
-    for x in range(0, 220):
-        alpha = int(50 * (1 - x / 220))
-        pd.line([(x, 8), (x, H - 9)], fill=(ar, ag, ab, alpha))
-    
-    for y in range(H - 50, H - 1):
-        t = (y - (H - 50)) / 50
-        pd.line([(12, y), (W - 13, y)], fill=(ar, ag, ab, int(18 * t)))
-    base.alpha_composite(panel)
-
-    
-    _rounded_rect(draw, [14, 28, 20, H - 28], 4, (ar, ag, ab, 220))
-
-    
-    av = _circular_avatar(avatar_rgba, 140)
-    
-    ring = Image.new("RGBA", (150, 150), (0, 0, 0, 0))
-    ImageDraw.Draw(ring).ellipse((1, 1, 148, 148), outline=(ar, ag, ab, 230), width=3)
-    base.paste(ring, (40, (H // 2) - 75), ring)
-    base.paste(av, (45, (H // 2) - 70), av)
-
-    font_name = _load_font(32, bold=True)
-    font_rank = _load_font(18, bold=True)
-    font_level = _load_font(48, bold=True)
-    font_xp = _load_font(17)
-    font_small = _load_font(15)
-
-    name = display_name
-    if len(name) > 18:
-        name = name[:17] + "…"
-    draw.text((210, 42), name, font=font_name, fill=(245, 246, 252, 255))
-    draw.text(
-        (210, 88),
-        f"RANK  #{rank}  ·  {total_members} members",
-        font=font_rank,
-        fill=(150, 154, 180, 255),
+    margin = 0
+    draw.rounded_rectangle(
+        (margin, margin, W - 1 - margin, H - 1 - margin),
+        radius=24,
+        fill=_CARD_PANEL,
     )
 
-    draw.text((W - 190, 36), "LEVEL", font=font_small, fill=(150, 154, 180, 255))
-    lvl_text = str(level)
-    try:
-        lvl_w = draw.textlength(lvl_text, font=font_level)
-    except Exception:
-        lvl_w = 40
-    draw.text((W - 48 - lvl_w, 50), lvl_text, font=font_level, fill=(255, 255, 255, 255))
+    
+    strip = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    sd = ImageDraw.Draw(strip)
+    sd.rounded_rectangle((0, 18, 8, H - 19), radius=4, fill=(ar, ag, ab, 255))
+    layer.alpha_composite(strip)
 
-    bar_x, bar_y, bar_w, bar_h = 210, 155, 560, 22
-    _rounded_rect(draw, [bar_x, bar_y, bar_x + bar_w, bar_y + bar_h], 11, (42, 44, 62, 255))
-    fill_w = max(int(bar_w * progress), 10 if progress > 0 else 0)
-    if fill_w:
-        _rounded_rect(
-            draw,
-            [bar_x, bar_y, bar_x + fill_w, bar_y + bar_h],
-            11,
-            (ar, ag, ab, 255),
-        )
-    pct = progress * 100
-    draw.text(
-        (bar_x, bar_y + 30),
-        f"{int(xp):,}  /  {int(target_xp):,} XP   ·   {pct:.1f}%",
-        font=font_xp,
-        fill=(180, 184, 205, 255),
+    
+    sheen = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    ImageDraw.Draw(sheen).rounded_rectangle(
+        (12, 10, W - 13, 72),
+        radius=18,
+        fill=(ar, ag, ab, 22),
     )
-    return base
+    layer.alpha_composite(sheen)
+
+    
+    av_size = 148
+    av = _circular_avatar(avatar_rgba, av_size)
+    av_x, av_y = 36, (H - av_size) // 2
+    ring_pad = 5
+    ring_size = av_size + ring_pad * 2
+    ring = Image.new("RGBA", (ring_size, ring_size), (0, 0, 0, 0))
+    rd = ImageDraw.Draw(ring)
+    rd.ellipse((1, 1, ring_size - 2, ring_size - 2), outline=(ar, ag, ab, 255), width=4)
+    rd.ellipse((3, 3, ring_size - 4, ring_size - 4), outline=(255, 255, 255, 28), width=1)
+    layer.paste(ring, (av_x - ring_pad, av_y - ring_pad), ring)
+    layer.paste(av, (av_x, av_y), av)
+
+    font_name = _load_font(34, bold=True)
+    font_label = _load_font(15, bold=True)
+    font_value = _load_font(22, bold=True)
+    font_level = _load_font(52, bold=True)
+    font_xp = _load_font(16, bold=False)
+    font_small = _load_font(14, bold=False)
+
+    text_left = av_x + av_size + 28
+    bar_right = W - 40
+    name_max = bar_right - text_left - 150
+
+    name = _fit_text(draw, display_name, font_name, name_max)
+    draw.text((text_left, 48), name, font=font_name, fill=_TEXT)
+
+    
+    rank_label = f"RANK #{int(rank)}"
+    members_label = f"{int(total_members):,} ranked"
+    draw.text((text_left, 96), rank_label, font=font_label, fill=(ar, ag, ab, 255))
+    rw = _text_width(draw, rank_label, font_label)
+    draw.text((text_left + rw + 12, 96), f"·  {members_label}", font=font_small, fill=_MUTED)
+
+    
+    lvl_title = "LEVEL"
+    lvl_text = str(int(level))
+    lt_w = _text_width(draw, lvl_title, font_small)
+    lv_w = _text_width(draw, lvl_text, font_level)
+    block_w = max(lt_w, lv_w)
+    block_x = bar_right - block_w
+    draw.text((block_x + (block_w - lt_w), 40), lvl_title, font=font_small, fill=_MUTED)
+    draw.text((block_x + (block_w - lv_w), 58), lvl_text, font=font_level, fill=_TEXT)
+
+    
+    bar_x = text_left
+    bar_y = 168
+    bar_w = bar_right - text_left
+    bar_h = 26
+    radius = bar_h // 2
+
+    
+    draw.rounded_rectangle(
+        (bar_x, bar_y, bar_x + bar_w, bar_y + bar_h),
+        radius=radius,
+        fill=_TRACK,
+    )
+
+    fill_w = int(round(bar_w * progress))
+    if progress > 0 and fill_w < radius * 2:
+        fill_w = min(bar_w, radius * 2)
+    if fill_w > 0:
+        bar = _gradient_bar(fill_w, bar_h, (ar, ag, ab), (er, eg, eb), radius)
+        layer.paste(bar, (bar_x, bar_y), bar)
+        
+        gloss_h = max(bar_h // 2, 4)
+        gloss = Image.new("RGBA", (fill_w, gloss_h), (0, 0, 0, 0))
+        gd = ImageDraw.Draw(gloss)
+        gd.rounded_rectangle((0, 0, fill_w - 1, gloss_h - 1), radius=radius // 2, fill=(255, 255, 255, 40))
+        layer.paste(gloss, (bar_x, bar_y + 2), gloss)
+
+    
+    cur = f"{int(xp):,}"
+    need = f"{int(target_xp):,}"
+    pct = f"{progress * 100:.1f}%"
+    left_xp = f"{cur} / {need} XP"
+    draw.text((bar_x, bar_y + bar_h + 12), left_xp, font=font_xp, fill=_SOFT)
+    pct_w = _text_width(draw, pct, font_value)
+    draw.text((bar_x + bar_w - pct_w, bar_y + bar_h + 8), pct, font=font_value, fill=_TEXT)
+
+    canvas.alpha_composite(layer)
+    
+    rounded = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    rounded.paste(canvas, (0, 0), _round_mask((W, H), 24))
+    return rounded
 
 
 async def generate_rank_card(
@@ -164,89 +290,55 @@ async def generate_rank_card(
     rank: int,
     total_members: int,
     *,
-    accent: int = 0x5865F2,
+    accent: int | None = None,
 ) -> io.BytesIO:
-    """Render a polished rank card. Animated avatars export as GIF."""
-    display_name = getattr(member, "display_name", None) or getattr(member, "name", "User")
+    """Render a stable rank card PNG (static avatar frame — no broken GIFs)."""
+    if accent is None:
+        accent = int(getattr(bot_color, "base", 0xE1D2DE) or 0xE1D2DE)
+
+    display_name = (
+        getattr(member, "display_name", None)
+        or getattr(member, "global_name", None)
+        or getattr(member, "name", None)
+        or "User"
+    )
     avatar_asset = getattr(member, "display_avatar", None)
-    is_animated = bool(getattr(avatar_asset, "is_animated", False))
 
+    avatar_rgba: Image.Image
     try:
-        avatar_bytes = await avatar_asset.read()
-        src = Image.open(io.BytesIO(avatar_bytes))
-    except Exception:
-        src = Image.new("RGBA", (180, 180), (70, 74, 96, 255))
-        is_animated = False
-
-    buf = io.BytesIO()
-
-    if is_animated and getattr(src, "is_animated", False):
-        frames: list[Image.Image] = []
-        durations: list[int] = []
-        n = min(getattr(src, "n_frames", 1), 48)  
-        for i in range(n):
-            try:
-                src.seek(i)
-                frame = src.convert("RGBA")
-            except Exception:
-                continue
-            card = _draw_rank_base(
-                level=level,
-                xp=xp,
-                target_xp=target_xp,
-                rank=rank,
-                total_members=total_members,
-                display_name=display_name,
-                accent=accent,
-                avatar_rgba=frame,
-            )
-            
-            frames.append(card.convert("RGBA"))
-            durations.append(int(src.info.get("duration", 40) or 40))
-        if not frames:
-            is_animated = False
+        
+        if avatar_asset is not None:
+            avatar_bytes = await avatar_asset.replace(format="png", size=256).read()
         else:
-            
-            bg_color = (22, 24, 38, 255)
-            solid_frames = []
-            for fr in frames:
-                bg = Image.new("RGBA", fr.size, bg_color)
-                bg.alpha_composite(fr)
-                solid_frames.append(bg.convert("P", palette=Image.ADAPTIVE, colors=255))
-            solid_frames[0].save(
-                buf,
-                format="GIF",
-                save_all=True,
-                append_images=solid_frames[1:],
-                duration=durations[: len(solid_frames)],
-                loop=0,
-                optimize=True,
-                disposal=2,
-            )
-            buf.seek(0)
-            buf.name = "rank.gif"  # type: ignore[attr-defined]
-            return buf
+            raise RuntimeError("no avatar")
+        with Image.open(io.BytesIO(avatar_bytes)) as src:
+            avatar_rgba = src.convert("RGBA")
+    except Exception:
+        avatar_rgba = Image.new("RGBA", (256, 256), (70, 74, 96, 255))
+        
+        d = ImageDraw.Draw(avatar_rgba)
+        d.ellipse((0, 0, 255, 255), fill=(54, 56, 70, 255))
+        initial = (display_name[:1] or "?").upper()
+        f = _load_font(96, bold=True)
+        tw = _text_width(d, initial, f)
+        d.text(((256 - tw) / 2, 64), initial, font=f, fill=_TEXT)
 
-    
-    if not isinstance(src, Image.Image):
-        avatar_rgba = Image.new("RGBA", (180, 180), (70, 74, 96, 255))
-    else:
-        try:
-            src.seek(0)
-        except Exception:
-            pass
-        avatar_rgba = src.convert("RGBA")
     card = _draw_rank_base(
         level=level,
         xp=xp,
         target_xp=target_xp,
         rank=rank,
         total_members=total_members,
-        display_name=display_name,
-        accent=accent,
+        display_name=str(display_name),
+        accent=int(accent),
         avatar_rgba=avatar_rgba,
     )
-    card.save(buf, format="PNG", optimize=True)
+
+    buf = io.BytesIO()
+    
+    flat = Image.new("RGBA", card.size, _CARD_BG)
+    flat.alpha_composite(card)
+    flat.convert("RGB").save(buf, format="PNG", optimize=True)
     buf.seek(0)
     buf.name = "rank.png"  # type: ignore[attr-defined]
     return buf
@@ -385,7 +477,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         if position is None:
             return await ctx.warn(f"{member.mention} has no recorded level data")
         data = next(r for r in sorted_rows if r["user_id"] == member.id)
-        accent = getattr(self.bot, "color", None) or 0x5865F2
+        accent = int(getattr(self.bot, "color", None) or bot_color.base or 0xE1D2DE)
         card = await generate_rank_card(
             member if isinstance(member, Member) else ctx.author,
             int(data["level"]),
@@ -393,17 +485,9 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
             int(data["target_xp"]),
             position,
             len(sorted_rows),
-            accent=int(accent),
+            accent=accent,
         )
-        ext = "gif" if getattr(card, "name", "").endswith(".gif") else "png"
-        
-        try:
-            head = card.getvalue()[:6] if hasattr(card, "getvalue") else b""
-            if head.startswith(b"GIF"):
-                ext = "gif"
-        except Exception:
-            pass
-        return await ctx.send(file=File(card, filename=f"rank-{member.id}.{ext}"))
+        return await ctx.send(file=File(fp=card, filename=f"rank-{member.id}.png"))
 
     
     
@@ -749,7 +833,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         embed = Embed(
             title="Level Leaderboard",
             description="\n".join(lines),
-            color=getattr(self.bot, "color", 0x5865F2) or 0x5865F2,
+            color=getattr(self.bot, "color", 0xE1D2DE) or 0xE1D2DE,
         )
         if ctx.guild.icon:
             embed.set_author(name=ctx.guild.name, icon_url=ctx.guild.icon.url)
@@ -777,7 +861,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
             ch_label = ch.mention if ch else f"`{ch_id}` (missing)"
         else:
             ch_label = "same channel (any)"
-        embed = Embed(title="Leveling Config", color=0x5865F2)
+        embed = Embed(title="Leveling Config", color=0xE1D2DE)
         embed.add_field(name="Channel", value=ch_label, inline=True)
         embed.add_field(
             name="Stack rewards",

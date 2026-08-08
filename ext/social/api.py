@@ -1,38 +1,12 @@
 """Social content API client (scl.guilt.bot — socials-main route shape).
 
 Base: https://scl.guilt.bot (override with ``config.api.social_base``).
-No API key required.
+No API key required. Optional Cloudflare Access service-token headers via
+``config.api.social_cf_client_id`` / ``social_cf_client_secret``.
 
 Routes used:
-  Instagram
-    GET /api/instagram/{username}
-    GET /api/instagram/p/{shortcode}
-    GET /api/instagram/trending?count=
-    GET /api/instagram/{username}/posts?count=
-    GET /api/instagram/{username}/stories
-    GET /api/instagram/{username}/highlights
-    GET /api/instagram/highlights/{highlight_id}
-  TikTok
-    GET /api/tiktok/{username}
-    GET /api/tiktok/fyp?limit=&region=
-    GET /api/tiktok/{username}/posts?limit=
-    GET /api/tiktok/{username}/reposts?limit=
-    GET /api/tiktok/p/{item_id}
-    GET /api/tiktok/shortcode/{code}
-  Twitter / X
-    GET /api/twitter/{username}
-    GET /api/twitter/{username}/tweets
-    GET /api/twitter/status/{status_id}
-    GET /api/twitter/thread/{status_id}
-  YouTube
-    GET /api/youtube/channel/{channel}
-    GET /api/youtube/channel/{channel}/videos|shorts|notifications
-    GET /api/youtube/video/{video_id}
-    GET /api/youtube/video?url=
-    GET /api/youtube/download/{video_id}
-  Telegram
-    GET /api/telegram/{username}
-    GET /api/telegram/channel/{username}
+  Instagram, TikTok, Twitter/X, YouTube, Telegram,
+  Twitch, Snapchat, Pinterest, Brave, Google
 """
 
 from __future__ import annotations
@@ -75,10 +49,35 @@ def _base() -> str:
 
 
 def _headers() -> dict[str, str]:
-    return {
-        "User-Agent": "VainBot/1.0 (+https://vain.bot)",
+    """Match Scalar/OpenAPI client: Accept application/json + optional CF Access.
+
+    Working browser/Scalar requests only need ``Accept: application/json``.
+    CF service-token headers are attached when configured (server-to-server).
+    """
+    headers: dict[str, str] = {
         "Accept": "application/json",
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/122.0.0.0 Safari/537.36"
+        ),
+        "Accept-Language": "en-US,en;q=0.9",
     }
+    client_id = (
+        getattr(api_cfg, "social_cf_client_id", None)
+        or getattr(api_cfg, "cf_access_client_id", None)
+        or ""
+    ).strip()
+    client_secret = (
+        getattr(api_cfg, "social_cf_client_secret", None)
+        or getattr(api_cfg, "cf_access_client_secret", None)
+        or ""
+    ).strip()
+    if client_id and client_secret:
+        
+        headers["CF-Access-Client-Id"] = client_id
+        headers["CF-Access-Client-Secret"] = client_secret
+    return headers
 
 
 def _as_int(value: Any) -> int:
@@ -116,7 +115,42 @@ def _first_str(*values: Any) -> str:
             return v.strip()
         if isinstance(v, (int, float)) and not isinstance(v, bool):
             return str(v)
+        if isinstance(v, dict):
+            nested = _first_str(
+                v.get("text"),
+                v.get("username"),
+                v.get("uniqueId"),
+                v.get("unique_id"),
+                v.get("screen_name"),
+                v.get("name"),
+                v.get("url"),
+            )
+            if nested:
+                return nested
+        if isinstance(v, list):
+            for item in v:
+                nested = _first_str(item)
+                if nested:
+                    return nested
     return ""
+
+
+def _dict(*values: Any) -> dict:
+    for v in values:
+        if isinstance(v, dict) and v:
+            return v
+    return {}
+
+
+def _unwrap(data: dict, *keys: str) -> dict:
+    """Prefer first nested dict under *keys* that looks populated."""
+    if not isinstance(data, dict):
+        return {}
+    for key in keys:
+        inner = data.get(key)
+        if isinstance(inner, dict) and inner:
+            return inner
+    return data
 
 
 def _pick_url(*values: Any) -> str | None:
@@ -131,8 +165,11 @@ def _pick_url(*values: Any) -> str | None:
                     u = _pick_url(
                         item.get("url"),
                         item.get("playAddr"),
+                        item.get("play_addr"),
                         item.get("downloadAddr"),
+                        item.get("download_addr"),
                         item.get("play"),
+                        item.get("src"),
                     )
                     if u:
                         return u
@@ -140,10 +177,16 @@ def _pick_url(*values: Any) -> str | None:
             u = _pick_url(
                 v.get("url"),
                 v.get("playAddr"),
+                v.get("play_addr"),
                 v.get("downloadAddr"),
+                v.get("download_addr"),
                 v.get("play"),
                 v.get("hdplay"),
                 v.get("urlList"),
+                v.get("url_list"),
+                v.get("src"),
+                v.get("image_url"),
+                v.get("profile_pic_url"),
             )
             if u:
                 return u
@@ -203,7 +246,12 @@ async def api_get(
     params: dict | None = None,
     timeout: float = 25.0,
 ) -> Any | None:
-    """GET JSON from scl.guilt.bot. Returns None on any failure."""
+    """GET JSON from scl.guilt.bot. Returns None on any failure.
+
+    Routes are under ``/api/...`` (OpenAPI). Auth is optional CF Access
+    service-token headers when configured; browser/Scalar sessions that already
+    hold an Access cookie do not need them.
+    """
     url = f"{_base()}{path if path.startswith('/') else '/' + path}"
     try:
         async with aiohttp.ClientSession(headers=_headers()) as session:
@@ -211,8 +259,22 @@ async def api_get(
                 url,
                 params=params,
                 timeout=aiohttp.ClientTimeout(total=timeout),
-                allow_redirects=True,
+                
+                allow_redirects=False,
             ) as resp:
+                
+                if resp.status in {301, 302, 303, 307, 308}:
+                    loc = resp.headers.get("Location") or ""
+                    log.debug("social-api %s redirected (%s) -> %s", path, resp.status, loc[:120])
+                    return None
+                if resp.status == 401 or resp.status == 403:
+                    body = ""
+                    try:
+                        body = (await resp.text())[:180]
+                    except Exception:
+                        pass
+                    log.debug("social-api %s auth %s %s", path, resp.status, body)
+                    return None
                 if resp.status != 200:
                     body = ""
                     try:
@@ -224,7 +286,7 @@ async def api_get(
                 ctype = (resp.headers.get("Content-Type") or "").lower()
                 if "json" in ctype:
                     return await resp.json(content_type=None)
-                
+
                 text = await resp.text()
                 text = (text or "").strip()
                 if text.startswith(("{", "[")):
@@ -238,6 +300,66 @@ async def api_get(
     except Exception as exc:
         log.debug("social-api error %s: %s", path, exc)
         return None
+
+
+def _username_from_url(url: str, platform: str) -> str:
+    """Best-effort handle extraction from a share URL."""
+    u = url or ""
+    plat = (platform or "").lower()
+    if plat == "tiktok":
+        m = _TT_USER_RE.search(u)
+        return (m.group(1) if m else "").lstrip("@")
+    if plat == "instagram":
+        m = re.search(r"instagram\.com/([A-Za-z0-9._]+)/?", u, re.I)
+        if m and m.group(1).lower() not in {"p", "reel", "reels", "tv", "stories", "explore"}:
+            return m.group(1)
+        return ""
+    if plat in {"twitter", "x"}:
+        m = _X_USER_RE.search(u)
+        handle = (m.group(1) if m else "").lstrip("@")
+        if handle.lower() in {"i", "intent", "share", "home", "explore", "search"}:
+            return ""
+        return handle
+    if plat == "youtube":
+        m = _YT_HANDLE_RE.search(u)
+        return (m.group(1) if m else "").lstrip("@")
+    if plat == "twitch":
+        m = re.search(r"twitch\.tv/([A-Za-z0-9_]+)", u, re.I)
+        if m and m.group(1).lower() not in {"videos", "clips", "directory", "downloads"}:
+            return m.group(1)
+    if plat == "snapchat":
+        m = re.search(r"snapchat\.com/add/([A-Za-z0-9._-]+)", u, re.I)
+        return m.group(1) if m else ""
+    if plat == "pinterest":
+        m = re.search(r"pinterest\.[^/]+/([A-Za-z0-9._-]+)/?", u, re.I)
+        return m.group(1) if m else ""
+    return ""
+
+
+def enrich_social_post(post: SocialPost | None, *, source_url: str = "") -> SocialPost | None:
+    """Backfill username/display from URL / raw when parsers leave gaps."""
+    if post is None:
+        return None
+    plat = (post.platform or "").lower()
+    url = source_url or post.url or ""
+    if (not post.username or post.username == "unknown") and url:
+        derived = _username_from_url(url, plat)
+        if derived:
+            post.username = derived
+    if not post.display_name or post.display_name in {"", "unknown"}:
+        post.display_name = post.username if post.username != "unknown" else ""
+    raw = post.raw if isinstance(post.raw, dict) else {}
+    if (not post.avatar_url) and raw:
+        post.avatar_url = _pick_url(
+            raw.get("avatar"),
+            raw.get("avatar_url"),
+            raw.get("profile_pic_url"),
+            raw.get("profile_image_url"),
+            (raw.get("user") or {}).get("profile_pic_url") if isinstance(raw.get("user"), dict) else None,
+            (raw.get("author") or {}).get("avatarLarger") if isinstance(raw.get("author"), dict) else None,
+            (raw.get("author") or {}).get("avatar_larger") if isinstance(raw.get("author"), dict) else None,
+        )
+    return post
 
 
 
@@ -331,35 +453,47 @@ def parse_instagram_post(data: dict, *, source_url: str = "") -> SocialPost | No
     if not isinstance(data, dict) or not data:
         return None
 
-    
     post = data
-    for key in ("post", "item", "media", "data"):
+    for key in ("post", "item", "media", "data", "result"):
         inner = data.get(key)
         if isinstance(inner, dict) and (
-            inner.get("code") or inner.get("pk") or inner.get("user") or inner.get("caption")
+            inner.get("code")
+            or inner.get("pk")
+            or inner.get("user")
+            or inner.get("caption")
+            or inner.get("shortcode")
         ):
             post = inner
             break
 
-    user = post.get("user") if isinstance(post.get("user"), dict) else {}
-    if not isinstance(user, dict):
-        user = {}
+    user = _dict(
+        post.get("user"),
+        post.get("owner"),
+        post.get("author"),
+        data.get("user"),
+    )
     username = _first_str(
         user.get("username"),
+        user.get("unique_id"),
         post.get("username"),
         post.get("author_name"),
+        post.get("owner_username"),
+        _username_from_url(source_url, "instagram"),
         "unknown",
     ).lstrip("@")
     display = _first_str(
         user.get("full_name"),
         user.get("fullName"),
+        user.get("name"),
         post.get("full_name"),
         username,
     )
     avatar = _pick_url(
         user.get("profile_pic_url"),
         user.get("profile_pic_url_hd"),
+        user.get("hd_profile_pic_url_info"),
         user.get("profilePicUrl"),
+        user.get("profile_pic_url_info"),
         post.get("avatar"),
     )
 
@@ -460,62 +594,88 @@ def parse_instagram_post(data: dict, *, source_url: str = "") -> SocialPost | No
         if isinstance(osi, dict) and not music_title:
             music_title = _first_str(osi.get("original_audio_title"), "Original audio") or None
 
-    return SocialPost(
-        platform="instagram",
-        url=clean,
-        username=username or "unknown",
-        display_name=display or username or "unknown",
-        avatar_url=avatar,
-        caption=caption[:2000],
-        media_urls=list(dict.fromkeys(media_urls)),
-        is_video=is_video and bool(video_url or is_reel),
-        like_count=likes,
-        comment_count=comments,
-        music_title=music_title,
-        music_author=music_author,
-        raw={**post, "source": "social-api", "code": code},
+    return enrich_social_post(
+        SocialPost(
+            platform="instagram",
+            url=clean,
+            username=username or "unknown",
+            display_name=display or username or "unknown",
+            avatar_url=avatar,
+            caption=caption[:2000],
+            media_urls=list(dict.fromkeys(media_urls)),
+            is_video=is_video and bool(video_url or is_reel),
+            like_count=likes,
+            comment_count=comments,
+            music_title=music_title,
+            music_author=music_author,
+            raw={**post, "source": "social-api", "code": code},
+        ),
+        source_url=source_url or clean,
     )
 
 
 def parse_instagram_user(data: dict, *, username: str = "") -> dict | None:
     if not isinstance(data, dict):
         return None
-    user = data.get("user") if isinstance(data.get("user"), dict) else data
+    user = _unwrap(data, "user", "data", "result", "profile")
     if not isinstance(user, dict):
         return None
-    uname = _first_str(user.get("username"), username).lstrip("@")
+    
+    uname = _first_str(
+        user.get("username"),
+        data.get("username"),
+        username,
+    ).lstrip("@")
     if not uname:
         return None
     return {
         "username": uname,
-        "full_name": _first_str(user.get("full_name"), user.get("fullName"), uname),
-        "bio": _first_str(user.get("biography"), user.get("bio"), user.get("signature")),
+        "full_name": _first_str(
+            user.get("full_name"),
+            user.get("fullName"),
+            user.get("name"),
+            uname,
+        ),
+        "bio": _first_str(
+            user.get("biography"),
+            user.get("bio"),
+            user.get("signature"),
+            user.get("about"),
+        ),
         "followers": _as_int(
             user.get("follower_count")
             or user.get("followers")
+            or user.get("followerCount")
             or (user.get("edge_followed_by") or {}).get("count")
         ),
         "following": _as_int(
             user.get("following_count")
             or user.get("following")
+            or user.get("followingCount")
             or (user.get("edge_follow") or {}).get("count")
         ),
         "posts": _as_int(
             user.get("media_count")
             or user.get("posts")
+            or user.get("mediaCount")
             or (user.get("edge_owner_to_timeline_media") or {}).get("count")
         ),
-        "is_private": bool(user.get("is_private") or user.get("isPrivate") or user.get("private")),
-        "is_verified": bool(user.get("is_verified") or user.get("isVerified") or user.get("verified")),
+        "is_private": bool(
+            user.get("is_private") or user.get("isPrivate") or user.get("private")
+        ),
+        "is_verified": bool(
+            user.get("is_verified") or user.get("isVerified") or user.get("verified")
+        ),
         "avatar": _pick_url(
             user.get("profile_pic_url_hd"),
             user.get("hd_profile_pic_url_info"),
             user.get("profile_pic_url"),
             user.get("profilePicUrl"),
             user.get("avatar"),
+            user.get("profile_pic_url_info"),
         )
         or "",
-        "pk": _first_str(user.get("pk"), user.get("id")),
+        "pk": _first_str(user.get("pk"), user.get("id"), user.get("user_id")),
     }
 
 
@@ -582,145 +742,183 @@ async def tiktok_user_reposts(username: str, *, limit: int = 12) -> list[dict]:
 
 
 def parse_tiktok_post(data: dict, *, source_url: str = "") -> SocialPost | None:
-    """Normalize guilt TikTok Video/Photo/Story payload → SocialPost."""
+    """Normalize guilt TikTok Video/Photo/Story payload → SocialPost.
+
+    OpenAPI shapes:
+      - Video: { itemInfos, authorInfos, musicInfos, ... }
+      - flat: { author: User{unique_id,nickname,avatar_larger}, video, stats, ... }
+    """
     if not isinstance(data, dict) or not data:
         return None
 
     post = data
-    item = post.get("itemInfos") if isinstance(post.get("itemInfos"), dict) else None
-    author_infos: dict = post.get("authorInfos") if isinstance(post.get("authorInfos"), dict) else {}
-    video_block: dict = post.get("video") if isinstance(post.get("video"), dict) else {}
-    stats: dict = post.get("stats") if isinstance(post.get("stats"), dict) else {}
-    author: dict = post.get("author") if isinstance(post.get("author"), dict) else {}
-    music: dict = post.get("music") if isinstance(post.get("music"), dict) else {}
-    music_infos: dict = post.get("musicInfos") if isinstance(post.get("musicInfos"), dict) else {}
+    for key in ("item", "data", "result", "aweme", "aweme_detail", "post"):
+        inner = post.get(key)
+        if isinstance(inner, dict) and (
+            inner.get("itemInfos")
+            or inner.get("authorInfos")
+            or inner.get("author")
+            or inner.get("id")
+            or inner.get("desc")
+        ):
+            post = inner
+            break
 
-    post_id = ""
-    caption = ""
-    likes = comments = shares = plays = saves = 0
-    media_urls: list[str] = []
-    is_video = False
-    username = "unknown"
-    display = ""
-    avatar: str | None = None
-    music_title: str | None = None
-    music_author: str | None = None
-    mid = ""
+    item = _dict(post.get("itemInfos"), post.get("item_infos"))
+    author_infos = _dict(post.get("authorInfos"), post.get("author_infos"), post.get("authorMeta"))
+    author = _dict(post.get("author"), post.get("authorInfo"), post.get("creator"))
+    video_block = _dict(post.get("video"), item.get("video") if item else None)
+    stats = _dict(post.get("stats"), post.get("statistics"), post.get("authorStats"))
+    music = _dict(post.get("music"), post.get("musicInfo"))
+    music_infos = _dict(post.get("musicInfos"), post.get("music_infos"))
 
-    if item is not None:
-        post_id = _first_str(item.get("id"), post.get("id"))
-        caption = _first_str(item.get("text"), post.get("desc"), post.get("caption"))
-        likes = _as_int(item.get("diggCount") or item.get("digg_count"))
-        comments = _as_int(item.get("commentCount") or item.get("comment_count"))
-        shares = _as_int(item.get("shareCount") or item.get("share_count"))
-        plays = _as_int(item.get("playCount") or item.get("play_count"))
-        saves = _as_int(stats.get("collectCount") or post.get("collect_count"))
-        video_node = item.get("video") if isinstance(item.get("video"), dict) else {}
-        video_urls = _url_list(video_node.get("urls"), video_node, item.get("video"))
-        images = _url_list(post.get("imagePostInfo"))
-        media_urls = list(dict.fromkeys([*video_urls, *images]))
-        is_video = bool(video_urls) and not images
-        username = _first_str(
-            author_infos.get("uniqueId"),
-            author_infos.get("unique_id"),
-            author.get("uniqueId"),
-            "unknown",
-        ).lstrip("@")
-        display = _first_str(
-            author_infos.get("nickName"),
-            author_infos.get("nickname"),
-            author.get("nickname"),
-            username,
-        )
-        avatar = _pick_url(
-            author_infos.get("coversLarger"),
-            author_infos.get("coversMedium"),
-            author_infos.get("covers"),
-            author.get("avatarLarger"),
-            author.get("avatar"),
-        )
-        if music_infos:
-            music_title = _first_str(music_infos.get("musicName"), music_infos.get("title")) or None
-            music_author = (
-                _first_str(music_infos.get("authorName"), music_infos.get("author")) or None
-            )
-            mid = _first_str(music_infos.get("musicId"), music_infos.get("id"))
-        else:
-            music_title = _first_str(music.get("title"), music.get("musicName")) or None
-            music_author = _first_str(music.get("authorName"), music.get("author")) or None
-            mid = _first_str(music.get("id"), music.get("musicId"))
-    else:
-        post_id = _first_str(post.get("id"), video_block.get("id"))
-        caption = _first_str(
-            post.get("desc"), post.get("caption"), post.get("title"), post.get("text")
-        )
-        likes = _as_int(
-            stats.get("diggCount")
-            or post.get("digg_count")
-            or post.get("like_count")
-            or post.get("likes")
-        )
-        comments = _as_int(
-            stats.get("commentCount") or post.get("comment_count") or post.get("comments")
-        )
-        shares = _as_int(stats.get("shareCount") or post.get("share_count") or post.get("shares"))
-        plays = _as_int(stats.get("playCount") or post.get("play_count") or post.get("plays"))
-        saves = _as_int(stats.get("collectCount") or post.get("collect_count") or post.get("saves"))
-        media_urls = _url_list(
-            video_block.get("playAddr"),
-            video_block.get("downloadAddr"),
-            post.get("video_url"),
-            post.get("download_url"),
-            post.get("play"),
-            post.get("hdplay"),
-            post.get("images"),
-            post.get("imagePostInfo"),
-        )
-        cover = _pick_url(
-            video_block.get("cover"),
-            video_block.get("originCover"),
-            post.get("thumbnail"),
-            post.get("cover"),
-        )
-        is_video = bool(
-            _pick_url(
-                video_block.get("playAddr"),
-                video_block.get("downloadAddr"),
-                post.get("video_url"),
-                post.get("play"),
-            )
-        )
-        if not media_urls and cover:
-            media_urls = [cover]
-            is_video = False
-        username = _first_str(
-            author.get("uniqueId"),
-            author.get("unique_id"),
-            author.get("username"),
-            post.get("username"),
-            "unknown",
-        ).lstrip("@")
-        display = _first_str(
-            author.get("nickname"),
-            author.get("nickName"),
-            author.get("display_name"),
-            username,
-        )
-        avatar = _pick_url(
-            author.get("avatarLarger"),
-            author.get("avatarMedium"),
-            author.get("avatarThumb"),
-            author.get("avatar"),
-            author.get("coversLarger"),
-        )
-        music_title = _first_str(music.get("title"), music.get("musicName")) or None
-        music_author = _first_str(music.get("authorName"), music.get("author")) or None
-        mid = _first_str(music.get("id"), music.get("musicId"))
+    post_id = _first_str(
+        item.get("id") if item else None,
+        post.get("id"),
+        post.get("aweme_id"),
+        video_block.get("id"),
+    )
+    caption = _first_str(
+        item.get("text") if item else None,
+        post.get("desc"),
+        post.get("caption"),
+        post.get("title"),
+        post.get("text"),
+    )
+    likes = _as_int(
+        (item.get("diggCount") if item else None)
+        or (item.get("digg_count") if item else None)
+        or stats.get("diggCount")
+        or stats.get("digg_count")
+        or post.get("digg_count")
+        or post.get("like_count")
+        or post.get("likes")
+    )
+    comments = _as_int(
+        (item.get("commentCount") if item else None)
+        or (item.get("comment_count") if item else None)
+        or stats.get("commentCount")
+        or post.get("comment_count")
+        or post.get("comments")
+    )
+    shares = _as_int(
+        (item.get("shareCount") if item else None)
+        or stats.get("shareCount")
+        or post.get("share_count")
+        or post.get("shares")
+    )
+    plays = _as_int(
+        (item.get("playCount") if item else None)
+        or stats.get("playCount")
+        or post.get("play_count")
+        or post.get("plays")
+        or post.get("view_count")
+    )
+    saves = _as_int(
+        stats.get("collectCount")
+        or stats.get("collect_count")
+        or post.get("collect_count")
+        or post.get("saves")
+    )
 
-    if not username or username == "unknown":
-        um = _TT_USER_RE.search(source_url or "")
-        if um:
-            username = um.group(1)
+    video_urls = _url_list(
+        video_block.get("urls"),
+        video_block.get("playAddr"),
+        video_block.get("play_addr"),
+        video_block.get("downloadAddr"),
+        video_block.get("download_addr"),
+        post.get("video_url"),
+        post.get("download_url"),
+        post.get("play"),
+        post.get("hdplay"),
+        post.get("wmplay"),
+        item.get("video") if item else None,
+    )
+    images = _url_list(
+        post.get("imagePostInfo"),
+        post.get("image_post_info"),
+        post.get("images"),
+        post.get("image_urls"),
+    )
+    media_urls = list(dict.fromkeys([*video_urls, *images]))
+    cover = _pick_url(
+        video_block.get("cover"),
+        video_block.get("originCover"),
+        video_block.get("origin_cover"),
+        post.get("thumbnail"),
+        post.get("cover"),
+        post.get("dynamicCover"),
+    )
+    is_video = bool(video_urls) and not images
+    if not media_urls and cover:
+        media_urls = [cover]
+        is_video = False
+
+    username = _first_str(
+        author_infos.get("uniqueId"),
+        author_infos.get("unique_id"),
+        author.get("uniqueId"),
+        author.get("unique_id"),
+        author.get("username"),
+        author.get("uniqueId"),
+        post.get("username"),
+        post.get("unique_id"),
+        post.get("author_unique_id"),
+        _username_from_url(source_url, "tiktok"),
+        "unknown",
+    ).lstrip("@")
+    display = _first_str(
+        author_infos.get("nickName"),
+        author_infos.get("nickname"),
+        author.get("nickname"),
+        author.get("nickName"),
+        author.get("nick_name"),
+        author.get("display_name"),
+        post.get("nickname"),
+        username,
+    )
+    avatar = _pick_url(
+        author_infos.get("coversLarger"),
+        author_infos.get("coversMedium"),
+        author_infos.get("covers"),
+        author.get("avatarLarger"),
+        author.get("avatar_larger"),
+        author.get("avatarMedium"),
+        author.get("avatar_medium"),
+        author.get("avatarThumb"),
+        author.get("avatar_thumb"),
+        author.get("avatar"),
+        author.get("coversLarger"),
+        post.get("avatar"),
+    )
+
+    music_title = (
+        _first_str(
+            music_infos.get("musicName"),
+            music_infos.get("title"),
+            music.get("title"),
+            music.get("musicName"),
+            music.get("music_name"),
+        )
+        or None
+    )
+    music_author = (
+        _first_str(
+            music_infos.get("authorName"),
+            music_infos.get("author"),
+            music.get("authorName"),
+            music.get("author_name"),
+            music.get("author"),
+        )
+        or None
+    )
+    mid = _first_str(
+        music_infos.get("musicId"),
+        music_infos.get("id"),
+        music.get("id"),
+        music.get("musicId"),
+        music.get("mid"),
+    )
 
     kind = "photo" if (not is_video and media_urls) else "video"
     if post_id and username and username != "unknown":
@@ -730,84 +928,153 @@ def parse_tiktok_post(data: dict, *, source_url: str = "") -> SocialPost | None:
 
     music_url = f"https://www.tiktok.com/music/original-sound-{mid}" if mid else None
 
-    return SocialPost(
-        platform="tiktok",
-        url=clean,
-        username=username or "unknown",
-        display_name=display or username or "unknown",
-        avatar_url=avatar,
-        caption=caption[:2000],
-        media_urls=list(dict.fromkeys(media_urls)),
-        is_video=bool(is_video),
-        like_count=likes,
-        comment_count=comments,
-        share_count=shares,
-        save_count=saves,
-        play_count=plays,
-        music_title=music_title,
-        music_author=music_author,
-        music_url=music_url,
-        region=_first_str(post.get("region"), post.get("location_created")) or None,
-        raw={**post, "source": "social-api", "id": post_id},
+    return enrich_social_post(
+        SocialPost(
+            platform="tiktok",
+            url=clean,
+            username=username or "unknown",
+            display_name=display or username or "unknown",
+            avatar_url=avatar,
+            caption=caption[:2000],
+            media_urls=list(dict.fromkeys(media_urls)),
+            is_video=bool(is_video),
+            like_count=likes,
+            comment_count=comments,
+            share_count=shares,
+            save_count=saves,
+            play_count=plays,
+            music_title=music_title,
+            music_author=music_author,
+            music_url=music_url,
+            region=_first_str(post.get("region"), post.get("location_created")) or None,
+            raw={**post, "source": "social-api", "id": post_id},
+        ),
+        source_url=source_url or clean,
     )
 
 
 def parse_tiktok_user(data: dict, *, username: str = "") -> dict | None:
+    """Parse TikTok User schema (unique_id / nickname / avatar_larger).
+
+    Live Scalar shape is flat::
+      { id, unique_id, nickname, avatar_larger, followers, following, likes, videos,
+        verified, private_account, secret, ... }
+    """
     if not isinstance(data, dict):
         return None
+
     
-    user = data.get("user") if isinstance(data.get("user"), dict) else data
-    stats = data.get("stats") if isinstance(data.get("stats"), dict) else {}
-    if not isinstance(user, dict):
-        return None
+    user = data
+    for key in ("user", "userInfo", "data", "result", "author"):
+        inner = data.get(key)
+        if isinstance(inner, dict) and (
+            inner.get("unique_id")
+            or inner.get("uniqueId")
+            or inner.get("username")
+            or inner.get("nickname")
+        ):
+            user = inner
+            break
+    
+    nested = user.get("user") if isinstance(user.get("user"), dict) else None
+    if nested and (nested.get("unique_id") or nested.get("uniqueId") or nested.get("username")):
+        stats_from_parent = _dict(user.get("stats"), user.get("statsV2"), data.get("stats"))
+        user = nested
+    else:
+        stats_from_parent = {}
+
+    stats = _dict(data.get("stats"), data.get("statsV2"), user.get("stats"), stats_from_parent)
+
     uname = _first_str(
         user.get("uniqueId"),
         user.get("unique_id"),
         user.get("username"),
+        data.get("unique_id"),
+        data.get("uniqueId"),
         username,
     ).lstrip("@")
     if not uname:
         return None
     return {
         "uniqueId": uname,
-        "nickname": _first_str(user.get("nickname"), user.get("nickName"), uname),
+        "nickname": _first_str(
+            user.get("nickname"),
+            user.get("nickName"),
+            user.get("nick_name"),
+            data.get("nickname"),
+            uname,
+        ),
         "avatarLarger": _pick_url(
             user.get("avatarLarger"),
             user.get("avatar_larger"),
+            data.get("avatar_larger"),
             user.get("avatarMedium"),
+            user.get("avatar_medium"),
+            data.get("avatar_medium"),
+            user.get("avatarThumb"),
+            user.get("avatar_thumb"),
+            data.get("avatar_thumb"),
             user.get("avatar"),
+            user.get("coversLarger"),
         )
         or "",
-        "signature": _first_str(user.get("signature"), user.get("bio")),
+        "signature": _first_str(
+            user.get("signature"),
+            data.get("signature"),
+            user.get("bio"),
+            user.get("desc"),
+        ),
         "followerCount": _as_int(
             user.get("followerCount")
             or user.get("followers")
+            or data.get("followers")
+            or user.get("follower_count")
             or stats.get("followerCount")
+            or stats.get("follower_count")
         ),
         "followingCount": _as_int(
             user.get("followingCount")
             or user.get("following")
+            or data.get("following")
+            or user.get("following_count")
             or stats.get("followingCount")
+            or stats.get("following_count")
         ),
         "heartCount": _as_int(
             user.get("heart")
             or user.get("heartCount")
+            or user.get("heart_count")
+            or data.get("heart_count")
             or user.get("likes")
+            or data.get("likes")
             or stats.get("heart")
             or stats.get("heartCount")
+            or stats.get("diggCount")
         ),
         "videoCount": _as_int(
-            user.get("videoCount") or user.get("videos") or stats.get("videoCount")
+            user.get("videoCount")
+            or user.get("videos")
+            or data.get("videos")
+            or user.get("video_count")
+            or stats.get("videoCount")
+            or stats.get("video_count")
         ),
-        "verified": bool(user.get("verified") or user.get("is_verified")),
+        "verified": bool(
+            user.get("verified")
+            or data.get("verified")
+            or user.get("is_verified")
+        ),
         "is_private": bool(
             user.get("privateAccount")
+            or user.get("private_account")
+            or data.get("private_account")
             or user.get("secret")
+            or data.get("secret")
             or user.get("isPrivate")
             or user.get("is_private")
             or user.get("private")
         ),
-        "id": _first_str(user.get("id"), user.get("userId")),
+        "id": _first_str(user.get("id"), data.get("id"), user.get("userId"), user.get("user_id")),
         "source": "social-api",
     }
 
@@ -851,24 +1118,27 @@ def twitter_status_id_from_url(url: str) -> str | None:
 def parse_twitter_user(data: dict, *, username: str = "") -> dict | None:
     if not isinstance(data, dict):
         return None
-    
-    user = data
+
+    user: dict[str, Any] = data
     for key in ("user", "data", "result", "legacy"):
         inner = data.get(key) if isinstance(data.get(key), dict) else None
-        if inner and (
+        if isinstance(inner, dict) and (
             inner.get("screen_name")
             or inner.get("core")
-            or (isinstance(inner.get("legacy"), dict) and inner.get("legacy").get("screen_name"))
+            or (
+                isinstance(inner.get("legacy"), dict)
+                and (inner.get("legacy") or {}).get("screen_name")
+            )
             or inner.get("username")
         ):
             user = inner
             break
 
-    core = user.get("core") if isinstance(user.get("core"), dict) else {}
-    legacy = user.get("legacy") if isinstance(user.get("legacy"), dict) else {}
-    privacy = user.get("privacy") if isinstance(user.get("privacy"), dict) else {}
-    verification = user.get("verification") if isinstance(user.get("verification"), dict) else {}
-    avatar_block = user.get("avatar") if isinstance(user.get("avatar"), dict) else {}
+    core = _dict(user.get("core"))
+    legacy = _dict(user.get("legacy"))
+    privacy = _dict(user.get("privacy"))
+    verification = _dict(user.get("verification"))
+    avatar_block = _dict(user.get("avatar"))
 
     uname = _first_str(
         core.get("screen_name"),
@@ -887,6 +1157,7 @@ def parse_twitter_user(data: dict, *, username: str = "") -> dict | None:
         user.get("profile_image_url"),
         user.get("avatar"),
         user.get("profileImageUrl"),
+        legacy.get("profile_image_url_https"),
     )
     if avatar and "_normal." in avatar:
         avatar = avatar.replace("_normal.", ".")
@@ -943,8 +1214,8 @@ def parse_twitter_status(data: dict, *, source_url: str = "") -> SocialPost | No
     if not isinstance(data, dict) or not data:
         return None
 
-    status = data
-    for key in ("status", "tweet", "data", "result", "legacy"):
+    status: dict[str, Any] = data
+    for key in ("status", "tweet", "data", "result"):
         inner = data.get(key)
         if isinstance(inner, dict) and (
             inner.get("full_text")
@@ -952,35 +1223,30 @@ def parse_twitter_status(data: dict, *, source_url: str = "") -> SocialPost | No
             or inner.get("rest_id")
             or isinstance(inner.get("legacy"), dict)
         ):
-            
-            if key == "legacy" and data.get("rest_id"):
-                break
-            if key != "legacy":
-                status = inner
+            status = inner
             break
 
-    legacy = status.get("legacy") if isinstance(status.get("legacy"), dict) else {}
+    legacy = _dict(status.get("legacy"))
     if not legacy and (status.get("full_text") or status.get("text")):
         legacy = status
 
-    core = status.get("core") if isinstance(status.get("core"), dict) else {}
-    user_result = (
-        (core.get("user_results") or {}).get("result")
-        if isinstance(core.get("user_results"), dict)
-        else None
+    core = _dict(status.get("core"))
+    user_results = _dict(core.get("user_results"))
+    user_result = _dict(
+        user_results.get("result"),
+        status.get("user"),
+        data.get("user"),
     )
-    if not isinstance(user_result, dict):
-        user_result = status.get("user") if isinstance(status.get("user"), dict) else {}
 
-    user_core = user_result.get("core") if isinstance(user_result.get("core"), dict) else {}
-    user_legacy = (
-        user_result.get("legacy") if isinstance(user_result.get("legacy"), dict) else {}
-    )
+    user_core = _dict(user_result.get("core"))
+    user_legacy = _dict(user_result.get("legacy"))
     username = _first_str(
         user_core.get("screen_name"),
         user_legacy.get("screen_name"),
         user_result.get("screen_name"),
-        status.get("user", {}).get("screen_name") if isinstance(status.get("user"), dict) else "",
+        user_result.get("username"),
+        status.get("user_screen_name"),
+        _username_from_url(source_url, "twitter"),
         "unknown",
     ).lstrip("@")
     display = _first_str(
@@ -989,9 +1255,7 @@ def parse_twitter_status(data: dict, *, source_url: str = "") -> SocialPost | No
         user_result.get("name"),
         username,
     )
-    avatar_block = (
-        user_result.get("avatar") if isinstance(user_result.get("avatar"), dict) else {}
-    )
+    avatar_block = _dict(user_result.get("avatar"))
     avatar = _pick_url(
         avatar_block.get("image_url"),
         user_result.get("profile_image_url_https"),
@@ -1013,17 +1277,17 @@ def parse_twitter_status(data: dict, *, source_url: str = "") -> SocialPost | No
     media_urls: list[str] = []
     is_video = False
     entities = legacy.get("extended_entities") or status.get("extended_entities") or {}
-    media_list = []
+    media_list: list[Any] = []
     if isinstance(entities, dict):
-        media_list = entities.get("media") or []
+        media_list = list(entities.get("media") or [])
     if not media_list:
         ents = legacy.get("entities") or status.get("entities") or {}
         if isinstance(ents, dict):
-            media_list = ents.get("media") or []
+            media_list = list(ents.get("media") or [])
     if not media_list and isinstance(status.get("mediaDetails"), list):
-        media_list = status["mediaDetails"]
+        media_list = list(status["mediaDetails"])
     if not media_list and isinstance(status.get("media"), list):
-        media_list = status["media"]
+        media_list = list(status["media"])
 
     for m in media_list:
         if not isinstance(m, dict):
@@ -1031,8 +1295,9 @@ def parse_twitter_status(data: dict, *, source_url: str = "") -> SocialPost | No
         mtype = str(m.get("type") or "").lower()
         if mtype in {"video", "animated_gif"}:
             is_video = True
-            vinfo = m.get("video_info") if isinstance(m.get("video_info"), dict) else {}
-            variants = vinfo.get("variants") if isinstance(vinfo.get("variants"), list) else []
+            vinfo = _dict(m.get("video_info"))
+            _variants = vinfo.get("variants")
+            variants: list[Any] = list(_variants) if isinstance(_variants, list) else []
             best_url = None
             best_br = -1
             for v in variants:
@@ -1048,9 +1313,6 @@ def parse_twitter_status(data: dict, *, source_url: str = "") -> SocialPost | No
             if best_url:
                 media_urls.append(best_url)
             cover = _pick_url(m.get("media_url_https"), m.get("media_url"))
-            if cover and cover not in media_urls:
-                
-                pass
             if not best_url and cover:
                 media_urls.append(cover)
                 is_video = False
@@ -1059,7 +1321,7 @@ def parse_twitter_status(data: dict, *, source_url: str = "") -> SocialPost | No
             if u:
                 media_urls.append(u)
 
-    views = status.get("views") if isinstance(status.get("views"), dict) else {}
+    views = _dict(status.get("views"))
     play_count = _as_int(views.get("count") or status.get("view_count") or status.get("views"))
 
     if status_id and username and username != "unknown":
@@ -1067,21 +1329,36 @@ def parse_twitter_status(data: dict, *, source_url: str = "") -> SocialPost | No
     else:
         clean = source_url or (f"https://x.com/{username}" if username else "")
 
-    return SocialPost(
-        platform="twitter",
-        url=clean,
-        username=username or "unknown",
-        display_name=display or username or "unknown",
-        avatar_url=avatar,
-        caption=text[:2000],
-        media_urls=list(dict.fromkeys(media_urls)),
-        is_video=bool(is_video),
-        like_count=_as_int(legacy.get("favorite_count") or status.get("favorite_count") or status.get("likes")),
-        comment_count=_as_int(legacy.get("reply_count") or status.get("reply_count") or status.get("replies")),
-        share_count=_as_int(legacy.get("retweet_count") or status.get("retweet_count") or status.get("reposts")),
-        save_count=_as_int(legacy.get("bookmark_count") or status.get("bookmark_count")),
-        play_count=play_count,
-        raw={**status, "source": "social-api", "id": status_id},
+    return enrich_social_post(
+        SocialPost(
+            platform="twitter",
+            url=clean,
+            username=username or "unknown",
+            display_name=display or username or "unknown",
+            avatar_url=avatar,
+            caption=text[:2000],
+            media_urls=list(dict.fromkeys(media_urls)),
+            is_video=bool(is_video),
+            like_count=_as_int(
+                legacy.get("favorite_count")
+                or status.get("favorite_count")
+                or status.get("likes")
+            ),
+            comment_count=_as_int(
+                legacy.get("reply_count")
+                or status.get("reply_count")
+                or status.get("replies")
+            ),
+            share_count=_as_int(
+                legacy.get("retweet_count")
+                or status.get("retweet_count")
+                or status.get("reposts")
+            ),
+            save_count=_as_int(legacy.get("bookmark_count") or status.get("bookmark_count")),
+            play_count=play_count,
+            raw={**status, "source": "social-api", "id": status_id},
+        ),
+        source_url=source_url or clean,
     )
 
 
@@ -1092,7 +1369,24 @@ async def fetch_twitter_social_post(url: str) -> SocialPost | None:
     data = await twitter_status(sid)
     if not data:
         return None
-    return parse_twitter_status(data, source_url=url)
+    post = parse_twitter_status(data, source_url=url)
+    if post and (not post.avatar_url or post.username == "unknown"):
+        
+        try:
+            uname = post.username if post.username != "unknown" else _username_from_url(url, "twitter")
+            if uname:
+                raw_user = await twitter_user(uname)
+                parsed = parse_twitter_user(raw_user or {}, username=uname)
+                if parsed:
+                    if post.username == "unknown":
+                        post.username = parsed["username"]
+                    if not post.display_name or post.display_name == "unknown":
+                        post.display_name = parsed.get("name") or post.username
+                    if not post.avatar_url and parsed.get("avatar"):
+                        post.avatar_url = parsed["avatar"]
+        except Exception as exc:
+            log.debug("twitter profile enrich failed: %s", exc)
+    return enrich_social_post(post, source_url=url)
 
 
 
@@ -1275,8 +1569,9 @@ def parse_youtube_video(data: dict, *, source_url: str = "") -> SocialPost | Non
     best = _pick_url(vid.get("best_url"), vid.get("url"), vid.get("download_url"))
     if best:
         media_urls.append(best)
-    formats = vid.get("formats") if isinstance(vid.get("formats"), list) else []
-    
+    _formats = vid.get("formats")
+    formats: list[Any] = list(_formats) if isinstance(_formats, list) else []
+
     progressive: list[tuple[int, str]] = []
     for fmt in formats:
         if not isinstance(fmt, dict):
@@ -1310,27 +1605,30 @@ def parse_youtube_video(data: dict, *, source_url: str = "") -> SocialPost | Non
     if not media_urls and thumb:
         media_urls = [thumb]
 
-    return SocialPost(
-        platform="youtube",
-        url=clean,
-        username=handle or channel_name or "unknown",
-        display_name=channel_name or handle or "unknown",
-        avatar_url=None,
-        caption=_first_str(vid.get("title"), vid.get("description"))[:2000],
-        media_urls=list(dict.fromkeys(media_urls)),
-        is_video=True,
-        like_count=_as_int(vid.get("like_count") or vid.get("likeCount") or vid.get("likes")),
-        comment_count=_as_int(
-            vid.get("comment_count") or vid.get("commentCount") or vid.get("comments")
+    return enrich_social_post(
+        SocialPost(
+            platform="youtube",
+            url=clean,
+            username=handle or channel_name or "unknown",
+            display_name=channel_name or handle or "unknown",
+            avatar_url=_pick_url(vid.get("channel_avatar"), vid.get("avatar"), thumb),
+            caption=_first_str(vid.get("title"), vid.get("description"))[:2000],
+            media_urls=list(dict.fromkeys(media_urls)),
+            is_video=True,
+            like_count=_as_int(vid.get("like_count") or vid.get("likeCount") or vid.get("likes")),
+            comment_count=_as_int(
+                vid.get("comment_count") or vid.get("commentCount") or vid.get("comments")
+            ),
+            play_count=_as_int(vid.get("view_count") or vid.get("viewCount") or vid.get("views")),
+            raw={
+                **vid,
+                "source": "social-api",
+                "id": video_id,
+                "is_short": is_short,
+                "thumbnail_url": thumb,
+            },
         ),
-        play_count=_as_int(vid.get("view_count") or vid.get("viewCount") or vid.get("views")),
-        raw={
-            **vid,
-            "source": "social-api",
-            "id": video_id,
-            "is_short": is_short,
-            "thumbnail_url": thumb,
-        },
+        source_url=source_url or clean,
     )
 
 
@@ -1338,7 +1636,21 @@ async def fetch_youtube_social_post(url: str) -> SocialPost | None:
     data = await youtube_video(url, formats=True)
     if not data:
         return None
-    return parse_youtube_video(data, source_url=url)
+    post = parse_youtube_video(data, source_url=url)
+    if post and (not post.avatar_url or post.username == "unknown"):
+        handle = post.username if post.username != "unknown" else ""
+        if handle:
+            try:
+                raw_ch = await youtube_channel(handle)
+                parsed = parse_youtube_channel(raw_ch or {}, channel=handle)
+                if parsed:
+                    if not post.avatar_url and parsed.get("avatar"):
+                        post.avatar_url = parsed["avatar"]
+                    if parsed.get("name"):
+                        post.display_name = parsed["name"]
+            except Exception as exc:
+                log.debug("youtube channel enrich failed: %s", exc)
+    return enrich_social_post(post, source_url=url)
 
 
 
@@ -1359,7 +1671,7 @@ async def telegram_channel(username: str) -> Optional[dict]:
 def parse_telegram_user(data: dict, *, username: str = "") -> dict | None:
     if not isinstance(data, dict):
         return None
-    user = data.get("user") if isinstance(data.get("user"), dict) else data
+    user = _unwrap(data, "user", "data", "result")
     if not isinstance(user, dict):
         return None
     alt_uname = ""
@@ -1375,7 +1687,7 @@ def parse_telegram_user(data: dict, *, username: str = "") -> dict | None:
     name = " ".join(p for p in (first, last) if p).strip() or uname
     if not uname and not name:
         return None
-    photo = user.get("photo") if isinstance(user.get("photo"), dict) else {}
+    photo = _dict(user.get("photo"))
     avatar = _pick_url(
         user.get("avatar"),
         user.get("photo_url"),
@@ -1399,14 +1711,14 @@ def parse_telegram_user(data: dict, *, username: str = "") -> dict | None:
 def parse_telegram_channel(data: dict, *, username: str = "") -> dict | None:
     if not isinstance(data, dict):
         return None
-    ch = data.get("channel") if isinstance(data.get("channel"), dict) else data
+    ch = _unwrap(data, "channel", "data", "result")
     if not isinstance(ch, dict):
         return None
     uname = _first_str(ch.get("username"), username).lstrip("@")
     title = _first_str(ch.get("title"), ch.get("name"), uname)
     if not uname and not title:
         return None
-    photo = ch.get("photo") if isinstance(ch.get("photo"), dict) else {}
+    photo = _dict(ch.get("photo"))
     avatar = _pick_url(
         ch.get("avatar"),
         ch.get("photo_url"),
@@ -1432,6 +1744,30 @@ def parse_telegram_channel(data: dict, *, username: str = "") -> dict | None:
     }
 
 
+async def _enrich_tiktok_post(post: SocialPost | None, *, source_url: str = "") -> SocialPost | None:
+    post = enrich_social_post(post, source_url=source_url)
+    if post is None:
+        return None
+    needs = (
+        post.username in ("", "unknown")
+        or not post.avatar_url
+        or not post.display_name
+        or post.display_name == post.username
+    )
+    if needs and post.username not in ("", "unknown"):
+        try:
+            raw_user = await tiktok_user(post.username)
+            parsed = parse_tiktok_user(raw_user or {}, username=post.username)
+            if parsed:
+                if parsed.get("nickname"):
+                    post.display_name = parsed["nickname"]
+                if parsed.get("avatarLarger") and not post.avatar_url:
+                    post.avatar_url = parsed["avatarLarger"]
+        except Exception as exc:
+            log.debug("tiktok profile enrich failed: %s", exc)
+    return enrich_social_post(post, source_url=source_url)
+
+
 async def fetch_instagram_social_post(url: str) -> SocialPost | None:
     code = instagram_shortcode_from_url(url)
     if not code:
@@ -1439,7 +1775,27 @@ async def fetch_instagram_social_post(url: str) -> SocialPost | None:
     data = await instagram_post(code)
     if not data:
         return None
-    return parse_instagram_post(data, source_url=url)
+    post = parse_instagram_post(data, source_url=url)
+    if post and (
+        post.username in ("", "unknown")
+        or not post.avatar_url
+        or not post.display_name
+        or post.display_name == post.username
+    ):
+        uname = post.username if post.username != "unknown" else _username_from_url(url, "instagram")
+        if uname and uname != "unknown":
+            try:
+                raw_user = await instagram_user(uname)
+                parsed = parse_instagram_user(raw_user or {}, username=uname)
+                if parsed:
+                    post.username = parsed["username"] or post.username
+                    if parsed.get("full_name"):
+                        post.display_name = parsed["full_name"]
+                    if parsed.get("avatar") and not post.avatar_url:
+                        post.avatar_url = parsed["avatar"]
+            except Exception as exc:
+                log.debug("ig profile enrich failed: %s", exc)
+    return enrich_social_post(post, source_url=url)
 
 
 async def fetch_tiktok_social_post(url: str) -> SocialPost | None:
@@ -1450,16 +1806,14 @@ async def fetch_tiktok_social_post(url: str) -> SocialPost | None:
     if not url.startswith("http"):
         url = "https://" + url
 
-    
     m = _TT_ID_RE.search(url)
     if m:
         data = await tiktok_item(m.group(1))
         if data:
-            post = parse_tiktok_post(data, source_url=url)
-            if post and post.media_urls:
+            post = await _enrich_tiktok_post(parse_tiktok_post(data, source_url=url), source_url=url)
+            if post and (post.media_urls or post.caption):
                 return post
 
-    
     try:
         host = urlparse(url).netloc.lower()
         path = urlparse(url).path.strip("/")
@@ -1478,16 +1832,331 @@ async def fetch_tiktok_social_post(url: str) -> SocialPost | None:
     if code:
         data = await tiktok_shortcode(code)
         if not data:
-            
             data = await tiktok_shortcode(url)
         if data:
-            post = parse_tiktok_post(data, source_url=url)
-            if post:
-                return post
+            return await _enrich_tiktok_post(parse_tiktok_post(data, source_url=url), source_url=url)
 
-    
     if not m:
         data = await tiktok_shortcode(url)
         if data:
-            return parse_tiktok_post(data, source_url=url)
+            return await _enrich_tiktok_post(parse_tiktok_post(data, source_url=url), source_url=url)
     return None
+
+
+
+
+
+
+
+async def twitch_user(username: str) -> Optional[dict]:
+    data = await api_get(f"/api/twitch/{quote(username.lstrip('@'))}")
+    return data if isinstance(data, dict) else None
+
+
+async def twitch_live(username: str) -> Optional[dict]:
+    data = await api_get(f"/api/twitch/{quote(username.lstrip('@'))}/live")
+    return data if isinstance(data, dict) else None
+
+
+async def twitch_stream(username: str) -> Optional[dict]:
+    data = await api_get(f"/api/twitch/{quote(username.lstrip('@'))}/stream")
+    return data if isinstance(data, dict) else None
+
+
+async def twitch_videos(username: str) -> list[dict]:
+    data = await api_get(f"/api/twitch/{quote(username.lstrip('@'))}/videos")
+    return _list_payload(data, ("videos", "items", "data", "results"))
+
+
+async def twitch_clips(username: str) -> list[dict]:
+    data = await api_get(f"/api/twitch/{quote(username.lstrip('@'))}/clips")
+    return _list_payload(data, ("clips", "items", "data", "results"))
+
+
+async def twitch_video(video_id: str) -> Optional[dict]:
+    data = await api_get(f"/api/twitch/v/{quote(str(video_id))}")
+    return data if isinstance(data, dict) else None
+
+
+def parse_twitch_user(data: dict, *, username: str = "") -> dict | None:
+    if not isinstance(data, dict):
+        return None
+    user = _unwrap(data, "user", "data", "result")
+    if not isinstance(user, dict):
+        return None
+    login = _first_str(user.get("login"), user.get("username"), username).lstrip("@")
+    if not login and not user.get("display_name"):
+        return None
+    stream = _dict(user.get("stream"), data.get("stream"))
+    return {
+        "username": login,
+        "display_name": _first_str(user.get("display_name"), user.get("displayName"), login),
+        "bio": _first_str(user.get("description"), user.get("bio")),
+        "avatar": _pick_url(user.get("profile_image_url"), user.get("avatar"), user.get("logo")) or "",
+        "banner": _pick_url(user.get("banner_image_url"), user.get("banner")) or "",
+        "followers": _as_int(user.get("followers") or user.get("follower_count")),
+        "is_live": bool(user.get("is_live") or stream.get("is_live") or stream.get("type") == "live"),
+        "is_partner": bool(user.get("is_partner") or user.get("partner")),
+        "is_affiliate": bool(user.get("is_affiliate")),
+        "url": _first_str(user.get("url"), f"https://www.twitch.tv/{login}" if login else ""),
+        "stream_title": _first_str(stream.get("title")),
+        "viewers": _as_int(stream.get("viewers") or stream.get("viewer_count")),
+        "game": _first_str(
+            (stream.get("game") or {}).get("name") if isinstance(stream.get("game"), dict) else None,
+            stream.get("game_name"),
+            stream.get("game"),
+        ),
+        "id": _first_str(user.get("id")),
+        "source": "social-api",
+    }
+
+
+def parse_twitch_video(data: dict, *, source_url: str = "") -> SocialPost | None:
+    if not isinstance(data, dict) or not data:
+        return None
+    vid = _unwrap(data, "video", "data", "result")
+    owner = _dict(vid.get("owner"), vid.get("user"), data.get("owner"))
+    username = _first_str(
+        owner.get("login"),
+        owner.get("display_name"),
+        vid.get("broadcaster_login"),
+        _username_from_url(source_url, "twitch"),
+        "unknown",
+    ).lstrip("@")
+    display = _first_str(owner.get("display_name"), owner.get("login"), username)
+    media = _url_list(vid.get("download_url"), vid.get("url"), vid.get("m3u8_url"))
+    thumb = _pick_url(vid.get("preview_thumbnail_url"), vid.get("animated_preview_url"), vid.get("thumbnail"))
+    if not media and thumb:
+        media = [thumb]
+    clean = _first_str(vid.get("url"), source_url, f"https://www.twitch.tv/videos/{vid.get('id')}" if vid.get("id") else "")
+    return enrich_social_post(
+        SocialPost(
+            platform="twitch",
+            url=clean,
+            username=username or "unknown",
+            display_name=display or username or "unknown",
+            avatar_url=_pick_url(owner.get("profile_image_url"), owner.get("avatar")),
+            caption=_first_str(vid.get("title"), vid.get("description"))[:2000],
+            media_urls=list(dict.fromkeys(media)),
+            is_video=True,
+            play_count=_as_int(vid.get("view_count") or vid.get("views")),
+            raw={**vid, "source": "social-api"},
+        ),
+        source_url=source_url or clean,
+    )
+
+
+async def snapchat_user(username: str) -> Optional[dict]:
+    data = await api_get(f"/api/snapchat/{quote(username.lstrip('@'))}")
+    return data if isinstance(data, dict) else None
+
+
+def parse_snapchat_user(data: dict, *, username: str = "") -> dict | None:
+    if not isinstance(data, dict):
+        return None
+    user = _unwrap(data, "user", "data", "result", "publicProfileInfo")
+    if not isinstance(user, dict):
+        return None
+    uname = _first_str(user.get("username"), username).lstrip("@")
+    if not uname and not user.get("name"):
+        return None
+    bitmoji = _dict(user.get("bitmoji"))
+    avatar = _pick_url(
+        user.get("profile_picture_url"),
+        user.get("square_hero_image_url"),
+        user.get("preview_image"),
+        bitmoji.get("avatar"),
+        user.get("snapcode_image_url"),
+    )
+    return {
+        "username": uname,
+        "name": _first_str(user.get("display_name"), user.get("title"), user.get("name"), uname),
+        "bio": _first_str(user.get("bio"), user.get("page_description")),
+        "avatar": avatar or "",
+        "subscribers": _as_int(user.get("subscriber_count") or user.get("subscribers")),
+        "is_verified": bool(user.get("verified")),
+        "has_story": bool(user.get("has_story")),
+        "url": _first_str(
+            user.get("url"),
+            user.get("canonical_url"),
+            f"https://www.snapchat.com/add/{uname}" if uname else "",
+        ),
+        "source": "social-api",
+    }
+
+
+async def pinterest_user(username: str) -> Optional[dict]:
+    data = await api_get(f"/api/pinterest/user/{quote(username.lstrip('@'))}")
+    if not isinstance(data, dict):
+        data = await api_get(f"/api/pinterest/profile/{quote(username.lstrip('@'))}")
+    return data if isinstance(data, dict) else None
+
+
+async def pinterest_pin(url_or_id: str) -> Optional[dict]:
+    raw = (url_or_id or "").strip()
+    if not raw:
+        return None
+    if raw.startswith("http"):
+        data = await api_get("/api/pinterest/pin", params={"url": raw})
+    else:
+        data = await api_get("/api/pinterest/pin", params={"id": raw})
+    return data if isinstance(data, dict) else None
+
+
+async def pinterest_search(query: str, *, limit: int = 12) -> list[dict]:
+    data = await api_get(
+        "/api/pinterest/search",
+        params={"q": query, "limit": max(1, min(int(limit), 50))},
+    )
+    return _list_payload(data, ("pins", "items", "results", "data"))
+
+
+def parse_pinterest_user(data: dict, *, username: str = "") -> dict | None:
+    if not isinstance(data, dict):
+        return None
+    user = _unwrap(data, "user", "data", "result", "profile")
+    if not isinstance(user, dict):
+        return None
+    uname = _first_str(user.get("username"), username).lstrip("@")
+    if not uname and not user.get("full_name"):
+        return None
+    return {
+        "username": uname,
+        "name": _first_str(user.get("full_name"), user.get("first_name"), uname),
+        "bio": _first_str(user.get("about"), user.get("bio"), user.get("description")),
+        "avatar": _pick_url(
+            user.get("image_xlarge_url"),
+            user.get("image_medium_url"),
+            user.get("avatar"),
+        )
+        or "",
+        "followers": _as_int(user.get("follower_count") or user.get("followers")),
+        "following": _as_int(user.get("following_count") or user.get("following")),
+        "pins": _as_int(user.get("pin_count") or user.get("pins")),
+        "boards": _as_int(user.get("board_count") or user.get("boards")),
+        "is_verified": bool(user.get("verified") or user.get("is_verified_merchant")),
+        "is_private": bool(user.get("is_private_profile")),
+        "url": _first_str(user.get("url"), f"https://www.pinterest.com/{uname}/" if uname else ""),
+        "source": "social-api",
+    }
+
+
+def parse_pinterest_pin(data: dict, *, source_url: str = "") -> SocialPost | None:
+    if not isinstance(data, dict) or not data:
+        return None
+    pin = _unwrap(data, "pin", "data", "result")
+    pinner = _dict(pin.get("pinner"), pin.get("native_creator"), pin.get("user"))
+    username = _first_str(
+        pinner.get("username"),
+        (pin.get("board") or {}).get("owner", {}).get("username")
+        if isinstance(pin.get("board"), dict)
+        else None,
+        _username_from_url(source_url, "pinterest"),
+        "unknown",
+    ).lstrip("@")
+    display = _first_str(pinner.get("full_name"), pinner.get("first_name"), username)
+    media = _url_list(pin.get("image_urls"), pin.get("video_urls"), pin.get("images"), pin.get("videos"))
+    if not media:
+        images = pin.get("images") if isinstance(pin.get("images"), dict) else {}
+        for key in ("orig", "originals", "736x", "564x", "474x"):
+            block = images.get(key) if isinstance(images, dict) else None
+            u = _pick_url(block)
+            if u:
+                media.append(u)
+                break
+    caption = _first_str(pin.get("grid_title"), pin.get("title"), pin.get("description"), pin.get("alt_text"))
+    clean = _first_str(pin.get("url"), pin.get("link"), source_url)
+    return enrich_social_post(
+        SocialPost(
+            platform="pinterest",
+            url=clean,
+            username=username or "unknown",
+            display_name=display or username or "unknown",
+            avatar_url=_pick_url(pinner.get("image_xlarge_url"), pinner.get("image_medium_url")),
+            caption=caption[:2000],
+            media_urls=list(dict.fromkeys(media)),
+            is_video=bool(pin.get("is_video") or pin.get("video_urls")),
+            like_count=_as_int(pin.get("reaction_counts") or pin.get("repin_count")),
+            comment_count=_as_int(pin.get("comment_count")),
+            raw={**pin, "source": "social-api"},
+        ),
+        source_url=source_url or clean,
+    )
+
+
+async def brave_search(query: str, *, count: int = 8) -> dict | None:
+    data = await api_get(
+        "/api/brave/search",
+        params={"q": query, "count": max(1, min(int(count), 20))},
+    )
+    return data if isinstance(data, dict) else None
+
+
+async def brave_scrape(url: str) -> dict | None:
+    data = await api_get("/api/brave/scrape", params={"url": url})
+    return data if isinstance(data, dict) else None
+
+
+async def brave_ai(query: str) -> dict | None:
+    data = await api_get("/api/brave/ai", params={"q": query}, timeout=60.0)
+    return data if isinstance(data, dict) else None
+
+
+async def google_search(query: str, *, count: int = 8) -> dict | None:
+    data = await api_get(
+        "/api/google/search",
+        params={"q": query, "count": max(1, min(int(count), 20))},
+    )
+    return data if isinstance(data, dict) else None
+
+
+async def google_scrape(url: str) -> dict | None:
+    data = await api_get("/api/google/scrape", params={"url": url})
+    return data if isinstance(data, dict) else None
+
+
+def parse_search_results(data: dict | list | None) -> list[dict]:
+    """Normalize Brave/Google search payloads into [{title,url,snippet,image}]."""
+    if data is None:
+        return []
+    items: list[Any]
+    if isinstance(data, list):
+        items = data
+    elif isinstance(data, dict):
+        items = []
+        for key in ("results", "web", "organic", "items", "data", "images"):
+            val = data.get(key)
+            if isinstance(val, list):
+                items = val
+                break
+            if isinstance(val, dict):
+                for k2 in ("results", "items"):
+                    if isinstance(val.get(k2), list):
+                        items = val[k2]
+                        break
+            if items:
+                break
+    else:
+        return []
+    out: list[dict] = []
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        title = _first_str(it.get("title"), it.get("name"))
+        url = _first_str(it.get("url"), it.get("link"), it.get("href"))
+        if not title and not url:
+            continue
+        out.append(
+            {
+                "title": title,
+                "url": url,
+                "snippet": _first_str(
+                    it.get("description"),
+                    it.get("snippet"),
+                    it.get("text"),
+                    it.get("meta_description"),
+                ),
+                "image": _pick_url(it.get("image"), it.get("thumbnail"), it.get("img")) or "",
+            }
+        )
+    return out

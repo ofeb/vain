@@ -1,21 +1,16 @@
-"""role converter with fuzzy name matching and dangerous permission helpers."""
+"""role converter with smart name matching and dangerous permission helpers."""
 
 from __future__ import annotations
 
-from discord.ext.commands import Converter, CommandError, Context, RoleNotFound
-from discord.utils import find
+import re
+
 import discord
+from discord.ext.commands import CommandError, Context, Converter, RoleNotFound
 
-try:
-    from fast_string_match import closest_match
-except ImportError:
-    def closest_match(query, candidates):
-        return None
+from .regex import clean_query, regex_find
 
-from re import compile
-
-DISCORD_ID = compile(r"^[0-9]{17,}$")
-DISCORD_ROLE_MENTION = compile(r"<@&(\d+)>")
+DISCORD_ID = re.compile(r"^[0-9]{15,22}$")
+DISCORD_ROLE_MENTION = re.compile(r"<@&(\d{15,22})>")
 
 DANGEROUS_PERMISSIONS = [
     "administrator",
@@ -31,32 +26,44 @@ DANGEROUS_PERMISSIONS = [
 ]
 
 
+def _role_names(role: discord.Role) -> list[str | None]:
+    return [role.name]
+
+
 class RoleConvert(Converter):
-    """convert string to guild Role"""
+    """Convert string to guild Role.
+
+    Accepts mentions, IDs, exact names, and smart partials:
+    ``own`` → ``ʚ .  own``, ``boost`` → ``・boost・``, etc.
+    """
 
     async def convert(self, ctx: Context, arg: str) -> discord.Role:
-        role = None
-        if match := DISCORD_ID.match(arg):
+        if ctx.guild is None:
+            raise RoleNotFound(arg)
+
+        raw = clean_query(arg)
+        if not raw:
+            raise RoleNotFound(arg)
+
+        role: discord.Role | None = None
+
+        if match := DISCORD_ID.match(raw):
             role = ctx.guild.get_role(int(match.group(0)))
-        elif match := DISCORD_ROLE_MENTION.match(arg):
+        elif match := DISCORD_ROLE_MENTION.match(str(arg).strip()):
             role = ctx.guild.get_role(int(match.group(1)))
         else:
+            
             try:
-                role_id = int(arg.strip("<@&>"))
-                role = ctx.guild.get_role(role_id)
+                role_id = int(str(arg).strip().strip("<@&>"))
+                if 15 <= len(str(role_id)) <= 22:
+                    role = ctx.guild.get_role(role_id)
             except Exception:
-                pass
-            if role is None:
-                arg_low = arg.lower()
-                role = (
-                    find(lambda r: r.name.lower() == arg_low, ctx.guild.roles)
-                    or find(lambda r: arg_low in r.name.lower(), ctx.guild.roles)
-                    or find(lambda r: r.name.lower().startswith(arg_low), ctx.guild.roles)
-                )
-                if role is None:
-                    names = [r.name for r in ctx.guild.roles]
-                    if match := closest_match(arg, names):
-                        role = discord.utils.get(ctx.guild.roles, name=match)
+                role = None
+
+        if role is None:
+            
+            candidates = [r for r in ctx.guild.roles if not r.is_default()]
+            role = regex_find(raw, candidates, names_of=_role_names, fuzzy=True)
 
         if not role or role.is_default():
             raise RoleNotFound(arg)
@@ -84,7 +91,6 @@ class RoleConvert(Converter):
                 f"You're unable to {action} {role.mention} because it has the `{permissions[0]}` permission"
             )
         return False
-
 
 
 Role = RoleConvert

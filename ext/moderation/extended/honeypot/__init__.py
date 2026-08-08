@@ -610,6 +610,19 @@ class Honeypot(Package):
 
         applied = await self._apply_punishments(author, punishments, reason=reason)
 
+        
+        if not applied:
+            await self._send_alert(
+                message.guild,
+                row,
+                author,
+                applied,
+                content=content,
+                attachment_count=attachment_count,
+                channel_label=channel_mention,
+            )
+            return
+
         caught = int(row.get("caught") or 0) + 1
         updated = await self._upsert(message.guild.id, caught=caught)
         await self._refresh_trap_message(message.guild, updated)
