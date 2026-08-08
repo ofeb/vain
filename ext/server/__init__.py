@@ -316,7 +316,7 @@ class ServerCommands(Package):
 
     @command(
         name="variables",
-        aliases=["vars"],
+        aliases=["vars", "var", "variable"],
         usage="(category)",
         example="user",
     )
@@ -412,8 +412,8 @@ class ServerCommands(Package):
                     "{honeypot.channel}": "Honeypot channel mention",
                     "{honeypot.channel.name}": "Honeypot channel name",
                     "{honeypot.channel.id}": "Honeypot channel ID",
-                    "{honeypot.punishment}": "Configured punishment phrase",
-                    "{honeypot.punishments}": "Configured punishment phrase",
+                    "{honeypot.punishment}": "Configured punishment phrase (e.g. softbanned, timed out, kicked)",
+                    "{honeypot.punishments}": "Configured punishment phrase (e.g. softbanned, timed out, kicked)",
                     "{guild.name}": "Server name",
                     "{guild.id}": "Server ID",
                     "{guild.icon}": "Server icon URL",

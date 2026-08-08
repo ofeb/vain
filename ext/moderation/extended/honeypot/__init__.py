@@ -9,7 +9,7 @@ from discord import ui
 from discord.ext import commands
 from discord.ext.commands import BucketType, cooldown, group
 
-from config import color
+from config import color, emojis
 from core.discord.package import Package
 from core.discord.views.embed import panel_embed
 from core.managers.permissions import has_permissions
@@ -21,7 +21,9 @@ _TIMEOUT_SECONDS = 7 * 24 * 60 * 60
 _MISSING: Any = object()
 _DEFAULT_TRAP_SCRIPT = (
     "{container}"
-    "$v{description: :warning: DO NOT SEND MESSAGES HERE! :warning:}"
+    f"$v{{description: {emojis.warn} DO **NOT** SEND MESSAGES HERE! {emojis.warn}}}"
+    "$v{description: This channel is a **trap** for **compromised accounts**.}"
+    "$v{description: Anything posted here is claimed as evidence and the compromised account will be **softbanned**.}"
     "$v{separator: divider: true && spacing: 1}"
     "$v{button: label: Caught: {honeypot.caught} && style: red}"
 )
@@ -41,10 +43,22 @@ def _normalize_punishments(raw: Iterable[str] | None) -> list[str]:
     return out or list(_DEFAULT_PUNISHMENTS)
 
 
-def _punishment_phrase(punishments: list[str]) -> str:
-    labels = [f"**{p}**" for p in punishments]
+_PUNISHMENT_PAST = {
+    "kick": "kicked",
+    "ban": "banned",
+    "hardban": "hardbanned",
+    "softban": "softbanned",
+    "timeout": "timed out",
+    "mute": "muted",
+}
+
+
+def _punishment_phrase(punishments: Iterable[str] | None) -> str:
+    labels = [
+        f"**{_PUNISHMENT_PAST.get(str(p).lower(), p)}**" for p in (punishments or [])
+    ]
     if not labels:
-        labels = ["**ban**"]
+        labels = ["**banned**"]
     if len(labels) == 1:
         return labels[0]
     if len(labels) == 2:
@@ -60,9 +74,17 @@ def _comma(value: Any) -> str:
         return str(value)
 
 
-def _trap_body() -> str:
-    """Minimal trap copy - no accent, no counters in the text body."""
-    return ":warning: DO NOT SEND MESSAGES HERE! :warning:"
+def _trap_body(punishments: Iterable[str] | None = None) -> str:
+    """Trap copy with the warning emoji and a short description of the channel."""
+    phrase = _punishment_phrase(_normalize_punishments(punishments))
+    return "\n".join(
+        [
+            f"### {emojis.warn} DO NOT SEND MESSAGES HERE! {emojis.warn}",
+            "",
+            "> -# This channel is a **trap** for **compromised accounts**.",
+            f"> -# Anything posted here is claimed as evidence and the compromised account will be {phrase}.",
+        ]
+    )
 
 
 class Honeypot(Package):
@@ -184,11 +206,13 @@ class Honeypot(Package):
             "embed_script": next_script,
         }
 
-    def _default_trap_layout(self, caught: int) -> ui.LayoutView:
+    def _default_trap_layout(
+        self, caught: int, punishments: Iterable[str] | None = None
+    ) -> ui.LayoutView:
         """Default trap card with a non-clickable Caught counter."""
         layout = ui.LayoutView(timeout=None)
         container = ui.Container(accent_colour=color.warn)
-        container.add_item(ui.TextDisplay(_trap_body()))
+        container.add_item(ui.TextDisplay(_trap_body(punishments)))
         container.add_item(ui.Separator(visible=True))
 
         row = ui.ActionRow()
@@ -232,8 +256,13 @@ class Honeypot(Package):
         """Build send/edit kwargs for the trap message (script or default layout)."""
         script = (row.get("embed_script") or "").strip()
         caught = int(row.get("caught") or 0)
+        punishments = _normalize_punishments(row.get("punishments"))
         if not script:
-            return {"view": self._default_trap_layout(caught), "embed": None, "content": None}
+            return {
+                "view": self._default_trap_layout(caught, punishments),
+                "embed": None,
+                "content": None,
+            }
 
         try:
             bot = getattr(self, "bot", None)
@@ -250,7 +279,11 @@ class Honeypot(Package):
                 s = Script(script)
                 data = await s.data(True, **self._honeypot_kwargs(guild, row))
         except Exception:
-            return {"view": self._default_trap_layout(caught), "embed": None, "content": None}
+            return {
+                "view": self._default_trap_layout(caught, punishments),
+                "embed": None,
+                "content": None,
+            }
 
         
         view = data.get("view")
@@ -280,7 +313,11 @@ class Honeypot(Package):
         if view is not None:
             payload["view"] = view
         if not payload.get("view") and not payload.get("embed") and not payload.get("content"):
-            return {"view": self._default_trap_layout(caught), "embed": None, "content": None}
+            return {
+                "view": self._default_trap_layout(caught, punishments),
+                "embed": None,
+                "content": None,
+            }
         return payload
 
     @staticmethod
