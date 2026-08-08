@@ -23,7 +23,7 @@ _DEFAULT_TRAP_SCRIPT = (
     "{container}"
     "$v{description: :warning: DO NOT SEND MESSAGES HERE! :warning:}"
     "$v{separator: divider: true && spacing: 1}"
-    "$v{button: label: Caught: {honeypot.caught} && style: yellow}"
+    "$v{button: label: Caught: {honeypot.caught} && style: red}"
 )
 
 
@@ -194,7 +194,7 @@ class Honeypot(Package):
         row = ui.ActionRow()
         row.add_item(
             ui.Button(
-                style=discord.ButtonStyle.premium,
+                style=discord.ButtonStyle.danger,
                 label=f"Caught: {_comma(caught)}",
                 disabled=True,
             )

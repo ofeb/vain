@@ -239,6 +239,7 @@ class RoleplayBackView(discord.ui.View):
                     f"for the **{ordinal(total)}** time!"
                 ),
             )
+            embed.color = embed_color
             embed.set_image(url="attachment://action.gif")
 
             
@@ -308,6 +309,7 @@ class RoleplayCommands(Package):
                 f"for the **{ordinal(total)}** time!"
             ),
         )
+        embed.color = embed_color
         embed.set_image(url="attachment://action.gif")
 
         view = None

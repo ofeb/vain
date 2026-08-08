@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 _MAX_BUILDER_BUTTONS = 25
 _MAX_FIELDS = 25
 _MAX_IMAGES = 10
-_BUTTON_STYLE_NOTE = "blue · green · red · grey · yellow · url"
+_BUTTON_STYLE_NOTE = "blue · green · red · grey · url"
 
 
 def _normalize_btn_style(raw: str | None) -> str:
@@ -33,10 +33,8 @@ def _normalize_btn_style(raw: str | None) -> str:
         return "blue"
     if s in {"green", "success", "g"}:
         return "green"
-    if s in {"red", "danger", "r"}:
+    if s in {"red", "danger", "r", "yellow", "gold"}:
         return "red"
-    if s in {"yellow", "gold"}:
-        return "yellow"
     if s in {"grey", "gray", "secondary"}:
         return "grey"
     return "grey"
@@ -49,7 +47,6 @@ def _discord_btn_style(name: str) -> discord.ButtonStyle:
         "green": discord.ButtonStyle.success,
         "red": discord.ButtonStyle.danger,
         "grey": discord.ButtonStyle.secondary,
-        "yellow": discord.ButtonStyle.secondary,
     }.get(_normalize_btn_style(name), discord.ButtonStyle.secondary)
 
 
@@ -1159,7 +1156,7 @@ class _BaseBuilder:
                 f"Add Button ({len(self.buttons) + 1}/{_MAX_BUILDER_BUTTONS})",
                 [
                     ("label", "Label", False, 80, ""),
-                    ("style", "Style: blue green red grey yellow url", False, 20, "blue"),
+                    ("style", "Style: blue green red grey url", False, 20, "blue"),
                     ("url", "URL (style url only)", False, 500, ""),
                     ("emoji", "Emoji (optional)", False, 100, ""),
                     (
