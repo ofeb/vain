@@ -89,10 +89,10 @@ def _make_preview_button(btn: dict[str, str], *, index: int) -> discord.ui.Butto
             url=href,
             **kwargs,
         )
-    # Preview mirrors live behaviour: no message → disabled / unclickable
+    
     return discord.ui.Button(
         style=style,
-        disabled=True,  # always disabled in builder preview
+        disabled=True,  
         custom_id=f"builder:preview:{index}",
         **kwargs,
     )
@@ -217,7 +217,7 @@ class _BaseBuilder:
 
     def __init__(self, author_id: int, accent: int | None = None):
         self.author_id = author_id
-        # Color is optional — empty means no accent / no $v{color} in export
+        
         self.data: dict[str, str] = {
             "content": "",
             "title": "",
@@ -419,7 +419,7 @@ class _BaseBuilder:
             parts.append(f"$v{{title: {self.data['title']}}}")
         if self.data.get("description"):
             parts.append(f"$v{{description: {self.data['description']}}}")
-        # Only export color when the user explicitly set one
+        
         color_raw = (self.data.get("color") or "").strip().lstrip("#")
         if color_raw:
             parts.append(f"$v{{color: #{color_raw}}}")
@@ -482,7 +482,7 @@ class _BaseBuilder:
             description=self.data.get("description") or None,
             url=(self.data.get("url") or None) or None,
         )
-        # Color optional — only apply when set; preview falls back for visibility
+        
         accent = self._accent()
         if accent is not None:
             emb.color = accent
@@ -552,16 +552,8 @@ class _BaseBuilder:
         layout = ui.LayoutView(timeout=None)
         container = ui.Container()
 
-        # Optional accent — only set when the user chose a color
-        accent = self._accent()
-        if accent is not None:
-            try:
-                container.accent_colour = accent  # type: ignore[attr-defined]
-            except Exception:
-                try:
-                    container.accent_color = accent  # type: ignore[attr-defined]
-                except Exception:
-                    pass
+        
+        _ = self._accent()
 
         lines: list[str] = []
         if self.data.get("author"):
@@ -664,7 +656,7 @@ class _BaseBuilder:
     async def refresh(self) -> None:
         if self._stopped or not self.message:
             return
-        # Content goes on the preview only — controls message stays clean (no header fluff)
+        
         content = (self.data.get("content") or "").strip() or None
         try:
             if self.kind == "embed":
@@ -768,7 +760,7 @@ class _BaseBuilder:
             return
 
         if key == "images":
-            # Discord modals max 5 inputs — edit slots 1-5 or 6-10 depending on count
+            
             editing_tail = len(self.images) >= 5
             if editing_tail:
                 values = await self._run_modal(
@@ -1060,7 +1052,7 @@ async def register_builders(bot: "Vain") -> None:
         example=",embedbuilder",
     )
     async def _run_eb(ctx: Context):
-        # Modal/select only — color optional (not forced into exported script)
+        
         accent = getattr(ctx.bot, "color", None) or 0x2B2D31
         builder = EmbedBuilderView(ctx.author.id, accent=int(accent))
         m = await ctx.send(
@@ -1077,7 +1069,7 @@ async def register_builders(bot: "Vain") -> None:
         example=",containerbuilder",
     )
     async def _run_cb(ctx: Context):
-        # Modal/select only — color optional (not forced into exported script)
+        
         accent = getattr(ctx.bot, "color", None) or 0x2B2D31
         builder = ContainerBuilderView(ctx.author.id, accent=int(accent))
         m = await ctx.send(view=builder._controls())

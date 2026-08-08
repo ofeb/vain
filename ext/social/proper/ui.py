@@ -233,17 +233,10 @@ def build_social_repost_container(
     from config import emojis
 
     plat = _platform_key(platform)
-    if accent is None:
-        accent = _PLATFORM_ACCENTS.get(plat, 0xE1D2DE)
+    
+    _ = accent
+    _ = _PLATFORM_ACCENTS.get(plat)
     c = ui.Container()
-    if accent is not None:
-        try:
-            c.accent_colour = int(accent)  # type: ignore[attr-defined]
-        except Exception:
-            try:
-                c.accent_color = int(accent)  # type: ignore[attr-defined]
-            except Exception:
-                pass
     _ = avatar_url
 
     raw_user = (username or "").lstrip("@").strip()
@@ -418,14 +411,8 @@ def build_profile_container(
         body_bits.append(bio_clean[:500])
 
     c = ui.Container()
-    if accent is not None:
-        try:
-            c.accent_colour = int(accent)  # type: ignore[attr-defined]
-        except Exception:
-            try:
-                c.accent_color = int(accent)  # type: ignore[attr-defined]
-            except Exception:
-                pass
+    
+    _ = accent
     header = "\n".join(body_bits)
     if avatar_url:
         try:

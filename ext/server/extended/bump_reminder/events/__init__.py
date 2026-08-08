@@ -17,7 +17,7 @@ from ..proper.constants import (
 if TYPE_CHECKING:
     from core.vain import Vain
 
-# DISBOARD success signals — hyperlinks differ per guild; match text, not URLs
+
 _BUMP_DONE_RE = re.compile(r"bump\s+done", re.IGNORECASE)
 
 
@@ -26,23 +26,23 @@ def _is_disboard_bump(message: discord.Message) -> bool:
     author = message.author
     if author is None:
         return False
-    # Bot account or webhook-style application messages from DISBOARD
+    
     if int(getattr(author, "id", 0) or 0) != DISBOARD_ID:
         app_id = getattr(message, "application_id", None)
         if app_id is None or int(app_id) != DISBOARD_ID:
-            # webhook_id sometimes equals the app id on interaction responses
+            
             wh = getattr(message, "webhook_id", None)
             if wh is None or int(wh) != DISBOARD_ID:
                 return False
 
-    # Prefer embed description ("Bump done! :thumbsup: ...")
+    
     for emb in message.embeds or []:
         desc = (getattr(emb, "description", None) or "") + "\n" + (
             getattr(emb, "title", None) or ""
         )
         if _BUMP_DONE_RE.search(desc):
             return True
-        # rawDescription style fields aren't on discord.py Embed, but content may
+        
         raw = str(getattr(emb, "to_dict", lambda: {})() or "")
         if _BUMP_DONE_RE.search(raw):
             return True
@@ -51,14 +51,14 @@ def _is_disboard_bump(message: discord.Message) -> bool:
     if _BUMP_DONE_RE.search(content):
         return True
 
-    # Interaction name fallback (type 20 chat input response)
+    
     inter = getattr(message, "interaction", None) or getattr(
         message, "interaction_metadata", None
     )
     if inter is not None:
         name = str(getattr(inter, "name", "") or "").lower()
         if name == "bump" and (message.embeds or _BUMP_DONE_RE.search(content)):
-            # Only treat as success if we also see done language or a rich embed
+            
             if message.embeds:
                 for emb in message.embeds:
                     blob = f"{getattr(emb, 'description', '') or ''} {getattr(emb, 'title', '') or ''}"
@@ -88,7 +88,7 @@ def _extract_bumper(message: discord.Message) -> discord.abc.User | discord.Memb
         member = guild.get_member(uid)
         if member is not None:
             return member
-        # lightweight member-like fallback
+        
         return user
     return user
 
@@ -119,10 +119,10 @@ class BumpReminderEvents:
             next_bump_at=next_at,
             last_bumper_id=bumper_id,
             bump_channel_id=message.channel.id,
-            # keep enabled / channel / messages
+            
         )
 
-        # Thank-you in the channel where DISBOARD replied (or configured channel)
+        
         dest = message.channel
         if not isinstance(dest, (discord.TextChannel, discord.Thread)):
             dest = settings.channel

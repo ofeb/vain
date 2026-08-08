@@ -662,7 +662,7 @@ class Socials(Package):
             raw = await api_user(uname)
             if isinstance(raw, dict) and raw:
                 data = parse_tiktok_user(raw, username=uname)
-                # If stats are all zero but the API payload has counters, re-parse flat.
+                
                 if data and not any(
                     int(data.get(k) or 0)
                     for k in ("followerCount", "followingCount", "heartCount", "videoCount")

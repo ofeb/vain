@@ -55,7 +55,7 @@ class StealPaginateView(PaginateView):
 
     def _page_container(self) -> ui.Container:
         container = super()._page_container()
-        # Steal button row (scissors) above/after pager chrome
+        
         try:
             row = ui.ActionRow()
             row.add_item(
@@ -233,7 +233,7 @@ class Steal(Package):
         emojis_found = _parse_emoji(target)
 
         if not emojis_found:
-            # Message link
+            
             try:
                 channel_id, message_id = self._parse_message_link(target)
                 channel = ctx.guild.get_channel(channel_id)
@@ -248,7 +248,7 @@ class Steal(Package):
                 emojis_found = []
 
         if not emojis_found:
-            # Search by bare emoji name in recent channel history
+            
             needle = target.strip().strip(":").lower()
             if needle and re.fullmatch(r"[a-zA-Z0-9_]{2,32}", needle):
                 seen: dict[str, dict] = {}

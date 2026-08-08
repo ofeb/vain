@@ -40,7 +40,7 @@ def _fmt_dt(value: Any) -> str:
 
 
 class BumpReminder(BumpReminderEvents, Package):
-    """Remind guild members to promote the guild on Disboard."""
+    """Remind your guild members to promote the guild on Disboard."""
 
     def __init__(self, bot: Vain):
         super().__init__(bot)
@@ -55,9 +55,9 @@ class BumpReminder(BumpReminderEvents, Package):
         if self._bump_watcher.is_running():
             self._bump_watcher.cancel()
 
-    # ------------------------------------------------------------------
-    # Script send helper
-    # ------------------------------------------------------------------
+    
+    
+    
 
     def _bumper_kwargs(
         self,
@@ -75,7 +75,7 @@ class BumpReminder(BumpReminderEvents, Package):
             "channel": channel or (settings.channel if settings else None),
             "role": role,
             "bumper": bumper,
-            "user": bumper,  # user.* aliases work too
+            "user": bumper,  
             "member": bumper,
         }
         if next_bump_at is not None:
@@ -110,7 +110,7 @@ class BumpReminder(BumpReminderEvents, Package):
             or is_container_script(raw)
             or raw.startswith(("{", "$v"))
         ):
-            # plain text still goes through Script for variable expansion
+            
             pass
         else:
             raw = maybe_wrap_embed_script(raw)
@@ -125,7 +125,7 @@ class BumpReminder(BumpReminderEvents, Package):
             channel=channel,  # type: ignore[arg-type]
         )
 
-        # Role ping only when explicitly requested (reminder path), not thank-you
+        
         role_mention = ""
         if content_prefix is not None:
             role_mention = content_prefix
@@ -136,7 +136,7 @@ class BumpReminder(BumpReminderEvents, Package):
         try:
             payload = await Script(raw, bumper).data(True, **kwargs)
         except Exception:
-            # Fallback plain container
+            
             with contextlib.suppress(Exception):
                 payload = await Script(DEFAULT_REMINDER_SCRIPT, bumper).data(
                     True, **kwargs
@@ -147,7 +147,7 @@ class BumpReminder(BumpReminderEvents, Package):
                     text = f"{role_mention}\n{text}"
                 return await dest.send(content=text)
 
-        # Merge role ping into content when not already present
+        
         if role_mention:
             existing = payload.get("content") or ""
             if role_mention not in existing:
@@ -155,7 +155,7 @@ class BumpReminder(BumpReminderEvents, Package):
                     f"{role_mention}\n{existing}".strip() if existing else role_mention
                 )
 
-        # Drop empty color-less noise keys
+        
         for k in list(payload.keys()):
             if payload[k] is None:
                 payload.pop(k, None)
@@ -164,9 +164,9 @@ class BumpReminder(BumpReminderEvents, Package):
             return await dest.send(**payload)
         return None
 
-    # ------------------------------------------------------------------
-    # Watcher — fires reminders when next_bump_at is due
-    # ------------------------------------------------------------------
+    
+    
+    
 
     @tasks.loop(seconds=45)
     async def _bump_watcher(self) -> None:
@@ -193,11 +193,11 @@ class BumpReminder(BumpReminderEvents, Package):
                 next_at = next_at.replace(tzinfo=datetime.timezone.utc)
 
             if now < next_at:
-                # clear sent flag once we're back in cooldown window after a send
+                
                 self._reminder_sent.discard(guild_id)
                 continue
 
-            # Already reminded for this window?
+            
             if guild_id in self._reminder_sent:
                 continue
 
@@ -227,7 +227,7 @@ class BumpReminder(BumpReminderEvents, Package):
             )
             if sent is not None:
                 self._reminder_sent.add(guild_id)
-                # Push next window so we don't spam; real bump will reschedule precisely
+                
                 with contextlib.suppress(Exception):
                     await settings.upsert(
                         next_bump_at=now + datetime.timedelta(seconds=BUMP_COOLDOWN)
@@ -237,13 +237,13 @@ class BumpReminder(BumpReminderEvents, Package):
     async def _before_watcher(self) -> None:
         await self.bot.wait_until_ready()
 
-    # ------------------------------------------------------------------
-    # Commands
-    # ------------------------------------------------------------------
+    
+    
+    
 
     @group(
         name="bumpreminder",
-        aliases=["bumpremind", "bumpr"],
+        aliases=["bumpremind", "bumpr", "autobump", "bumper"],
         description="Remind your guild members to promote the guild on Disboard.",
         guild_only=True,
         invoke_without_command=True,
@@ -256,11 +256,11 @@ class BumpReminder(BumpReminderEvents, Package):
     @bumpreminder.command(
         name="enable",
         aliases=["setup", "on"],
-        description="Enable bump reminders for this guild.",
+        description="Enable Disboard bump reminders so guild members get prompted to promote the guild.",
         guild_only=True,
         example=",bumpreminder enable #bump",
     )
-    @describe(channel="Channel where reminders are posted")
+    @describe(channel="Channel where guild members are reminded to bump on Disboard")
     @has_permissions(manage_guild=True)
     @cooldown(1, 5, BucketType.guild)
     async def bumpreminder_enable(
@@ -268,7 +268,7 @@ class BumpReminder(BumpReminderEvents, Package):
         ctx: Context,
         channel: discord.TextChannel | None = None,
     ):
-        """Enable bump reminders for this guild."""
+        """Enable Disboard bump reminders so guild members get prompted to promote the guild."""
         if ctx.guild is None:
             return await ctx.warn("Guild only")
         if getattr(self.bot.db, "pool", None) is None:
@@ -282,7 +282,7 @@ class BumpReminder(BumpReminderEvents, Package):
 
         settings = await Settings.fetch(self.bot, ctx.guild)
         now = discord.utils.utcnow()
-        # If never bumped, schedule a reminder soon so setup is useful
+        
         next_at = settings.next_bump_at
         if next_at is None:
             next_at = now + datetime.timedelta(minutes=1)
@@ -299,7 +299,7 @@ class BumpReminder(BumpReminderEvents, Package):
             title="Bump Reminder",
             message=(
                 f"**Enabled** in {target.mention}\n"
-                f"-# Reminders fire after a successful Disboard `/bump` (every 2 hours)\n"
+                f"-# Guild members are reminded after a successful Disboard `/bump` (every 2 hours)\n"
                 f"-# Customize with `{ctx.clean_prefix}bumpreminder message` · "
                 f"`{ctx.clean_prefix}bumpreminder thankyou` · "
                 f"`{ctx.clean_prefix}bumpreminder role`"
@@ -311,13 +311,13 @@ class BumpReminder(BumpReminderEvents, Package):
     @bumpreminder.command(
         name="disable",
         aliases=["remove", "reset"],
-        description="Disable bump reminders and delete the configuration.",
+        description="Disable Disboard bump reminders and delete this guild's configuration.",
         guild_only=True,
     )
     @has_permissions(manage_guild=True)
     @cooldown(1, 5, BucketType.guild)
     async def bumpreminder_disable(self, ctx: Context):
-        """Disable bump reminders and delete the configuration."""
+        """Disable Disboard bump reminders and delete this guild's configuration."""
         if ctx.guild is None:
             return await ctx.warn("Guild only")
         if getattr(self.bot.db, "pool", None) is None:
@@ -325,20 +325,22 @@ class BumpReminder(BumpReminderEvents, Package):
 
         settings = await Settings.fetch(self.bot, ctx.guild)
         if not await Settings.exists(self.bot, ctx.guild):
-            return await ctx.warn("Bump reminder is not configured")
+            return await ctx.warn("Bump reminder is not configured for this guild")
 
         await settings.delete()
         self._reminder_sent.discard(ctx.guild.id)
-        return await ctx.success("Bump reminders **disabled** and configuration deleted")
+        return await ctx.success(
+            "Disboard bump reminders **disabled** and this guild's configuration deleted"
+        )
 
     @bumpreminder.command(
         name="toggle",
-        description="Toggle bump reminders on or off.",
+        description="Toggle Disboard bump reminders on or off for this guild.",
         guild_only=True,
     )
     @has_permissions(manage_guild=True)
     async def bumpreminder_toggle(self, ctx: Context):
-        """Toggle bump reminders on or off."""
+        """Toggle Disboard bump reminders on or off for this guild."""
         if ctx.guild is None:
             return await ctx.warn("Guild only")
         if getattr(self.bot.db, "pool", None) is None:
@@ -355,18 +357,18 @@ class BumpReminder(BumpReminderEvents, Package):
         if new_state:
             self._reminder_sent.discard(ctx.guild.id)
         return await ctx.success(
-            f"Bump reminders are now **{'enabled' if new_state else 'disabled'}**"
+            f"Disboard bump reminders are now **{'enabled' if new_state else 'disabled'}** for this guild"
         )
 
     @bumpreminder.command(
         name="message",
         aliases=["reminder", "remindmessage"],
-        description="Set the reminder message sent when it's time to bump.",
+        description="Set the message that reminds guild members to promote the guild on Disboard.",
         guild_only=True,
         usage="(script or text)",
         example=",bumpreminder message {container}$v{description: Time to /bump}",
     )
-    @describe(script="Plain text or embed/container script")
+    @describe(script="Plain text or embed/container script shown when it's time to bump")
     @has_permissions(manage_guild=True)
     async def bumpreminder_message(
         self,
@@ -374,7 +376,7 @@ class BumpReminder(BumpReminderEvents, Package):
         *,
         script: str | None = None,
     ):
-        """Set the reminder message sent when it's time to bump."""
+        """Set the message that reminds guild members to promote the guild on Disboard."""
         if ctx.guild is None:
             return await ctx.warn("Guild only")
         settings = await Settings.fetch(self.bot, ctx.guild)
@@ -398,7 +400,9 @@ class BumpReminder(BumpReminderEvents, Package):
 
         if raw.lower() in {"clear", "reset", "default", "none"}:
             await settings.upsert(message=None)
-            return await ctx.success("Reminder message reset to the **default** script")
+            return await ctx.success(
+                "Reminder message reset to the **default** (guild members · Disboard)"
+            )
 
         if raw.startswith("```") and raw.endswith("```"):
             raw = raw.strip("`")
@@ -407,7 +411,7 @@ class BumpReminder(BumpReminderEvents, Package):
             raw = raw.strip()
 
         await settings.upsert(message=raw)
-        # Live preview
+        
         with contextlib.suppress(Exception):
             await self._send_bump_script(
                 ctx.channel,
@@ -416,17 +420,19 @@ class BumpReminder(BumpReminderEvents, Package):
                 bumper=ctx.author,
                 settings=settings,
             )
-        return await ctx.success("Bump reminder message **updated**")
+        return await ctx.success(
+            "Disboard bump reminder message **updated** for this guild"
+        )
 
     @bumpreminder.command(
         name="thankyou",
         aliases=["thanks", "thankmessage"],
-        description="Set the thank-you message sent after a successful bump.",
+        description="Set the thank-you message sent after a guild member bumps on Disboard.",
         guild_only=True,
         usage="(script or text)",
         example=",bumpreminder thankyou Thanks {bumper.mention}!",
     )
-    @describe(script="Plain text or embed/container script")
+    @describe(script="Plain text or embed/container script sent after a successful bump")
     @has_permissions(manage_guild=True)
     async def bumpreminder_thankyou(
         self,
@@ -434,7 +440,7 @@ class BumpReminder(BumpReminderEvents, Package):
         *,
         script: str | None = None,
     ):
-        """Set the thank-you message sent after a successful bump."""
+        """Set the thank-you message sent after a guild member bumps on Disboard."""
         if ctx.guild is None:
             return await ctx.warn("Guild only")
         settings = await Settings.fetch(self.bot, ctx.guild)
@@ -458,7 +464,9 @@ class BumpReminder(BumpReminderEvents, Package):
 
         if raw.lower() in {"clear", "reset", "default", "none"}:
             await settings.upsert(thankyou_message=None)
-            return await ctx.success("Thank-you message reset to the **default** script")
+            return await ctx.success(
+                "Thank-you message reset to the **default** (guild member bump on Disboard)"
+            )
 
         if raw.startswith("```") and raw.endswith("```"):
             raw = raw.strip("`")
@@ -475,15 +483,17 @@ class BumpReminder(BumpReminderEvents, Package):
                 bumper=ctx.author,
                 settings=settings,
             )
-        return await ctx.success("Bump thank-you message **updated**")
+        return await ctx.success(
+            "Disboard bump thank-you message **updated** for this guild"
+        )
 
     @bumpreminder.command(
         name="role",
-        description="Set (or clear) the role pinged on each reminder.",
+        description="Set (or clear) the role pinged when guild members should bump on Disboard.",
         guild_only=True,
         example=",bumpreminder role @Bumpers",
     )
-    @describe(role="Role to ping, or clear/none to remove")
+    @describe(role="Role to ping on reminders, or clear/none to remove")
     @has_permissions(manage_guild=True)
     async def bumpreminder_role(
         self,
@@ -491,7 +501,7 @@ class BumpReminder(BumpReminderEvents, Package):
         *,
         role: str | None = None,
     ):
-        """Set (or clear) the role pinged on each reminder."""
+        """Set (or clear) the role pinged when guild members should bump on Disboard."""
         if ctx.guild is None:
             return await ctx.warn("Guild only")
         settings = await Settings.fetch(self.bot, ctx.guild)
@@ -511,11 +521,11 @@ class BumpReminder(BumpReminderEvents, Package):
                         timestamp=False,
                     )
                 )
-            return await ctx.warn("No reminder role set")
+            return await ctx.warn("No reminder role set for this guild")
 
         if raw.lower() in {"clear", "none", "off", "remove", "reset"}:
             await settings.upsert(role_id=None)
-            return await ctx.success("Bump reminder role **cleared**")
+            return await ctx.success("Disboard bump reminder role **cleared**")
 
         try:
             resolved = await commands.RoleConverter().convert(ctx, raw)
@@ -523,17 +533,19 @@ class BumpReminder(BumpReminderEvents, Package):
             return await ctx.warn(f"Couldn't find a role matching `{raw}`")
 
         await settings.upsert(role_id=resolved.id)
-        return await ctx.success(f"Bump reminder role set to {resolved.mention}")
+        return await ctx.success(
+            f"Disboard bump reminder role set to {resolved.mention}"
+        )
 
     @bumpreminder.command(
         name="settings",
         aliases=["config", "view"],
-        description="View the current bump reminder configuration.",
+        description="View this guild's Disboard bump reminder configuration.",
         guild_only=True,
     )
     @has_permissions(manage_guild=True)
     async def bumpreminder_settings(self, ctx: Context):
-        """View the current bump reminder configuration."""
+        """View this guild's Disboard bump reminder configuration."""
         if ctx.guild is None:
             return await ctx.warn("Guild only")
         settings = await Settings.fetch(self.bot, ctx.guild)
@@ -561,7 +573,7 @@ class BumpReminder(BumpReminderEvents, Package):
                 f"**Next reminder**: {_fmt_dt(settings.next_bump_at)}",
                 f"**Last bumper**: {bumper_label}",
             ],
-            footer="Disboard · /bump every 2 hours",
+            footer="Disboard · remind guild members every 2 hours",
             timestamp=False,
         )
         return await ctx.send(embed=embed)

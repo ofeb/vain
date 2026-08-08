@@ -410,7 +410,7 @@ def _split_fields(value: str) -> list[str]:
     text = str(value or "")
     if "&&" in text:
         return _split_top_level(text, "&&")
-    # legacy: pipe-separated image urls / semicolon-separated named params
+    
     if "|" in text and "{" not in text:
         return [p.strip() for p in text.split("|") if p.strip()]
     if ";" in text and not re.search(r"https?://", text):
@@ -433,7 +433,7 @@ def _parse_named_pairs(payload: str) -> dict[str, str]:
     Also accepts ``key=value`` and legacy ``key=value; key=value``.
     """
     out: dict[str, str] = {}
-    # Normalize legacy semicolons to && when they look like named pairs
+    
     text = str(payload or "")
     if ";" in text and "&&" not in text and re.search(r"[\w.]+\s*=", text):
         text = text.replace(";", "&&")
@@ -441,14 +441,14 @@ def _parse_named_pairs(payload: str) -> dict[str, str]:
         raw = part.strip()
         if not raw:
             continue
-        # key: value  OR  key=value
+        
         m = re.match(r"^([A-Za-z_][\w.]*)\s*[:=]\s*(.*)$", raw, flags=re.S)
         if m:
             key = m.group(1).strip().lower()
             val = m.group(2).strip()
             out[key] = val
             continue
-        # bare flag (e.g. "inline", "timestamp")
+        
         flag = raw.lower()
         if flag in {"inline", "timestamp", "divider"}:
             out[flag] = "true"
@@ -479,7 +479,7 @@ def _parse_button_style(value: str) -> discord.ButtonStyle:
     if lowered in {"red", "danger"}:
         return discord.ButtonStyle.danger
     if lowered in {"yellow", "gold"}:
-        # Discord has no yellow button — map to secondary (grey) for safety
+        
         return discord.ButtonStyle.secondary
     return discord.ButtonStyle.secondary
 
@@ -541,7 +541,7 @@ def _unwrap_message_script(raw: str) -> str:
     text = str(raw or "").strip()
     if not text:
         return text
-    # Strip accidental wrapping quotes
+    
     if (text.startswith('"') and text.endswith('"')) or (
         text.startswith("'") and text.endswith("'")
     ):
@@ -583,7 +583,7 @@ async def _send_button_message(interaction: discord.Interaction, script: str) ->
             await interaction.response.defer(ephemeral=True)
         return
 
-    # Nested embed/container scripts
+    
     if is_container_script(raw) or is_embed_script(raw) or raw.startswith(("{", "$v")):
         try:
             payload = await parse(maybe_wrap_embed_script(raw), sendable=True)
@@ -612,7 +612,7 @@ async def _send_button_message(interaction: discord.Interaction, script: str) ->
                 await interaction.followup.send(ephemeral=True, **kwargs)
         return
 
-    # Plain text
+    
     if not interaction.response.is_done():
         await interaction.response.send_message(content=raw[:2000], ephemeral=True)
     else:
@@ -647,7 +647,7 @@ def _parse_button_payload(payload: str) -> dict[str, Any]:
         style_raw = named.get("style") or named.get("type") or "grey"
         style = _parse_button_style(style_raw)
         url = (named.get("url") or named.get("link") or "").strip() or None
-        # Only parse emoji when the key was actually provided
+        
         emoji = None
         if "emoji" in named or "emote" in named:
             emoji = _parse_button_emoji(named.get("emoji") or named.get("emote"))
@@ -658,7 +658,7 @@ def _parse_button_payload(payload: str) -> dict[str, Any]:
             style = discord.ButtonStyle.link
             if not url or not _has_link(url):
                 raise BadEmbed("url buttons need a valid url")
-        # Non-link with no message → unclickable (unless explicitly enabled)
+        
         if style != discord.ButtonStyle.link and not message:
             if disabled is None:
                 disabled = True
@@ -704,7 +704,7 @@ def _parse_button_payload(payload: str) -> dict[str, Any]:
             emoji = _parse_button_emoji(third)
     else:
         style = _parse_button_style(first)
-        # Detect trailing message: if a bit looks like embed/container script
+        
         for bit in bits[2:]:
             if is_embed_script(bit) or is_container_script(bit) or bit.startswith(("{embed}", "{container}")):
                 message = bit
@@ -718,7 +718,7 @@ def _parse_button_payload(payload: str) -> dict[str, Any]:
         disabled = bool(state) if state is not None else False
         if style == discord.ButtonStyle.link:
             if not target or not _has_link(target):
-                # maybe second was url
+                
                 if _has_link(second):
                     url = second
                     label = first
@@ -748,7 +748,7 @@ def _build_button_from_payload(payload: str) -> discord.ui.Button:
     label = meta.get("label") or "Button"
     style = meta.get("style") or discord.ButtonStyle.secondary
     url = meta.get("url")
-    # emoji is optional — only attach when explicitly provided
+    
     emoji = meta.get("emoji") or None
     disabled = bool(meta.get("disabled"))
     message = (meta.get("message") or "").strip() or None
@@ -764,8 +764,8 @@ def _build_button_from_payload(payload: str) -> discord.ui.Button:
             kwargs["emoji"] = emoji
         return discord.ui.Button(**kwargs)
 
-    # Non-link buttons: no message → decorative / unclickable (disabled).
-    # No emoji → don't pass emoji so Discord shows label only.
+    
+    
     if not message:
         disabled = True
 
@@ -956,17 +956,17 @@ async def parse_container(raw: str, sendable: bool = False) -> dict:
         if key in {"divider", "separator"}:
             _flush_text()
             named = _parse_named_pairs(payload) if payload else {}
-            # Support: separator: divider: true && spacing: 2
-            #          separator: spacing: 1
-            #          divider  (no payload)
-            #          divider: true
+            
+            
+            
+            
             visible = True
             if "divider" in named:
                 visible = _parse_bool(named.get("divider") or "true")
             elif payload and payload.strip().lower() in {"false", "off", "0", "no", "hidden"}:
                 visible = False
             spacing = named.get("spacing") or named.get("space") or "1"
-            # bare "2" / "1" as payload
+            
             if not named and payload.strip() in {"1", "2"}:
                 spacing = payload.strip()
             try:
@@ -975,7 +975,7 @@ async def parse_container(raw: str, sendable: bool = False) -> dict:
                 pass
             continue
         if key == "section":
-            # section: text=AAA  OR  section: text: AAA && thumbnail: url
+            
             named = _parse_named_pairs(payload) if payload else {}
             text = named.get("text") or named.get("description") or named.get("content") or payload
             thumb = named.get("thumbnail") or named.get("image") or named.get("icon") or ""
@@ -1059,10 +1059,10 @@ async def parse_container(raw: str, sendable: bool = False) -> dict:
             continue
         if key == "image":
             _flush_text()
-            # Support multiple images via && (max 10) — MediaGallery
+            
             urls: list[str] = []
             for part in _split_fields(payload):
-                # allow image: url: x  or bare urls
+                
                 named = _parse_named_pairs(part)
                 candidate = (
                     named.get("url")
@@ -1129,14 +1129,8 @@ async def parse_container(raw: str, sendable: bool = False) -> dict:
 
     _flush_text()
 
-    if accent is not None:
-        try:
-            container.accent_colour = accent  # type: ignore[attr-defined]
-        except Exception:
-            try:
-                container.accent_color = accent  # type: ignore[attr-defined]
-            except Exception:
-                pass
+    
+    _ = accent
 
     if buttons:
         try:
@@ -1200,8 +1194,8 @@ async def parse(raw: str, sendable: bool = False) -> dict:
     author_url = None
 
     for chunk in chunks:
-        # Nested scripts inside button messages may contain "}{" at depth>0; only
-        # reject bare top-level adjacency after stripping the outer braces.
+        
+        
         if not chunk.startswith("{"):
             raise ParseError(f"missing open brace in: {chunk}")
         if not chunk.endswith("}"):
@@ -1228,7 +1222,7 @@ async def parse(raw: str, sendable: bool = False) -> dict:
             continue
 
         if lowered == "timestamp":
-            # timestamp is a flag / variable, not a parameterized field
+            
             out["timestamp"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
             continue
 
@@ -1505,10 +1499,10 @@ class Script:
         if bumper:
             replacements.update(_user_replacements("bumper", bumper))
         elif user:
-            # allow {bumper.*} to fall back to the acting user when not set
+            
             replacements.update(_user_replacements("bumper", user))
         else:
-            # keep templates clean when no bumper is known yet
+            
             replacements.update(
                 {
                     "{bumper}": "",
@@ -1801,7 +1795,7 @@ class Script:
             replacements["{tag.role.id}"] = str(getattr(tag_role, "id", ""))
 
         
-        # Bump reminder timestamps / meta
+        
         bump = kwargs.get("bump")
         if isinstance(bump, dict):
             b_role = bump.get("role")

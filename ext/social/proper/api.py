@@ -989,12 +989,12 @@ def parse_tiktok_user(data: dict, *, username: str = "") -> dict | None:
     stats_from_parent: dict = {}
     user: dict = data
 
-    # Walk common envelopes: userInfo/data/result → optional nested user + stats
+    
     for key in ("userInfo", "user_info", "data", "result", "author", "user"):
         inner = data.get(key)
         if not isinstance(inner, dict) or not inner:
             continue
-        # Shape: { user: {...}, stats: {...} }
+        
         nested_user = inner.get("user") if isinstance(inner.get("user"), dict) else None
         if nested_user and _looks_like_user(nested_user):
             stats_from_parent = _dict(
@@ -1006,7 +1006,7 @@ def parse_tiktok_user(data: dict, *, username: str = "") -> dict | None:
             )
             user = nested_user
             break
-        # Shape: envelope itself is the user
+        
         if _looks_like_user(inner):
             stats_from_parent = _dict(
                 data.get("stats"),
@@ -1017,7 +1017,7 @@ def parse_tiktok_user(data: dict, *, username: str = "") -> dict | None:
             user = inner
             break
 
-    # One more hop if still wrapped
+    
     nested = user.get("user") if isinstance(user.get("user"), dict) else None
     if nested and _looks_like_user(nested):
         stats_from_parent = _dict(

@@ -86,7 +86,7 @@ class Honeypot(Package):
                 )
                 """
             )
-        # migrate older installs that lack embed_script
+        
         with contextlib.suppress(Exception):
             await self.db.execute(
                 "ALTER TABLE honeypot ADD COLUMN IF NOT EXISTS embed_script TEXT"
@@ -245,7 +245,7 @@ class Honeypot(Package):
                 )
                 data = dict(getattr(prepared, "data", None) or {})
             else:
-                # Fallback: bare parse without full variable expansion
+                
                 from core.tools.embed import Script
 
                 s = Script(script)
@@ -253,12 +253,12 @@ class Honeypot(Package):
         except Exception:
             return {"view": self._default_trap_layout(caught), "embed": None, "content": None}
 
-        # Disable interactive buttons on trap (caught counter should not fire)
+        
         view = data.get("view")
         if view is not None:
             for child in list(getattr(view, "children", []) or []):
                 self._disable_buttons_recursive(child)
-            # LayoutView: walk nested containers
+            
             walk = list(getattr(view, "children", []) or [])
             while walk:
                 item = walk.pop(0)
@@ -754,7 +754,7 @@ class Honeypot(Package):
                 await self._refresh_trap_message(ctx.guild, updated)
             return await ctx.success("Honeypot trap embed reset to **default**")
 
-        # Strip surrounding code fences if pasted
+        
         if raw.startswith("```") and raw.endswith("```"):
             raw = raw.strip("`")
             if raw.lower().startswith("ts") or raw.lower().startswith("txt"):
@@ -764,7 +764,7 @@ class Honeypot(Package):
         if not (is_embed_script(raw) or is_container_script(raw) or raw.startswith(("{", "$v"))):
             raw = maybe_wrap_embed_script(raw)
 
-        # Validate by building once
+        
         try:
             test_row = {
                 **row,

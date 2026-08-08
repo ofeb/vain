@@ -1,7 +1,7 @@
 DISBOARD_ID = 302050872383242240
-BUMP_COOLDOWN = 7200  # 2 hours
+BUMP_COOLDOWN = 7200  
 
-# Aesthetic Components V2 defaults — color intentionally omitted
+
 DEFAULT_REMINDER_SCRIPT = (
     "{container}"
     "$v{content: {bumper.mention}}"
