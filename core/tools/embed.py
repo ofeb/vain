@@ -1865,8 +1865,9 @@ class Script:
         ):
             stamp = kwargs.get(stamp_key)
             if stamp is None:
-                for alias in aliases:
-                    replacements.setdefault(alias, "")
+                if isinstance(bump, dict):
+                    for alias in aliases:
+                        replacements.setdefault(alias, "")
                 continue
             try:
                 unix = _format_unix(stamp)
