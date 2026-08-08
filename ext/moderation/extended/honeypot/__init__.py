@@ -9,202 +9,26 @@ from discord import ui
 from discord.ext import commands
 from discord.ext.commands import BucketType, cooldown, group
 
-from config import color, emojis
+from config import color
 from core.discord.package import Package
 from core.discord.views.embed import panel_embed
 from core.managers.permissions import has_permissions
-from core.tools.embed import is_container_script, is_embed_script, maybe_wrap_embed_script, parse
+from core.tools.embed import is_container_script, is_embed_script, maybe_wrap_embed_script
 
-_VALID_PUNISHMENTS = ("kick", "ban", "softban", "timeout")
-_DEFAULT_PUNISHMENTS = ["ban"]
-_TIMEOUT_SECONDS = 7 * 24 * 60 * 60
-_MISSING: Any = object()
-_DEFAULT_TRAP_SCRIPT = (
-    "{container}"
-    f"$v{{description: {emojis.warn} DO **NOT** SEND MESSAGES HERE! {emojis.warn}}}"
-    "$v{description: This channel is a **trap** for **compromised accounts**.}"
-    "$v{description: Anything posted here is claimed as evidence and the compromised account will be **softbanned**.}"
-    "$v{separator: divider: true && spacing: 2}"
-    "$v{button: label: Caught: {honeypot.caught} && style: red}"
+from .models import (
+    _DEFAULT_PUNISHMENTS,
+    _TIMEOUT_SECONDS,
+    _VALID_PUNISHMENTS,
+    _comma,
+    _normalize_punishments,
+    _punishment_phrase,
+    _trap_body,
 )
-
-
-def _normalize_punishments(raw: Iterable[str] | None) -> list[str]:
-    out: list[str] = []
-    seen: set[str] = set()
-    for item in raw or []:
-        value = str(item or "").strip().lower()
-        if value in {"hardban", "hard"}:
-            value = "ban"
-        if value not in _VALID_PUNISHMENTS or value in seen:
-            continue
-        seen.add(value)
-        out.append(value)
-    return out or list(_DEFAULT_PUNISHMENTS)
-
-
-_PUNISHMENT_PAST = {
-    "kick": "kicked",
-    "ban": "banned",
-    "hardban": "hardbanned",
-    "softban": "softbanned",
-    "timeout": "timed out",
-    "mute": "muted",
-}
-
-
-def _punishment_phrase(punishments: Iterable[str] | None) -> str:
-    labels = [
-        f"**{_PUNISHMENT_PAST.get(str(p).lower(), p)}**" for p in (punishments or [])
-    ]
-    if not labels:
-        labels = ["**banned**"]
-    if len(labels) == 1:
-        return labels[0]
-    if len(labels) == 2:
-        return f"{labels[0]} and {labels[1]}"
-    return ", ".join(labels[:-1]) + f", and {labels[-1]}"
-
-
-def _comma(value: Any) -> str:
-    """Format a number with thousands separators (human-friendly)."""
-    try:
-        return f"{int(value):,}"
-    except (TypeError, ValueError):
-        return str(value)
-
-
-def _trap_body(punishments: Iterable[str] | None = None) -> str:
-    """Trap copy with the warning emoji and a short description of the channel."""
-    phrase = _punishment_phrase(_normalize_punishments(punishments))
-    return "\n".join(
-        [
-            f"### {emojis.warn} DO NOT SEND MESSAGES HERE! {emojis.warn}",
-            "",
-            "> -# This channel is a **trap** for **compromised accounts**.",
-            f"> -# Anything posted here is claimed as evidence and the compromised account will be {phrase}.",
-        ]
-    )
+from .settings import fetch, remove, upsert
 
 
 class Honeypot(Package):
     """Honeypot channel trap for compromised / malicious accounts."""
-
-    async def _ensure_table(self) -> None:
-        if getattr(self.db, "pool", None) is None:
-            return
-        with contextlib.suppress(Exception):
-            await self.db.execute(
-                """
-                CREATE TABLE IF NOT EXISTS honeypot (
-                    guild_id BIGINT PRIMARY KEY,
-                    channel_id BIGINT,
-                    message_id BIGINT,
-                    alert_channel_id BIGINT,
-                    punishments TEXT[] NOT NULL DEFAULT ARRAY['ban']::TEXT[],
-                    caught INT NOT NULL DEFAULT 0,
-                    enabled BOOLEAN NOT NULL DEFAULT FALSE,
-                    embed_script TEXT
-                )
-                """
-            )
-        
-        with contextlib.suppress(Exception):
-            await self.db.execute(
-                "ALTER TABLE honeypot ADD COLUMN IF NOT EXISTS embed_script TEXT"
-            )
-
-    async def _get_row(self, guild_id: int) -> dict | None:
-        await self._ensure_table()
-        if getattr(self.db, "pool", None) is None:
-            return None
-        row = await self.db.fetchrow(
-            "SELECT * FROM honeypot WHERE guild_id = $1",
-            guild_id,
-        )
-        return dict(row) if row else None
-
-    async def _upsert(
-        self,
-        guild_id: int,
-        *,
-        channel_id: int | None = _MISSING,
-        message_id: int | None = _MISSING,
-        alert_channel_id: int | None = _MISSING,
-        punishments: list[str] | None = None,
-        caught: int | None = None,
-        enabled: bool | None = None,
-        embed_script: str | None = _MISSING,
-    ) -> dict:
-        await self._ensure_table()
-        current = await self._get_row(guild_id) or {
-            "guild_id": guild_id,
-            "channel_id": None,
-            "message_id": None,
-            "alert_channel_id": None,
-            "punishments": list(_DEFAULT_PUNISHMENTS),
-            "caught": 0,
-            "enabled": False,
-            "embed_script": None,
-        }
-
-        next_channel = (
-            current.get("channel_id") if channel_id is _MISSING else channel_id
-        )
-        next_message = (
-            current.get("message_id") if message_id is _MISSING else message_id
-        )
-        next_alert = (
-            current.get("alert_channel_id")
-            if alert_channel_id is _MISSING
-            else alert_channel_id
-        )
-        next_punishments = (
-            _normalize_punishments(current.get("punishments"))
-            if punishments is None
-            else _normalize_punishments(punishments)
-        )
-        next_caught = int(current.get("caught") or 0) if caught is None else int(caught)
-        next_enabled = bool(current.get("enabled")) if enabled is None else bool(enabled)
-        next_script = (
-            current.get("embed_script") if embed_script is _MISSING else embed_script
-        )
-
-        await self.db.execute(
-            """
-            INSERT INTO honeypot (
-                guild_id, channel_id, message_id, alert_channel_id,
-                punishments, caught, enabled, embed_script
-            )
-            VALUES ($1, $2, $3, $4, $5::TEXT[], $6, $7, $8)
-            ON CONFLICT (guild_id) DO UPDATE SET
-                channel_id = EXCLUDED.channel_id,
-                message_id = EXCLUDED.message_id,
-                alert_channel_id = EXCLUDED.alert_channel_id,
-                punishments = EXCLUDED.punishments,
-                caught = EXCLUDED.caught,
-                enabled = EXCLUDED.enabled,
-                embed_script = EXCLUDED.embed_script
-            """,
-            guild_id,
-            next_channel,
-            next_message,
-            next_alert,
-            next_punishments,
-            next_caught,
-            next_enabled,
-            next_script,
-        )
-        return {
-            "guild_id": guild_id,
-            "channel_id": next_channel,
-            "message_id": next_message,
-            "alert_channel_id": next_alert,
-            "punishments": next_punishments,
-            "caught": next_caught,
-            "enabled": next_enabled,
-            "embed_script": next_script,
-        }
 
     def _default_trap_layout(
         self, caught: int, punishments: Iterable[str] | None = None
@@ -363,7 +187,7 @@ class Honeypot(Package):
             msg = await self._post_trap_message(
                 channel, int(row.get("caught") or 0), row=row
             )
-            await self._upsert(guild.id, message_id=msg.id)
+            await upsert(self.bot, guild.id, message_id=msg.id)
 
     def _is_exempt(self, member: discord.Member) -> bool:
         if member.bot:
@@ -471,7 +295,7 @@ class Honeypot(Package):
         if getattr(self.db, "pool", None) is None:
             return await ctx.warn("Database is unavailable")
 
-        row = await self._get_row(ctx.guild.id)
+        row = await fetch(self.bot, ctx.guild.id)
         if row and row.get("enabled") and row.get("channel_id"):
             existing = ctx.guild.get_channel(int(row["channel_id"]))
             if isinstance(existing, discord.TextChannel):
@@ -498,7 +322,7 @@ class Honeypot(Package):
                     )
                 except (discord.Forbidden, discord.HTTPException):
                     return await ctx.fail("Couldn't post the honeypot trap message")
-                await self._upsert(
+                await upsert(self.bot,
                     ctx.guild.id,
                     channel_id=existing.id,
                     message_id=msg.id,
@@ -560,7 +384,7 @@ class Honeypot(Package):
                 await channel.delete(reason="Honeypot setup failed to post trap message")
             return await ctx.fail("Couldn't post the honeypot trap message")
 
-        await self._upsert(
+        await upsert(self.bot,
             ctx.guild.id,
             channel_id=channel.id,
             message_id=msg.id,
@@ -585,7 +409,7 @@ class Honeypot(Package):
         if getattr(self.db, "pool", None) is None:
             return await ctx.warn("Database is unavailable")
 
-        row = await self._get_row(ctx.guild.id)
+        row = await fetch(self.bot, ctx.guild.id)
         if not row:
             return await ctx.warn("Honeypot is not configured for this server")
         if not row.get("enabled"):
@@ -594,7 +418,7 @@ class Honeypot(Package):
                 f"use `{ctx.clean_prefix}honeypot setup` to arm it again"
             )
 
-        await self._upsert(ctx.guild.id, enabled=False)
+        await upsert(self.bot, ctx.guild.id, enabled=False)
         return await ctx.success(
             "Honeypot **disabled** - configuration and channel kept. "
             f"Use `{ctx.clean_prefix}honeypot reset` to delete everything"
@@ -614,7 +438,7 @@ class Honeypot(Package):
         if getattr(self.db, "pool", None) is None:
             return await ctx.warn("Database is unavailable")
 
-        row = await self._get_row(ctx.guild.id)
+        row = await fetch(self.bot, ctx.guild.id)
         if not row:
             return await ctx.warn("Honeypot is not configured for this server")
 
@@ -636,10 +460,7 @@ class Honeypot(Package):
                     reason=f"Honeypot reset by {ctx.author} ({ctx.author.id})"
                 )
 
-        await self.db.execute(
-            "DELETE FROM honeypot WHERE guild_id = $1",
-            ctx.guild.id,
-        )
+        await remove(self.bot, ctx.guild.id)
         return await ctx.success(
             "Honeypot configuration **deleted**. This action cannot be undone."
         )
@@ -658,7 +479,7 @@ class Honeypot(Package):
         if getattr(self.db, "pool", None) is None:
             return await ctx.warn("Database is unavailable")
 
-        row = await self._get_row(ctx.guild.id) or {}
+        row = await fetch(self.bot, ctx.guild.id) or {}
         raw = (channel or "").strip()
 
         if not raw:
@@ -685,7 +506,7 @@ class Honeypot(Package):
         if raw.lower() in {"clear", "none", "off", "remove", "reset", "unset", "disable"}:
             if not row.get("alert_channel_id"):
                 return await ctx.warn("No honeypot **alert channel** is set")
-            await self._upsert(ctx.guild.id, alert_channel_id=None)
+            await upsert(self.bot, ctx.guild.id, alert_channel_id=None)
             return await ctx.success("Honeypot alert channel has been **cleared**")
 
         try:
@@ -693,7 +514,7 @@ class Honeypot(Package):
         except Exception:
             return await ctx.warn(f"Couldn't find a text channel matching `{raw}`")
 
-        await self._upsert(ctx.guild.id, alert_channel_id=target.id)
+        await upsert(self.bot, ctx.guild.id, alert_channel_id=target.id)
         return await ctx.success(f"Honeypot alerts will post in {target.mention}")
 
     @honeypot.command(
@@ -710,7 +531,7 @@ class Honeypot(Package):
         if getattr(self.db, "pool", None) is None:
             return await ctx.warn("Database is unavailable")
 
-        row = await self._get_row(ctx.guild.id) or {}
+        row = await fetch(self.bot, ctx.guild.id) or {}
         if not actions or not str(actions).strip():
             current = _normalize_punishments(row.get("punishments"))
             return await ctx.send(
@@ -746,7 +567,7 @@ class Honeypot(Package):
             )
 
         punishments = _normalize_punishments(tokens)
-        updated = await self._upsert(ctx.guild.id, punishments=punishments)
+        updated = await upsert(self.bot, ctx.guild.id, punishments=punishments)
 
         
         if updated.get("enabled"):
@@ -769,7 +590,7 @@ class Honeypot(Package):
         if getattr(self.db, "pool", None) is None:
             return await ctx.warn("Database is unavailable")
 
-        row = await self._get_row(ctx.guild.id)
+        row = await fetch(self.bot, ctx.guild.id)
         if not row:
             return await ctx.warn(
                 f"Honeypot is not configured - use `{ctx.clean_prefix}honeypot setup`"
@@ -820,7 +641,7 @@ class Honeypot(Package):
         if getattr(self.db, "pool", None) is None:
             return await ctx.warn("Database is unavailable")
 
-        row = await self._get_row(ctx.guild.id) or {}
+        row = await fetch(self.bot, ctx.guild.id) or {}
         raw = (script or "").strip()
 
         if not raw:
@@ -855,7 +676,7 @@ class Honeypot(Package):
             )
 
         if raw.lower() in {"clear", "none", "off", "reset", "default", "remove"}:
-            updated = await self._upsert(ctx.guild.id, embed_script=None)
+            updated = await upsert(self.bot, ctx.guild.id, embed_script=None)
             if updated.get("enabled"):
                 await self._refresh_trap_message(ctx.guild, updated)
             return await ctx.success("Honeypot trap embed reset to **default**")
@@ -884,74 +705,9 @@ class Honeypot(Package):
         except Exception as exc:
             return await ctx.fail(f"Invalid trap script: {exc}")
 
-        updated = await self._upsert(ctx.guild.id, embed_script=raw)
+        updated = await upsert(self.bot, ctx.guild.id, embed_script=raw)
         if updated.get("enabled"):
             await self._refresh_trap_message(ctx.guild, updated)
         return await ctx.success(
             f"Honeypot trap embed updated - see `{ctx.clean_prefix}variables honeypot` for vars"
-        )
-
-    @Package.listener("on_message")
-    async def on_honeypot_message(self, message: discord.Message) -> None:
-        if message.guild is None or message.author.bot:
-            return
-        if not isinstance(message.author, discord.Member):
-            return
-        if getattr(self.db, "pool", None) is None:
-            return
-
-        row = await self._get_row(message.guild.id)
-        if not row or not row.get("enabled") or not row.get("channel_id"):
-            return
-        if int(message.channel.id) != int(row["channel_id"]):
-            return
-        
-        if message.id == row.get("message_id"):
-            return
-        if self._is_exempt(message.author):
-            return
-
-        
-        reason = f"Honeypot triggered in #{getattr(message.channel, 'name', 'honeypot')}"
-        author = message.author
-        content = message.content or ""
-        attachment_count = len(message.attachments or [])
-        channel_mention = getattr(message.channel, "mention", None) or f"`{message.channel.id}`"
-
-        
-        with contextlib.suppress(discord.Forbidden, discord.HTTPException, discord.NotFound):
-            await message.delete()
-
-        
-        punishments = _normalize_punishments(row.get("punishments"))
-        if "ban" not in punishments and "softban" not in punishments and "kick" not in punishments:
-            punishments = ["ban", *punishments]
-
-        applied = await self._apply_punishments(author, punishments, reason=reason)
-
-        
-        if not applied:
-            await self._send_alert(
-                message.guild,
-                row,
-                author,
-                applied,
-                content=content,
-                attachment_count=attachment_count,
-                channel_label=channel_mention,
-            )
-            return
-
-        caught = int(row.get("caught") or 0) + 1
-        updated = await self._upsert(message.guild.id, caught=caught)
-        await self._refresh_trap_message(message.guild, updated)
-
-        await self._send_alert(
-            message.guild,
-            updated,
-            author,
-            applied,
-            content=content,
-            attachment_count=attachment_count,
-            channel_label=channel_mention,
         )

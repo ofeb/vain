@@ -25,3 +25,4 @@ yt-dlp
 imageio-ffmpeg
 lava-lyra
 #discord-chat-exporter
+uwuipy

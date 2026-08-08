@@ -2626,6 +2626,7 @@ from .extended.restrictcommand import Restrictcommand
 from .extended.stickyrole import Stickyrole
 from .extended.forcenickname import Forcenickname
 from .extended.honeypot import Honeypot
+from .extended.honeypot.events import HoneypotEvents
 
 class Moderation(
     ModerationCommands,
@@ -2644,6 +2645,7 @@ class Moderation(
     Stickyrole,
     Forcenickname,
     Honeypot,
+    HoneypotEvents,
     commands.Cog,
     metaclass=_Meta,
 ):

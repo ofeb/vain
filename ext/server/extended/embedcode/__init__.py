@@ -11,10 +11,7 @@ from discord.ext.commands import hybrid_command, CommandError
 from core.discord.package import Package
 from core.discord.hybrid import describe
 from core.managers.permissions import has_permissions
-from config import color, emojis
-
-from core.discord.views.embed import panel_embed
-from core.tools.human.text import codeblock
+from config import color
 
 if TYPE_CHECKING:
     from core.vain import Vain
@@ -40,7 +37,6 @@ class Embedcode(Package):
 
         if msg.embeds:
             code = self._embed_to_code(msg.embeds[0])
-            title = "Embed Code"
         else:
             layout = self._message_layout(msg)
             if layout is None:
@@ -52,14 +48,7 @@ class Embedcode(Package):
             return await ctx.warn("Code is too long to send. Check your DMs.")
 
         try:
-            await ctx.author.send(
-                embed=panel_embed(
-                    title=title,
-                    color=color.base,
-                    lines=[codeblock(code)],
-                    timestamp=False,
-                )
-            )
+            await ctx.author.send(content=self._code_dm_embed(code))
             await ctx.success(f"{title} sent to your DMs!")
         except discord.Forbidden:
             await ctx.warn("Could not DM you. Check your privacy settings.")
@@ -85,7 +74,6 @@ class Embedcode(Package):
             title = "Container Code"
         elif msg.embeds:
             code = self._embed_to_code(msg.embeds[0])
-            title = "Embed Code"
         else:
             return await ctx.warn("That message has no container code or embeds")
 
@@ -93,17 +81,14 @@ class Embedcode(Package):
             return await ctx.warn("Code is too long to send. Check your DMs.")
 
         try:
-            await ctx.author.send(
-                embed=panel_embed(
-                    title=title,
-                    color=color.base,
-                    lines=[codeblock(code)],
-                    timestamp=False,
-                )
-            )
+            await ctx.author.send(content=self._code_dm_embed(code))
             await ctx.success(f"{title} sent to your DMs!")
         except discord.Forbidden:
             await ctx.warn("Could not DM you. Check your privacy settings.")
+
+    def _code_dm_embed(self, code: str) -> str:
+        """Copy-friendly plain-text script in a fenced code block."""
+        return f"`{code}`"
 
     async def _fetch_message(self, ctx, link: str) -> discord.Message | None:
         try:
@@ -144,15 +129,15 @@ class Embedcode(Package):
         """Export as vain tagscript: {embed}$v{title: …}$v{description: …}"""
         parts = ["{embed}"]
         if embed.title:
-            parts.append(f"$v{{title: {embed.title}}}")
+            parts.append(f"$v{{title: {self._clean_script_text(embed.title)}}}")
         if embed.description:
-            parts.append(f"$v{{description: {embed.description}}}")
+            parts.append(f"$v{{description: {self._clean_script_text(embed.description)}}}")
         if embed.color:
             parts.append(f"$v{{color: #{embed.color.value:06x}}}")
         if embed.url:
             parts.append(f"$v{{url: {embed.url}}}")
         if embed.author and embed.author.name:
-            bits = [embed.author.name]
+            bits = [self._clean_script_text(embed.author.name)]
             if embed.author.icon_url:
                 bits.append(embed.author.icon_url)
             elif embed.author.url:
@@ -161,7 +146,7 @@ class Embedcode(Package):
                 bits.append(embed.author.url)
             parts.append(f"$v{{author: {' && '.join(bits)}}}")
         if embed.footer and embed.footer.text:
-            fbits = [embed.footer.text]
+            fbits = [self._clean_script_text(embed.footer.text)]
             if embed.footer.icon_url:
                 fbits.append(embed.footer.icon_url)
             parts.append(f"$v{{footer: {' && '.join(fbits)}}}")
@@ -174,7 +159,10 @@ class Embedcode(Package):
         for field in embed.fields:
             tail = " && inline" if field.inline else ""
             parts.append(
-                f"$v{{field: {field.name or 'Field'} && {field.value or '​'}{tail}}}"
+                "$v{field: "
+                f"{self._clean_script_text(field.name or 'Field')} && "
+                f"{self._clean_script_text(field.value or '​')}{tail}"
+                "}"
             )
         return "".join(parts)
 
@@ -200,10 +188,10 @@ class Embedcode(Package):
 
     def _container_item_to_code(self, parts: list[str], item: Any) -> None:
         if isinstance(item, ui.TextDisplay):
-            text = str(getattr(item, "content", "") or "").rstrip("\n")
+            text = self._clean_script_text(getattr(item, "content", "") or "").strip()
             if text.startswith("## "):
                 parts.append(f"$v{{title: {text[3:].strip()}}}")
-            elif text.startswith("-# ") and "\n" not in text:
+            elif text.startswith("-# ") and "\\n" not in text:
                 parts.append(f"$v{{footer: {text[3:].strip()}}}")
             elif text:
                 parts.append(f"$v{{description: {text}}}")
@@ -236,11 +224,13 @@ class Embedcode(Package):
             return
 
         if isinstance(item, ui.Section):
-            body = "".join(
-                str(getattr(c, "content", "") or "")
-                for c in (getattr(item, "children", []) or [])
-                if isinstance(c, ui.TextDisplay)
-            ).rstrip("\n")
+            body = self._clean_script_text(
+                "".join(
+                    str(getattr(c, "content", "") or "")
+                    for c in (getattr(item, "children", []) or [])
+                    if isinstance(c, ui.TextDisplay)
+                )
+            ).strip()
             accessory = getattr(item, "accessory", None)
             if isinstance(accessory, ui.MediaGallery):
                 urls = [
@@ -299,6 +289,21 @@ class Embedcode(Package):
         if disabled and style != "url":
             bits.append("disabled: true")
         return f"$v{{button: {' && '.join(bits)}}}"
+
+    @staticmethod
+    def _clean_script_text(text: Any) -> str:
+        """Normalise a fetched text block into script payload form.
+
+        Drops blockquote prefixes (``> ``, ``> -# ``) and collapses newlines
+        to ``\\n`` escapes so generated scripts stay single-line.
+        """
+        lines: list[str] = []
+        for raw in str(text or "").splitlines():
+            line = re.sub(r"^>\s*", "", raw)
+            if line.startswith("-# "):
+                line = line[3:]
+            lines.append(line.rstrip())
+        return "\\n".join(lines).rstrip("\\n")
 
     @staticmethod
     def _button_style_name(style: Any) -> str:

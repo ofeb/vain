@@ -9,6 +9,8 @@ import aiohttp
 import discord
 from discord.ext import commands
 
+from uwuipy import Uwuipy
+
 from core.discord.package import Package
 from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe, linked_family
@@ -189,6 +191,31 @@ class Fun(Package):
             title="⭐ Rating",
             color=color.base,
             message=f"**{thing}** gets a **{rating}/10**",
+            timestamp=False,
+        )
+        await ctx.send(embed=embed)
+
+    @hybrid(
+        name="uwuify",
+        description="Uwuify your text",
+        aliases=["uwu"],
+        example=",uwuify hello world",
+        **_CONTEXTS,
+    )
+    @describe(text="Text to uwuify")
+    async def uwuify(self, ctx: Context, *, text: str) -> None:
+        """Uwuify your text."""
+        try:
+            result = Uwuipy().uwuify(text)
+        except Exception:
+            return await ctx.fail("Failed to uwuify that text")
+        if not result:
+            return await ctx.warn("I couldn't uwuify that")
+        result = result[:2000]
+        embed = c2(
+            title="UwU",
+            color=color.base,
+            message=result,
             timestamp=False,
         )
         await ctx.send(embed=embed)
