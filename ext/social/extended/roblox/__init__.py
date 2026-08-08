@@ -5,10 +5,9 @@ from typing import Any
 
 import aiohttp
 import discord
-from discord.ext import commands
 
-from discord.ext.commands import group
-
+from core.discord.ctx import Context
+from core.discord.hybrid import describe, hybrid
 from core.discord.package import Package
 from core.discord.views.embed import panel_embed
 
@@ -161,21 +160,26 @@ class Roblox(Package):
                 e.set_thumbnail(url=avatar)
         return e
 
-    @group(
+    @hybrid(
         name="roblox",
         aliases=("rbx", "rblx"),
         description="Roblox profile and item lookups",
         invoke_without_command=True,
         example=",roblox builderman",
+        group=True,
+        guilds=True,
+        dms=True,
+        groupchats=True,
     )
-    async def roblox(self, ctx: commands.Context, *, username: str | None = None):
+    @describe(username="Roblox username")
+    async def roblox(self, ctx: Context, *, username: str | None = None):
         """Get a Roblox profile by username."""
         if not username:
             return await ctx.send_help(ctx.command)
         async with aiohttp.ClientSession() as session:
             user = await self._resolve_user(session, username)
             if not user or not user.get("id"):
-                return await ctx.warn(f"Roblox user **{username}** not found")  # type: ignore[attr-defined]
+                return await ctx.warn(f"Roblox user **{username}** not found")
             avatar = await self._avatar_url(session, int(user["id"]))
             await ctx.send(embed=self._profile_embed(user, avatar))
 
@@ -185,7 +189,8 @@ class Roblox(Package):
         description="Get profile information for a Roblox username",
         example=",roblox user builderman",
     )
-    async def roblox_user(self, ctx: commands.Context, *, username: str):
+    @describe(username="Roblox username")
+    async def roblox_user(self, ctx: Context, *, username: str):
         await ctx.invoke(self.roblox, username=username)
 
     @roblox.command(
@@ -194,13 +199,14 @@ class Roblox(Package):
         description="Look up a Roblox user by numeric ID",
         example=",roblox id 1",
     )
-    async def roblox_id(self, ctx: commands.Context, user_id: int):
+    @describe(user_id="Roblox numeric user ID")
+    async def roblox_id(self, ctx: Context, user_id: int):
         async with aiohttp.ClientSession() as session:
             data = await self._get_json(
                 session, f"https://users.roblox.com/v1/users/{user_id}"
             )
             if not isinstance(data, dict) or not data.get("id"):
-                return await ctx.warn(f"No Roblox user with id `{user_id}`")  # type: ignore[attr-defined]
+                return await ctx.warn(f"No Roblox user with id `{user_id}`")
             avatar = await self._avatar_url(session, int(data["id"]))
             await ctx.send(embed=self._profile_embed(data, avatar))
 
@@ -209,11 +215,12 @@ class Roblox(Package):
         description="Show a user's public friend / follower counts",
         example=",roblox friends builderman",
     )
-    async def roblox_friends(self, ctx: commands.Context, *, username: str):
+    @describe(username="Roblox username")
+    async def roblox_friends(self, ctx: Context, *, username: str):
         async with aiohttp.ClientSession() as session:
             user = await self._resolve_user(session, username)
             if not user or not user.get("id"):
-                return await ctx.warn(f"Roblox user **{username}** not found")  # type: ignore[attr-defined]
+                return await ctx.warn(f"Roblox user **{username}** not found")
             uid = int(user["id"])
             friends = await self._get_json(
                 session, f"https://friends.roblox.com/v1/users/{uid}/friends/count"
@@ -245,7 +252,8 @@ class Roblox(Package):
         description="List public collectibles for a user (if inventory is public)",
         example=",roblox inventory builderman",
     )
-    async def roblox_inventory(self, ctx: commands.Context, *, username: str):
+    @describe(username="Roblox username")
+    async def roblox_inventory(self, ctx: Context, *, username: str):
         async with aiohttp.ClientSession() as session:
             user = await self._resolve_user(session, username)
             if not user or not user.get("id"):
@@ -288,7 +296,8 @@ class Roblox(Package):
         description="Search the Roblox catalog for an item",
         example=",roblox item dominus",
     )
-    async def roblox_item(self, ctx: commands.Context, *, query: str):
+    @describe(query="Item name or keyword")
+    async def roblox_item(self, ctx: Context, *, query: str):
         q = (query or "").strip()
         if not q:
             return await ctx.warn("Provide a search query")  # type: ignore[attr-defined]
@@ -368,7 +377,8 @@ class Roblox(Package):
         description="Look up a Roblox experience by name or place id",
         example=",roblox game adopt me",
     )
-    async def roblox_game(self, ctx: commands.Context, *, query: str):
+    @describe(query="Game name or place id")
+    async def roblox_game(self, ctx: Context, *, query: str):
         q = (query or "").strip()
         if not q:
             return await ctx.warn("Provide a game name or place id")  # type: ignore[attr-defined]
@@ -478,8 +488,9 @@ class Roblox(Package):
         description="Check if a user owns an asset (public inventories only)",
         example=",roblox check builderman 102611803",
     )
+    @describe(username="Roblox username", asset_id="Asset ID to check")
     async def roblox_check(
-        self, ctx: commands.Context, username: str, asset_id: int
+        self, ctx: Context, username: str, asset_id: int
     ):
         async with aiohttp.ClientSession() as session:
             user = await self._resolve_user(session, username)
@@ -514,7 +525,8 @@ class Roblox(Package):
         description="Convert Robux to approximate USD via historical DevEx rate",
         example=",roblox devex 100000",
     )
-    async def roblox_devex(self, ctx: commands.Context, robux: int):
+    @describe(robux="Amount of Robux")
+    async def roblox_devex(self, ctx: Context, robux: int):
         if robux < 0:
             return await ctx.warn("Robux must be positive")  # type: ignore[attr-defined]
         rate = 0.0035
