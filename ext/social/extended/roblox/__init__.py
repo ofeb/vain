@@ -138,7 +138,9 @@ class Roblox(Package):
         name = user.get("name") or "Unknown"
         display = user.get("displayName") or name
         desc = (user.get("description") or "").strip()
-        created = user.get("created") or "Unknown"
+        from core.tools.human import human_date
+
+        created = human_date(user.get("created"), fallback="Unknown")
         e = panel_embed(
             title=f"{display} (@{name})",
             color=self.color,

@@ -105,7 +105,7 @@ class BoostCommands(Package):
         else:
             if exists:
                 return await ctx.fail(
-                    f"already a **{slot}** message in {channel.mention} — "
+                    f"there's already a **{slot}** message in {channel.mention} — "
                     f"use `{ctx.clean_prefix}boosts edit` or `{ctx.clean_prefix}boosts remove`"
                     + (" `--twoboosts`" if is_second else "")
                 )
@@ -122,7 +122,7 @@ class BoostCommands(Package):
                 )
             except UniqueViolationError:
                 return await ctx.fail(
-                    f"already a **{slot}** message in {channel.mention}"
+                    f"there's already a **{slot}** message in {channel.mention}"
                 )
             verb = "set"
 

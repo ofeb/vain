@@ -790,7 +790,17 @@ def _asset_url(asset) -> str:
 def _format_dt(value) -> str:
     if not value:
         return "Never"
-    return value.strftime("%m/%d/%Y, %I:%M %p")
+    try:
+        from core.tools.human import human_date, parse_dt
+
+        dt = parse_dt(value)
+        if dt is not None:
+            return human_date(dt)
+    except Exception:
+        pass
+    if hasattr(value, "strftime"):
+        return value.strftime("%m/%d/%Y, %I:%M %p")
+    return str(value)
 
 
 def _format_unix(value) -> str:

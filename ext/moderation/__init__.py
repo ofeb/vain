@@ -386,7 +386,9 @@ class ModerationCommands(Package):
         moderator = f"`{row['moderator_id']}`" if row.get("moderator_id") else "unknown"
         reason = row.get("reason") or "no reason provided"
         created = row.get("created_at")
-        stamp = created.strftime("%m/%d/%y") if hasattr(created, "strftime") else "unknown"
+        from core.tools.human import human_date
+
+        stamp = human_date(created, fallback="unknown")
         return label_line(
             f"Case #{row['case_id']} · {row['action']}",
             f"{target} · {moderator} · {reason} · {stamp}",

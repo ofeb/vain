@@ -162,7 +162,9 @@ def embed_to_container(
             footer = str(embed.footer.text)
         if has_ts:
             try:
-                ts = f"<t:{int(embed.timestamp.timestamp())}:R>"
+                from core.tools.human import human_date
+
+                ts = human_date(embed.timestamp)
                 footer = f"{footer} · {ts}" if footer else ts
             except Exception:
                 pass

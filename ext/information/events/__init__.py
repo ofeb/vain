@@ -86,7 +86,13 @@ class InformationEvents(Package):
             color=0xE1D2DE
         )
         embed.add_field(name="Account Age", value=f"{account_age} days", inline=True)
-        embed.add_field(name="Account Created", value=member.created_at.strftime("%Y-%m-%d"), inline=True)
+        from core.tools.human import human_date
+
+        embed.add_field(
+            name="Account Created",
+            value=human_date(member.created_at),
+            inline=True,
+        )
         embed.set_thumbnail(url=member.display_avatar.url)
         
         await info_channel.send(embed=embed)

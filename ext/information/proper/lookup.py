@@ -293,8 +293,15 @@ def build_cashapp_embed(profile: dict[str, Any], author: discord.User) -> discor
     return embed
 
 def _format_github_repo_date(iso: str) -> str:
-    dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
-    return dt.strftime("%m/%d/%y")
+    from core.tools.human import human_date, parse_dt
+
+    if not iso:
+        return "unknown"
+    dt = parse_dt(iso)
+    if dt is None:
+        return "unknown"
+    # compact for repo rows
+    return human_date(dt)
 
 def _github_info_lines(user: dict[str, Any]) -> list[str]:
     lines: list[str] = []
@@ -374,7 +381,16 @@ def build_github_embed(user: dict[str, Any], author: discord.User) -> discord.Em
         timestamp=False,
         thumbnail=user.get("avatar_url"),
     )
+    from core.tools.human import human_date, parse_dt
+
     if created := user.get("created_at"):
-        embed.timestamp = datetime.fromisoformat(created.replace("Z", "+00:00"))
-    embed.set_footer(text="-# Created on", icon_url=GITHUB_CREATED_ICON)
+        dt = parse_dt(created)
+        if dt is not None:
+            embed.timestamp = dt
+            embed.set_footer(
+                text=f"Created on {human_date(dt)}",
+                icon_url=GITHUB_CREATED_ICON,
+            )
+            return embed
+    embed.set_footer(text="Created on", icon_url=GITHUB_CREATED_ICON)
     return embed

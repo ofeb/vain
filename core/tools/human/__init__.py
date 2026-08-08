@@ -2,7 +2,7 @@
 time text and number helpers all in one place.
 from core.tools.human import join shorten compact when"""
 
-from .time import duration, timedelta, when
+from .time import discord_ts, duration, human_date, parse_dt, timedelta, when
 from .text import (
     codeblock,
     human_join,
@@ -19,6 +19,9 @@ __all__ = [
     "duration",
     "timedelta",
     "when",
+    "human_date",
+    "parse_dt",
+    "discord_ts",
     "join",
     "human_join",
     "shorten",

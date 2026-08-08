@@ -261,14 +261,19 @@ class Log(LogEvents, Package):
         if channel is None or not isinstance(channel, discord.TextChannel):
             return await ctx.warn("Provide a **text channel** (or run this in one)")
 
+        all_events = False
         if event is None:
             events = list(EVENT_TYPES.keys())
+            all_events = True
         else:
             event = event.lower()
             if event == "all":
                 events = list(EVENT_TYPES.keys())
+                all_events = True
             elif event not in EVENT_TYPES:
-                return await ctx.warn(f"Invalid event type. Valid: {', '.join(f'`{e}`' for e in EVENT_TYPES)}")
+                return await ctx.warn(
+                    f"Invalid event type. Valid: {', '.join(f'`{e}`' for e in EVENT_TYPES)}"
+                )
             else:
                 events = [event]
 
@@ -287,10 +292,17 @@ class Log(LogEvents, Package):
                 failed += 1
 
         if failed:
-            return await ctx.warn(f"Failed to add {failed} event(s) — check database connection")
+            return await ctx.warn(
+                f"failed to add {failed} event(s) — check the database connection"
+            )
 
-        label = "all events" if len(events) > 1 else f"`{events[0]}`"
-        return await ctx.success(f"Event {label} will be **logged** in {channel.mention}")
+        if all_events:
+            return await ctx.success(
+                f"logging **all** events to {channel.mention}"
+            )
+        return await ctx.success(
+            f"logging **{events[0]}** events to {channel.mention}"
+        )
 
     @log.command(
         name="remove",
@@ -314,17 +326,23 @@ class Log(LogEvents, Package):
                 ctx.guild.id, channel.id,
             )
             self._webhook_cache.pop(channel.id, None)
-            return await ctx.success(f"No longer **logging** any events to {channel.mention}")
+            return await ctx.success(
+                f"no longer logging **any** events to {channel.mention}"
+            )
 
         event = event.lower()
         if event not in EVENT_TYPES:
-            return await ctx.warn(f"Invalid event type. Valid: {', '.join(f'`{e}`' for e in EVENT_TYPES)}")
+            return await ctx.warn(
+                f"Invalid event type. Valid: {', '.join(f'`{e}`' for e in EVENT_TYPES)}"
+            )
 
         await self.db.execute(
             "UPDATE log_config SET events = array_remove(events, $1) WHERE guild_id = $2 AND channel_id = $3",
             event, ctx.guild.id, channel.id,
         )
-        return await ctx.success(f"No longer **logging** event `{event}` to {channel.mention}")
+        return await ctx.success(
+            f"no longer logging **{event}** events to {channel.mention}"
+        )
 
     @log.group(
         name="color",

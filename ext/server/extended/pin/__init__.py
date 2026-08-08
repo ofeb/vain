@@ -103,10 +103,19 @@ class PinCommands(Package):
         state = "enabled" if option else "disabled"
         return await ctx.success(f"pin archival **{state}**")
 
-    @pins.command(name="channel", description="Set the pin archival channel")
+    @pins.command(
+        name="channel",
+        description="Set the pin archival channel (defaults to current channel)",
+        usage="[channel]",
+    )
     @has_permissions(manage_guild=True)
-    async def pins_channel(self, ctx, *, channel: TextChannel):
+    async def pins_channel(self, ctx, channel: TextChannel = None):
         """set archive channel"""
+        channel = channel or (
+            ctx.channel if isinstance(ctx.channel, TextChannel) else None
+        )
+        if channel is None:
+            return await ctx.warn("Provide a **text channel** (or run this in one)")
         await self.db.execute(
             """INSERT INTO pin_config (guild_id, channel_id) VALUES($1, $2) ON CONFLICT(guild_id) DO UPDATE SET channel_id = excluded.channel_id""",
             ctx.guild.id, channel.id,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import discord
 from discord import Embed, TextChannel, Message
@@ -53,14 +53,20 @@ class PingOnJoinCommands(PingOnJoinEvents, Package):
         name="add",
         aliases=["set", "create"],
         example=",pingonjoin add #welcome",
-        description="Add a channel that will ping new members",
+        description="Add a channel that will ping new members (defaults to current channel)",
+        usage="[channel]",
     )
     @has_permissions(manage_guild=True)
-    async def pingonjoin_add(self, ctx, channel: TextChannel) -> Message:
+    async def pingonjoin_add(self, ctx, channel: Optional[TextChannel] = None) -> Message:
+        channel = channel or (
+            ctx.channel if isinstance(ctx.channel, TextChannel) else None
+        )
+        if channel is None:
+            return await ctx.warn("Provide a **text channel** (or run this in one)")
         await self._ensure_table()
         ids = await self._get_channels(ctx.guild.id)
         if channel.id in ids:
-            return await ctx.warn(f"{channel.mention} is already a ping on join channel")
+            return await ctx.warn(f"{channel.mention} is already a ping-on-join channel")
         ids.append(channel.id)
         await self._set_channels(ctx.guild.id, ids)
         return await ctx.success(f"New members will be **pinged** in {channel.mention}")
@@ -69,14 +75,20 @@ class PingOnJoinCommands(PingOnJoinEvents, Package):
         name="remove",
         aliases=["del", "rm"],
         example=",pingonjoin remove #welcome",
-        description="Remove a ping on join channel",
+        description="Remove a ping on join channel (defaults to current channel)",
+        usage="[channel]",
     )
     @has_permissions(manage_guild=True)
-    async def pingonjoin_remove(self, ctx, channel: TextChannel) -> Message:
+    async def pingonjoin_remove(self, ctx, channel: Optional[TextChannel] = None) -> Message:
+        channel = channel or (
+            ctx.channel if isinstance(ctx.channel, TextChannel) else None
+        )
+        if channel is None:
+            return await ctx.warn("Provide a **text channel** (or run this in one)")
         await self._ensure_table()
         ids = await self._get_channels(ctx.guild.id)
         if channel.id not in ids:
-            return await ctx.warn(f"{channel.mention} is not a ping on join channel")
+            return await ctx.warn(f"{channel.mention} is not a ping-on-join channel")
         ids = [i for i in ids if i != channel.id]
         await self._set_channels(ctx.guild.id, ids)
         return await ctx.success(f"Removed ping on join from {channel.mention}")

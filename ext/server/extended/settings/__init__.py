@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from asyncio import ensure_future
-from typing import Union
+from typing import Optional, Union
 
 import discord
 from discord import Embed, Guild, Role, TextChannel, Thread
@@ -144,10 +144,19 @@ class SettingsCommands(Package):
             lines,
         )
 
-    @settings.command(name="jail")
+    @settings.command(
+        name="jail",
+        description="Set the jail channel (defaults to current channel)",
+        usage="[channel]",
+    )
     @has_permissions(manage_guild=True)
-    async def settings_jail(self, ctx, channel: TextChannel):
+    async def settings_jail(self, ctx, channel: TextChannel = None):
         """Set the jail channel."""
+        channel = channel or (
+            ctx.channel if isinstance(ctx.channel, TextChannel) else None
+        )
+        if channel is None:
+            return await ctx.warn("Provide a **text channel** (or run this in one)")
         await self.db.set_server_settings(ctx.guild.id, jail_channel_id=channel.id)
         return await ctx.success(
             f"Successfully **set** the jail channel to {channel.mention}"
@@ -510,12 +519,22 @@ class SettingsCommands(Package):
     @tracker_username.command(
         name="add",
         aliases=["create", "set", "c", "a", "s"],
-        description="add a channel for username alerts",
+        description="Add a channel for username alerts (defaults to current channel)",
         example=",tracker username add #names",
+        usage="[channel]",
     )
     @has_permissions(manage_guild=True)
-    async def tracker_username_add(self, ctx, *, channel: Union[TextChannel, Thread]):
+    async def tracker_username_add(
+        self, ctx, channel: Optional[Union[TextChannel, Thread]] = None
+    ):
         """add username tracker channel"""
+        channel = channel or (
+            ctx.channel
+            if isinstance(ctx.channel, (TextChannel, Thread))
+            else None
+        )
+        if channel is None:
+            return await ctx.warn("Provide a **text channel** (or run this in one)")
         ids = (
             await self.db.fetchval(
                 """SELECT channel_ids FROM trackers WHERE tracker_type = $1 AND guild_id = $2""",
@@ -536,12 +555,22 @@ class SettingsCommands(Package):
     @tracker_username.command(
         name="remove",
         aliases=["delete", "del", "d", "r"],
-        description="remove a username tracker channel",
+        description="Remove a username tracker channel (defaults to current channel)",
         example=",tracker username remove #names",
+        usage="[channel]",
     )
     @has_permissions(manage_guild=True)
-    async def tracker_username_remove(self, ctx, *, channel: Union[TextChannel, Thread]):
+    async def tracker_username_remove(
+        self, ctx, channel: Optional[Union[TextChannel, Thread]] = None
+    ):
         """remove username tracker"""
+        channel = channel or (
+            ctx.channel
+            if isinstance(ctx.channel, (TextChannel, Thread))
+            else None
+        )
+        if channel is None:
+            return await ctx.warn("Provide a **text channel** (or run this in one)")
         ids = await self.db.fetchval(
             """SELECT channel_ids FROM trackers WHERE tracker_type = $1 AND guild_id = $2""",
             "username", ctx.guild.id,
@@ -578,12 +607,22 @@ class SettingsCommands(Package):
     @tracker_vanity.command(
         name="add",
         aliases=["create", "set", "c", "a", "s"],
-        description="add a channel for vanity alerts",
+        description="Add a channel for vanity alerts (defaults to current channel)",
         example=",tracker vanity add #vanities",
+        usage="[channel]",
     )
     @has_permissions(manage_guild=True)
-    async def tracker_vanity_add(self, ctx, *, channel: Union[TextChannel, Thread]):
+    async def tracker_vanity_add(
+        self, ctx, channel: Optional[Union[TextChannel, Thread]] = None
+    ):
         """add vanity tracker channel"""
+        channel = channel or (
+            ctx.channel
+            if isinstance(ctx.channel, (TextChannel, Thread))
+            else None
+        )
+        if channel is None:
+            return await ctx.warn("Provide a **text channel** (or run this in one)")
         ids = (
             await self.db.fetchval(
                 """SELECT channel_ids FROM trackers WHERE tracker_type = $1 AND guild_id = $2""",
@@ -604,12 +643,22 @@ class SettingsCommands(Package):
     @tracker_vanity.command(
         name="remove",
         aliases=["delete", "del", "d", "r"],
-        description="remove a vanity tracker channel",
+        description="Remove a vanity tracker channel (defaults to current channel)",
         example=",tracker vanity remove #vanities",
+        usage="[channel]",
     )
     @has_permissions(manage_guild=True)
-    async def tracker_vanity_remove(self, ctx, *, channel: Union[TextChannel, Thread]):
+    async def tracker_vanity_remove(
+        self, ctx, channel: Optional[Union[TextChannel, Thread]] = None
+    ):
         """remove vanity tracker"""
+        channel = channel or (
+            ctx.channel
+            if isinstance(ctx.channel, (TextChannel, Thread))
+            else None
+        )
+        if channel is None:
+            return await ctx.warn("Provide a **text channel** (or run this in one)")
         ids = await self.db.fetchval(
             """SELECT channel_ids FROM trackers WHERE tracker_type = $1 AND guild_id = $2""",
             "vanity", ctx.guild.id,

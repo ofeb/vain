@@ -1,3 +1,5 @@
+from typing import Optional
+
 from discord.ext.commands import group
 from discord import Embed, TextChannel
 from core.discord.package import Package
@@ -20,12 +22,18 @@ class ImgonlyCommands(Package):
     @imgonly.command(
         name="remove",
         aliases=["delete", "del"],
-        description="Remove a gallery channel",
+        description="Remove a gallery channel (defaults to current channel)",
         example=",imageonly remove #img",
+        usage="[channel]",
     )
     @has_permissions(manage_guild=True)
-    async def imgonly_remove(self, ctx, *, channel: TextChannel):
+    async def imgonly_remove(self, ctx, channel: Optional[TextChannel] = None):
         """un-gallery a channel"""
+        channel = channel or (
+            ctx.channel if isinstance(ctx.channel, TextChannel) else None
+        )
+        if channel is None:
+            return await ctx.warn("Provide a **text channel** (or run this in one)")
         await self.db.execute(
             """DELETE FROM image_only WHERE guild_id = $1 AND channel_id = $2""",
             ctx.guild.id, channel.id,
@@ -35,12 +43,18 @@ class ImgonlyCommands(Package):
     @imgonly.command(
         name="add",
         aliases=["create"],
-        description="Set a gallery channel",
+        description="Set a gallery channel (defaults to current channel)",
         example=",imageonly add #img",
+        usage="[channel]",
     )
     @has_permissions(manage_guild=True)
-    async def imgonly_add(self, ctx, *, channel: TextChannel):
+    async def imgonly_add(self, ctx, channel: Optional[TextChannel] = None):
         """make a gallery channel"""
+        channel = channel or (
+            ctx.channel if isinstance(ctx.channel, TextChannel) else None
+        )
+        if channel is None:
+            return await ctx.warn("Provide a **text channel** (or run this in one)")
         await self.db.execute(
             """INSERT INTO image_only (guild_id, channel_id) VALUES ($1, $2) ON CONFLICT(guild_id, channel_id) DO NOTHING""",
             ctx.guild.id, channel.id,

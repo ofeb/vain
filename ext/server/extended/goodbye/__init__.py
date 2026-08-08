@@ -62,7 +62,7 @@ class GoodbyeCommands(Package):
             )
         except UniqueViolationError:
             return await ctx.fail(
-                f"already a goodbye message in {channel.mention}, remove it first or use `{ctx.clean_prefix}goodbye edit`"
+                f"there's already a goodbye message in {channel.mention} — remove it first or use `{ctx.clean_prefix}goodbye edit`"
             )
         extra = f"\nmessages will delete after `{timer}` seconds" if timer else ""
         return await ctx.success(

@@ -857,10 +857,16 @@ class SuggestCommands(Package):
     @suggest.command(
         name="set",
         aliases=["channel"],
-        description="set the suggestions channel",
+        description="Set the suggestions channel (defaults to current channel)",
+        usage="[channel]",
     )
     @has_permissions(manage_channels=True)
-    async def suggest_set(self, ctx, channel: discord.TextChannel):
+    async def suggest_set(self, ctx, channel: discord.TextChannel = None):
+        channel = channel or (
+            ctx.channel if isinstance(ctx.channel, discord.TextChannel) else None
+        )
+        if channel is None:
+            return await ctx.warn("Provide a **text channel** (or run this in one)")
         await self._set_settings(ctx.guild.id, channel_id=channel.id)
         await ctx.success(f"suggestions channel set to {channel.mention}")
 
@@ -1054,10 +1060,16 @@ class SuggestCommands(Package):
 
     @suggest_review.command(
         name="channel",
-        description="set the suggestion review channel",
+        description="Set the suggestion review channel (defaults to current channel)",
+        usage="[channel]",
     )
     @has_permissions(manage_channels=True)
-    async def suggest_review_channel(self, ctx, channel: discord.TextChannel):
+    async def suggest_review_channel(self, ctx, channel: discord.TextChannel = None):
+        channel = channel or (
+            ctx.channel if isinstance(ctx.channel, discord.TextChannel) else None
+        )
+        if channel is None:
+            return await ctx.warn("Provide a **text channel** (or run this in one)")
         await self._set_settings(ctx.guild.id, review_channel_id=channel.id)
         await ctx.success(f"suggestion review channel set to {channel.mention}")
 
