@@ -760,7 +760,7 @@ class Server(
         self.boost_locks = defaultdict(Lock)
         self.sticky_locks = defaultdict(Lock)
         self.pinned_ids = {}
-        # Sticky message runtime state (used by StickymessageCommands mixin)
+        
         self._msg_counts: dict[int, int] = defaultdict(int)
         self._last_activity: dict = {}
         self._pending_repost: set[int] = set()
@@ -771,7 +771,7 @@ class Server(
         self._queue = _Queue()
 
     async def cog_load(self) -> None:
-        # Mixin cog_load methods are not chained by discord.py — start sticky here.
+        
         with contextlib.suppress(Exception):
             await StickymessageCommands._ensure_schema(self)  # type: ignore[misc]
         with contextlib.suppress(Exception):

@@ -419,7 +419,7 @@ class Role(Package):
     @group(
         name="role",
         aliases=("r",),
-        description="Add a role to a member (default). Subcommands for remove/mass/etc.",
+        description="Toggle a role on a member. Subcommands for add/remove/mass/etc.",
         invoke_without_command=True,
         example=",role @hroe developer",
     )
@@ -431,12 +431,12 @@ class Role(Package):
         *,
         role: Optional[RoleConvert] = None,
     ) -> None:
-        """Default acts like ``role add``. Usage: ``,r @user RoleName``."""
-        # Greedy may arrive as empty list when nothing matched
+        """Toggle a role. Usage: ``,r @user RoleName`` (add if missing, remove if present)."""
+        
         member_list = list(members or [])
         if not member_list or role is None:
-            # Forgiving parse: first token(s) members, rest role name
-            # covers ",r @user developer" and ",r user1 user2 Role Name"
+            
+            
             if ctx.message and ctx.message.content:
                 raw = ctx.message.content
                 try:
@@ -453,7 +453,7 @@ class Role(Package):
                     tokens = body.split()
                     if len(tokens) >= 2:
                         if not member_list:
-                            # Take leading convertible member tokens
+                            
                             converted: list[discord.Member] = []
                             idx = 0
                             while idx < len(tokens) - 1:
@@ -473,12 +473,12 @@ class Role(Package):
                                 except Exception:
                                     role = None
                         elif role is None:
-                            # Members parsed, role didn't — join remaining message after members
+                            
                             role_name = " ".join(tokens[1:]) if len(tokens) > 1 else ""
-                            # Prefer everything after the first token when greedy ate members
+                            
                             if not role_name and len(tokens) >= 2:
                                 role_name = " ".join(tokens[1:])
-                            # Fallback: strip member mentions from body
+                            
                             if not role_name:
                                 role_name = body
                             try:
@@ -491,11 +491,16 @@ class Role(Package):
                 return await ctx.send_help(ctx.command)
 
         target_role: discord.Role = role  # type: ignore[assignment]
-        # Default group behaviour matches ``role add`` (not toggle/remove).
+        
         for member in member_list:
-            await ctx.invoke(
-                self.role_add, member=member, role=target_role, reason=None
-            )
+            if target_role in member.roles:
+                await self.role_remove.callback(
+                    self, ctx, member=member, role=target_role, reason=None
+                )
+            else:
+                await self.role_add.callback(
+                    self, ctx, member=member, role=target_role, reason=None
+                )
 
     @role.command(
         name="add",

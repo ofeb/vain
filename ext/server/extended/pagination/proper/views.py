@@ -109,7 +109,7 @@ class StoredPaginationView(ui.View):
         self.index = min(max(current_page, 0), max(len(pages) - 1, 0))
         ids = _custom_ids(message_id)
         
-        # Order: previous · delete · next · search
+        
         self.add_item(
             _StoredButton(
                 action="prev",

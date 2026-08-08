@@ -531,4 +531,4 @@ class Roblox(Package):
         await ctx.send(embed=e)
 
 
-# Loaded from ext.social.setup — no separate setup() so auto-scan won't double-add.
+

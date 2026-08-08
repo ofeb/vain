@@ -21,11 +21,11 @@ from core.tools.moderation_args import (
 )
 from humanize import naturaldelta
 
-# Bare add → every message (limit 1). Interval only applies when limit > 1.
+
 _DEFAULT_MESSAGE_LIMIT = 1
-_DEFAULT_INTERVAL_SECONDS = 300  # 5 minutes when limit > 1 and no interval given
+_DEFAULT_INTERVAL_SECONDS = 300  
 _INTERVAL_DISABLED = 0
-# Space sticky reposts so a burst of chat doesn't flood the channel / hit rate limits.
+
 _REPOST_MIN_GAP_SECONDS = 1.35
 
 
@@ -51,7 +51,7 @@ class StickymessageCommands(Package):
         self.pinned_ids: dict[int, int] = {}
         self._msg_counts: dict[int, int] = defaultdict(int)
         self._last_activity: dict[int, datetime] = {}
-        # Per-channel queue: coalesce bursts into a single pending repost.
+        
         self._pending_repost: set[int] = set()
         self._queue: Queue[tuple[int, int, str, object | None]] = Queue()
         self._worker_task: asyncio.Task | None = None
@@ -105,7 +105,7 @@ class StickymessageCommands(Package):
 
     async def _repost(self, channel: TextChannel, code: str, *, user=None):
         async with self.sticky_locks[channel.id]:
-            # Rate-gap: never fire faster than _REPOST_MIN_GAP_SECONDS per channel.
+            
             loop = asyncio.get_running_loop()
             now_m = loop.time()
             last = self._last_repost_at.get(channel.id, 0.0)
@@ -130,7 +130,7 @@ class StickymessageCommands(Package):
                 try:
                     new_msg = await channel.send(content=(code or "")[:2000])
                 except (discord.Forbidden, discord.HTTPException) as exc:
-                    # Back off harder on rate limits.
+                    
                     if isinstance(exc, discord.HTTPException) and exc.status == 429:
                         retry = float(getattr(exc, "retry_after", 2.0) or 2.0)
                         await asyncio.sleep(min(max(retry, 1.0), 15.0))
@@ -168,7 +168,7 @@ class StickymessageCommands(Package):
             self._msg_counts = defaultdict(int)
         if not hasattr(self, "_last_activity") or self._last_activity is None:
             self._last_activity = {}
-        # Schema may not have run (mixin cog_load is not chained).
+        
         if not getattr(self, "_sticky_schema_ready", False):
             try:
                 loop = asyncio.get_running_loop()
@@ -211,7 +211,7 @@ class StickymessageCommands(Package):
                 channel = guild.get_channel(channel_id)
                 if channel is None or not isinstance(channel, TextChannel):
                     continue
-                # Confirm sticky still exists
+                
                 row = await self._get_row(guild_id, channel_id)
                 if not row:
                     continue
@@ -219,18 +219,18 @@ class StickymessageCommands(Package):
             except asyncio.CancelledError:
                 raise
             except Exception:
-                # Never kill the worker on a single channel failure.
+                
                 await asyncio.sleep(0.5)
             finally:
                 self._pending_repost.discard(channel_id)
                 self._queue.task_done()
-                # Global pacing between jobs across channels.
+                
                 await asyncio.sleep(0.35)
 
     async def _resolve_add(self, ctx, raw: str):
         tokens = raw.split() if raw else []
         channel: TextChannel = ctx.channel  # type: ignore[assignment]
-        # Defaults: every message, no interval.
+        
         message_limit = _DEFAULT_MESSAGE_LIMIT
         interval_seconds = _INTERVAL_DISABLED
         saw_limit = False
@@ -243,14 +243,14 @@ class StickymessageCommands(Package):
             except Exception:
                 pass
         body = tokens[i:]
-        # Optional trailing interval token (5m, 1h, …)
+        
         if body and is_duration_token(body[-1]):
             secs = parse_duration_seconds(body[-1])
             if secs is not None and secs >= 30:
                 interval_seconds = secs
                 saw_interval = True
                 body = body[:-1]
-        # Optional trailing message limit
+        
         if body and body[-1].isdigit():
             limit = int(body[-1])
             if 1 <= limit <= 100:
@@ -269,21 +269,21 @@ class StickymessageCommands(Package):
         if not isinstance(channel, TextChannel):
             raise CommandError("You can only set sticky messages in text channels")
 
-        # Rules:
-        # - limit 1 (every message) → interval disabled
-        # - limit > 1 and no interval given → default 5 minutes
-        # - interval given without limit → keep every-message? No: if only interval,
-        #   treat as idle interval with a high-ish message limit fallback of 5? User said
-        #   bare = every msg. If only interval provided, use limit default 5 + that interval.
+        
+        
+        
+        
+        
+        
         if message_limit <= 1:
             interval_seconds = _INTERVAL_DISABLED
         else:
             if not saw_interval:
                 interval_seconds = _DEFAULT_INTERVAL_SECONDS
-        # Interval-only style: user passed duration but no limit → 5m-style with default 5 msgs
+        
         if saw_interval and not saw_limit:
-            # They want interval behaviour; pair with a sensible message limit (5)
-            # unless they explicitly set 1.
+            
+            
             message_limit = 5
             if interval_seconds < 30:
                 interval_seconds = _DEFAULT_INTERVAL_SECONDS
@@ -465,7 +465,7 @@ class StickymessageCommands(Package):
         if not existing:
             raise CommandError(f"No sticky in {channel.mention}")
 
-        # limit 1 → clear interval; raising above 1 without interval → default 5m
+        
         interval = int(existing.get("interval_seconds") or 0)
         if limit <= 1:
             interval = _INTERVAL_DISABLED
@@ -662,7 +662,7 @@ class StickymessageCommands(Package):
                 channel.id,
             )
         if count >= limit:
-            # Queue + coalesce — never fire N concurrent deletes/sends on a chat burst.
+            
             self._enqueue_repost(
                 ctx.guild.id, channel.id, row["code"], user=ctx.author
             )

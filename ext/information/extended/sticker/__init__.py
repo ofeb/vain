@@ -126,7 +126,7 @@ class Sticker(Package):
             return await ctx.warn("Attach a sticker to rename")
 
         partial = ctx.message.stickers[0]
-        # Resolve to guild sticker when possible
+        
         sticker = discord.utils.get(ctx.guild.stickers, id=partial.id)
         if sticker is None:
             sticker = discord.utils.get(ctx.guild.stickers, name=partial.name)
@@ -207,7 +207,7 @@ class Sticker(Package):
         if not data or len(data) > 512 * 1024:
             return await ctx.fail("Sticker image missing or larger than **512KB**")
 
-        # Guess extension for Discord File
+        
         lower = source_url.lower()
         if ".gif" in lower:
             filename = f"{clean}.gif"

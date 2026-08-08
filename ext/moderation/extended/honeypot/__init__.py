@@ -444,7 +444,7 @@ class Honeypot(Package):
                     f"use `{ctx.clean_prefix}honeypot disable` to turn it off"
                 )
 
-        # Re-arm an existing trap channel after a soft disable.
+        
         if row and row.get("channel_id") and not row.get("enabled"):
             existing = ctx.guild.get_channel(int(row["channel_id"]))
             if isinstance(existing, discord.TextChannel):

@@ -31,7 +31,7 @@ def join(
     )
 
 
-# legacy alias used across server filter commands
+
 human_join = join
 
 

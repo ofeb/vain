@@ -185,7 +185,7 @@ class _BuilderModal(discord.ui.Modal):
             self.add_item(item)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        # Prefer tracked TextInput refs — children order can differ across dpy builds.
+        
         pairs = list(zip(self.keys, self._inputs)) if self._inputs else []
         if len(pairs) != len(self.keys):
             pairs = []
@@ -301,8 +301,8 @@ class _BaseBuilder:
         self.fields: list[dict[str, str]] = []
         self.buttons: list[dict[str, str]] = []
         self.images: list[str] = []
-        # Ordered container pieces so dividers can sit between title/description/etc.
-        # Each entry: {"type": "title"|"description"|"author"|"footer"|"field"|"divider"|"images"|"thumbnail", ...}
+        
+        
         self.blocks: list[dict[str, Any]] = []
         self.message: discord.Message | None = None
         self.preview_message: discord.Message | None = None
@@ -370,6 +370,15 @@ class _BaseBuilder:
                 self._upsert_singleton_block("thumbnail", {"value": val})
             else:
                 self._remove_singleton_block("thumbnail")
+        elif key == "content":
+            
+            
+            
+            val = (self.data.get("content") or "").strip()
+            if val:
+                self._upsert_singleton_block("content", {"value": val})
+            else:
+                self._remove_singleton_block("content")
         elif key == "images":
             if self.images:
                 self._upsert_singleton_block(
@@ -390,7 +399,7 @@ class _BaseBuilder:
         if not after or after in {"end", "bottom", "last", "buttons"}:
             self.blocks.append(block)
             return
-        # Map aliases
+        
         target = after
         if target in {"desc", "description"}:
             target = "description"
@@ -400,7 +409,7 @@ class _BaseBuilder:
             target = "field"
         elif target in {"thumb", "thumbnail"}:
             target = "thumbnail"
-        # Insert after the last matching block of that type
+        
         idx = None
         for i, b in enumerate(self.blocks):
             if b.get("type") == target:
@@ -595,8 +604,8 @@ class _BaseBuilder:
     def _embed_preview_view(self) -> discord.ui.View:
         """Controls + clickable preview buttons for the embed builder message."""
         view = _BuilderControls(self, field_options=self._field_options())
-        # Classic views support rows 0–4; select is 0, approve/cancel are 1.
-        # Put preview buttons on rows 2–4 (up to 15).
+        
+        
         max_preview = min(len(self.buttons), 15)
         for i, btn in enumerate(self.buttons[:max_preview]):
             try:
@@ -619,7 +628,12 @@ class _BaseBuilder:
     def _to_script(self) -> str:
         mode = "{embed}" if self.kind == "embed" else "{container}"
         parts = [mode]
-        if self.data.get("content"):
+        
+        
+        emit_top_content = True
+        if self.kind == "container" and self.blocks:
+            emit_top_content = not any(b.get("type") == "content" for b in self.blocks)
+        if emit_top_content and self.data.get("content"):
             parts.append(f"$v{{content: {self.data['content']}}}")
 
         color_raw = (self.data.get("color") or "").strip().lstrip("#")
@@ -629,10 +643,16 @@ class _BaseBuilder:
             parts.append(f"$v{{url: {self.data['url']}}}")
 
         if self.kind == "container" and self.blocks:
-            # Emit in user-chosen order so dividers stay between pieces.
+            
             for block in self.blocks:
                 typ = block.get("type")
-                if typ == "title":
+                if typ == "content":
+                    val = (
+                        block.get("value") or self.data.get("content") or ""
+                    ).strip()
+                    if val:
+                        parts.append(f"$v{{content: {val}}}")
+                elif typ == "title":
                     val = (block.get("value") or self.data.get("title") or "").strip()
                     if val:
                         parts.append(f"$v{{title: {val}}}")
@@ -676,7 +696,7 @@ class _BaseBuilder:
                 elif typ == "images":
                     urls = list(block.get("urls") or self.images or [])[:_MAX_IMAGES]
                     urls = [u for u in urls if u]
-                    # Two gallery tags (1–5 and 6–10) so they stay separate groups
+                    
                     if urls[:5]:
                         parts.append(f"$v{{image: {' && '.join(urls[:5])}}}")
                     if urls[5:10]:
@@ -691,7 +711,7 @@ class _BaseBuilder:
                         f"$v{{separator: divider: true && spacing: {spacing}}}"
                     )
         else:
-            # Embed path (and container fallback with empty blocks).
+            
             if self.data.get("title"):
                 parts.append(f"$v{{title: {self.data['title']}}}")
             if self.data.get("description"):
@@ -735,7 +755,7 @@ class _BaseBuilder:
                     parts.append(f"$v{{field: name: {name} && value: {value}}}")
 
         if self.kind == "embed":
-            # Fields already emitted above for embed.
+            
             pass
 
         for btn in self.buttons[:_MAX_BUILDER_BUTTONS]:
@@ -863,14 +883,18 @@ class _BaseBuilder:
 
         _ = self._accent()
 
-        # Prefer ordered blocks so dividers sit between title/description/etc.
-        # Use blocks path whenever any block exists; empty list falls back to data.
+        
+        
         blocks = list(self.blocks) if self.blocks else None
         if not blocks:
             blocks = None
         if blocks is None:
-            # Legacy fallback when blocks empty
+            
             lines: list[str] = []
+            
+            
+            if self.data.get("content"):
+                lines.append(self.data["content"])
             if self.data.get("author"):
                 lines.append(f"**{self.data['author']}**")
             if self.data.get("title"):
@@ -961,6 +985,10 @@ class _BaseBuilder:
                     _flush_text()
                     urls = list(block.get("urls") or self.images or [])
                     self._add_gallery(container, urls)
+                elif typ == "content":
+                    val = (block.get("value") or "").strip()
+                    if val:
+                        pending_lines.append(val)
                 elif typ == "title":
                     val = (block.get("value") or "").strip()
                     if val:
@@ -996,7 +1024,7 @@ class _BaseBuilder:
                         pending_thumb = val
 
             _flush_text()
-            # If nothing was rendered, show placeholder
+            
             if not getattr(container, "children", None):
                 try:
                     container.add_item(ui.TextDisplay("​"))
@@ -1043,7 +1071,7 @@ class _BaseBuilder:
             try:
                 await self.message.edit(content=content, embed=embed, view=view)
             except Exception:
-                # Message may have been converted / lost components — resend.
+                
                 if channel is not None:
                     try:
                         with contextlib.suppress(Exception):
@@ -1055,7 +1083,10 @@ class _BaseBuilder:
                         pass
             return
 
-        # Container: controls message + separate live preview LayoutView
+        
+        
+        
+        
         try:
             await self.message.edit(content=None, embed=None, view=self._controls())
         except Exception:
@@ -1070,7 +1101,7 @@ class _BaseBuilder:
         preview = self._preview_container()
         if self.preview_message is not None:
             try:
-                await self.preview_message.edit(content=content, view=preview)
+                await self.preview_message.edit(content=None, embed=None, view=preview)
                 return
             except Exception:
                 with contextlib.suppress(Exception):
@@ -1079,9 +1110,7 @@ class _BaseBuilder:
 
         if channel is not None:
             try:
-                self.preview_message = await channel.send(
-                    content=content, view=preview
-                )
+                self.preview_message = await channel.send(view=preview)
             except Exception:
                 self.preview_message = None
 
@@ -1101,9 +1130,9 @@ class _BaseBuilder:
         await modal.wait()
         if not getattr(modal, "_submitted", False):
             return None
-        # Always copy — never return the live dict (callers may mutate).
+        
         out = {str(k): str(v or "") for k, v in dict(modal.values).items()}
-        # Guarantee every requested key exists even if a TextInput failed to bind.
+        
         for entry in fields[:5]:
             out.setdefault(str(entry[0]), "")
         return out
@@ -1226,7 +1255,7 @@ class _BaseBuilder:
                     (values.get("img9") or "").strip(),
                     (values.get("img10") or "").strip(),
                 ]
-                # Keep empty head slots only if tail has content beyond them
+                
                 merged = list(head) + tail
                 self.images = [u for u in merged if u][:_MAX_IMAGES]
             else:
@@ -1492,7 +1521,7 @@ class _BaseBuilder:
             self.data[key] = self.data[key].lstrip("#")
         if key in {"title", "description", "thumbnail", "content", "image"}:
             if key == "image" and self.data[key]:
-                # Keep gallery list in sync when setting single image URL.
+                
                 if not self.images:
                     self.images = [self.data[key]]
                 else:

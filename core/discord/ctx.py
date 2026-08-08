@@ -389,7 +389,7 @@ class Context(commands.Context):
         if return_embed:
             return embed
         kwargs.setdefault("mention_author", False)
-        # Status replies (success/warn/deny) keep classic embed colours.
+        
         if raw_embed:
             kwargs["raw_embed"] = True
 
@@ -565,15 +565,16 @@ class Context(commands.Context):
         if components is not None:
             layout = layout_from_components(components)
             send_kw = dict(base_kw)
-            
+
             send_kw.pop("suppress_embeds", None)
             if len(file_list) == 1:
                 send_kw["file"] = file_list[0]
             elif file_list:
                 send_kw["files"] = file_list
+            
             return await super().send(view=layout, **send_kw)
 
-        
+
         if isinstance(view, discord.ui.LayoutView):
             send_kw = dict(base_kw)
             send_kw.pop("suppress_embeds", None)
@@ -581,6 +582,7 @@ class Context(commands.Context):
                 send_kw["file"] = file_list[0]
             elif file_list:
                 send_kw["files"] = file_list
+            
             
             return await super().send(view=view, **send_kw)
 

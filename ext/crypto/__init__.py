@@ -26,7 +26,7 @@ COIN_ALIASES = {
     "bitcoin": "bitcoin",
     "eth": "ethereum",
     "ethereum": "ethereum",
-    "etherium": "ethereum",  # common misspelling
+    "etherium": "ethereum",  
     "ether": "ethereum",
     "sol": "solana",
     "solana": "solana",
@@ -74,11 +74,11 @@ COIN_LABELS = {
     "binancecoin": ("BNB", "BNB", None),
 }
 
-# Feed watcher thresholds
+
 _FEED_POLL_SECONDS = 120.0
-_MIN_POST_GAP_SECONDS = 300.0  # don't spam a channel more than once / 5m per coin
-_PRICE_MOVE_PCT = 0.75  # post when |Δ change| moves or price shifts this %
-_CHANGE_DELTA = 0.35  # absolute 24h-change percentage point move
+_MIN_POST_GAP_SECONDS = 300.0  
+_PRICE_MOVE_PCT = 0.75  
+_CHANGE_DELTA = 0.35  
 
 
 def _now_naive() -> datetime:
@@ -95,7 +95,7 @@ def resolve_coin(raw: str) -> tuple[str, str, str, str | None] | None:
     if label:
         symbol, name, thumb = label
         return coin_id, symbol, name, thumb
-    # Unknown free-form coingecko id
+    
     symbol = key.upper()[:8]
     return coin_id, symbol, key.replace("-", " ").title(), None
 
@@ -177,7 +177,7 @@ class Crypto(commands.Cog):
     async def _fetch_prices(self, coin_ids: list[str]) -> dict[str, dict]:
         if not coin_ids:
             return {}
-        # CoinGecko allows comma-separated ids
+        
         url = f"{COINGECKO_BASE}/simple/price"
         params = {
             "ids": ",".join(sorted(set(coin_ids))),
@@ -255,11 +255,11 @@ class Crypto(commands.Cog):
         last_change = row.get("last_change")
         last_posted = row.get("last_posted")
 
-        # Always post the first observation
+        
         if last_price is None:
             return True
 
-        # Gap throttle
+        
         if last_posted is not None:
             lp = last_posted
             if getattr(lp, "tzinfo", None) is not None:
@@ -285,7 +285,7 @@ class Crypto(commands.Cog):
             except Exception:
                 pass
 
-        # Market cap large relative move (~1%+)
+        
         last_cap = row.get("last_market_cap")
         if last_cap and cap:
             try:
@@ -296,7 +296,7 @@ class Crypto(commands.Cog):
                 pass
         return False
 
-    # ── commands ──────────────────────────────────────────────────────────
+    
 
     async def _parse_channel_coin(
         self, ctx: Context, args: str
@@ -320,7 +320,7 @@ class Crypto(commands.Cog):
         if not resolved:
             raise commands.CommandError(f"Unknown coin `{coin_raw}`")
         coin_id, symbol, name, thumb = resolved
-        # Validate coin exists on CoinGecko
+        
         data = await self._fetch_price(coin_id)
         if data is None:
             raise commands.CommandError(
@@ -392,7 +392,7 @@ class Crypto(commands.Cog):
             coin_id,
             label,
         )
-        # Seed last_* so the next real move triggers a post (optional first snapshot)
+        
         data = await self._fetch_price(coin_id)
         if data:
             await self.bot.db.execute(
@@ -444,7 +444,7 @@ class Crypto(commands.Cog):
                 pass
         coin_raw = " ".join(tokens[i:]).strip() if tokens[i:] else ""
         if not coin_raw:
-            # Remove all feeds in channel
+            
             result = await self.bot.db.execute(
                 "DELETE FROM crypto_feeds WHERE guild_id = $1 AND channel_id = $2",
                 ctx.guild.id,
@@ -520,7 +520,7 @@ class Crypto(commands.Cog):
     )
     @has_permissions(manage_guild=True)
     async def crypto_unsubscribe(self, ctx: Context, *, args: str = "") -> None:
-        # Command objects aren't bound methods — call the underlying callback.
+        
         await self.crypto_feeds_remove.callback(self, ctx, args=args)
 
     @hybrid(
@@ -609,7 +609,7 @@ class Crypto(commands.Cog):
         source = "Ethereum"
 
         session = await self._http()
-        # 1) ethgasstation.info (no key)
+        
         try:
             async with session.get(
                 "https://ethgasstation.info/api/ethgasAPI.json",
@@ -634,7 +634,7 @@ class Crypto(commands.Cog):
         except Exception:
             pass
 
-        # 2) beaconcha.in
+        
         if result is None:
             try:
                 async with session.get(
@@ -676,7 +676,7 @@ class Crypto(commands.Cog):
             except Exception:
                 pass
 
-        # 3) etherchain
+        
         if result is None:
             try:
                 async with session.get(
@@ -705,7 +705,7 @@ class Crypto(commands.Cog):
             except Exception:
                 pass
 
-        # 4) etherscan with real key only
+        
         if result is None:
             try:
                 from config import api as api_cfg
@@ -798,7 +798,7 @@ class Crypto(commands.Cog):
         embed.set_footer(text="You'll be notified when the transaction is confirmed")
         await ctx.send(embed=embed)
 
-    # ── feed watcher ──────────────────────────────────────────────────────
+    
 
     @tasks.loop(seconds=_FEED_POLL_SECONDS)
     async def _feed_loop(self) -> None:
@@ -833,8 +833,8 @@ class Crypto(commands.Cog):
             for row in feed_rows:
                 try:
                     if not self._should_post_update(row, data):
-                        # Still refresh last_* quietly so baselines stay current
-                        # only update price baseline without posting when gap-throttled
+                        
+                        
                         last_posted = row.get("last_posted")
                         if last_posted is not None and row.get("last_price") is not None:
                             continue
@@ -907,7 +907,7 @@ class Crypto(commands.Cog):
                         row["channel_id"],
                         coin_id,
                     )
-                    # Pace channel posts
+                    
                     await asyncio.sleep(0.6)
                 except Exception as exc:
                     log.debug("crypto feed post failed: %s", exc)

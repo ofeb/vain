@@ -418,7 +418,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
     def _cfg_is_enabled(self, cfg: dict | None) -> bool:
         if not cfg:
             return False
-        # Missing column on old rows treats as enabled when the row exists.
+        
         if "enabled" not in cfg:
             return True
         return bool(cfg.get("enabled"))

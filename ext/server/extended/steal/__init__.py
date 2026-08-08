@@ -193,7 +193,7 @@ class StealPaginateView(PaginateView):
             return
         total = len(self.items)
         self.pages[index] = self._build_embed(self.items[index], index + 1, total)
-        # Keep page footers in sync after a rename (totals unchanged).
+        
         for i in range(len(self.items)):
             if i == index:
                 continue
@@ -237,7 +237,7 @@ class StealPaginateView(PaginateView):
                     custom_id=f"vain:steal:steal:{self.kind}:{id(self)}",
                 )
             )
-            # Single-page scans still need a way to dismiss bot + invoke messages.
+            
             if not needs_pagination(self.pages):
                 from core.discord.views.paginate import _safe_emoji, _PAGER_DELETE
 

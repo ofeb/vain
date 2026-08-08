@@ -6,8 +6,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from discord.ext import commands
-
 from core.discord.package import Package
 
 if TYPE_CHECKING:
@@ -16,22 +14,10 @@ if TYPE_CHECKING:
 
 class GatewayEvents(Package):
     """global pre-processing event handlers.
-    intercepts all messages before command processing.
-    checks blacklist and disabled modules"""
 
-
-    @Package.listener()
-    async def on_message(self, message):
-        if message.author.bot:
-            return
-        if not message.guild:
-            return
-        if await self.bot.db.fetchrow(
-            "SELECT 1 FROM blacklist WHERE user_id = $1 AND (expires_at IS NULL OR expires_at > NOW())",
-            message.author.id,
-        ):
-            return
-        await self.bot.process_commands(message)
+    Message command dispatch lives solely on ``Vain.on_message``. This cog used
+    to call ``process_commands`` as well, which double-invoked every command.
+    """
 
 
 async def setup(bot: Vain):

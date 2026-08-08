@@ -99,7 +99,7 @@ class LastFMPagedView(discord.ui.View):
                 await self.message.edit(view=None)
 
     
-    # Order: previous · delete · next · search
+    
     @discord.ui.button(
         label="",
         style=discord.ButtonStyle.secondary,

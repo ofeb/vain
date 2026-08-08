@@ -263,7 +263,7 @@ class LevelingEvents:
                 )
                 if not cfg:
                     return
-                # Soft-disabled rows keep config/XP but grant no XP.
+                
                 if "enabled" in cfg and not bool(cfg.get("enabled")):
                     return
 

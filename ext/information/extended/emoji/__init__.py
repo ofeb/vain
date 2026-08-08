@@ -194,7 +194,7 @@ class Emoji(Package):
             emoji_data = None
 
         if not emoji_data:
-            # Fall back to listing server emotes when usage table is empty/missing.
+            
             emojis = list(ctx.guild.emojis)
             if not emojis:
                 return await ctx.warn("No emoji usage data or server emotes available")
@@ -231,7 +231,7 @@ class Emoji(Package):
         token = (emoji or "").strip()
         pe = _parse_partial_emoji(token.split()[0]) if token else None
 
-        # Optional message link: https://discord.com/channels/g/c/m
+        
         if pe is None and token and "channels/" in token:
             try:
                 parts = token.rstrip("/").split("channels/")[-1].split("/")

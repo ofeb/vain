@@ -577,13 +577,14 @@ async def _send_button_message(interaction: discord.Interaction, script: str) ->
     """Reply ephemerally with plain text, embed, or container from a button script."""
     import contextlib
 
+    from discord import ui as d_ui
+
     raw = _unwrap_message_script(script)
     if not raw:
         if not interaction.response.is_done():
             await interaction.response.defer(ephemeral=True)
         return
 
-    
     if is_container_script(raw) or is_embed_script(raw) or raw.startswith(("{", "$v")):
         try:
             payload = await parse(maybe_wrap_embed_script(raw), sendable=True)
@@ -595,14 +596,16 @@ async def _send_button_message(interaction: discord.Interaction, script: str) ->
                 )
             return
         kwargs: dict[str, Any] = {}
-        if payload.get("content") is not None:
-            kwargs["content"] = payload["content"]
+        view = payload.get("view")
         if payload.get("embed") is not None:
             kwargs["embed"] = payload["embed"]
         if payload.get("embeds"):
             kwargs["embeds"] = payload["embeds"]
-        if payload.get("view") is not None:
-            kwargs["view"] = payload["view"]
+        if view is not None:
+            kwargs["view"] = view
+        
+        if payload.get("content") is not None and not isinstance(view, d_ui.LayoutView):
+            kwargs["content"] = payload["content"]
         if not kwargs:
             kwargs["content"] = raw[:2000]
         if not interaction.response.is_done():
@@ -945,7 +948,13 @@ async def parse_container(raw: str, sendable: bool = False) -> dict:
         payload = (part.payload or "").strip() if part.payload is not None else ""
 
         if key in {"content", "message"}:
-            content = payload
+            
+            
+            if payload:
+                try:
+                    container.add_item(ui.TextDisplay(payload))
+                except Exception:
+                    content = payload
             continue
         if key == "autodelete":
             try:
@@ -1160,7 +1169,7 @@ async def parse_container(raw: str, sendable: bool = False) -> dict:
     final: dict[str, Any] = {"view": layout}
     
     
-    if content is not None:
+    if content is not None and not getattr(container, "children", None):
         final["content"] = content
     if delete_after is not None:
         final["delete_after"] = delete_after
