@@ -8,7 +8,7 @@ from discord import ui
 
 from core.discord.views.embed import body
 
-_PAGE_SIZE = 5
+_PAGE_SIZE = 10
 
 
 def _ts(dt) -> str:
