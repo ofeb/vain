@@ -14,6 +14,7 @@ from core.managers.permissions import has_permissions
 from config import color, emojis
 
 from core.discord.views.embed import panel_embed
+from core.tools.human.text import codeblock
 
 if TYPE_CHECKING:
     from core.vain import Vain
@@ -55,7 +56,7 @@ class Embedcode(Package):
                 embed=panel_embed(
                     title=title,
                     color=color.base,
-                    lines=[f"```{code}```"],
+                    lines=[codeblock(code)],
                     timestamp=False,
                 )
             )
@@ -96,7 +97,7 @@ class Embedcode(Package):
                 embed=panel_embed(
                     title=title,
                     color=color.base,
-                    lines=[f"```{code}```"],
+                    lines=[codeblock(code)],
                     timestamp=False,
                 )
             )
