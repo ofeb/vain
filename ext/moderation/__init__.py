@@ -2121,6 +2121,17 @@ class ModerationCommands(Package):
     @has_permissions(administrator=True)
     async def unsetup(self, ctx):
         """remove moderation setup"""
+        from core.discord.views.confirm import ConfirmView
+
+        view = ConfirmView(ctx)
+        ok = await view.prompt(
+            "Remove the **moderation system** setup? "
+            "This **deletes** the `logs` and `jail` categories and their channels "
+            "and clears the modlog configuration. **This cannot be undone.**"
+        )
+        if not ok:
+            return await ctx.warn("Moderation unsetup **cancelled**")
+
         async with ctx.typing():
             removed = []
 
@@ -2167,6 +2178,93 @@ class ModerationCommands(Package):
         )
         embed.title = "Jail Setup Complete"
         await ctx.send(embed=embed)
+
+    @command(
+        name="unsetupjail",
+        aliases=["resetjail"],
+        description="Remove the jail system setup (channel, role and permissions)",
+    )
+    @has_permissions(manage_guild=True, manage_channels=True, manage_roles=True)
+    async def unsetupjail(self, ctx):
+        """remove jail system setup"""
+        from core.discord.views.confirm import ConfirmView
+
+        view = ConfirmView(ctx)
+        ok = await view.prompt(
+            "Remove the **jail system**? "
+            "This **deletes** the jail channel/category and the `Jailed` role. "
+            "**This cannot be undone.**"
+        )
+        if not ok:
+            return await ctx.warn("Jail unsetup **cancelled**")
+
+        async with ctx.typing():
+            removed = []
+
+            row = await self.db.fetchrow(
+                "SELECT jail_channel_id, jail_role_id FROM server_settings WHERE guild_id = $1",
+                ctx.guild.id,
+            )
+            configured_channel_id = (
+                int(row["jail_channel_id"]) if row and row["jail_channel_id"] else None
+            )
+            configured_role_id = (
+                int(row["jail_role_id"]) if row and row["jail_role_id"] else None
+            )
+
+            jail_cat = discord.utils.get(ctx.guild.categories, name="jail")
+            if jail_cat:
+                for ch in list(jail_cat.channels):
+                    try:
+                        await ch.delete(reason="Jail unsetup")
+                        removed.append(f"#{ch.name}")
+                    except discord.HTTPException:
+                        pass
+                try:
+                    await jail_cat.delete(reason="Jail unsetup")
+                    removed.append("Category: jail")
+                except discord.HTTPException:
+                    pass
+            else:
+                channel = (
+                    ctx.guild.get_channel(configured_channel_id)
+                    if configured_channel_id
+                    else None
+                )
+                if channel:
+                    try:
+                        await channel.delete(reason="Jail unsetup")
+                        removed.append(f"#{channel.name}")
+                    except discord.HTTPException:
+                        pass
+
+            role = (
+                ctx.guild.get_role(configured_role_id)
+                if configured_role_id
+                else None
+            )
+            if role is None:
+                role = discord.utils.get(ctx.guild.roles, name="Jailed")
+            if role:
+                try:
+                    await role.delete(reason="Jail unsetup")
+                    removed.append(f"@{role.name}")
+                except discord.HTTPException:
+                    pass
+
+            await self.db.set_server_settings(
+                ctx.guild.id,
+                jail_channel_id=None,
+                jail_role_id=None,
+            )
+
+        if removed:
+            await ctx.success(
+                f"Removed: {', '.join(removed)}\n"
+                f"Use `{ctx.clean_prefix}setupjail` to recreate them."
+            )
+        else:
+            await ctx.warn("No jail setup found to remove.")
 
     @command(
         name="setupmute",
@@ -2223,6 +2321,71 @@ class ModerationCommands(Package):
             timestamp=False,
         )
         await ctx.send(embed=embed)
+
+    @command(
+        name="unsetupmute",
+        aliases=["resetmute"],
+        description="Remove the mute system setup (muted roles and permissions)",
+    )
+    @has_permissions(manage_guild=True, manage_roles=True)
+    async def unsetupmute(self, ctx):
+        """remove mute system setup"""
+        from core.discord.views.confirm import ConfirmView
+
+        view = ConfirmView(ctx)
+        ok = await view.prompt(
+            "Remove the **mute system**? "
+            "This **deletes** the `Muted`, `Image Muted` and `Reaction Muted` roles "
+            "and clears the mute configuration. **This cannot be undone.**"
+        )
+        if not ok:
+            return await ctx.warn("Mute unsetup **cancelled**")
+
+        async with ctx.typing():
+            removed = []
+
+            row = await self.db.fetchrow(
+                "SELECT muted_role_id, imuted_role_id, rmuted_role_id FROM server_settings WHERE guild_id = $1",
+                ctx.guild.id,
+            )
+            configured = {}
+            for key in ("muted_role_id", "imuted_role_id", "rmuted_role_id"):
+                if row and row[key]:
+                    configured[key] = int(row[key])
+
+            for key, name in (
+                ("muted_role_id", "Muted"),
+                ("imuted_role_id", "Image Muted"),
+                ("rmuted_role_id", "Reaction Muted"),
+            ):
+                role = (
+                    ctx.guild.get_role(configured[key])
+                    if key in configured
+                    else None
+                )
+                if role is None:
+                    role = discord.utils.get(ctx.guild.roles, name=name)
+                if role:
+                    try:
+                        await role.delete(reason="Mute unsetup")
+                        removed.append(f"@{role.name}")
+                    except discord.HTTPException:
+                        pass
+
+            await self.db.set_server_settings(
+                ctx.guild.id,
+                muted_role_id=None,
+                imuted_role_id=None,
+                rmuted_role_id=None,
+            )
+
+        if removed:
+            await ctx.success(
+                f"Removed: {', '.join(removed)}\n"
+                f"Use `{ctx.clean_prefix}setupmute` to recreate them."
+            )
+        else:
+            await ctx.warn("No mute setup found to remove.")
 
     @command(
         name="rename",
