@@ -16,7 +16,7 @@ from core.discord.hybrid import describe, hybrid
 from config import color, music as nl, music_enabled
 
 from .events import MusicEvents
-from .panel import (
+from .proper.panel import (
     MusicControlView,
     fetch_image_bytes,
     render_now_playing_card,

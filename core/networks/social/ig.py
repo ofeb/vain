@@ -67,7 +67,7 @@ class Instagram:
 
         
         try:
-            from ext.social.api import fetch_instagram_social_post, instagram_user, parse_instagram_user
+            from ext.social.proper.api import fetch_instagram_social_post, instagram_user, parse_instagram_user
 
             post = await fetch_instagram_social_post(clean)
             if post is not None:
@@ -139,7 +139,7 @@ class Instagram:
             return None
 
         try:
-            from ext.social.api import instagram_user, parse_instagram_user
+            from ext.social.proper.api import instagram_user, parse_instagram_user
 
             raw = await instagram_user(username)
             parsed = parse_instagram_user(raw or {}, username=username)

@@ -28,11 +28,11 @@ from .events import LastfmEvents
 from config import emojis, api as api_values, lastfm_color as lastfm_color_config, lastfm_callback
 from core.tools.guild_members import collect_guild_members
 from core.tools import embed as embed_builder
-from .api import LastFMApiClient
-from .constants import LASTFM_EMBED_FOOTER_ICON_URL
-from .crowns import LastFMCrownStore
-from .library import LastFMLibraryStore
-from .ui import build_link_view, send_pages as _send_pages
+from .proper.api import LastFMApiClient
+from .proper.constants import LASTFM_EMBED_FOOTER_ICON_URL
+from .proper.crowns import LastFMCrownStore
+from .proper.library import LastFMLibraryStore
+from .proper.ui import build_link_view, send_pages as _send_pages
 
 LASTFM_AUTH = "https://www.last.fm/api/auth/"
 

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Optional
 import discord
 from core.discord.package import Package, tasks
 
-from .constants import BUMP_COOLDOWN, DISBOARD_ID
+from .proper.constants import BUMP_COOLDOWN, DISBOARD_ID
 from .events import BumpReminderEvents
 
 from core.discord.ctx import Context

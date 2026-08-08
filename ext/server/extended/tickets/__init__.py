@@ -31,11 +31,11 @@ from config import color, emojis
 from core.discord.package import Package
 from core.managers.permissions import has_permissions
 
-from .checks import in_ticket, staff
-from .interface import Interface
+from .proper.checks import in_ticket, staff
+from .proper.interface import Interface
 from .settings import Settings, TicketButton, TicketDropdownOption
-from .transcript import Transcript
-from .views import (
+from .proper.transcript import Transcript
+from .proper.views import (
     OpeningButtonAddModal,
     OpeningButtonEmojiView,
     TicketControlView,

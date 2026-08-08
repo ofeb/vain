@@ -23,7 +23,7 @@ from config import color
 
 from core.discord.views.embed import body, c2
 
-from .ui import (
+from .proper.ui import (
     SocialRepostView,
     build_profile_container,
     build_social_repost_container,
@@ -98,7 +98,7 @@ class Socials(Package):
     def __init__(self, bot: Vain):
         super().__init__(bot)
         self._filters = {}
-        from .feeds import FeedStore, FeedWatcher
+        from .proper.feeds import FeedStore, FeedWatcher
 
         self.feeds = FeedStore(bot)
         self.watcher = FeedWatcher(bot)
@@ -126,7 +126,7 @@ class Socials(Package):
         handle: str,
         channel: discord.TextChannel | discord.Thread | None = None,
     ) -> None:
-        from .feeds import PLATFORMS, normalize_handle, valid_handle
+        from .proper.feeds import PLATFORMS, normalize_handle, valid_handle
 
         if ctx.guild is None:
             await ctx.warn("Feeds can only be configured in a server.")
@@ -161,7 +161,7 @@ class Socials(Package):
         )
 
     async def _feed_remove(self, ctx: Context, platform: str, handle: str) -> None:
-        from .feeds import PLATFORMS, normalize_handle
+        from .proper.feeds import PLATFORMS, normalize_handle
 
         if ctx.guild is None:
             await ctx.warn("Feeds can only be configured in a server.")
@@ -175,7 +175,7 @@ class Socials(Package):
             await ctx.warn(f"No {label} feed for **@{uname}**.")
 
     async def _feed_list(self, ctx: Context, platform: str | None = None) -> None:
-        from .feeds import PLATFORMS, format_feed_list
+        from .proper.feeds import PLATFORMS, format_feed_list
 
         if ctx.guild is None:
             await ctx.warn("Feeds can only be listed in a server.")
@@ -212,7 +212,7 @@ class Socials(Package):
         source: discord.TextChannel | discord.Thread,
         dest: discord.TextChannel | discord.Thread,
     ) -> None:
-        from .feeds import PLATFORMS
+        from .proper.feeds import PLATFORMS
 
         if ctx.guild is None:
             await ctx.warn("Feeds can only be migrated in a server.")
@@ -238,7 +238,7 @@ class Socials(Package):
         template: str,
         handle: str | None = None,
     ) -> None:
-        from .feeds import PLATFORMS, normalize_handle
+        from .proper.feeds import PLATFORMS, normalize_handle
 
         if ctx.guild is None:
             await ctx.warn("Feeds can only be configured in a server.")
@@ -429,7 +429,7 @@ class Socials(Package):
         plat = platform.lower().strip()
         if plat == "x":
             plat = "twitter"
-        from .feeds import PLATFORMS
+        from .proper.feeds import PLATFORMS
 
         if plat not in PLATFORMS:
             await ctx.warn("Platforms: " + ", ".join(sorted(PLATFORMS)))
@@ -443,7 +443,7 @@ class Socials(Package):
         plat = platform.lower().strip()
         if plat == "x":
             plat = "twitter"
-        from .feeds import PLATFORMS
+        from .proper.feeds import PLATFORMS
 
         if plat not in PLATFORMS:
             await ctx.warn("Platforms: " + ", ".join(sorted(PLATFORMS)))
@@ -474,7 +474,7 @@ class Socials(Package):
     @instagram.command(name="user", description="Look up an Instagram profile", aliases=["profile", "p"])
     @describe(username="Instagram username")
     async def instagram_user(self, ctx: Context, *, username: str) -> None:
-        from .api import instagram_user as api_user, parse_instagram_user
+        from .proper.api import instagram_user as api_user, parse_instagram_user
 
         uname = username.strip().lstrip("@")
         async with ctx.typing():
@@ -531,7 +531,7 @@ class Socials(Package):
     @instagram.command(name="stories", description="List active Instagram stories", aliases=["story"])
     @describe(username="Instagram username")
     async def instagram_stories(self, ctx: Context, *, username: str) -> None:
-        from .api import instagram_user_stories
+        from .proper.api import instagram_user_stories
 
         uname = username.strip().lstrip("@")
         async with ctx.typing():
@@ -546,7 +546,7 @@ class Socials(Package):
     @instagram.command(name="highlights", description="List Instagram highlight reels", aliases=["highlight", "hl"])
     @describe(username="Instagram username")
     async def instagram_highlights(self, ctx: Context, *, username: str) -> None:
-        from .api import instagram_user_highlights
+        from .proper.api import instagram_user_highlights
 
         uname = username.strip().lstrip("@")
         async with ctx.typing():
@@ -561,7 +561,7 @@ class Socials(Package):
     @instagram.command(name="trending", description="Instagram trending posts", aliases=["explore"])
     @describe(count="How many posts (1-12)")
     async def instagram_trending(self, ctx: Context, count: int = 4) -> None:
-        from .api import instagram_trending, parse_instagram_post
+        from .proper.api import instagram_trending, parse_instagram_post
 
         async with ctx.typing():
             items = await instagram_trending(count=max(1, min(int(count or 4), 12)))
@@ -582,7 +582,7 @@ class Socials(Package):
     @instagram.command(name="posts", description="Recent posts from an Instagram user")
     @describe(username="Instagram username", count="How many posts (1-24)")
     async def instagram_posts(self, ctx: Context, username: str, count: int = 12) -> None:
-        from .api import instagram_user_posts
+        from .proper.api import instagram_user_posts
 
         uname = username.strip().lstrip("@")
         async with ctx.typing():
@@ -654,7 +654,7 @@ class Socials(Package):
     @tiktok.command(name="user", description="Look up a TikTok profile", aliases=["profile", "p"])
     @describe(username="TikTok username")
     async def tiktok_user(self, ctx: Context, *, username: str) -> None:
-        from .api import parse_tiktok_user, tiktok_user as api_user
+        from .proper.api import parse_tiktok_user, tiktok_user as api_user
 
         uname = username.strip().lstrip("@")
         async with ctx.typing():
@@ -770,7 +770,7 @@ class Socials(Package):
     @tiktok.command(name="fyp", description="TikTok For You sample", aliases=["feed"])
     @describe(limit="How many posts (1-12)", region="Optional 2-letter region")
     async def tiktok_fyp(self, ctx: Context, limit: int = 8, region: str | None = None) -> None:
-        from .api import parse_tiktok_post, tiktok_fyp
+        from .proper.api import parse_tiktok_post, tiktok_fyp
 
         async with ctx.typing():
             items = await tiktok_fyp(limit=max(1, min(int(limit or 8), 12)), region=region)
@@ -789,7 +789,7 @@ class Socials(Package):
     @tiktok.command(name="posts", description="Recent posts from a TikTok user")
     @describe(username="TikTok username", limit="How many (1-20)")
     async def tiktok_posts(self, ctx: Context, username: str, limit: int = 12) -> None:
-        from .api import tiktok_user_posts
+        from .proper.api import tiktok_user_posts
 
         uname = username.strip().lstrip("@")
         async with ctx.typing():
@@ -829,7 +829,7 @@ class Socials(Package):
     @x.command(name="user", description="Look up an X profile", aliases=["profile", "p"])
     @describe(username="X handle")
     async def x_user(self, ctx: Context, *, username: str) -> None:
-        from .api import parse_twitter_user, twitter_user
+        from .proper.api import parse_twitter_user, twitter_user
 
         uname = username.strip().lstrip("@")
         async with ctx.typing():
@@ -869,7 +869,7 @@ class Socials(Package):
     @x.command(name="tweets", description="Recent tweets from a user", aliases=["posts"])
     @describe(username="X handle")
     async def x_tweets(self, ctx: Context, *, username: str) -> None:
-        from .api import twitter_user_tweets
+        from .proper.api import twitter_user_tweets
 
         uname = username.strip().lstrip("@")
         async with ctx.typing():
@@ -911,7 +911,7 @@ class Socials(Package):
     @youtube.command(name="user", description="Look up a YouTube channel", aliases=["channel", "c", "profile"])
     @describe(channel="Channel handle or ID")
     async def youtube_user(self, ctx: Context, *, channel: str) -> None:
-        from .api import parse_youtube_channel, youtube_channel
+        from .proper.api import parse_youtube_channel, youtube_channel
 
         ch = channel.strip().lstrip("@")
         async with ctx.typing():
@@ -957,7 +957,7 @@ class Socials(Package):
     @youtube.command(name="shorts", description="Recent shorts from a channel")
     @describe(channel="Channel handle", limit="How many (1-20)")
     async def youtube_shorts(self, ctx: Context, channel: str, limit: int = 10) -> None:
-        from .api import youtube_channel_shorts
+        from .proper.api import youtube_channel_shorts
 
         ch = channel.strip().lstrip("@")
         async with ctx.typing():
@@ -972,7 +972,7 @@ class Socials(Package):
     @youtube.command(name="videos", description="Recent videos from a channel")
     @describe(channel="Channel handle", limit="How many (1-20)")
     async def youtube_videos(self, ctx: Context, channel: str, limit: int = 10) -> None:
-        from .api import youtube_channel_videos
+        from .proper.api import youtube_channel_videos
 
         ch = channel.strip().lstrip("@")
         async with ctx.typing():
@@ -1008,7 +1008,7 @@ class Socials(Package):
     @telegram.command(name="user", description="Look up a Telegram user", aliases=["profile", "p"])
     @describe(username="Telegram username")
     async def telegram_user(self, ctx: Context, *, username: str) -> None:
-        from .api import parse_telegram_user, telegram_user as api_user
+        from .proper.api import parse_telegram_user, telegram_user as api_user
 
         uname = username.strip().lstrip("@")
         async with ctx.typing():
@@ -1042,7 +1042,7 @@ class Socials(Package):
     @telegram.command(name="channel", description="Look up a Telegram channel", aliases=["ch"])
     @describe(username="Channel username")
     async def telegram_channel(self, ctx: Context, *, username: str) -> None:
-        from .api import parse_telegram_channel, telegram_channel as api_ch
+        from .proper.api import parse_telegram_channel, telegram_channel as api_ch
 
         uname = username.strip().lstrip("@")
         async with ctx.typing():
@@ -1092,7 +1092,7 @@ class Socials(Package):
     @twitch.command(name="user", description="Look up a Twitch profile", aliases=["profile", "p"])
     @describe(username="Twitch login")
     async def twitch_user(self, ctx: Context, *, username: str) -> None:
-        from .api import parse_twitch_user, twitch_user as api_user
+        from .proper.api import parse_twitch_user, twitch_user as api_user
 
         uname = username.strip().lstrip("@")
         async with ctx.typing():
@@ -1133,7 +1133,7 @@ class Socials(Package):
     @twitch.command(name="live", description="Check if a Twitch channel is live")
     @describe(username="Twitch login")
     async def twitch_live(self, ctx: Context, *, username: str) -> None:
-        from .api import parse_twitch_user, twitch_live, twitch_user as api_user
+        from .proper.api import parse_twitch_user, twitch_live, twitch_user as api_user
 
         uname = username.strip().lstrip("@")
         async with ctx.typing():
@@ -1178,7 +1178,7 @@ class Socials(Package):
     @twitch.command(name="videos", description="Recent Twitch videos / VODs")
     @describe(username="Twitch login")
     async def twitch_videos(self, ctx: Context, *, username: str) -> None:
-        from .api import twitch_videos
+        from .proper.api import twitch_videos
 
         uname = username.strip().lstrip("@")
         async with ctx.typing():
@@ -1210,7 +1210,7 @@ class Socials(Package):
     @snapchat.command(name="user", description="Look up a Snapchat profile", aliases=["profile", "p"])
     @describe(username="Snapchat username")
     async def snapchat_user(self, ctx: Context, *, username: str) -> None:
-        from .api import parse_snapchat_user, snapchat_user as api_user
+        from .proper.api import parse_snapchat_user, snapchat_user as api_user
 
         uname = username.strip().lstrip("@")
         async with ctx.typing():
@@ -1266,7 +1266,7 @@ class Socials(Package):
     @pinterest.command(name="user", description="Look up a Pinterest profile", aliases=["profile", "p"])
     @describe(username="Pinterest username")
     async def pinterest_user(self, ctx: Context, *, username: str) -> None:
-        from .api import parse_pinterest_user, pinterest_user as api_user
+        from .proper.api import parse_pinterest_user, pinterest_user as api_user
 
         uname = username.strip().lstrip("@")
         async with ctx.typing():
@@ -1311,7 +1311,7 @@ class Socials(Package):
     @pinterest.command(name="search", description="Search Pinterest pins")
     @describe(query="Search query", limit="How many (1-12)")
     async def pinterest_search(self, ctx: Context, query: str, limit: int = 8) -> None:
-        from .api import parse_pinterest_pin, pinterest_search
+        from .proper.api import parse_pinterest_pin, pinterest_search
 
         async with ctx.typing():
             items = await pinterest_search(query, limit=max(1, min(int(limit or 8), 12)))
@@ -1353,7 +1353,7 @@ class Socials(Package):
     @brave.command(name="search", description="Search the web via Brave", aliases=["s", "q"])
     @describe(query="Search query")
     async def brave_search(self, ctx: Context, *, query: str) -> None:
-        from .api import brave_search, parse_search_results
+        from .proper.api import brave_search, parse_search_results
 
         async with ctx.typing():
             raw = await brave_search(query, count=8)
@@ -1377,7 +1377,7 @@ class Socials(Package):
     @brave.command(name="scrape", description="Scrape a URL via Brave")
     @describe(url="Page URL")
     async def brave_scrape(self, ctx: Context, *, url: str) -> None:
-        from .api import brave_scrape
+        from .proper.api import brave_scrape
 
         async with ctx.typing():
             data = await brave_scrape(url.strip())
@@ -1404,7 +1404,7 @@ class Socials(Package):
     @brave.command(name="ai", description="Brave AI answer")
     @describe(query="Question")
     async def brave_ai(self, ctx: Context, *, query: str) -> None:
-        from .api import brave_ai
+        from .proper.api import brave_ai
 
         async with ctx.typing():
             data = await brave_ai(query)
@@ -1447,7 +1447,7 @@ class Socials(Package):
     @google.command(name="search", description="Search the web via Google", aliases=["s", "q"])
     @describe(query="Search query")
     async def google_search(self, ctx: Context, *, query: str) -> None:
-        from .api import google_search, parse_search_results
+        from .proper.api import google_search, parse_search_results
 
         async with ctx.typing():
             raw = await google_search(query, count=8)
@@ -1471,7 +1471,7 @@ class Socials(Package):
     @google.command(name="scrape", description="Scrape a URL via Google path")
     @describe(url="Page URL")
     async def google_scrape(self, ctx: Context, *, url: str) -> None:
-        from .api import google_scrape
+        from .proper.api import google_scrape
 
         async with ctx.typing():
             data = await google_scrape(url.strip())
@@ -1673,7 +1673,7 @@ class Socials(Package):
         Supports TikTok, Instagram, X/Twitter, YouTube, Pinterest, Twitch.
         Videos attach as a file; multi-image sets paginate.
         """
-        from .api import (
+        from .proper.api import (
             fetch_twitter_social_post,
             fetch_youtube_social_post,
             parse_pinterest_pin,
@@ -2019,7 +2019,9 @@ class Socials(Package):
             await ctx.send(file=file)
 
 async def setup(bot: Vain):
-    from .builders import register_builders
+    from .extended.roblox import Roblox
+    from .proper.builders import register_builders
     cog = Socials(bot)
     await register_builders(bot)
     await bot.add_cog(cog)
+    await bot.add_cog(Roblox(bot))

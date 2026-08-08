@@ -14,7 +14,7 @@ from core.discord.package import Package
 from core.tools.embed import Script
 from core.managers.permissions import has_permissions
 
-from .helpers import (
+from .proper.helpers import (
     _split_trigger_response,
     _parse_response_flags,
     _is_embed_script,

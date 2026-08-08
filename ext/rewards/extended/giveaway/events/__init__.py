@@ -13,13 +13,13 @@ from discord.ext.commands import Cog
 
 from config import color
 
-from ..requirements import (
+from ..proper.requirements import (
     check_member_requirements,
     format_requirements,
     has_any_requirement,
     requirements_from_record,
 )
-from ..views import (
+from ..proper.views import (
     EntriesPaginator,
     build_dm_win_view,
     build_entries_pages,

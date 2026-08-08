@@ -16,13 +16,13 @@ from core.discord.views.paginate import send_pages
 from config import color, emojis
 
 from .games import start_connect4, start_rps, start_ttt
-from .search import (
+from .proper.search import (
     build_ddg_search_pages,
     build_image_search_pages,
     fetch_ddg_results,
     fetch_image_results,
 )
-from .ttt_stats import (
+from .proper.ttt_stats import (
     build_leaderboard_pages,
     build_stats_embed,
     default_leaderboard_scope,

@@ -1,6 +1,6 @@
-from .info import Track
-from .search import TrackSearch
-from .similar import SimilarTracks
+from .proper.info import Track
+from .proper.search import TrackSearch
+from .proper.similar import SimilarTracks
 
 __all__ = (
     "Track",

@@ -11,7 +11,7 @@ from core.discord.package import Package
 from core.managers.converters import EmbedConverter
 from core.managers.permissions import has_permissions
 
-from .views import embed_script_from_message, sync_stored_pagination
+from .proper.views import embed_script_from_message, sync_stored_pagination
 
 
 def _not_pagination(message: Message) -> CommandError:

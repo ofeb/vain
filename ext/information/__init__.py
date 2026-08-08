@@ -117,7 +117,7 @@ async def get_bot_dominant_color(bot) -> int:
         return await get_dominant_color(str(bot.user.display_avatar.url))
     return 0xE1D2DE
 
-from .lookup import (
+from .proper.lookup import (
     build_cashapp_embed,
     build_define_embed,
     build_github_embed,
@@ -556,8 +556,8 @@ from .extended.emoji import Emoji
 from .extended.highlight import Highlight
 from .extended.birthday import Birthday
 from .extended.timezone import Timezone
-from .extended.roblox import Roblox
-from .extended.snapchat import Snapchat
+
+
 
 class Information(
     InformationCommands,
@@ -566,8 +566,6 @@ class Information(
     Highlight,
     Birthday,
     Timezone,
-    Roblox,
-    Snapchat,
     commands.Cog,
     metaclass=_Meta,
 ):
