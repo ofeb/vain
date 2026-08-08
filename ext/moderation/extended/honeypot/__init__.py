@@ -24,7 +24,7 @@ _DEFAULT_TRAP_SCRIPT = (
     f"$v{{description: {emojis.warn} DO **NOT** SEND MESSAGES HERE! {emojis.warn}}}"
     "$v{description: This channel is a **trap** for **compromised accounts**.}"
     "$v{description: Anything posted here is claimed as evidence and the compromised account will be **softbanned**.}"
-    "$v{separator: divider: true && spacing: 1}"
+    "$v{separator: divider: true && spacing: 2}"
     "$v{button: label: Caught: {honeypot.caught} && style: red}"
 )
 
@@ -213,7 +213,7 @@ class Honeypot(Package):
         layout = ui.LayoutView(timeout=None)
         container = ui.Container(accent_colour=color.warn)
         container.add_item(ui.TextDisplay(_trap_body(punishments)))
-        container.add_item(ui.Separator(visible=True))
+        container.add_item(ui.Separator(visible=True, spacing=discord.SeparatorSpacing.large))
 
         row = ui.ActionRow()
         row.add_item(
