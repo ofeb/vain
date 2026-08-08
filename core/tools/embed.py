@@ -1854,8 +1854,10 @@ class Script:
                     unix = _format_unix(stamp) if not isinstance(stamp, (str, int)) else str(
                         int(stamp) if isinstance(stamp, (int, float)) else stamp
                     )
-                    for alias in aliases:
-                        replacements.setdefault(alias, unix)
+                else:
+                    unix = ""
+                for alias in aliases:
+                    replacements.setdefault(alias, unix)
 
         for stamp_key, aliases in (
             ("next_bump_at", ("{next_bump_at}", "{next_bump}", "{bump.next}")),
@@ -1863,6 +1865,8 @@ class Script:
         ):
             stamp = kwargs.get(stamp_key)
             if stamp is None:
+                for alias in aliases:
+                    replacements.setdefault(alias, "")
                 continue
             try:
                 unix = _format_unix(stamp)
