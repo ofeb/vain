@@ -419,32 +419,83 @@ class Role(Package):
     @group(
         name="role",
         aliases=("r",),
-        description="Add or remove a role from a member",
+        description="Add a role to a member (default). Subcommands for remove/mass/etc.",
         invoke_without_command=True,
-        example=",role @member @Role",
+        example=",role @hroe developer",
     )
     @has_permissions(manage_roles=True)
     async def role(
         self,
         ctx,
-        members: Greedy[discord.Member],
+        members: Greedy[discord.Member] = None,
         *,
         role: Optional[RoleConvert] = None,
     ) -> None:
-        """Add or remove a role from a member."""
-        if not members or role is None:
-            return await ctx.send_help(ctx.command)
+        """Default acts like ``role add``. Usage: ``,r @user RoleName``."""
+        # Greedy may arrive as empty list when nothing matched
+        member_list = list(members or [])
+        if not member_list or role is None:
+            # Forgiving parse: first token(s) members, rest role name
+            # covers ",r @user developer" and ",r user1 user2 Role Name"
+            if ctx.message and ctx.message.content:
+                raw = ctx.message.content
+                try:
+                    invoker = (ctx.invoked_with or "role").lower()
+                    prefix = ctx.prefix or ""
+                    body = raw
+                    if prefix and body.startswith(str(prefix)):
+                        body = body[len(str(prefix)) :]
+                    parts = body.split(None, 1)
+                    if parts and parts[0].lower() in {invoker, "role", "r"}:
+                        body = parts[1] if len(parts) > 1 else ""
+                    else:
+                        body = body.strip()
+                    tokens = body.split()
+                    if len(tokens) >= 2:
+                        if not member_list:
+                            # Take leading convertible member tokens
+                            converted: list[discord.Member] = []
+                            idx = 0
+                            while idx < len(tokens) - 1:
+                                try:
+                                    m = await commands.MemberConverter().convert(
+                                        ctx, tokens[idx]
+                                    )
+                                    converted.append(m)
+                                    idx += 1
+                                except Exception:
+                                    break
+                            if converted:
+                                member_list = converted
+                                role_name = " ".join(tokens[idx:])
+                                try:
+                                    role = await RoleConvert().convert(ctx, role_name)
+                                except Exception:
+                                    role = None
+                        elif role is None:
+                            # Members parsed, role didn't — join remaining message after members
+                            role_name = " ".join(tokens[1:]) if len(tokens) > 1 else ""
+                            # Prefer everything after the first token when greedy ate members
+                            if not role_name and len(tokens) >= 2:
+                                role_name = " ".join(tokens[1:])
+                            # Fallback: strip member mentions from body
+                            if not role_name:
+                                role_name = body
+                            try:
+                                role = await RoleConvert().convert(ctx, role_name)
+                            except Exception:
+                                role = None
+                except Exception:
+                    pass
+            if not member_list or role is None:
+                return await ctx.send_help(ctx.command)
 
         target_role: discord.Role = role  # type: ignore[assignment]
-        for member in members:
-            if target_role in member.roles:
-                await ctx.invoke(
-                    self.role_remove, member=member, role=target_role, reason=None
-                )
-            else:
-                await ctx.invoke(
-                    self.role_add, member=member, role=target_role, reason=None
-                )
+        # Default group behaviour matches ``role add`` (not toggle/remove).
+        for member in member_list:
+            await ctx.invoke(
+                self.role_add, member=member, role=target_role, reason=None
+            )
 
     @role.command(
         name="add",

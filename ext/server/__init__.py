@@ -759,6 +759,9 @@ class Server(
         self.boost_locks = defaultdict(Lock)
         self.sticky_locks = defaultdict(Lock)
         self.pinned_ids = {}
+        # Sticky message runtime state (used by StickymessageCommands mixin)
+        self._msg_counts: dict[int, int] = defaultdict(int)
+        self._last_activity: dict = {}
 
 async def setup(bot: Vain) -> None:
     """load server extension"""

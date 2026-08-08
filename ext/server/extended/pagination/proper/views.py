@@ -109,12 +109,13 @@ class StoredPaginationView(ui.View):
         self.index = min(max(current_page, 0), max(len(pages) - 1, 0))
         ids = _custom_ids(message_id)
         
+        # Order: previous · delete · next · search
         self.add_item(
             _StoredButton(
-                action="next",
+                action="prev",
                 style=discord.ButtonStyle.secondary,
-                emoji=discord.PartialEmoji.from_str(emojis.paginator.next),
-                custom_id=ids["next"],
+                emoji=discord.PartialEmoji.from_str(emojis.paginator.previous),
+                custom_id=ids["prev"],
             )
         )
         self.add_item(
@@ -131,10 +132,10 @@ class StoredPaginationView(ui.View):
         )
         self.add_item(
             _StoredButton(
-                action="prev",
+                action="next",
                 style=discord.ButtonStyle.secondary,
-                emoji=discord.PartialEmoji.from_str(emojis.paginator.previous),
-                custom_id=ids["prev"],
+                emoji=discord.PartialEmoji.from_str(emojis.paginator.next),
+                custom_id=ids["next"],
             )
         )
         self.add_item(

@@ -99,17 +99,18 @@ class LastFMPagedView(discord.ui.View):
                 await self.message.edit(view=None)
 
     
+    # Order: previous · delete · next · search
     @discord.ui.button(
         label="",
         style=discord.ButtonStyle.secondary,
-        emoji=discord.PartialEmoji.from_str(emojis.paginator.next),
+        emoji=discord.PartialEmoji.from_str(emojis.paginator.previous),
     )
-    async def next_button(
+    async def prev_button(
         self,
         interaction: discord.Interaction,
         _: discord.ui.Button,
     ) -> None:
-        self.index = (self.index + 1) % len(self.pages)
+        self.index = (self.index - 1) % len(self.pages)
         await interaction.response.edit_message(
             embed=self.pages[self.index],
             view=self,
@@ -137,14 +138,14 @@ class LastFMPagedView(discord.ui.View):
     @discord.ui.button(
         label="",
         style=discord.ButtonStyle.secondary,
-        emoji=discord.PartialEmoji.from_str(emojis.paginator.previous),
+        emoji=discord.PartialEmoji.from_str(emojis.paginator.next),
     )
-    async def prev_button(
+    async def next_button(
         self,
         interaction: discord.Interaction,
         _: discord.ui.Button,
     ) -> None:
-        self.index = (self.index - 1) % len(self.pages)
+        self.index = (self.index + 1) % len(self.pages)
         await interaction.response.edit_message(
             embed=self.pages[self.index],
             view=self,

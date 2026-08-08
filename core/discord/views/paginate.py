@@ -367,7 +367,7 @@ def build_pager_row(
     parent: "PaginateView",
     show_search: bool = True,
 ) -> ui.ActionRow:
-    """Action row order: next · delete · previous · search (blue)."""
+    """Action row order: previous · delete · next · search (blue)."""
     row = ui.ActionRow()
 
     next_emoji = _safe_emoji(
@@ -391,11 +391,11 @@ def build_pager_row(
 
     row.add_item(
         _PagerButton(
-            "next",
+            "prev",
             parent,
             style=discord.ButtonStyle.secondary,
-            emoji=next_emoji,
-            custom_id=f"vain:pager:next:{id(parent)}",
+            emoji=prev_emoji,
+            custom_id=f"vain:pager:prev:{id(parent)}",
         )
     )
     row.add_item(
@@ -409,11 +409,11 @@ def build_pager_row(
     )
     row.add_item(
         _PagerButton(
-            "prev",
+            "next",
             parent,
             style=discord.ButtonStyle.secondary,
-            emoji=prev_emoji,
-            custom_id=f"vain:pager:prev:{id(parent)}",
+            emoji=next_emoji,
+            custom_id=f"vain:pager:next:{id(parent)}",
         )
     )
 

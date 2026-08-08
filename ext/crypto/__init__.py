@@ -216,38 +216,149 @@ class Crypto(commands.Cog):
         guild_only=True,
     )
     async def gas(self, ctx: Context) -> None:
-        url = "https://api.etherscan.io/api"
-        params = {
-            "module": "gastracker",
-            "action": "gasoracle",
-            "apikey": "YourApiKeyToken",
-        }
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.get(url, params=params, timeout=10) as resp:
-                    if resp.status != 200:
-                        await ctx.fail("Could not fetch gas prices.")
-                        return
-                    data = await resp.json()
-                    result = data.get("result", {})
-            except Exception:
-                await ctx.fail("Could not fetch gas prices.")
-                return
+        """Fetch ETH gas from keyless public endpoints (ethgasstation / beaconcha / blocknative-free)."""
+        result: dict | None = None
+        source = "Ethereum"
 
-        if not result or result.get("SafeGasPrice") is None:
-            await ctx.fail("Could not fetch gas prices.")
+        async with aiohttp.ClientSession() as session:
+            # 1) ethgasstation.info (no key)
+            try:
+                async with session.get(
+                    "https://ethgasstation.info/api/ethgasAPI.json",
+                    timeout=aiohttp.ClientTimeout(total=8),
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json(content_type=None)
+                        if isinstance(data, dict) and data.get("safeLow") is not None:
+                            # values are in tenths of gwei
+                            def _gwei(v) -> str:
+                                try:
+                                    return f"{float(v) / 10:.1f}"
+                                except Exception:
+                                    return "N/A"
+
+                            result = {
+                                "low": _gwei(data.get("safeLow")),
+                                "avg": _gwei(data.get("average") or data.get("avg")),
+                                "fast": _gwei(data.get("fast")),
+                            }
+                            source = "ETH Gas Station"
+            except Exception:
+                pass
+
+            # 2) beaconcha.in (no key)
+            if result is None:
+                try:
+                    async with session.get(
+                        "https://beaconcha.in/api/v1/execution/gasnow",
+                        timeout=aiohttp.ClientTimeout(total=8),
+                    ) as resp:
+                        if resp.status == 200:
+                            data = await resp.json(content_type=None)
+                            payload = data.get("data") if isinstance(data, dict) else None
+                            if isinstance(payload, dict):
+                                def _from_wei(v) -> str:
+                                    try:
+                                        # values often in wei
+                                        n = float(v)
+                                        if n > 1_000_000:
+                                            n = n / 1e9
+                                        return f"{n:.1f}"
+                                    except Exception:
+                                        return "N/A"
+
+                                low = payload.get("standard") or payload.get("slow") or payload.get("safeLow")
+                                avg = payload.get("rapid") or payload.get("average") or payload.get("standard")
+                                fast = payload.get("fast") or payload.get("rapid")
+                                if low is not None or avg is not None or fast is not None:
+                                    result = {
+                                        "low": _from_wei(low),
+                                        "avg": _from_wei(avg),
+                                        "fast": _from_wei(fast),
+                                    }
+                                    source = "beaconcha.in"
+                except Exception:
+                    pass
+
+            # 3) etherchain (no key)
+            if result is None:
+                try:
+                    async with session.get(
+                        "https://www.etherchain.org/api/gasPriceOracle",
+                        timeout=aiohttp.ClientTimeout(total=8),
+                    ) as resp:
+                        if resp.status == 200:
+                            data = await resp.json(content_type=None)
+                            if isinstance(data, dict) and (
+                                data.get("safeLow") is not None
+                                or data.get("standard") is not None
+                            ):
+                                def _s(v) -> str:
+                                    try:
+                                        return f"{float(v):.1f}"
+                                    except Exception:
+                                        return "N/A"
+
+                                result = {
+                                    "low": _s(data.get("safeLow") or data.get("slow")),
+                                    "avg": _s(data.get("standard") or data.get("average")),
+                                    "fast": _s(data.get("fast")),
+                                }
+                                source = "etherchain.org"
+                except Exception:
+                    pass
+
+            # 4) etherscan only if a real key is configured
+            if result is None:
+                try:
+                    from config import api as api_cfg
+
+                    key = (
+                        getattr(getattr(api_cfg, "etherscan", None), "key", None)
+                        or getattr(api_cfg, "etherscan_key", None)
+                        or ""
+                    )
+                except Exception:
+                    key = ""
+                key = str(key or "").strip()
+                if key and key not in {"YourApiKeyToken", "changeme", "none"}:
+                    try:
+                        async with session.get(
+                            "https://api.etherscan.io/api",
+                            params={
+                                "module": "gastracker",
+                                "action": "gasoracle",
+                                "apikey": key,
+                            },
+                            timeout=aiohttp.ClientTimeout(total=8),
+                        ) as resp:
+                            if resp.status == 200:
+                                data = await resp.json(content_type=None)
+                                raw = data.get("result") if isinstance(data, dict) else None
+                                if isinstance(raw, dict) and raw.get("SafeGasPrice") is not None:
+                                    result = {
+                                        "low": str(raw.get("SafeGasPrice", "N/A")),
+                                        "avg": str(raw.get("ProposeGasPrice", "N/A")),
+                                        "fast": str(raw.get("FastGasPrice", "N/A")),
+                                    }
+                                    source = "Etherscan"
+                    except Exception:
+                        pass
+
+        if not result:
+            await ctx.fail("Could not fetch gas prices right now. Try again shortly.")
             return
 
         embed = panel_embed(
             title="ETH Gas Prices",
             color=color.base,
             lines=[],
-            footer="Powered by Etherscan",
+            footer=f"Powered by {source}",
             timestamp=False,
         )
-        embed.add_field(name="Low", value=f"{result.get('SafeGasPrice', 'N/A')} Gwei", inline=True)
-        embed.add_field(name="Average", value=f"{result.get('ProposeGasPrice', 'N/A')} Gwei", inline=True)
-        embed.add_field(name="Fast", value=f"{result.get('FastGasPrice', 'N/A')} Gwei", inline=True)
+        embed.add_field(name="Low", value=f"{result.get('low', 'N/A')} Gwei", inline=True)
+        embed.add_field(name="Average", value=f"{result.get('avg', 'N/A')} Gwei", inline=True)
+        embed.add_field(name="Fast", value=f"{result.get('fast', 'N/A')} Gwei", inline=True)
         await ctx.send(embed=embed)
 
     @hybrid(

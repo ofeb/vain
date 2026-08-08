@@ -1,260 +1,534 @@
 from __future__ import annotations
 
-from discord.ext.commands import group
-from discord import Embed
+import contextlib
+from typing import Any
+
 import aiohttp
+import discord
+from discord.ext import commands
+
+from discord.ext.commands import group
 
 from core.discord.package import Package
+from core.discord.views.embed import panel_embed
+
+
+_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/122.0.0.0 Safari/537.36"
+)
+
+
 class Roblox(Package):
-    """roblox management"""
+    """Roblox lookups via keyless public APIs (help category: Social)."""
+
+    async def _get_json(
+        self,
+        session: aiohttp.ClientSession,
+        url: str,
+        *,
+        params: dict | None = None,
+        method: str = "GET",
+        json_body: dict | None = None,
+    ) -> Any | None:
+        headers = {"User-Agent": _UA, "Accept": "application/json"}
+        try:
+            timeout = aiohttp.ClientTimeout(total=12)
+            if method.upper() == "POST":
+                async with session.post(
+                    url,
+                    params=params,
+                    json=json_body,
+                    headers=headers,
+                    timeout=timeout,
+                ) as resp:
+                    if resp.status >= 400:
+                        return None
+                    return await resp.json(content_type=None)
+            async with session.get(
+                url, params=params, headers=headers, timeout=timeout
+            ) as resp:
+                if resp.status >= 400:
+                    return None
+                return await resp.json(content_type=None)
+        except Exception:
+            return None
+
+    async def _resolve_user(
+        self, session: aiohttp.ClientSession, username: str
+    ) -> dict[str, Any] | None:
+        name = (username or "").strip().lstrip("@")
+        if not name:
+            return None
+
+        data = await self._get_json(
+            session,
+            "https://users.roblox.com/v1/usernames/users",
+            method="POST",
+            json_body={"usernames": [name], "excludeBannedUsers": False},
+        )
+        if isinstance(data, dict):
+            rows = data.get("data") or []
+            if rows:
+                row = rows[0]
+                uid = row.get("id")
+                if uid:
+                    detail = await self._get_json(
+                        session, f"https://users.roblox.com/v1/users/{uid}"
+                    )
+                    if isinstance(detail, dict) and detail.get("id"):
+                        return detail
+                    return {
+                        "id": uid,
+                        "name": row.get("name") or name,
+                        "displayName": row.get("displayName")
+                        or row.get("name")
+                        or name,
+                        "description": "",
+                        "created": row.get("created") or "Unknown",
+                    }
+
+        data = await self._get_json(
+            session,
+            "https://users.roblox.com/v1/users/search",
+            params={"keyword": name, "limit": 10},
+        )
+        if isinstance(data, dict):
+            rows = data.get("data") or []
+            for row in rows:
+                if str(row.get("name") or "").lower() == name.lower():
+                    uid = row.get("id")
+                    if not uid:
+                        continue
+                    detail = await self._get_json(
+                        session, f"https://users.roblox.com/v1/users/{uid}"
+                    )
+                    if isinstance(detail, dict) and detail.get("id"):
+                        return detail
+                    return row
+            if rows:
+                return rows[0]
+        return None
+
+    async def _avatar_url(
+        self, session: aiohttp.ClientSession, user_id: int
+    ) -> str | None:
+        data = await self._get_json(
+            session,
+            "https://thumbnails.roblox.com/v1/users/avatar-headshot",
+            params={
+                "userIds": str(user_id),
+                "size": "420x420",
+                "format": "Png",
+                "isCircular": "false",
+            },
+        )
+        if isinstance(data, dict):
+            rows = data.get("data") or []
+            if rows and rows[0].get("imageUrl"):
+                return str(rows[0]["imageUrl"])
+        return (
+            "https://www.roblox.com/headshot-thumbnail/image?"
+            f"userId={user_id}&width=420&height=420&format=png"
+        )
+
+    def _profile_embed(self, user: dict[str, Any], avatar: str | None) -> discord.Embed:
+        uid = user.get("id")
+        name = user.get("name") or "Unknown"
+        display = user.get("displayName") or name
+        desc = (user.get("description") or "").strip()
+        created = user.get("created") or "Unknown"
+        e = panel_embed(
+            title=f"{display} (@{name})",
+            color=self.color,
+            lines=[
+                f"**ID:** `{uid}`",
+                f"**Created:** {created}",
+                (
+                    f"**Profile:** [roblox.com/users/{uid}/profile]"
+                    f"(https://www.roblox.com/users/{uid}/profile)"
+                ),
+            ],
+            timestamp=False,
+        )
+        if desc:
+            e.add_field(name="Bio", value=desc[:1024], inline=False)
+        if avatar:
+            with contextlib.suppress(Exception):
+                e.set_thumbnail(url=avatar)
+        return e
 
     @group(
         name="roblox",
-        description="Gets profile information on the given Roblox user",
+        aliases=("rbx", "rblx"),
+        description="Roblox profile and item lookups",
         invoke_without_command=True,
+        example=",roblox builderman",
     )
-    async def roblox(self, ctx, username: str):
-        """get roblox profile"""
+    async def roblox(self, ctx: commands.Context, *, username: str | None = None):
+        """Get a Roblox profile by username."""
+        if not username:
+            return await ctx.send_help(ctx.command)
         async with aiohttp.ClientSession() as session:
-            async with session.get(f"https://users.roblox.com/v1/users/search?keyword={username}&limit=1") as resp:
-                if resp.status != 200:
-                    return await ctx.send("User not found")
-                data = await resp.json()
-        
-        if not data.get('data'):
-            return await ctx.send("User not found")
-        
-        user = data['data'][0]
-        e = Embed(
-            title=user['name'],
-            description=f"Display Name: {user['displayName']}",
-            color=self.color,
-        )
-        e.set_thumbnail(url=f"https://www.roblox.com/headshot-thumbnail/image?userId={user['id']}&width=420&height=420&format=png")
-        e.add_field(name="ID", value=user['id'], inline=True)
-        e.add_field(name="Created", value=user['created'], inline=True)
-        await ctx.send(embed=e)
+            user = await self._resolve_user(session, username)
+            if not user or not user.get("id"):
+                return await ctx.warn(f"Roblox user **{username}** not found")  # type: ignore[attr-defined]
+            avatar = await self._avatar_url(session, int(user["id"]))
+            await ctx.send(embed=self._profile_embed(user, avatar))
 
     @roblox.command(
-        name="fromdiscord",
-        description="Get Roblox account from Discord account",
+        name="user",
+        aliases=("profile", "lookup", "get"),
+        description="Get profile information for a Roblox username",
+        example=",roblox user builderman",
     )
-    async def roblox_fromdiscord(self, ctx, user_id: int):
-        """get roblox from discord"""
-        roblox_id = await self.bot.db.fetchval(
-            "SELECT roblox_id FROM roblox_links WHERE discord_id = $1",
-            user_id
-        )
-        if not roblox_id:
-            return await ctx.send("No Roblox account linked to this Discord account")
-        
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"https://users.roblox.com/v1/users/{roblox_id}") as resp:
-                if resp.status != 200:
-                    return await ctx.send("Failed to fetch Roblox user")
-                data = await resp.json()
-        
-        e = Embed(
-            title=data['name'],
-            description=f"Display Name: {data['displayName']}",
-            color=self.color,
-        )
-        e.set_thumbnail(url=f"https://www.roblox.com/headshot-thumbnail/image?userId={data['id']}&width=420&height=420&format=png")
-        e.add_field(name="ID", value=data['id'], inline=True)
-        await ctx.send(embed=e)
+    async def roblox_user(self, ctx: commands.Context, *, username: str):
+        await ctx.invoke(self.roblox, username=username)
 
     @roblox.command(
-        name="devex",
-        description="No description given",
+        name="id",
+        aliases=("userid",),
+        description="Look up a Roblox user by numeric ID",
+        example=",roblox id 1",
     )
-    async def roblox_devex(self, ctx, robux: str):
-        """devex robux"""
-        await ctx.send("DevEx requires Roblox account verification and is not available through this bot")
+    async def roblox_id(self, ctx: commands.Context, user_id: int):
+        async with aiohttp.ClientSession() as session:
+            data = await self._get_json(
+                session, f"https://users.roblox.com/v1/users/{user_id}"
+            )
+            if not isinstance(data, dict) or not data.get("id"):
+                return await ctx.warn(f"No Roblox user with id `{user_id}`")  # type: ignore[attr-defined]
+            avatar = await self._avatar_url(session, int(data["id"]))
+            await ctx.send(embed=self._profile_embed(data, avatar))
 
     @roblox.command(
-        name="todiscord",
-        description="Get Discord account from Roblox account",
+        name="friends",
+        description="Show a user's public friend / follower counts",
+        example=",roblox friends builderman",
     )
-    async def roblox_todiscord(self, ctx, username: str):
-        """get discord from roblox"""
+    async def roblox_friends(self, ctx: commands.Context, *, username: str):
         async with aiohttp.ClientSession() as session:
-            async with session.get(f"https://users.roblox.com/v1/users/search?keyword={username}&limit=1") as resp:
-                if resp.status != 200:
-                    return await ctx.send("User not found")
-                data = await resp.json()
-        
-        if not data.get('data'):
-            return await ctx.send("User not found")
-        
-        roblox_id = data['data'][0]['id']
-        discord_id = await self.bot.db.fetchval(
-            "SELECT discord_id FROM roblox_links WHERE roblox_id = $1",
-            roblox_id
-        )
-        if not discord_id:
-            return await ctx.send("No Discord account linked to this Roblox account")
-        
-        user = self.bot.get_user(discord_id)
-        if not user:
-            user = await self.bot.fetch_user(discord_id)
-        
-        await ctx.send(f"Discord account: {user.mention} ({user})")
-
-    @roblox.command(
-        name="template",
-        description="Download asset for an item",
-    )
-    async def roblox_template(self, ctx, asset_id: int):
-        """download roblox asset"""
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"https://assetdelivery.roblox.com/v1/assetId/{asset_id}") as resp:
-                if resp.status != 200:
-                    return await ctx.send("Asset not found")
-                data = await resp.json()
-        
-        if data.get('location'):
-            await ctx.send(f"Asset URL: {data['location']}")
-        else:
-            await ctx.send("Failed to get asset URL")
+            user = await self._resolve_user(session, username)
+            if not user or not user.get("id"):
+                return await ctx.warn(f"Roblox user **{username}** not found")  # type: ignore[attr-defined]
+            uid = int(user["id"])
+            friends = await self._get_json(
+                session, f"https://friends.roblox.com/v1/users/{uid}/friends/count"
+            )
+            followers = await self._get_json(
+                session, f"https://friends.roblox.com/v1/users/{uid}/followers/count"
+            )
+            following = await self._get_json(
+                session, f"https://friends.roblox.com/v1/users/{uid}/followings/count"
+            )
+            f_count = friends.get("count") if isinstance(friends, dict) else "N/A"
+            fo_count = followers.get("count") if isinstance(followers, dict) else "N/A"
+            g_count = following.get("count") if isinstance(following, dict) else "N/A"
+            e = panel_embed(
+                title=f"{user.get('displayName') or user.get('name')} — Social",
+                color=self.color,
+                lines=[
+                    f"**Friends:** {f_count}",
+                    f"**Followers:** {fo_count}",
+                    f"**Following:** {g_count}",
+                ],
+                timestamp=False,
+            )
+            await ctx.send(embed=e)
 
     @roblox.command(
         name="inventory",
-        description="No description given",
+        aliases=("collectibles", "limiteds"),
+        description="List public collectibles for a user (if inventory is public)",
+        example=",roblox inventory builderman",
     )
-    async def roblox_inventory(self, ctx, username: str):
-        """get roblox inventory"""
+    async def roblox_inventory(self, ctx: commands.Context, *, username: str):
         async with aiohttp.ClientSession() as session:
-            async with session.get(f"https://users.roblox.com/v1/users/search?keyword={username}&limit=1") as resp:
-                if resp.status != 200:
-                    return await ctx.send("User not found")
-                data = await resp.json()
-        
-        if not data.get('data'):
-            return await ctx.send("User not found")
-        
-        user_id = data['data'][0]['id']
-        
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"https://inventory.roblox.com/v1/users/{user_id}/assets/collectibles?limit=10") as resp:
-                if resp.status != 200:
-                    return await ctx.send("Failed to fetch inventory")
-                data = await resp.json()
-        
-        if not data.get('data'):
-            return await ctx.send("No collectibles found")
-        
-        e = Embed(
-            title=f"{username}'s Collectibles",
-            color=self.color,
-        )
-        for item in data['data'][:5]:
-            e.add_field(
-                name=item['name'],
-                value=f"Rap: {item.get('recentAveragePrice', 'N/A')} Robux",
-                inline=False
+            user = await self._resolve_user(session, username)
+            if not user or not user.get("id"):
+                return await ctx.warn(f"Roblox user **{username}** not found")  # type: ignore[attr-defined]
+            uid = int(user["id"])
+            data = await self._get_json(
+                session,
+                f"https://inventory.roblox.com/v1/users/{uid}/assets/collectibles",
+                params={"limit": 25, "sortOrder": "Asc"},
             )
-        await ctx.send(embed=e)
+            if not isinstance(data, dict):
+                return await ctx.warn(  # type: ignore[attr-defined]
+                    "Couldn't load inventory (private or rate-limited)"
+                )
+            rows = data.get("data") or []
+            if not rows:
+                return await ctx.warn("No public collectibles found")  # type: ignore[attr-defined]
+            lines: list[str] = []
+            for item in rows[:15]:
+                name = item.get("name") or "Item"
+                rap = item.get("recentAveragePrice")
+                asset = item.get("assetId") or item.get("userAssetId")
+                rap_s = f"{rap:,} R$" if isinstance(rap, int) else "N/A"
+                if asset:
+                    lines.append(f"**{name}** — RAP {rap_s} · `{asset}`")
+                else:
+                    lines.append(f"**{name}** — RAP {rap_s}")
+            e = panel_embed(
+                title=f"{user.get('name')}'s Collectibles",
+                color=self.color,
+                lines=lines,
+                footer=f"{len(rows)} shown (public only)",
+                timestamp=False,
+            )
+            await ctx.send(embed=e)
 
     @roblox.command(
         name="item",
-        description="No description given",
+        aliases=("catalog", "search"),
+        description="Search the Roblox catalog for an item",
+        example=",roblox item dominus",
     )
-    async def roblox_item(self, ctx, query: str):
-        """search roblox item"""
+    async def roblox_item(self, ctx: commands.Context, *, query: str):
+        q = (query or "").strip()
+        if not q:
+            return await ctx.warn("Provide a search query")  # type: ignore[attr-defined]
         async with aiohttp.ClientSession() as session:
-            async with session.get(f"https://catalog.roblox.com/v1/search/items?keyword={query}&limit=10") as resp:
-                if resp.status != 200:
-                    return await ctx.send("Failed to search items")
-                data = await resp.json()
-        
-        if not data.get('data'):
-            return await ctx.send("No items found")
-        
-        items = data['data'][:5]
-        e = Embed(
-            title=f"Roblox Items: {query}",
-            color=self.color,
-        )
-        for item in items:
-            e.add_field(
-                name=item['name'],
-                value=f"Price: {item.get('price', 'Free')} Robux",
-                inline=False
+            data = await self._get_json(
+                session,
+                "https://catalog.roblox.com/v1/search/items",
+                params={"keyword": q, "limit": 10, "category": "All"},
             )
-        await ctx.send(embed=e)
+            items: list[dict] = []
+            if isinstance(data, dict):
+                items = list(data.get("data") or [])
+
+            detail_ids = [
+                it.get("id")
+                for it in items
+                if isinstance(it, dict) and it.get("id") and not it.get("name")
+            ]
+            if detail_ids:
+                details = await self._get_json(
+                    session,
+                    "https://catalog.roblox.com/v1/catalog/items/details",
+                    method="POST",
+                    json_body={
+                        "items": [
+                            {"id": i, "itemType": "Asset"} for i in detail_ids[:10]
+                        ]
+                    },
+                )
+                if isinstance(details, dict) and details.get("data"):
+                    items = list(details["data"])
+
+            if not items:
+                data2 = await self._get_json(
+                    session,
+                    "https://catalog.roblox.com/v2/search/items/details",
+                    params={"keyword": q, "limit": 10},
+                )
+                if isinstance(data2, dict):
+                    items = list(data2.get("data") or [])
+
+            if not items:
+                return await ctx.warn(f"No catalog items found for **{q}**")  # type: ignore[attr-defined]
+
+            lines: list[str] = []
+            for item in items[:8]:
+                name = item.get("name") or f"Item {item.get('id')}"
+                price = item.get("price")
+                if price is None:
+                    price = item.get("lowestPrice")
+                if price in (0, None) and item.get("priceStatus") == "Free":
+                    price_s = "Free"
+                elif isinstance(price, int):
+                    price_s = f"{price:,} R$"
+                else:
+                    price_s = str(price or "N/A")
+                iid = item.get("id") or item.get("itemId")
+                link = (
+                    f"https://www.roblox.com/catalog/{iid}/"
+                    if iid
+                    else "https://www.roblox.com/catalog"
+                )
+                lines.append(f"**[{name}]({link})** — {price_s}")
+
+            e = panel_embed(
+                title=f"Catalog — {q}",
+                color=self.color,
+                lines=lines,
+                footer="Roblox catalog (public)",
+                timestamp=False,
+            )
+            await ctx.send(embed=e)
 
     @roblox.command(
-        name="outfits",
-        description="View all outfits for a user",
+        name="game",
+        aliases=("place", "experience"),
+        description="Look up a Roblox experience by name or place id",
+        example=",roblox game adopt me",
     )
-    async def roblox_outfits(self, ctx, username: str):
-        """get roblox outfits"""
+    async def roblox_game(self, ctx: commands.Context, *, query: str):
+        q = (query or "").strip()
+        if not q:
+            return await ctx.warn("Provide a game name or place id")  # type: ignore[attr-defined]
+
         async with aiohttp.ClientSession() as session:
-            async with session.get(f"https://users.roblox.com/v1/users/search?keyword={username}&limit=1") as resp:
-                if resp.status != 200:
-                    return await ctx.send("User not found")
-                data = await resp.json()
-        
-        if not data.get('data'):
-            return await ctx.send("User not found")
-        
-        user_id = data['data'][0]['id']
-        
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"https://thumbnails.roblox.com/v1/users/outfits?userIds={user_id}&size=420x420&format=Png&isCircular=false") as resp:
-                if resp.status != 200:
-                    return await ctx.send("Failed to fetch outfits")
-                data = await resp.json()
-        
-        if not data.get('data'):
-            return await ctx.send("No outfits found")
-        
-        e = Embed(
-            title=f"{username}'s Outfits",
-            color=self.color,
-        )
-        for outfit in data['data'][:5]:
-            e.add_field(
-                name=f"Outfit {outfit['targetId']}",
-                value=f"[View](https://www.roblox.com/catalog/?Keyword=outfit)",
-                inline=False
+            place_id: int | None = int(q) if q.isdigit() else None
+            universe_id: int | None = None
+            place_name: str | None = None
+
+            if place_id is None:
+                data = await self._get_json(
+                    session,
+                    "https://apis.roblox.com/search-api/omni-search",
+                    params={
+                        "searchQuery": q,
+                        "pageToken": "",
+                        "sessionId": "vain-bot",
+                    },
+                )
+                if isinstance(data, dict):
+                    for group in data.get("searchResults") or []:
+                        for content in group.get("contents") or []:
+                            ctype = str(content.get("contentType") or "")
+                            if ctype.lower() in {"game", "place", "experience"}:
+                                place_id = (
+                                    content.get("placeId")
+                                    or content.get("rootPlaceId")
+                                    or content.get("contentId")
+                                )
+                                universe_id = content.get("universeId")
+                                place_name = content.get("name") or content.get(
+                                    "username"
+                                )
+                                if place_id:
+                                    break
+                        if place_id:
+                            break
+
+            if not place_id and not universe_id:
+                return await ctx.warn(f"No experience found for **{q}**")  # type: ignore[attr-defined]
+
+            if universe_id is None and place_id:
+                mapped = await self._get_json(
+                    session,
+                    f"https://apis.roblox.com/universes/v1/places/{place_id}/universe",
+                )
+                if isinstance(mapped, dict):
+                    universe_id = mapped.get("universeId")
+
+            if universe_id is None and place_id:
+                place = await self._get_json(
+                    session,
+                    "https://games.roblox.com/v1/games/multiget-place-details",
+                    params={"placeIds": str(place_id)},
+                )
+                if isinstance(place, list) and place:
+                    universe_id = place[0].get("universeId")
+                    place_name = place[0].get("name") or place_name
+                elif isinstance(place, dict) and place.get("data"):
+                    universe_id = place["data"][0].get("universeId")
+                    place_name = place["data"][0].get("name") or place_name
+
+            if not universe_id:
+                return await ctx.warn("Found a place but couldn't resolve universe")  # type: ignore[attr-defined]
+
+            gdata = await self._get_json(
+                session,
+                "https://games.roblox.com/v1/games",
+                params={"universeIds": str(universe_id)},
             )
-        await ctx.send(embed=e)
+            if not isinstance(gdata, dict) or not gdata.get("data"):
+                return await ctx.warn("Couldn't load experience details")  # type: ignore[attr-defined]
+
+            game_info = gdata["data"][0]
+            name = game_info.get("name") or place_name or q
+            playing = game_info.get("playing")
+            visits = game_info.get("visits")
+            favs = game_info.get("favoritedCount")
+            creator = (game_info.get("creator") or {}).get("name") or "Unknown"
+            root = game_info.get("rootPlaceId") or place_id
+            desc = (game_info.get("description") or "").strip()
+
+            def _fmt(v: Any) -> str:
+                return f"{v:,}" if isinstance(v, int) else str(v if v is not None else "N/A")
+
+            lines = [
+                f"**Creator:** {creator}",
+                f"**Playing:** {_fmt(playing)}",
+                f"**Visits:** {_fmt(visits)}",
+                f"**Favorites:** {_fmt(favs)}",
+                f"**Link:** [Open experience](https://www.roblox.com/games/{root}/)",
+            ]
+            e = panel_embed(
+                title=name,
+                color=self.color,
+                lines=lines,
+                footer=f"Universe {universe_id} · Place {root}",
+                timestamp=False,
+            )
+            if desc:
+                e.add_field(name="Description", value=desc[:1024], inline=False)
+            await ctx.send(embed=e)
 
     @roblox.command(
         name="check",
-        description="No description given",
+        aliases=("owns",),
+        description="Check if a user owns an asset (public inventories only)",
+        example=",roblox check builderman 102611803",
     )
-    async def roblox_check(self, ctx, username: str, asset_id_or_name: str):
-        """check if user has item"""
+    async def roblox_check(
+        self, ctx: commands.Context, username: str, asset_id: int
+    ):
         async with aiohttp.ClientSession() as session:
-            async with session.get(f"https://users.roblox.com/v1/users/search?keyword={username}&limit=1") as resp:
-                if resp.status != 200:
-                    return await ctx.send("User not found")
-                data = await resp.json()
-        
-        if not data.get('data'):
-            return await ctx.send("User not found")
-        
-        user_id = data['data'][0]['id']
-        
-        try:
-            asset_id = int(asset_id_or_name)
-        except ValueError:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(f"https://catalog.roblox.com/v1/search/items?keyword={asset_id_or_name}&limit=1") as resp:
-                    if resp.status != 200:
-                        return await ctx.send("Failed to search item")
-                    item_data = await resp.json()
-            
-            if not item_data.get('data'):
-                return await ctx.send("Item not found")
-            
-            asset_id = item_data['data'][0]['id']
-        
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"https://inventory.roblox.com/v1/users/{user_id}/items/{asset_id}") as resp:
-                if resp.status == 200:
-                    return await ctx.send(f"{username} owns this item")
-                else:
-                    return await ctx.send(f"{username} does not own this item")
+            user = await self._resolve_user(session, username)
+            if not user or not user.get("id"):
+                return await ctx.warn(f"Roblox user **{username}** not found")  # type: ignore[attr-defined]
+            uid = int(user["id"])
+            owned = False
+            data = await self._get_json(
+                session,
+                f"https://inventory.roblox.com/v1/users/{uid}/items/Asset/{asset_id}",
+            )
+            if isinstance(data, dict):
+                owned = bool(data.get("data"))
+            if not owned:
+                own = await self._get_json(
+                    session,
+                    f"https://inventory.roblox.com/v1/users/{uid}/items/Asset/{asset_id}/is-owned",
+                )
+                if isinstance(own, bool):
+                    owned = own
+                elif isinstance(own, dict) and "isOwned" in own:
+                    owned = bool(own.get("isOwned"))
+            name = user.get("name") or username
+            if owned:
+                return await ctx.success(f"**{name}** owns asset `{asset_id}`")  # type: ignore[attr-defined]
+            return await ctx.warn(  # type: ignore[attr-defined]
+                f"**{name}** does not own asset `{asset_id}` (or inventory is private)"
+            )
+
+    @roblox.command(
+        name="devex",
+        description="Convert Robux to approximate USD via historical DevEx rate",
+        example=",roblox devex 100000",
+    )
+    async def roblox_devex(self, ctx: commands.Context, robux: int):
+        if robux < 0:
+            return await ctx.warn("Robux must be positive")  # type: ignore[attr-defined]
+        rate = 0.0035
+        usd = robux * rate
+        e = panel_embed(
+            title="DevEx Estimate",
+            color=self.color,
+            lines=[
+                f"**Robux:** {robux:,}",
+                f"**Rate:** ${rate} / Robux",
+                f"**USD:** ${usd:,.2f}",
+            ],
+            footer="Estimate only — not a live DevEx quote",
+            timestamp=False,
+        )
+        await ctx.send(embed=e)
+
+
+# Loaded from ext.social.setup — no separate setup() so auto-scan won't double-add.

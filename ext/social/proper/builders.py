@@ -7,6 +7,7 @@ Container builder → Components V2 LayoutView (TextDisplay, Section+Thumbnail,
 
 from __future__ import annotations
 
+import contextlib
 from typing import TYPE_CHECKING, Any
 
 import discord
@@ -162,11 +163,11 @@ class _BuilderModal(discord.ui.Modal):
         title: str,
         fields: list[tuple[str, str, bool, int, str]],
     ):
-        
         super().__init__(title=title[:45])
         self.keys: list[str] = []
         self.values: dict[str, str] = {}
         self._submitted = False
+        self._inputs: list[discord.ui.TextInput] = []
         for key, label, paragraph, maxlen, default in fields[:5]:
             self.keys.append(key)
             item = discord.ui.TextInput(
@@ -180,15 +181,28 @@ class _BuilderModal(discord.ui.Modal):
                 max_length=min(int(maxlen), 4000),
                 default=(default or "")[: min(int(maxlen), 4000)] or None,
             )
+            self._inputs.append(item)
             self.add_item(item)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        for key, child in zip(self.keys, self.children):
-            if isinstance(child, discord.ui.TextInput):
+        # Prefer tracked TextInput refs — children order can differ across dpy builds.
+        pairs = list(zip(self.keys, self._inputs)) if self._inputs else []
+        if len(pairs) != len(self.keys):
+            pairs = []
+            for key, child in zip(self.keys, self.children):
+                if isinstance(child, discord.ui.TextInput):
+                    pairs.append((key, child))
+        for key, child in pairs:
+            try:
                 self.values[key] = child.value or ""
+            except Exception:
+                self.values[key] = ""
         self._submitted = True
-        if not interaction.response.is_done():
-            await interaction.response.defer()
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.defer(ephemeral=True)
+        except Exception:
+            pass
 
 
 class _BuilderControls(discord.ui.View):
@@ -850,7 +864,10 @@ class _BaseBuilder:
         _ = self._accent()
 
         # Prefer ordered blocks so dividers sit between title/description/etc.
+        # Use blocks path whenever any block exists; empty list falls back to data.
         blocks = list(self.blocks) if self.blocks else None
+        if not blocks:
+            blocks = None
         if blocks is None:
             # Legacy fallback when blocks empty
             lines: list[str] = []
@@ -1018,32 +1035,55 @@ class _BaseBuilder:
             return
 
         content = (self.data.get("content") or "").strip() or None
-        try:
-            if self.kind == "embed":
-                await self.message.edit(
-                    content=content,
-                    embed=self._preview_embed(),
-                    view=self._embed_preview_view(),
-                )
-            else:
-                await self.message.edit(
-                    content=None,
-                    view=self._controls(),
-                )
-                if self.preview_message is not None:
+        channel = getattr(self.message, "channel", None)
+
+        if self.kind == "embed":
+            view = self._embed_preview_view()
+            embed = self._preview_embed()
+            try:
+                await self.message.edit(content=content, embed=embed, view=view)
+            except Exception:
+                # Message may have been converted / lost components — resend.
+                if channel is not None:
                     try:
-                        await self.preview_message.edit(
-                            content=content,
-                            view=self._preview_container(),
+                        with contextlib.suppress(Exception):
+                            await self.message.delete()
+                        self.message = await channel.send(
+                            content=content, embed=embed, view=view
                         )
                     except Exception:
                         pass
-        except Exception:
-            pass
+            return
 
-    
-    
-    
+        # Container: controls message + separate live preview LayoutView
+        try:
+            await self.message.edit(content=None, embed=None, view=self._controls())
+        except Exception:
+            if channel is not None:
+                try:
+                    with contextlib.suppress(Exception):
+                        await self.message.delete()
+                    self.message = await channel.send(view=self._controls())
+                except Exception:
+                    pass
+
+        preview = self._preview_container()
+        if self.preview_message is not None:
+            try:
+                await self.preview_message.edit(content=content, view=preview)
+                return
+            except Exception:
+                with contextlib.suppress(Exception):
+                    await self.preview_message.delete()
+                self.preview_message = None
+
+        if channel is not None:
+            try:
+                self.preview_message = await channel.send(
+                    content=content, view=preview
+                )
+            except Exception:
+                self.preview_message = None
 
     async def _run_modal(
         self,
@@ -1052,11 +1092,21 @@ class _BaseBuilder:
         fields: list[tuple[str, str, bool, int, str]],
     ) -> dict[str, str] | None:
         modal = _BuilderModal(title, fields)
-        await inter.response.send_modal(modal)
-        timed_out = await modal.wait()
-        if timed_out and not modal._submitted:
+        try:
+            if inter.response.is_done():
+                return None
+            await inter.response.send_modal(modal)
+        except Exception:
             return None
-        return modal.values or None
+        await modal.wait()
+        if not getattr(modal, "_submitted", False):
+            return None
+        # Always copy — never return the live dict (callers may mutate).
+        out = {str(k): str(v or "") for k, v in dict(modal.values).items()}
+        # Guarantee every requested key exists even if a TextInput failed to bind.
+        for entry in fields[:5]:
+            out.setdefault(str(entry[0]), "")
+        return out
 
     async def handle_field(self, inter: discord.Interaction, key: str) -> None:
         if key == "button":
@@ -1434,11 +1484,21 @@ class _BaseBuilder:
             f"Edit {label}",
             [(key, label, paragraph, maxlen, self.data.get(key) or "")],
         )
-        if values and key in values:
-            self.data[key] = (values[key] or "").strip()
-            if key == "color":
-                self.data[key] = self.data[key].lstrip("#")
-            if key in {"title", "description", "thumbnail"}:
+        if values is None:
+            return
+        raw = values.get(key, self.data.get(key) or "")
+        self.data[key] = (raw or "").strip()
+        if key == "color":
+            self.data[key] = self.data[key].lstrip("#")
+        if key in {"title", "description", "thumbnail", "content", "image"}:
+            if key == "image" and self.data[key]:
+                # Keep gallery list in sync when setting single image URL.
+                if not self.images:
+                    self.images = [self.data[key]]
+                else:
+                    self.images[0] = self.data[key]
+                self._sync_block_from_data("images")
+            else:
                 self._sync_block_from_data(key)
         await self.refresh()
 
