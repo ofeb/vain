@@ -5,16 +5,15 @@ from typing import Any, Iterable, TypedDict
 from config import emojis
 
 _VALID_PUNISHMENTS = ("kick", "ban", "softban", "timeout")
-_DEFAULT_PUNISHMENTS = ["ban"]
+_DEFAULT_PUNISHMENTS = ["softban"]
 _TIMEOUT_SECONDS = 7 * 24 * 60 * 60
 _MISSING: Any = object()
 _DEFAULT_TRAP_SCRIPT = (
     "{container}"
-    f"$v{{description: {emojis.warn} DO **NOT** SEND MESSAGES HERE! {emojis.warn}}}"
-    "$v{description: This channel is a **trap** for **compromised accounts**.}"
-    "$v{description: Anything posted here is claimed as evidence and the compromised account will be **softbanned**.}"
-    "$v{separator: divider: true && spacing: 2}"
-    "$v{button: label: Caught: {honeypot.caught} && style: red}"
+    f"$v{{description: {emojis.warn} Don't send any messages here! {emojis.warn}}}"
+    "$v{description: This channel is a **trap** for **compromised accounts**}"
+    "$v{description: Anything posted here is**claimed as evidence** and the **compromised account** will be **softbanned**}"
+    "$v{button: label: Caught: {honeypot.caught} && style: red && disabled: true}"
 )
 
 
@@ -58,7 +57,7 @@ def _punishment_phrase(punishments: Iterable[str] | None) -> str:
         f"**{_PUNISHMENT_PAST.get(str(p).lower(), p)}**" for p in (punishments or [])
     ]
     if not labels:
-        labels = ["**banned**"]
+        labels = ["**softbanned**"]
     if len(labels) == 1:
         return labels[0]
     if len(labels) == 2:
@@ -82,7 +81,7 @@ def _trap_body(punishments: Iterable[str] | None = None) -> str:
             f"### {emojis.warn} DO NOT SEND MESSAGES HERE! {emojis.warn}",
             "",
             "> -# This channel is a **trap** for **compromised accounts**.",
-            f"> -# Anything posted here is claimed as evidence and the compromised account will be {phrase}.",
+            f"> -# Anything posted here is**claimed as evidence** and the **compromised account** will be {phrase}!",
         ]
     )
 

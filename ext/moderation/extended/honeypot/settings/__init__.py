@@ -27,7 +27,7 @@ async def ensure_table(bot: Vain) -> None:
                 channel_id BIGINT,
                 message_id BIGINT,
                 alert_channel_id BIGINT,
-                punishments TEXT[] NOT NULL DEFAULT ARRAY['ban']::TEXT[],
+                punishments TEXT[] NOT NULL DEFAULT ARRAY['softban']::TEXT[],
                 caught INT NOT NULL DEFAULT 0,
                 enabled BOOLEAN NOT NULL DEFAULT FALSE,
                 embed_script TEXT

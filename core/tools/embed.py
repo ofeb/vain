@@ -1138,8 +1138,11 @@ async def parse_container(raw: str, sendable: bool = False) -> dict:
 
     _flush_text()
 
-    
-    _ = accent
+    if accent is not None:
+        try:
+            container.accent_color = accent
+        except Exception:
+            pass
 
     if buttons:
         try:
@@ -1372,6 +1375,9 @@ async def parse(raw: str, sendable: bool = False) -> dict:
 
     if out.get("fields") == []:
         out.pop("fields")
+
+    if out and "color" not in out:
+        out["color"] = 0x2F3136
 
     if out:
         await _validate(out)

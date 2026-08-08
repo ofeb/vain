@@ -39,6 +39,16 @@ def _fmt_dt(value: Any) -> str:
         return str(value)
 
 
+def _bump_ts(value: Any) -> str:
+    """Relative timestamp for scripts, or a safe `never` when unset."""
+    if not value:
+        return "`never`"
+    try:
+        return f"<t:{int(value.timestamp())}:R>"
+    except Exception:
+        return "`never`"
+
+
 class BumpReminder(BumpReminderEvents, Package):
     """Remind your guild members to promote the guild on Disboard."""
 
@@ -89,6 +99,15 @@ class BumpReminder(BumpReminderEvents, Package):
                 "next": next_bump_at or settings.next_bump_at,
                 "last": last_bump_at or settings.last_bump_at,
             }
+        last = last_bump_at or (settings.last_bump_at if settings else None)
+        next_ = next_bump_at or (settings.next_bump_at if settings else None)
+        kw["bumper_label"] = (
+            getattr(bumper, "display_name", None)
+            or getattr(bumper, "name", None)
+            or "`nobody`"
+        ) if bumper else "`nobody`"
+        kw["last_bump_ts"] = _bump_ts(last)
+        kw["next_bump_ts"] = _bump_ts(next_)
         return kw
 
     async def _send_bump_script(
