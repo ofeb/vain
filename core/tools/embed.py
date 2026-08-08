@@ -479,7 +479,7 @@ def _parse_button_style(value: str) -> discord.ButtonStyle:
         return discord.ButtonStyle.danger
     if lowered in {"yellow", "gold"}:
         
-        return discord.ButtonStyle.secondary
+        return discord.ButtonStyle.premium
     return discord.ButtonStyle.secondary
 
 
@@ -490,6 +490,7 @@ def _style_name(style: discord.ButtonStyle) -> str:
         discord.ButtonStyle.success: "green",
         discord.ButtonStyle.secondary: "grey",
         discord.ButtonStyle.danger: "red",
+        discord.ButtonStyle.premium: "yellow",
     }.get(style, "grey")
 
 
