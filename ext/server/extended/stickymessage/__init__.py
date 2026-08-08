@@ -35,11 +35,11 @@ def _now_naive() -> datetime:
 
 def _format_trigger(message_limit: int, interval_seconds: int) -> str:
     if int(message_limit) <= 1:
-        return "after **every** message (rate-limited queue)"
+        return "after **every** message"
     parts = [f"every **{message_limit}** message(s)"]
     if int(interval_seconds or 0) >= 30:
         parts.append(f"or after **{naturaldelta(interval_seconds)}** idle")
-    return " · ".join(parts)
+    return "> ".join(parts)
 
 
 class StickymessageCommands(Package):
@@ -334,7 +334,7 @@ class StickymessageCommands(Package):
         )
         self._msg_counts[channel.id] = 0
         new_msg = await self._repost(channel, script, user=ctx.author)
-        extra = f"\n-# initial sticky posted · {new_msg.jump_url}" if new_msg else ""
+        extra = f"\n> -# preview of the stickymessage · {new_msg.jump_url}" if new_msg else ""
         return await ctx.success(
             f"Sticky set in {channel.mention}\n• {_format_trigger(message_limit, interval_seconds)}{extra}"
         )

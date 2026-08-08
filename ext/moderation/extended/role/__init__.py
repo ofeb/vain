@@ -13,7 +13,6 @@ from discord.ext import commands
 from discord.ext.commands import (
     BucketType,
     CommandError,
-    Greedy,
     MaxConcurrency,
     MaxConcurrencyReached,
     Range,
@@ -424,83 +423,86 @@ class Role(Package):
         example=",role @hroe developer",
     )
     @has_permissions(manage_roles=True)
-    async def role(
-        self,
-        ctx,
-        members: Greedy[discord.Member] = None,
-        *,
-        role: Optional[RoleConvert] = None,
-    ) -> None:
-        """Toggle a role. Usage: ``,r @user RoleName`` (add if missing, remove if present)."""
-        
-        member_list = list(members or [])
-        if not member_list or role is None:
-            
-            
-            if ctx.message and ctx.message.content:
-                raw = ctx.message.content
-                try:
-                    invoker = (ctx.invoked_with or "role").lower()
-                    prefix = ctx.prefix or ""
-                    body = raw
-                    if prefix and body.startswith(str(prefix)):
-                        body = body[len(str(prefix)) :]
-                    parts = body.split(None, 1)
-                    if parts and parts[0].lower() in {invoker, "role", "r"}:
-                        body = parts[1] if len(parts) > 1 else ""
-                    else:
-                        body = body.strip()
-                    tokens = body.split()
-                    if len(tokens) >= 2:
-                        if not member_list:
-                            
-                            converted: list[discord.Member] = []
-                            idx = 0
-                            while idx < len(tokens) - 1:
-                                try:
-                                    m = await commands.MemberConverter().convert(
-                                        ctx, tokens[idx]
-                                    )
-                                    converted.append(m)
-                                    idx += 1
-                                except Exception:
-                                    break
-                            if converted:
-                                member_list = converted
-                                role_name = " ".join(tokens[idx:])
-                                try:
-                                    role = await RoleConvert().convert(ctx, role_name)
-                                except Exception:
-                                    role = None
-                        elif role is None:
-                            
-                            role_name = " ".join(tokens[1:]) if len(tokens) > 1 else ""
-                            
-                            if not role_name and len(tokens) >= 2:
-                                role_name = " ".join(tokens[1:])
-                            
-                            if not role_name:
-                                role_name = body
-                            try:
-                                role = await RoleConvert().convert(ctx, role_name)
-                            except Exception:
-                                role = None
-                except Exception:
-                    pass
-            if not member_list or role is None:
-                return await ctx.send_help(ctx.command)
+    async def role(self, ctx, *, args: str | None = None) -> None:
+        """Toggle a role. Usage: ``,r @user RoleName`` (add if missing, remove if present).
 
-        target_role: discord.Role = role  # type: ignore[assignment]
-        
+        Multi-member: ``,r @a @b Role Name``. Parsing stops consuming members once the
+        remaining tokens form a valid role — so a role named ``member`` is never
+        fuzzy-matched as a second user.
+        """
+        member_list, target_role = await self._parse_role_targets(ctx, args)
+        if not member_list or target_role is None:
+            return await ctx.send_help(ctx.command)
+
         for member in member_list:
             if target_role in member.roles:
                 await self.role_remove.callback(
-                    self, ctx, member=member, role=target_role, reason=None
+                    self, ctx, member, target_role, reason=None
                 )
             else:
                 await self.role_add.callback(
-                    self, ctx, member=member, role=target_role, reason=None
+                    self, ctx, member, target_role, reason=None
                 )
+
+    async def _parse_role_targets(
+        self, ctx, args: str | None
+    ) -> tuple[list[discord.Member], discord.Role | None]:
+        """Parse ``[member...] role name`` without Greedy fuzzy eating the role."""
+        body = (args or "").strip()
+        if not body and ctx.message and ctx.message.content:
+            raw = ctx.message.content
+            invoker = (ctx.invoked_with or "role").lower()
+            prefix = str(ctx.prefix or "")
+            if prefix and raw.startswith(prefix):
+                raw = raw[len(prefix) :]
+            parts = raw.split(None, 1)
+            if parts and parts[0].lower() in {invoker, "role", "r"}:
+                body = parts[1] if len(parts) > 1 else ""
+            else:
+                body = raw.strip()
+
+        tokens = body.split()
+        if len(tokens) < 2:
+            return [], None
+
+        member_conv = commands.MemberConverter()
+        role_conv = RoleConvert()
+
+        # Prefer the smallest member prefix whose remainder is a valid role.
+        # Walk member count from 1 upward so ",r nafim0509 member" binds role
+        # "member" instead of fuzzy-matching a second user named like "member".
+        for member_count in range(1, len(tokens)):
+            member_tokens = tokens[:member_count]
+            role_name = " ".join(tokens[member_count:]).strip()
+            if not role_name:
+                continue
+
+            members: list[discord.Member] = []
+            ok = True
+            for tok in member_tokens:
+                try:
+                    members.append(await member_conv.convert(ctx, tok))
+                except Exception:
+                    ok = False
+                    break
+            if not ok or not members:
+                continue
+
+            try:
+                role = await role_conv.convert(ctx, role_name)
+            except Exception:
+                continue
+
+            # Deduplicate while preserving order
+            seen: set[int] = set()
+            unique: list[discord.Member] = []
+            for m in members:
+                if m.id not in seen:
+                    seen.add(m.id)
+                    unique.append(m)
+            return unique, role
+
+        return [], None
 
     @role.command(
         name="add",
