@@ -20,11 +20,11 @@ _TIMEOUT_SECONDS = 7 * 24 * 60 * 60
 _MISSING: Any = object()
 _DEFAULT_TRAP_SCRIPT = (
     "{container}"
-    "$v{description: ### Do not send messages here\n\n"
-    "-# This channel is a trap for compromised accounts.\n"
-    "-# Anything posted here is removed and the account is banned.}"
+    "$v{description: ### Do **not** send messages here\n\n"
+    "-# This channel is a **trap** for **compromised accounts**.\n"
+    "-# Anything posted here is claimed as evidence and the compromised account is **softbanned**.}"
     "$v{separator: divider: true && spacing: 1}"
-    "$v{button: label: Caught: {honeypot.caught} && style: grey && emoji: 🍯}"
+    "$v{button: label: Caught: {honeypot.caught} && style: grey}"
 )
 
 
@@ -57,10 +57,10 @@ def _trap_body() -> str:
     """Minimal trap copy - no accent, no counters in the text body."""
     return "\n".join(
         [
-            "### Do not send messages here",
+            "### Do **not** send messages here",
             "",
-            "-# This channel is a trap for compromised accounts.",
-            "-# Anything posted here is removed and the account is banned.",
+            "-# This channel is a **trap** for **compromised accounts**.",
+            "-# Anything posted here is claimed as evidence and the compromised account is **softbanned**.",
         ]
     )
 
@@ -196,7 +196,6 @@ class Honeypot(Package):
             ui.Button(
                 style=discord.ButtonStyle.secondary,
                 label=f"Caught: {int(caught)}",
-                emoji="🍯",
                 disabled=True,
             )
         )
@@ -499,7 +498,7 @@ class Honeypot(Package):
             channel = await ctx.guild.create_text_channel(
                 name="honeypot",
                 overwrites=overwrites,
-                topic="Do not send messages here - trap channel for compromised accounts.",
+                topic="Auto configured honeypot channel for compromised accounts.",
                 reason=f"Honeypot setup by {ctx.author} ({ctx.author.id})",
                 position=len(ctx.guild.channels),
             )
