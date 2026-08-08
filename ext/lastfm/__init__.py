@@ -881,7 +881,7 @@ class Lastfm(LastfmEvents, Package):
             if not script:
                 await ctx.warn(
                     f"You do not have a **custom script** set yet. "
-                    f"Set one with `{ctx.clean_prefix}lastfm embed` — "
+                    f"Set one with `{ctx.clean_prefix}lastfm embed` - "
                     f"supports `{{embed}}`, `{{container}}`, or plain text."
                 )
                 return
@@ -3001,7 +3001,7 @@ class Lastfm(LastfmEvents, Package):
             await ctx.warn("Could not find lyrics for that track.")
             return
         embed = panel_embed(
-            title=f"{title.strip()} — {artist.strip()}",
+            title=f"{title.strip()} - {artist.strip()}",
             color=self._lastfm_color(),
             lines=[],
             timestamp=False,

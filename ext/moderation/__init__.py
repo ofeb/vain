@@ -715,7 +715,7 @@ class ModerationCommands(Package):
 
         row = await self._ensure_jail_ready(ctx)
         if not row:
-            return await ctx.warn("Failed to configure jail — try `,setupjail`")
+            return await ctx.warn("Failed to configure jail - try `,setupjail`")
 
         jail_role = row["jail_role"]
         jail_channel = row["jail_channel"]
@@ -890,7 +890,7 @@ class ModerationCommands(Package):
         if not rows:
             return await ctx.warn(f"{member.mention} has **no warnings**")
         embed = panel_embed(
-            title=f"Warnings — {member}",
+            title=f"Warnings - {member}",
             color=self.color,
             lines=[self._format_case_line(row) for row in rows],
             timestamp=False,
@@ -914,7 +914,7 @@ class ModerationCommands(Package):
         )
         if not rows:
             return await ctx.warn(f"{member.mention} has **no recorded actions**")
-        title = f"Moderation History — {member}"
+        title = f"Moderation History - {member}"
         if command:
             title += f" ({command})"
         embed = panel_embed(
@@ -946,7 +946,7 @@ class ModerationCommands(Package):
             mod = ctx.guild.get_member(row["moderator_id"])
             mod_name = mod.mention if mod else "`unknown`"
             reason = row["reason"] or "no reason"
-            lines.append(label_line(name, f"jailed by {mod_name} — {reason}"))
+            lines.append(label_line(name, f"jailed by {mod_name} - {reason}"))
 
         embed = panel_embed(
             title="Jailed Members",
@@ -1873,7 +1873,7 @@ class ModerationCommands(Package):
             return await ctx.warn(f"No members have {role.mention}")
         lines = [member.mention for member in members[:50]]
         embed = panel_embed(
-            title=f"Members — {role.name}",
+            title=f"Members - {role.name}",
             color=role.color.value or self.color,
             lines=lines,
             footer=f"{len(members)} total" if len(members) > 50 else None,
@@ -2398,7 +2398,7 @@ class ModerationCommands(Package):
             for key in keys
         ]
         embed = panel_embed(
-            title=f"Permissions — {member.display_name}",
+            title=f"Permissions - {member.display_name}",
             color=self.color,
             lines=lines,
             footer=channel.mention,
@@ -2465,7 +2465,7 @@ class Moderation(
     commands.Cog,
     metaclass=_Meta,
 ):
-    """main moderation extension — all subcommands combined"""
+    """main moderation extension - all subcommands combined"""
 
 async def setup(bot) -> None:
     """load moderation extension"""

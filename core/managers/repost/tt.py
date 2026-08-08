@@ -1,6 +1,6 @@
 """tiktok video downloader and repost.
 
-Fetches a playable URL and sends the file only — no embed.
+Fetches a playable URL and sends the file only - no embed.
 """
 
 from __future__ import annotations

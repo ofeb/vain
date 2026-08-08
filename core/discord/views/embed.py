@@ -17,7 +17,7 @@ def body(*lines: str) -> str:
 
 
 def caption(text: str) -> str:
-    """Small Discord subtext. Idempotent — never stacks ``-# -#``."""
+    """Small Discord subtext. Idempotent - never stacks ``-# -#``."""
     cleaned = str(text or "").strip()
     if not cleaned:
         return ""
@@ -38,7 +38,7 @@ def c2(
 ) -> discord.Embed:
     """Build a compact embed that converts to a C2 lookalike on send.
 
-    No embed colour — C2 containers render without an accent strip.
+    No embed colour - C2 containers render without an accent strip.
     ``color`` is accepted for call-site compatibility and ignored.
     """
     _ = color

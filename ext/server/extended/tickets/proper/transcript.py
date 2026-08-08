@@ -39,7 +39,7 @@ class Transcript:
     ) -> "Transcript":
         """Collect channel history into a Transcript (optionally store a row)."""
         lines: list[str] = [
-            f"Ticket Transcript — {channel.name}",
+            f"Ticket Transcript - {channel.name}",
             f"Guild: {guild.name} ({guild.id})",
             f"Channel: #{channel.name} ({channel.id})",
             f"Opened by: {ticket.get('user_id')}",
@@ -105,7 +105,7 @@ class Transcript:
     ) -> None:
         """Send an already-built transcript to destinations."""
         embed = Embed(
-            title=f"Transcript — {channel_name}",
+            title=f"Transcript - {channel_name}",
             description=description,
             color=0xE1D2DE,
             timestamp=datetime.now(timezone.utc),

@@ -60,7 +60,7 @@ def embed_to_container(
     """Convert a rich embed into a Components V2 container that mirrors embed layout.
 
     Title, author, description, fields, image, and footer are preserved.
-    No accent strip / embed colour — C2 cards stay neutral.
+    No accent strip / embed colour - C2 cards stay neutral.
     """
     _ = _accent_from_embed(embed)  
     container = ui.Container()

@@ -125,7 +125,7 @@ class Remind(Package):
             when = row["time"]
             stamp = discord.utils.format_dt(when, style="R") if when else "unknown"
             msg = (row["message"] or "")[:80]
-            lines.append(label_line(f"#{row['id']}", f"{msg} — {stamp}"))
+            lines.append(label_line(f"#{row['id']}", f"{msg} - {stamp}"))
 
         embed = panel_embed(
             title=f"Your Reminders ({len(rows)})",

@@ -31,7 +31,7 @@ def _format_ms(ms: int) -> str:
 
 def _track_line(index: int, track: dict) -> str:
     artists = ", ".join(a["name"] for a in track.get("artists", []))
-    return f"`{index}.` **{track['name']}** — {artists} ({_format_ms(track.get('duration_ms', 0))})"
+    return f"`{index}.` **{track['name']}** - {artists} ({_format_ms(track.get('duration_ms', 0))})"
 
 class Spotify(Package):
     """Spotify search and playback controls."""
@@ -81,7 +81,7 @@ class Spotify(Package):
         tracks = result["tracks"]["items"]
         entries = [_track_line(i, track) for i, track in enumerate(tracks[:5], 1)]
         embed = panel_embed(
-            title=f"Spotify Search — {query}",
+            title=f"Spotify Search - {query}",
             color=color.base,
             lines=entries,
             footer="Use `spotify login` to control playback",
@@ -357,7 +357,7 @@ class Spotify(Package):
             return await ctx.warn("No top tracks found.")
         lines = [_track_line(i, track) for i, track in enumerate(items, 1)]
         embed = panel_embed(
-            title=f"Top Tracks — {duration}",
+            title=f"Top Tracks - {duration}",
             color=color.base,
             lines=lines,
             timestamp=False,
@@ -384,7 +384,7 @@ class Spotify(Package):
             return await ctx.warn("No top artists found.")
         lines = [f"`{i}.` **{artist['name']}**" for i, artist in enumerate(items, 1)]
         embed = panel_embed(
-            title=f"Top Artists — {duration}",
+            title=f"Top Artists - {duration}",
             color=color.base,
             lines=lines,
             timestamp=False,
@@ -415,7 +415,7 @@ class Spotify(Package):
         lines = []
         for index, device in enumerate(devices, 1):
             active = " (active)" if device.get("is_active") else ""
-            lines.append(f"`{index}.` **{device['name']}** — {device.get('type', 'device')}{active}")
+            lines.append(f"`{index}.` **{device['name']}** - {device.get('type', 'device')}{active}")
         embed = panel_embed(title="Spotify Devices", color=color.base, lines=lines, timestamp=False)
         await ctx.send(embed=embed)
 

@@ -1,4 +1,4 @@
-"""Components V2 social UI — repost cards, profile cards, accent colours."""
+"""Components V2 social UI - repost cards, profile cards, accent colours."""
 
 from __future__ import annotations
 
@@ -322,7 +322,7 @@ def build_social_repost_container(
     if music_title:
         music_label = music_title
         if music_author:
-            music_label = f"{music_title} — {music_author}"
+            music_label = f"{music_title} - {music_author}"
         if music_url:
             whisper.append(f"{emojis.music} [{music_label}]({music_url})")
         else:

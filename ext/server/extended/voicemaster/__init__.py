@@ -36,16 +36,16 @@ class VoiceMaster(VoiceMasterEvents, Package):
 
     def _interface_usage_lines(self, support_url: str) -> list[str]:
         return [
-            f"{emojis.interface.lock} — [`Lock`]({support_url}) the voice channel",
-            f"{emojis.interface.unlock} — [`Unlock`]({support_url}) the voice channel",
-            f"{emojis.interface.ghost} — [`Ghost`]({support_url}) the voice channel",
-            f"{emojis.interface.reveal} — [`Reveal`]({support_url}) the voice channel",
-            f"{emojis.interface.claim} — [`Claim`]({support_url}) the voice channel",
-            f"{emojis.interface.disconnect} — [`Disconnect`]({support_url}) a member",
-            f"{emojis.interface.activity} — [`Start`]({support_url}) a new voice channel activity",
-            f"{emojis.interface.information} — [`View`]({support_url}) channel information",
-            f"{emojis.interface.increase} — [`Increase`]({support_url}) the user limit",
-            f"{emojis.interface.decrease} — [`Decrease`]({support_url}) the user limit",
+            f"{emojis.interface.lock} - [`Lock`]({support_url}) the voice channel",
+            f"{emojis.interface.unlock} - [`Unlock`]({support_url}) the voice channel",
+            f"{emojis.interface.ghost} - [`Ghost`]({support_url}) the voice channel",
+            f"{emojis.interface.reveal} - [`Reveal`]({support_url}) the voice channel",
+            f"{emojis.interface.claim} - [`Claim`]({support_url}) the voice channel",
+            f"{emojis.interface.disconnect} - [`Disconnect`]({support_url}) a member",
+            f"{emojis.interface.activity} - [`Start`]({support_url}) a new voice channel activity",
+            f"{emojis.interface.information} - [`View`]({support_url}) channel information",
+            f"{emojis.interface.increase} - [`Increase`]({support_url}) the user limit",
+            f"{emojis.interface.decrease} - [`Decrease`]({support_url}) the user limit",
         ]
 
     def _interface_usage_blocks(self) -> list[str]:

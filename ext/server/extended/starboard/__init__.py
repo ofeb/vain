@@ -73,7 +73,7 @@ class Starboard(Package):
             await ctx.message.add_reaction(emoji)
         except (discord.HTTPException, TypeError):
             return await ctx.warn(
-                f"I'm not able to use **{emoji}** — try a server emoji or unicode"
+                f"I'm not able to use **{emoji}** - try a server emoji or unicode"
             )
 
         cfg = await Config.upsert(
@@ -140,11 +140,11 @@ class Starboard(Package):
             ch = cfg.channel
             mention = ch.mention if ch else f"`{cfg.channel_id}`"
             lines.append(
-                f"{mention} — **{cfg.emoji}** · threshold `{cfg.threshold}` · "
+                f"{mention} - **{cfg.emoji}** · threshold `{cfg.threshold}` · "
                 f"self-star `{cfg.self_star}`"
             )
         if not lines:
-            return await ctx.warn("No starboards configured — use `,starboard add`")
+            return await ctx.warn("No starboards configured - use `,starboard add`")
         embed = Embed(title="Starboards", color=getattr(self.bot, "color", color.base))
         embed.set_author(
             name=str(ctx.author), icon_url=ctx.author.display_avatar.url

@@ -36,7 +36,7 @@ DEFAULT_DM_SCRIPT = (
 
 
 def _now() -> datetime:
-    """Local naive now — matches PostgreSQL ``NOW()`` for TIMESTAMP columns."""
+    """Local naive now - matches PostgreSQL ``NOW()`` for TIMESTAMP columns."""
     return datetime.now()
 
 
@@ -322,7 +322,7 @@ class GiveawayEvents(Cog):
 
     @tasks.loop(seconds=3.0)
     async def poll_expired_giveaways(self) -> None:
-        """Backup ender — compare expiration in Python to avoid TZ mismatch with NOW()."""
+        """Backup ender - compare expiration in Python to avoid TZ mismatch with NOW()."""
         with suppress(Exception):
             rows = await self.bot.db.fetch(
                 """
@@ -622,7 +622,7 @@ class GiveawayEvents(Cog):
             if left:
                 await interaction.warning("you **left** the giveaway")
             else:
-                await interaction.success("you’re **in** — good luck")
+                await interaction.success("you’re **in** - good luck")
 
             record = dict(fresh)
             record["entries"] = entries

@@ -167,7 +167,7 @@ class LevelingEvents:
                     dest = None
             if dest is None:
                 log.warning(
-                    "level-up channel %s missing in guild %s — message not sent",
+                    "level-up channel %s missing in guild %s - message not sent",
                     cid,
                     guild.id,
                 )

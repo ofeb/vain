@@ -99,7 +99,7 @@ class BadgeCommands(Package):
             ctx.guild.id, False,
         )
         return await ctx.success(
-            f"colorme **disabled** — color roles kept. "
+            f"colorme **disabled** - color roles kept. "
             f"use `{ctx.clean_prefix}colorme reset` to delete everything"
         )
 

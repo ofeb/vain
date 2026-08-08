@@ -1,4 +1,4 @@
-"""Guild tag cog — reward members repping the server tag (primary_guild).
+"""Guild tag cog - reward members repping the server tag (primary_guild).
 
 See Discord user primary_guild: https://docs.discord.com/developers/resources/user
 """
@@ -86,7 +86,7 @@ class TagCommands(TagEvents, Package):
             msg = f"Tag role set to {role.mention}"
         if not role.is_assignable():
             await ctx.warn(
-                f"{msg}\n-# I **cannot assign** it — move my role **above** "
+                f"{msg}\n-# I **cannot assign** it - move my role **above** "
                 f"{role.mention} in Server Settings → Roles."
             )
         else:

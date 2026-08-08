@@ -46,7 +46,7 @@ if TYPE_CHECKING:
     from core.vain import Vain
 
 class Reaction(ReactionEvents, Package):
-    """Auto-reaction management — same idea as autoresponder, but only emojis."""
+    """Auto-reaction management - same idea as autoresponder, but only emojis."""
 
     def __init__(self, bot: commands.Bot):
         super().__init__(bot)

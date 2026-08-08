@@ -45,7 +45,7 @@ class Notes(Package):
             lines.append(label_line(f"#{row['id']} · {mod_label}", f"{content} {when}".strip()))
 
         embed = panel_embed(
-            title=f"Notes — {member}",
+            title=f"Notes - {member}",
             color=None,
             lines=lines,
             footer=f"{len(rows)} total" if len(rows) > 25 else None,

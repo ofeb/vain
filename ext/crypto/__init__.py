@@ -218,7 +218,7 @@ class Crypto(commands.Cog):
             arrow = "▼"
 
         if title is None:
-            title = f"{name} ({symbol}) / USD — ${usd:,.2f}" if usd >= 1 else f"{name} ({symbol}) / USD — ${usd:,.6f}"
+            title = f"{name} ({symbol}) / USD - ${usd:,.2f}" if usd >= 1 else f"{name} ({symbol}) / USD - ${usd:,.6f}"
 
         embed = panel_embed(
             title=title,
@@ -324,7 +324,7 @@ class Crypto(commands.Cog):
         data = await self._fetch_price(coin_id)
         if data is None:
             raise commands.CommandError(
-                f"Could not resolve **{coin_raw}** on CoinGecko — check the id/symbol"
+                f"Could not resolve **{coin_raw}** on CoinGecko - check the id/symbol"
             )
         if not isinstance(channel, discord.TextChannel):
             raise commands.CommandError("Feeds can only be added to text channels")
@@ -498,9 +498,9 @@ class Crypto(commands.Cog):
             ch = ctx.guild.get_channel(r["channel_id"])
             label = ch.mention if ch else f"`{r['channel_id']}`"
             price = r.get("last_price")
-            price_s = f"${float(price):,.2f}" if price is not None else "—"
+            price_s = f"${float(price):,.2f}" if price is not None else "-"
             chg = r.get("last_change")
-            chg_s = f"{float(chg):+.2f}%" if chg is not None else "—"
+            chg_s = f"{float(chg):+.2f}%" if chg is not None else "-"
             lines.append(f"`{i}` {label} · **{r['coin_label']}** · {price_s} ({chg_s})")
         embed = panel_embed(
             title="Crypto Feeds",

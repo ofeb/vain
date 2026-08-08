@@ -99,7 +99,7 @@ class InviteTracker(Package):
             name = member.display_name if member else f"<@{row['user_id']}>"
             medal = medals[i] if i < 3 else f"`{i + 1}`"
             values.append(
-                f"{medal} {name} — **{row['real']}** invites "
+                f"{medal} {name} - **{row['real']}** invites "
                 f"({row['invites']} regular, {row['leaves']} left, {row['fake']} fake)"
             )
 
@@ -211,7 +211,7 @@ class InviteTracker(Package):
 
         invite_lines = []
         for row in rows:
-            invite_lines.append(f"`{row['code']}` — **{row['uses']}** uses")
+            invite_lines.append(f"`{row['code']}` - **{row['uses']}** uses")
 
         description = (
             f"**{user.display_name}** invite breakdown\n\n"

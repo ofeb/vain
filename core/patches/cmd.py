@@ -87,8 +87,8 @@ class PatchedCommand(Command):
 
             if arg is None or isinstance(arg, (str, ScriptType)):
                 raw = "" if arg is None else str(arg)
-                parsed = await FlagConv.convert(ctx, raw.replace("—", "--"))
-                cleaned = raw.replace("—", "--")
+                parsed = await FlagConv.convert(ctx, raw.replace("-", "--"))
+                cleaned = raw.replace("-", "--")
                 for name, value in parsed:
                     ctx.flags[name] = value
                     names = [name]

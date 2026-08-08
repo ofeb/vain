@@ -228,7 +228,7 @@ class Roblox(Package):
             fo_count = followers.get("count") if isinstance(followers, dict) else "N/A"
             g_count = following.get("count") if isinstance(following, dict) else "N/A"
             e = panel_embed(
-                title=f"{user.get('displayName') or user.get('name')} — Social",
+                title=f"{user.get('displayName') or user.get('name')} - Social",
                 color=self.color,
                 lines=[
                     f"**Friends:** {f_count}",
@@ -270,9 +270,9 @@ class Roblox(Package):
                 asset = item.get("assetId") or item.get("userAssetId")
                 rap_s = f"{rap:,} R$" if isinstance(rap, int) else "N/A"
                 if asset:
-                    lines.append(f"**{name}** — RAP {rap_s} · `{asset}`")
+                    lines.append(f"**{name}** - RAP {rap_s} · `{asset}`")
                 else:
-                    lines.append(f"**{name}** — RAP {rap_s}")
+                    lines.append(f"**{name}** - RAP {rap_s}")
             e = panel_embed(
                 title=f"{user.get('name')}'s Collectibles",
                 color=self.color,
@@ -351,10 +351,10 @@ class Roblox(Package):
                     if iid
                     else "https://www.roblox.com/catalog"
                 )
-                lines.append(f"**[{name}]({link})** — {price_s}")
+                lines.append(f"**[{name}]({link})** - {price_s}")
 
             e = panel_embed(
-                title=f"Catalog — {q}",
+                title=f"{q}",
                 color=self.color,
                 lines=lines,
                 footer="Roblox catalog (public)",
@@ -527,7 +527,7 @@ class Roblox(Package):
                 f"**Rate:** ${rate} / Robux",
                 f"**USD:** ${usd:,.2f}",
             ],
-            footer="Estimate only — not a live DevEx quote",
+            footer="Estimate only - not a live DevEx quote",
             timestamp=False,
         )
         await ctx.send(embed=e)

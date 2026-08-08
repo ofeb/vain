@@ -67,7 +67,7 @@ def build_giveaway_panel(
             wlabel = "Winner" if (winner_mentions or "").count("<@") <= 1 else "Winners"
             body = (
                 f"## {prize}\n"
-                f"**{wlabel}** {winner_mentions or '—'}\n"
+                f"**{wlabel}** {winner_mentions or '-'}\n"
                 f"**Entries** {entries}\n"
                 f"-# ended · hosted by {host_mention}"
             )

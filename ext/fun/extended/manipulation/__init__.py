@@ -89,11 +89,11 @@ class Manipulation(Package):
                 result = await processor(data)
             except Exception:
                 if pil_fallback is None:
-                    return await ctx.fail("Failed to process image — install ffmpeg or attach a valid image")
+                    return await ctx.fail("Failed to process image - install ffmpeg or attach a valid image")
                 try:
                     result = pil_fallback(data)
                 except Exception:
-                    return await ctx.fail("Failed to process image — install ffmpeg or attach a valid image")
+                    return await ctx.fail("Failed to process image - install ffmpeg or attach a valid image")
             await ctx.send(file=discord.File(BytesIO(result), filename=filename))
 
     async def _flux_command(
@@ -111,13 +111,13 @@ class Manipulation(Package):
                 await ctx.send(file=file)
             except Exception:
                 if pil_fallback is None:
-                    return await ctx.fail("Failed to process image — flux/ffmpeg unavailable for this effect")
+                    return await ctx.fail("Failed to process image - flux/ffmpeg unavailable for this effect")
                 try:
                     data = attachment.fp.read()
                     result = pil_fallback(data)
                     await ctx.send(file=discord.File(BytesIO(result), filename=f"{operation}.png"))
                 except Exception:
-                    await ctx.fail("Failed to process image — flux/ffmpeg unavailable for this effect")
+                    await ctx.fail("Failed to process image - flux/ffmpeg unavailable for this effect")
 
     @hybrid(name="media", description="Apply effects to images and GIFs", group=True, guild_only=True)
     async def media(self, ctx: Context) -> None:

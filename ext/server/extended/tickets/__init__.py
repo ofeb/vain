@@ -303,7 +303,7 @@ class Tickets(Package):
         record: dict,
         view: TicketControlView,
     ) -> None:
-        """Send welcome content — button template > guild open_embed > Vain default."""
+        """Send welcome content - button template > guild open_embed > Vain default."""
         user = interaction.user
         guild = interaction.guild
         template = (record.get("template") or settings.open_embed or "").strip()
@@ -699,7 +699,7 @@ class Tickets(Package):
         settings = await Settings.fetch(self.bot, ctx.guild)
         await settings.upsert(open_embed=None)
         return await ctx.success(
-            f"Open message reset to default: **{DEFAULT_OPEN_TITLE}** — "
+            f"Open message reset to default: **{DEFAULT_OPEN_TITLE}** - "
             f"{DEFAULT_OPEN_DESCRIPTION}."
         )
 
@@ -812,7 +812,7 @@ class Tickets(Package):
             color=color.base,
         )
         for b in rows[:15]:
-            e = b.get("emoji") or "—"
+            e = b.get("emoji") or "-"
             embed.add_field(
                 name=str(b.get("label") or b["id"])[:256],
                 value=f"id: `{b['id']}` · emoji: {e}",
@@ -912,7 +912,7 @@ class Tickets(Package):
         if not rows:
             return await ctx.warn("No buttons configured.")
         lines = [
-            f"**{r['label']}** (`{r['id']}`) — {r['style']}"
+            f"**{r['label']}** (`{r['id']}`) - {r['style']}"
             + (f" {r['emoji']}" if r["emoji"] else "")
             for r in rows
         ]
@@ -1298,7 +1298,7 @@ class Tickets(Package):
             persist=True,
         )
         embed = Embed(
-            title=f"Transcript — {interaction.channel.name}",
+            title=f"Transcript - {interaction.channel.name}",
             description="Manual export (ticket still open).",
             color=color.base,
         )

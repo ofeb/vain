@@ -383,7 +383,7 @@ class Giveaway(commands.Cog):
                 title="Giveaway entry rules",
                 description=header,
             )
-            await ctx.paginate(embed, [f"`{i:02d}` " + ln.split(" — ", 1)[-1] if " — " in ln else ln for i, ln in enumerate(lines, 1)])
+            await ctx.paginate(embed, [f"`{i:02d}` " + ln.split(" - ", 1)[-1] if " - " in ln else ln for i, ln in enumerate(lines, 1)])
             return
         emb = discord.Embed(color=color.base, description=text)
         await ctx.send(embed=emb)
@@ -1061,7 +1061,7 @@ class Giveaway(commands.Cog):
     )
     @has_permissions(manage_guild=True)
     async def customize_dmonwin(self, ctx: Context, state: str = None) -> None:
-        """`,giveaway customize dmonwin on|off` — off by default."""
+        """`,giveaway customize dmonwin on|off` - off by default."""
         events = self._events()
         if events is None:
             await ctx.warn("Giveaway events are not loaded")

@@ -427,7 +427,7 @@ class Role(Package):
         """Toggle a role. Usage: ``,r @user RoleName`` (add if missing, remove if present).
 
         Multi-member: ``,r @a @b Role Name``. Parsing stops consuming members once the
-        remaining tokens form a valid role — so a role named ``member`` is never
+        remaining tokens form a valid role - so a role named ``member`` is never
         fuzzy-matched as a second user.
         """
         member_list, target_role = await self._parse_role_targets(ctx, args)

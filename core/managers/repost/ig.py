@@ -1,7 +1,7 @@
 """instagram reel and post repost handler.
 
 Uses social API primary (vain.rest fallback).
-Sends the video/image file only — no embed.
+Sends the video/image file only - no embed.
 """
 
 from __future__ import annotations

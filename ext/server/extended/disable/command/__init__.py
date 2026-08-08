@@ -236,13 +236,13 @@ class CommandDisableCommands(Package):
                 kind = kinds[i] if i < len(kinds) else None
                 obj = resolve(int(oid), kind)
                 if obj == "server":
-                    lines.append(f"**{row.command}** — disabled in this **server**")
+                    lines.append(f"**{row.command}** - disabled in this **server**")
                 elif obj is not None:
                     if isinstance(obj, Role):
-                        lines.append(f"**{row.command}** — only {obj.mention} allowed (role lock)")
+                        lines.append(f"**{row.command}** - only {obj.mention} allowed (role lock)")
                     else:
                         lines.append(
-                            f"**{row.command}** — disabled {target_phrase(obj)}"
+                            f"**{row.command}** - disabled {target_phrase(obj)}"
                         )
         if not lines:
             raise CommandError("no commands have been disabled")

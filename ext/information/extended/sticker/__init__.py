@@ -183,7 +183,7 @@ class Sticker(Package):
         else:
             return await ctx.warn(
                 "Provide a sticker image URL, attachment, or sticker "
-                f"— e.g. `{ctx.clean_prefix}sticker add https://… name`"
+                f"- e.g. `{ctx.clean_prefix}sticker add https://… name`"
             )
 
         if not source_url:

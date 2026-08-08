@@ -50,8 +50,8 @@ def global_ratelimit(user_id: int) -> Optional[float]:
 
     Rules:
       1. Hard lockout while ``blocked_until`` is in the future (burst abuse).
-      2. Soft spacing — at most one command every ``BASE_COOLDOWN`` seconds.
-      3. Burst — more than ``BURST_RATE`` commands inside ``BURST_WINDOW``
+      2. Soft spacing - at most one command every ``BASE_COOLDOWN`` seconds.
+      3. Burst - more than ``BURST_RATE`` commands inside ``BURST_WINDOW``
          triggers a ``BURST_PENALTY`` second lockout.
     """
     now = time.monotonic()

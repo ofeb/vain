@@ -409,8 +409,8 @@ class LastFMApiClient:
     def _split_artist_track(self, value: str) -> tuple[str, str] | None:
         if " - " in value:
             artist, track = value.split(" - ", 1)
-        elif " — " in value:
-            artist, track = value.split(" — ", 1)
+        elif " - " in value:
+            artist, track = value.split(" - ", 1)
         elif "|" in value:
             artist, track = value.split("|", 1)
         else:

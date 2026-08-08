@@ -1,4 +1,4 @@
-"""AFK cog — global away status with mention notices (Redis)."""
+"""AFK cog - global away status with mention notices (Redis)."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ class Away(AFKEvents, Package):
 
     def _store(self) -> AFK:
         if self.bot.redis is None:
-            raise commands.CommandError("Redis is not connected — AFK is unavailable.")
+            raise commands.CommandError("Redis is not connected - AFK is unavailable.")
         return AFK(self.bot.redis)
 
     @hybrid(
@@ -42,7 +42,7 @@ class Away(AFKEvents, Package):
         await store.set(ctx.author.id, status or "AFK")
         embed = c2(
             color=color.base,
-            message=f"You're now **afk** — {status or 'AFK'}",
+            message=f"You're now **afk** - {status or 'AFK'}",
             timestamp=False,
         )
         await ctx.send(embed=embed)

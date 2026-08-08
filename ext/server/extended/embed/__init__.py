@@ -97,7 +97,7 @@ class EmbedCommands(Package):
         if not rows:
             return await ctx.warn("No saved embed templates yet.")
         lines = [
-            f"**`{row['name']}`** — <@{row['author_id']}> ({discord.utils.format_dt(row['updated_at'], style='R')})"
+            f"**`{row['name']}`** - <@{row['author_id']}> ({discord.utils.format_dt(row['updated_at'], style='R')})"
             for row in rows
         ]
         embed = discord.Embed(

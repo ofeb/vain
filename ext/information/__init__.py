@@ -511,7 +511,7 @@ class InformationCommands(Package):
     @describe(member="Member to check")
     @commands.cooldown(1, 2, commands.BucketType.user)
     async def seen(self, ctx: Context, member: discord.Member | None = None) -> None:
-        """Last seen based on last online / last activity — not 'now' while only online."""
+        """Last seen based on last online / last activity - not 'now' while only online."""
         member = member or ctx.author
         cache = getattr(self.bot, "member_last_seen", {})
         last = cache.get((ctx.guild.id, member.id))
@@ -532,7 +532,7 @@ class InformationCommands(Package):
             
             detail = "online right now (no prior activity recorded)"
         else:
-            detail = "unknown — no activity recorded yet"
+            detail = "unknown - no activity recorded yet"
 
         embed = reply_embed(
             color=color.base,
@@ -569,7 +569,7 @@ class Information(
     commands.Cog,
     metaclass=_Meta,
 ):
-    """main information extension — all subcommands combined"""
+    """main information extension - all subcommands combined"""
 
 async def setup(bot) -> None:
     """load information extension"""

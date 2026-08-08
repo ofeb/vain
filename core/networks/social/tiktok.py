@@ -1,4 +1,4 @@
-"""TikTok client — vain.rest primary, public scrapers as fallback.
+"""TikTok client - vain.rest primary, public scrapers as fallback.
 
 Primary: ``GET /tiktok/video/{username}/{post_id}`` and ``/tiktok/profile/{username}``
 Docs: https://vain.rest/docs
@@ -249,7 +249,7 @@ class TikTok:
         return post.raw if post and post.raw else (post.__dict__ if post else None)
 
     async def user(self, username: str) -> Optional[dict]:
-        """Best-effort public profile lookup — social API first, then vain.rest."""
+        """Best-effort public profile lookup - social API first, then vain.rest."""
         username = (username or "").strip().lstrip("@")
         if not username:
             return None

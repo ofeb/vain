@@ -244,7 +244,7 @@ class BoosterroleCommands(Package):
         ]
         valid = [r for r in all_roles if ctx.guild.get_member(r.user_id)]
         lines = [
-            f"`{i}` {ctx.guild.get_member(r.user_id).mention} — {ctx.guild.get_role(r.role_id).mention}"
+            f"`{i}` {ctx.guild.get_member(r.user_id).mention} - {ctx.guild.get_role(r.role_id).mention}"
             for i, r in enumerate(valid, start=1)
         ]
         if stale:

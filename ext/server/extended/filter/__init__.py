@@ -307,7 +307,7 @@ class FilterCommands(Package):
                 raise CommandError("can only filter 1000 words max")
             actions = [
                 AutoModRuleAction(
-                    custom_message=f"blocked by {self.bot.user.name} — blacklisted word"
+                    custom_message=f"blocked by {self.bot.user.name} - blacklisted word"
                 )
             ]
             await ctx.guild.create_automod_rule(

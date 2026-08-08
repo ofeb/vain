@@ -3,7 +3,7 @@
 
 CREATE TABLE IF NOT EXISTS leveling (
     guild_id        BIGINT PRIMARY KEY,
-    message         TEXT DEFAULT 'Nice work {user.mention} — you reached **Level {level}**!',
+    message         TEXT DEFAULT 'Nice work {user.mention} - you reached **Level {level}**!',
     channel_id      BIGINT,
     multiplier      REAL DEFAULT 1.0,
     booster         REAL DEFAULT 1.0,

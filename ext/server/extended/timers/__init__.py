@@ -139,7 +139,7 @@ class Timers(Package):
         for tid, data in sorted(user_timers.items(), key=lambda x: x[1]["expires"]):
             remaining = (data["expires"] - discord.utils.utcnow()).total_seconds()
             remaining_str = self._format_remaining(max(0, int(remaining)))
-            entries.append(f"`{tid}` — **{data['text'][:40]}** — expires {remaining_str}")
+            entries.append(f"`{tid}` - **{data['text'][:40]}** - expires {remaining_str}")
 
         embed = panel_embed(
             title=f"Active Timers ({len(user_timers)})",

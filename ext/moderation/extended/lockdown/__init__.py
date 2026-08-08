@@ -48,7 +48,7 @@ class Lockdown(Package):
             reason,
         )
 
-        return await ctx.success(f"{channel.mention} has been **locked** — {reason}")
+        return await ctx.success(f"{channel.mention} has been **locked** - {reason}")
 
     @lock.command(
         name="all",
@@ -94,7 +94,7 @@ class Lockdown(Package):
         if not locked:
             return await ctx.warn("no channels were locked")
 
-        return await ctx.success(f"**{len(locked)}** channels locked — {reason}")
+        return await ctx.success(f"**{len(locked)}** channels locked - {reason}")
 
     @lock.command(
         name="role",
@@ -246,7 +246,7 @@ class Lockdown(Package):
             channel.id,
         )
 
-        return await ctx.success(f"{channel.mention} has been **unlocked** — {reason}")
+        return await ctx.success(f"{channel.mention} has been **unlocked** - {reason}")
 
     @unlock.command(
         name="all",
@@ -280,4 +280,4 @@ class Lockdown(Package):
         if not unlocked:
             return await ctx.warn("no channels are currently **locked**")
 
-        return await ctx.success(f"**{len(unlocked)}** channels unlocked — {reason}")
+        return await ctx.success(f"**{len(unlocked)}** channels unlocked - {reason}")

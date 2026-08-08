@@ -107,7 +107,7 @@ class _RenameModal(ui.Modal, title="Rename"):
                 embed=reply_embed(
                     color=color.base,
                     message=(
-                        f"{emojis.approve} Renamed to `{clean}` — "
+                        f"{emojis.approve} Renamed to `{clean}` - "
                         "press **Steal** when ready"
                     ),
                 ),
@@ -170,12 +170,12 @@ class StealPaginateView(PaginateView):
         if self.kind == "sticker":
             lines = (
                 f"**Sticker:** `{name}`",
-                f"**ID:** {data.get('id') or '—'}",
+                f"**ID:** {data.get('id') or '-'}",
             )
         else:
             lines = (
                 f"**Emoji:** `:{name}:`",
-                f"**ID:** {data.get('id') or '—'}",
+                f"**ID:** {data.get('id') or '-'}",
             )
         embed = discord.Embed(
             color=color.base,
@@ -204,7 +204,7 @@ class StealPaginateView(PaginateView):
         if not self.search_options or index < 0 or index >= len(self.items):
             return
         name = str(self.items[index].get("name") or "")
-        sid = str(self.items[index].get("id") or "—")
+        sid = str(self.items[index].get("id") or "-")
         label = (f":{name}:" if self.kind != "sticker" else name)[:100]
         value = str(index)
         for opt in self.search_options:
@@ -653,7 +653,7 @@ class Steal(Package):
                 description=compose(
                     body(
                         f"**Sticker:** `{name}`",
-                        f"**ID:** {data.get('id') or '—'}",
+                        f"**ID:** {data.get('id') or '-'}",
                     ),
                     caption(f"{_STEAL_FOOTER_HINT} · {i}/{total}"),
                 ),
@@ -665,7 +665,7 @@ class Steal(Package):
                 discord.SelectOption(
                     label=name[:100],
                     value=str(i - 1),
-                    description=f"ID {data.get('id') or '—'}"[:100],
+                    description=f"ID {data.get('id') or '-'}"[:100],
                 )
             )
 

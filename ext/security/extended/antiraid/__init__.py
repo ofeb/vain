@@ -512,7 +512,7 @@ class Antiraid(AntiraidEvents, Package):
         await self._store_module(ctx.guild.id, "avatar", enabled=False)
         await self._store_module(ctx.guild.id, "newaccounts", enabled=False)
         await ctx.success(
-            "All **antiraid modules** are now **disabled** — configuration kept. "
+            "All **antiraid modules** are now **disabled** - configuration kept. "
             f"Use `{ctx.clean_prefix}antiraid reset` to delete everything."
         )
 

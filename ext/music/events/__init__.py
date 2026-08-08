@@ -51,7 +51,7 @@ class MusicEvents(Package):
                     description=f"Lavalink end reason: `{reason_u}`",
                     guild=player.guild,
                     error=True,
-                    fields=[("Track", f"{title} — {artist}")],
+                    fields=[("Track", f"{title} - {artist}")],
                 )
             except Exception:
                 pass
@@ -82,7 +82,7 @@ class MusicEvents(Package):
                 description=f"```{exception}```",
                 guild=player.guild,
                 error=True,
-                fields=[("Track", f"{title} — {artist}")],
+                fields=[("Track", f"{title} - {artist}")],
             )
         except Exception:
             pass
@@ -93,7 +93,7 @@ class MusicEvents(Package):
 
     @Package.listener("on_voice_state_update")
     async def _vc_cleanup(self, member, before, after) -> None:
-        """Leave when the last human leaves the bot's channel — never on bot self-updates."""
+        """Leave when the last human leaves the bot's channel - never on bot self-updates."""
         
         if self.bot.user and member.id == self.bot.user.id:
             return

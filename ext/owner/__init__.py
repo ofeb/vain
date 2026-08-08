@@ -103,7 +103,7 @@ class Owner(Package):
             except discord.NotFound:
                 raise CommandError(f"User `{argument}` not found")
         raise CommandError(
-            f"Could not resolve `{argument}` as a user — use a mention or ID"
+            f"Could not resolve `{argument}` as a user - use a mention or ID"
         )
 
     @command(
@@ -207,8 +207,8 @@ class Owner(Package):
                 else f"Unknown (`{guild.owner_id}`)"
             )
             entries.append(
-                f"`{i}.` **{guild.name}** (`{guild.id}`) — "
-                f"{guild.member_count} members — Owner: {owner_name}"
+                f"`{i}.` **{guild.name}** (`{guild.id}`) - "
+                f"{guild.member_count} members - Owner: {owner_name}"
             )
 
         pages = [entries[i : i + 15] for i in range(0, len(entries), 15)] or [[]]
@@ -373,10 +373,10 @@ class Owner(Package):
 
         if status == "error":
             await ctx.warning(
-                f"Command `{command}` raised an error — see attached log"
+                f"Command `{command}` raised an error - see attached log"
             )
         else:
-            await ctx.success(f"Command `{command}` ran — see attached log")
+            await ctx.success(f"Command `{command}` ran - see attached log")
         await ctx.send(file=file)
 
     async def _send_traceback_layout(
@@ -406,11 +406,11 @@ class Owner(Package):
             if len(tb_text) > len(preview):
                 preview = preview.rstrip() + "\n..."
             notice = (
-                "Error is too large to show fully — see attached file.\n"
+                "Error is too large to show fully - see attached file.\n"
                 f"```python\n{preview}\n```"
             )
             if len(notice) > _TB_DISPLAY_LIMIT:
-                notice = "Error is too large to show — see attached file."
+                notice = "Error is too large to show - see attached file."
             container.add_item(ui.TextDisplay(notice))
             attach = discord.File(
                 io.BytesIO(tb_text.encode("utf-8")),
@@ -669,7 +669,7 @@ class Owner(Package):
         description="View all whitelisted users and guilds",
     )
     async def whitelist_list(self, ctx: Context) -> None:
-        await ctx.fail("Whitelisting removes entries — use `blacklist list` to see current entries")
+        await ctx.fail("Whitelisting removes entries - use `blacklist list` to see current entries")
 
     
 
@@ -692,14 +692,14 @@ class Owner(Package):
                     )
                     break
             if not invite:
-                await ctx.fail("Cannot create invite — no permissions")
+                await ctx.fail("Cannot create invite - no permissions")
                 return
             await ctx.author.send(
                 f"**{guild.name}** (`{guild.id}`)\n{invite.url}"
             )
             await ctx.success("Invite sent to your DMs")
         except discord.Forbidden:
-            await ctx.fail("Cannot DM you — check your privacy settings")
+            await ctx.fail("Cannot DM you - check your privacy settings")
 
 from discord.ext import commands
 

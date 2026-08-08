@@ -29,7 +29,7 @@ def _matches_trigger(content: str, trigger: str, *, strict: bool) -> bool:
 
 
 class ReactionEvents(Package):
-    """Auto-reaction event handlers — mixed into Reaction cog."""
+    """Auto-reaction event handlers - mixed into Reaction cog."""
 
     @Package.listener("on_valid_message")
     async def on_auto_reaction(self, ctx: Context) -> None:

@@ -295,7 +295,7 @@ class Socials(Package):
                 cap = cap.get("text") or ""
             cap = str(cap).replace("\n", " ").strip()[:80]
             label = f"`{code}`" if code else f"#{i}"
-            lines.append(f"**{i}.** {label}" + (f" — {cap}" if cap else ""))
+            lines.append(f"**{i}.** {label}" + (f" - {cap}" if cap else ""))
         embed = c2(color=color.base, title=title, message="\n".join(lines) or empty)
         await ctx.send(embed=embed)
 
@@ -573,7 +573,7 @@ class Socials(Package):
                 post = parse_instagram_post(raw) if isinstance(raw, dict) else None
                 if post:
                     lines.append(
-                        f"**{i}.** [@{post.username}]({post.url}) — {(post.caption or '')[:70]}"
+                        f"**{i}.** [@{post.username}]({post.url}) - {(post.caption or '')[:70]}"
                     )
                 else:
                     lines.append(f"**{i}.** post")
@@ -827,7 +827,7 @@ class Socials(Package):
             for i, raw in enumerate(items[:12], 1):
                 post = parse_tiktok_post(raw) if isinstance(raw, dict) else None
                 if post:
-                    lines.append(f"**{i}.** [@{post.username}]({post.url}) — {(post.caption or '')[:70]}")
+                    lines.append(f"**{i}.** [@{post.username}]({post.url}) - {(post.caption or '')[:70]}")
                 else:
                     lines.append(f"**{i}.** post")
             await ctx.send(embed=c2(color=color.base, title="TikTok FYP", message="\n".join(lines)))
@@ -1369,7 +1369,7 @@ class Socials(Package):
                 post = parse_pinterest_pin(raw) if isinstance(raw, dict) else None
                 if post:
                     lines.append(
-                        f"**{i}.** [@{post.username}]({post.url}) — {(post.caption or '')[:70]}"
+                        f"**{i}.** [@{post.username}]({post.url}) - {(post.caption or '')[:70]}"
                     )
                 else:
                     title = ""

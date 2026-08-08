@@ -1,4 +1,4 @@
-"""Vanity role cog — reward members who put the guild vanity in their status."""
+"""Vanity role cog - reward members who put the guild vanity in their status."""
 
 from __future__ import annotations
 
@@ -108,7 +108,7 @@ class VanityCommands(VanityEvents, Package):
             msg = f"Vanity role set to {role.mention}"
         if not role.is_assignable():
             await ctx.warn(
-                f"{msg}\n-# I **cannot assign** it — move my role **above** "
+                f"{msg}\n-# I **cannot assign** it - move my role **above** "
                 f"{role.mention} in Server Settings → Roles."
             )
         else:
@@ -257,7 +257,7 @@ class VanityCommands(VanityEvents, Package):
             f"**Roles (will try):** "
             f"{', '.join(r.mention for r in grantable) or 'none'}",
             f"**Bot can assign:** "
-            f"{', '.join(r.mention for r in settings.assignable_roles) or 'none — move bot role higher'}",
+            f"{', '.join(r.mention for r in settings.assignable_roles) or 'none - move bot role higher'}",
             f"**Member has reward role:** {'yes' if has_roles else 'no'}"
             + ("" if had_roles == has_roles else " *(updated)*"),
             f"**Notify channel:** "

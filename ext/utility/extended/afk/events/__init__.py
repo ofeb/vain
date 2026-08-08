@@ -74,7 +74,7 @@ class AFKEvents:
             embed = c2(
                 color=color.approve,
                 message=(
-                    f"{user.mention} is AFK: **{data.status}** — "
+                    f"{user.mention} is AFK: **{data.status}** - "
                     f"{format_dt(data.timestamp, 'R')}"
                 ),
                 timestamp=False,

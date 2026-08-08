@@ -155,7 +155,7 @@ def _draw_rank_base(
     accent: int,
     avatar_rgba: Image.Image,
 ) -> Image.Image:
-    """Clean static rank card — solid PNG-safe layout, brand accent bar."""
+    """Clean static rank card - solid PNG-safe layout, brand accent bar."""
     W, H = 934, 280
     progress = 0.0
     if target_xp and target_xp > 0:
@@ -292,7 +292,7 @@ async def generate_rank_card(
     *,
     accent: int | None = None,
 ) -> io.BytesIO:
-    """Render a stable rank card PNG (static avatar frame — no broken GIFs)."""
+    """Render a stable rank card PNG (static avatar frame - no broken GIFs)."""
     if accent is None:
         accent = int(getattr(bot_color, "base", 0xE1D2DE) or 0xE1D2DE)
 
@@ -427,7 +427,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         cfg = await self._get_cfg(ctx.guild.id)
         if not cfg or not self._cfg_is_enabled(cfg):
             await ctx.warn(
-                f"Leveling is not enabled — use `{ctx.clean_prefix}leveling enable`"
+                f"Leveling is not enabled - use `{ctx.clean_prefix}leveling enable`"
             )
             return None
         return cfg
@@ -534,14 +534,14 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
                 ctx.guild.id,
             )
             return await ctx.success(
-                "Leveling system is now **enabled** — previous configuration and XP kept"
+                "Leveling system is now **enabled** - previous configuration and XP kept"
             )
         await self.db.execute(
             """INSERT INTO leveling
                (guild_id, message, multiplier, booster, stack, command, enabled)
                VALUES ($1, $2, 1.0, 1.0, false, false, true)""",
             ctx.guild.id,
-            "Nice work {user.mention} — you reached **Level {level}**!",
+            "Nice work {user.mention} - you reached **Level {level}**!",
         )
         return await ctx.success("Leveling system is now **enabled**")
 
@@ -556,11 +556,11 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         cfg = await self._get_cfg(ctx.guild.id)
         if not cfg:
             return await ctx.warn(
-                f"Leveling is not configured — use `{ctx.clean_prefix}leveling enable`"
+                f"Leveling is not configured - use `{ctx.clean_prefix}leveling enable`"
             )
         if not self._cfg_is_enabled(cfg):
             return await ctx.warn(
-                f"Leveling is already **disabled** — "
+                f"Leveling is already **disabled** - "
                 f"use `{ctx.clean_prefix}leveling enable` to turn it back on"
             )
         await self.db.execute(
@@ -568,7 +568,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
             ctx.guild.id,
         )
         return await ctx.success(
-            "Leveling **disabled** — configuration and XP kept. "
+            "Leveling **disabled** - configuration and XP kept. "
             f"Use `{ctx.clean_prefix}leveling wipe` to delete everything"
         )
 
@@ -615,7 +615,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         perms = ch.permissions_for(me) if me is not None else None
         if perms is not None and not perms.send_messages:
             return await ctx.warn(
-                f"I can't send messages in {ch.mention} — fix my permissions first"
+                f"I can't send messages in {ch.mention} - fix my permissions first"
             )
         await self.db.execute(
             "UPDATE leveling SET channel_id = $1 WHERE guild_id = $2",
@@ -627,7 +627,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
     @leveling.command(
         name="message",
         description="Set the level-up message script (embed/container/plain)",
-        example=",leveling message Nice {user.mention} — Level {level}!",
+        example=",leveling message Nice {user.mention} - Level {level}!",
         usage="<script|none>",
     )
     @has_permissions(manage_guild=True)
@@ -649,7 +649,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
             ctx.guild.id,
         )
         return await ctx.success(
-            f"Level-up message set — it will send to the configured "
+            f"Level-up message set - it will send to the configured "
             f"`{ctx.clean_prefix}leveling channel` destination.\n```\n{message[:500]}\n```"
         )
 
@@ -701,7 +701,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         )
         if msg is None:
             return await ctx.warn(
-                "Failed to send the level-up preview — check bot permissions "
+                "Failed to send the level-up preview - check bot permissions "
                 "in the configured channel (and DMs if channel is `dm`)"
             )
         jump = getattr(msg, "jump_url", None)
@@ -796,7 +796,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
     async def leveling_reset(self, ctx, member: Member = None):
         if not await self._get_cfg(ctx.guild.id):
             return await ctx.warn(
-                f"Leveling is not configured — use `{ctx.clean_prefix}leveling enable`"
+                f"Leveling is not configured - use `{ctx.clean_prefix}leveling enable`"
             )
         view = ConfirmView(ctx.author.id)
         target = member.mention if member else "**everyone**"
@@ -901,7 +901,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         for i, r in enumerate(sorted_rows, 1):
             user = self.bot.get_user(r["user_id"]) or r["user_id"]
             lines.append(
-                f"`#{i:02}` **{user}** — Level **{r['level']}** "
+                f"`#{i:02}` **{user}** - Level **{r['level']}** "
                 f"(`{int(r['xp']):,}`/`{int(r['target_xp']):,}` XP)"
             )
         embed = Embed(
@@ -1044,7 +1044,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         for r in rows:
             role = ctx.guild.get_role(r["role_id"])
             label = role.mention if role else f"`{r['role_id']}`"
-            lines.append(f"{label} — **Level {r['level']}**")
+            lines.append(f"{label} - **Level {r['level']}**")
         return await ctx.paginate(Embed(title="Level Rewards"), lines)
 
     @leveling_rewards.command(

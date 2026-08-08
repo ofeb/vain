@@ -278,7 +278,7 @@ def tag_label(member: Member) -> str | None:
 def member_repping_tag(member: Member, guild: Guild, *, strict: bool = False) -> bool:
     """Whether *member* is displaying this guild as their primary guild tag.
 
-    ``strict`` is ignored (kept for call-site compat) — there is no strict mode.
+    ``strict`` is ignored (kept for call-site compat) - there is no strict mode.
     """
     info = primary_guild_info(member)
     gid = info.get("id")

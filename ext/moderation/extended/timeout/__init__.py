@@ -11,6 +11,6 @@ from core.discord.package import Package
 
 
 class Timeout(Package):
-    """Placeholder — timeout is implemented in ModerationCommands."""
+    """Placeholder - timeout is implemented in ModerationCommands."""
 
     pass

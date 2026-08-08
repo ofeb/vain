@@ -1,4 +1,4 @@
-"""Color helpers — dominant color extraction, etc."""
+"""Color helpers - dominant color extraction, etc."""
 
 from __future__ import annotations
 

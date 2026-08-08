@@ -23,21 +23,21 @@ _DEFAULT_CHANNEL_ID = 0
 _DEFAULT_MESSAGE = "first"
 
 _NUKE_VARIABLES = [
-    "`{nuke.interval}` — scheduled interval for this channel (autonuke only)",
-    "`{nuke.threshold}` — same as interval (seconds as human duration)",
-    "`{nuke.reconfigured}` — systems re-pointed after the clone (welcome, leave, boost, logs, …)",
-    "`{nuke.channel}` — the new channel mention after the nuke",
-    "`{nuke.channel.name}` — new channel name",
-    "`{nuke.channel.id}` — new channel id",
-    "`{nuke.old}` — old channel name before the nuke",
-    "`{channel}` / `{channel.mention}` — new channel",
-    "`{guild}` / `{guild.name}` — the server",
-    "`{user}` / `{user.mention}` — member who triggered a manual nuke (manual only)",
+    "`{nuke.interval}` - scheduled interval for this channel (autonuke only)",
+    "`{nuke.threshold}` - same as interval (seconds as human duration)",
+    "`{nuke.reconfigured}` - systems re-pointed after the clone (welcome, leave, boost, logs, …)",
+    "`{nuke.channel}` - the new channel mention after the nuke",
+    "`{nuke.channel.name}` - new channel name",
+    "`{nuke.channel.id}` - new channel id",
+    "`{nuke.old}` - old channel name before the nuke",
+    "`{channel}` / `{channel.mention}` - new channel",
+    "`{guild}` / `{guild.name}` - the server",
+    "`{user}` / `{user.mention}` - member who triggered a manual nuke (manual only)",
 ]
 
 
 class Nuke(Package):
-    """nuke management — one-shot channel clone+delete and scheduled autonuke"""
+    """nuke management - one-shot channel clone+delete and scheduled autonuke"""
 
     def __init__(self, bot: Vain):
         super().__init__(bot)
@@ -469,7 +469,7 @@ class Nuke(Package):
             msg = row["message"] or _DEFAULT_MESSAGE
             short = msg if len(msg) <= 40 else msg[:40] + "…"
             values.append(
-                f"`{i}` {ch.mention} — every **{naturaldelta(row['nuke_threshold'])}**\n"
+                f"`{i}` {ch.mention} - every **{naturaldelta(row['nuke_threshold'])}**\n"
                 f"-# message: `{short}`"
             )
         if not values:
@@ -537,7 +537,7 @@ class Nuke(Package):
         )
         if not existing:
             raise CommandError(
-                f"No autonuke for {channel.mention} — use "
+                f"No autonuke for {channel.mention} - use "
                 f"`{ctx.clean_prefix}autonuke add` first"
             )
         await self.db.execute(

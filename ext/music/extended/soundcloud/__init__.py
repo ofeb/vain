@@ -78,10 +78,10 @@ class Soundcloud(Package):
         entries = []
         for i, track in enumerate(results[:5], 1):
             duration = self._format_duration(track.get("duration", 0))
-            entries.append(f"`{i}.` **{track['title']}** — {track['user']['username']} ({duration})")
+            entries.append(f"`{i}.` **{track['title']}** - {track['user']['username']} ({duration})")
 
         embed = panel_embed(
-            title=f"SoundCloud Search — {query}",
+            title=f"SoundCloud Search - {query}",
             color=color.base,
             lines=entries,
             footer="Powered by SoundCloud API",

@@ -5,7 +5,7 @@ Handles decorative names like ``ʚ .  own``, ``・boost・``, ``『VIP』`` by:
 1. Exact match (case-insensitive)
 2. Starts-with
 3. Substring contains
-4. **Word-token match** — strips symbols/emoji/punctuation, splits alphanumerics,
+4. **Word-token match** - strips symbols/emoji/punctuation, splits alphanumerics,
    then matches the query as a whole word (``own`` → ``ʚ .  own``, not ``owner``
    unless no better hit)
 5. Compact alnum contains (``boost`` in ``ʚ.boost.role``)

@@ -376,5 +376,5 @@ class FileVainCache:
 
     @classmethod
     async def from_url(cls, *_: Any, **__: Any) -> FileVainCache:
-        """compat alias — file store ignores redis urls."""
+        """compat alias - file store ignores redis urls."""
         return await cls.open(CACHE_REDIS_FILE)

@@ -44,7 +44,7 @@ def embed_to_container(
     """Convert a rich embed into a Components V2 container that mirrors embed layout.
 
     Title / author / description / fields / image / footer are preserved.
-    No accent strip — C2 cards stay colourless.
+    No accent strip - C2 cards stay colourless.
     """
     _ = _accent_from_embed(embed)  
     container = ui.Container()
@@ -278,7 +278,7 @@ class _PagerButton(ui.Button):
 
 
 class PageJumpSelect(ui.LayoutView):
-    """Ephemeral C2 select — stays open until timeout; picks update the original message."""
+    """Ephemeral C2 select - stays open until timeout; picks update the original message."""
 
     def __init__(
         self,

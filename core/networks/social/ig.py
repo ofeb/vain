@@ -1,4 +1,4 @@
-"""Instagram post client — scl.guilt.bot primary, vain.rest fallback."""
+"""Instagram post client - scl.guilt.bot primary, vain.rest fallback."""
 
 from __future__ import annotations
 

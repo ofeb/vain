@@ -87,7 +87,7 @@ class Emoji(Package):
         description="Returns a large version of a custom emoji",
     )
     async def emoji_enlarge(self, ctx, *, emoji: str | None = None):
-        """Show a large custom emoji — `,emoji enlarge <:name:id>`."""
+        """Show a large custom emoji - `,emoji enlarge <:name:id>`."""
         token = (emoji or "").strip()
         if not token:
             return await ctx.warn("that is **not** a **valid emoji**")
@@ -210,7 +210,7 @@ class Emoji(Package):
             return await ctx.send(embed=e)
 
         lines = [
-            f"**#{i} {row['emoji_name']}** — `{row['uses']}` uses"
+            f"**#{i} {row['emoji_name']}** - `{row['uses']}` uses"
             for i, row in enumerate(emoji_data, start=1)
         ]
         e = c2(
@@ -252,7 +252,7 @@ class Emoji(Package):
         if pe is None or not pe.id:
             return await ctx.warn(
                 "Provide a custom emoji or message link "
-                f"— e.g. `{ctx.clean_prefix}emoji information <:name:id>`"
+                f"- e.g. `{ctx.clean_prefix}emoji information <:name:id>`"
             )
 
         guild_emoji = None
@@ -414,7 +414,7 @@ class Emoji(Package):
                 
                 return await ctx.warn(
                     "Provide a custom emoji, image URL, attachment, or sticker "
-                    f"— e.g. `{ctx.clean_prefix}emoji add <:name:id>` "
+                    f"- e.g. `{ctx.clean_prefix}emoji add <:name:id>` "
                     f"or `{ctx.clean_prefix}emoji add https://… name`"
                 )
 

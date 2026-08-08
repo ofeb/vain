@@ -1,4 +1,4 @@
-"""Giveaway entry requirements — parse, display, and enforce."""
+"""Giveaway entry requirements - parse, display, and enforce."""
 
 from __future__ import annotations
 
@@ -266,7 +266,7 @@ def catalog_lines() -> list[str]:
     out: list[str] = []
     for i, item in enumerate(REQUIREMENT_CATALOG, 1):
         out.append(
-            f"`{i:02d}` **{item['usage']}** — {item['summary']}"
+            f"`{i:02d}` **{item['usage']}** - {item['summary']}"
         )
     return out
 
@@ -535,7 +535,7 @@ async def check_member_requirements(
 ) -> tuple[bool, str | None]:
     """Return (ok, fail_reason). fail_reason is user-facing when not ok.
 
-    *enforce_participation* — set False on join so members can enter first and
+    *enforce_participation* - set False on join so members can enter first and
     farm the post-start message count before the draw; still enforced at end.
     """
     r = requirements_from_record(reqs if isinstance(reqs, dict) else {})

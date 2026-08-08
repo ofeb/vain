@@ -328,14 +328,14 @@ class BumpReminder(BumpReminderEvents, Package):
             return await ctx.warn("Bump reminder is not configured for this guild")
         if not settings.enabled:
             return await ctx.warn(
-                f"Bump reminder is already **disabled** — "
+                f"Bump reminder is already **disabled** - "
                 f"use `{ctx.clean_prefix}bumpreminder enable` to turn it back on"
             )
 
         await settings.upsert(enabled=False)
         self._reminder_sent.discard(ctx.guild.id)
         return await ctx.success(
-            "Disboard bump reminders **disabled** — configuration kept "
+            "Disboard bump reminders **disabled** - configuration kept "
             f"(channel, role, messages). Use `{ctx.clean_prefix}bumpreminder reset` to delete everything"
         )
 
@@ -596,7 +596,7 @@ class BumpReminder(BumpReminderEvents, Package):
         status = "**enabled**" if settings.enabled and ch else "**disabled**"
         msg = "custom" if (settings.message or "").strip() else "default"
         ty = "custom" if (settings.thankyou_message or "").strip() else "default"
-        bumper_label = "`—`"
+        bumper_label = "`-`"
         if settings.last_bumper_id:
             m = ctx.guild.get_member(int(settings.last_bumper_id))
             bumper_label = m.mention if m else f"`{settings.last_bumper_id}`"

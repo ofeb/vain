@@ -71,7 +71,7 @@ def _button_script_chunk(btn: dict[str, str]) -> str:
 
 
 class _PreviewButton(discord.ui.Button):
-    """Clickable builder preview button — link opens URL; others show message ephemerally."""
+    """Clickable builder preview button - link opens URL; others show message ephemerally."""
 
     def __init__(
         self,
@@ -122,7 +122,7 @@ class _PreviewButton(discord.ui.Button):
         if not script:
             if not interaction.response.is_done():
                 await interaction.response.send_message(
-                    "No message set on this button — add one in the button modal.",
+                    "No message set on this button - add one in the button modal.",
                     ephemeral=True,
                 )
             return
@@ -1411,7 +1411,7 @@ class _BaseBuilder:
                     ),
                     (
                         "after",
-                        "Place after (optional): title, description, author, footer, field, images, thumbnail — blank = end",
+                        "Place after (optional): title, description, author, footer, field, images, thumbnail - blank = end",
                         False,
                         40,
                         "",
@@ -1498,7 +1498,7 @@ class _BaseBuilder:
             "content": ("Content / message text", True, 2000),
             "title": ("Title", False, 256),
             "description": ("Description", True, 4000),
-            "color": ("Color hex (optional — leave empty for none)", False, 20),
+            "color": ("Color hex (optional - leave empty for none)", False, 20),
             "image": ("Image URL", False, 500),
             "thumbnail": ("Thumbnail URL", False, 500),
             "url": ("Title URL", False, 500),
@@ -1549,7 +1549,7 @@ class _BaseBuilder:
                 
                 chunk = script[:1800]
                 await inter.response.send_message(
-                    f"Could not DM you — script:\n```\n{chunk}\n```",
+                    f"Could not DM you - script:\n```\n{chunk}\n```",
                     ephemeral=True,
                 )
         self._stopped = True

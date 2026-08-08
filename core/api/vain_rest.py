@@ -164,7 +164,7 @@ class VainRest:
         return TikTokProfile(**data)
 
     async def tiktok_video(self, username: str, post_id: str) -> TikTokPost:
-        """GET /tiktok/video/{username}/{post_id} — docs: vain.rest/docs"""
+        """GET /tiktok/video/{username}/{post_id} - docs: vain.rest/docs"""
         username = (username or "").strip().lstrip("@")
         post_id = (post_id or "").strip()
         if not username or not post_id:

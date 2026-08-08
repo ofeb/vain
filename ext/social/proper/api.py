@@ -1,4 +1,4 @@
-"""Social content API client (scl.guilt.bot — socials-main route shape).
+"""Social content API client (scl.guilt.bot - socials-main route shape).
 
 Base: https://scl.guilt.bot (override with ``config.api.social_base``).
 No API key required. Optional Cloudflare Access service-token headers via

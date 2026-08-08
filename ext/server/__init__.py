@@ -9,12 +9,18 @@ import discord
 from discord.ext.commands import command, group
 from colorthief import ColorThief
 
+from urllib.parse import urlparse
+
 from core.discord.hybrid import hybrid
 from core.discord.package import Package
 from core.discord.views.paginate import send_pages
+from core.managers.permissions import has_permissions
 from core.tools.embed import BadEmbed, ParseError, PreparedScript, parse
 
 from core.discord.views.embed import compose, body, caption, c2
+
+_CLEAR_MEDIA = frozenset({"clear", "none", "off", "remove", "reset", "delete", "del"})
+_MAX_GUILD_MEDIA_BYTES = 10 * 1024 * 1024
 
 async def get_dominant_color(url: str, fallback: int = 0xE1D2DE) -> int:
     """Fetch image and return dominant color using colorthief."""
@@ -48,6 +54,120 @@ async def get_bot_dominant_color(bot) -> int:
 
 class ServerCommands(Package):
     """standalone server commands"""
+
+    @staticmethod
+    def _is_image_url(value: str) -> bool:
+        parsed = urlparse((value or "").strip())
+        return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+    async def _read_guild_image(self, ctx, source: str | None) -> bytes | None:
+        """Load image bytes from attachment or http(s) url for guild branding."""
+        if not source:
+            if not ctx.message.attachments:
+                return None
+            attachment = ctx.message.attachments[0]
+            ctype = (attachment.content_type or "").lower()
+            if ctype and not ctype.startswith("image/"):
+                await ctx.warn("uploaded file must be a **valid image**")
+                return None
+            if attachment.size and attachment.size > _MAX_GUILD_MEDIA_BYTES:
+                await ctx.warn("image must be under **10MB**")
+                return None
+            data = await attachment.read()
+            if len(data) > _MAX_GUILD_MEDIA_BYTES:
+                await ctx.warn("image must be under **10MB**")
+                return None
+            return data
+
+        raw = source.strip()
+        if raw.lower() in _CLEAR_MEDIA:
+            return b""
+
+        if not self._is_image_url(raw):
+            await ctx.warn("provide a valid **http** or **https** image url")
+            return None
+
+        try:
+            timeout = aiohttp.ClientTimeout(total=15)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(raw) as response:
+                    if response.status != 200:
+                        await ctx.fail("failed to fetch that image")
+                        return None
+                    content_type = (response.headers.get("content-type") or "").lower()
+                    if "image/" not in content_type:
+                        await ctx.warn("that url must point to a **valid image**")
+                        return None
+                    data = await response.read()
+                    if len(data) > _MAX_GUILD_MEDIA_BYTES:
+                        await ctx.warn("image must be under **10MB**")
+                        return None
+                    return data
+        except (aiohttp.ClientError, asyncio.TimeoutError, ValueError):
+            await ctx.fail("failed to fetch that image")
+            return None
+
+    async def _set_guild_media(
+        self,
+        ctx,
+        *,
+        field: str,
+        label: str,
+        source: str | None,
+        requires_feature: str | None = None,
+        feature_hint: str | None = None,
+    ):
+        """Shared set/clear path for icon, banner, and splash."""
+        if ctx.guild is None:
+            return await ctx.warn("this command only works in a **server**")
+
+        me = ctx.guild.me
+        if me is None or not me.guild_permissions.manage_guild:
+            return await ctx.warn(
+                f"i need the **manage server** permission to change the **{label}**"
+            )
+
+        if requires_feature and requires_feature not in (ctx.guild.features or []):
+            return await ctx.warn(
+                feature_hint
+                or f"this server needs **{requires_feature.replace('_', ' ').title()}** to set a **{label}**"
+            )
+
+        clear = bool(source and source.strip().lower() in _CLEAR_MEDIA)
+        if clear:
+            data = None
+        else:
+            data = await self._read_guild_image(ctx, source)
+            if data is None:
+                if not source and not ctx.message.attachments:
+                    await ctx.warn(
+                        f"provide an image **url** or **attachment** "
+                        f"(or `none` to clear the {label})"
+                    )
+                return
+            if data == b"":
+                data = None
+                clear = True
+
+        reason = f"{label} {'cleared' if clear else 'updated'} by {ctx.author} ({ctx.author.id})"
+        try:
+            async with ctx.typing():
+                await ctx.guild.edit(**{field: data}, reason=reason)
+        except discord.Forbidden:
+            return await ctx.warn(
+                f"i don't have permission to change the server **{label}**"
+            )
+        except discord.HTTPException as error:
+            message = getattr(error, "text", None) or str(error)
+            if "):" in message:
+                message = message.split("):", 1)[-1].strip()
+            return await ctx.fail(
+                f"failed to update server **{label}**: `{message or 'unknown error'}`"
+            )
+
+        if clear:
+            return await ctx.success(f"cleared the server **{label}**")
+        return await ctx.success(f"updated the server **{label}**")
 
     @staticmethod
     def _normalize_embed_script(script: str, *, prefer: str = "embed") -> str:
@@ -268,19 +388,19 @@ class ServerCommands(Package):
             "timestamp": {
                 "description": "Timestamp formats",
                 "variables": {
-                    "{timestamp}": "Raw unix seconds — use inside content, not as a field param",
-                    "<t:{timestamp}:t>": "Short time — 16:20",
-                    "<t:{timestamp}:T>": "Long time — 16:20:30",
-                    "<t:{timestamp}:d>": "Short date — 20/04/2021",
-                    "<t:{timestamp}:D>": "Long date — 20 April 2021",
-                    "<t:{timestamp}:f>": "Short date/time — 20 April 2021 16:20",
-                    "<t:{timestamp}:F>": "Long date/time — Tuesday, 20 April 2021 16:20",
-                    "<t:{timestamp}:R>": "Relative — 2 months ago / in 3 days",
+                    "{timestamp}": "Raw unix seconds - use inside content, not as a field param",
+                    "<t:{timestamp}:t>": "Short time - 16:20",
+                    "<t:{timestamp}:T>": "Long time - 16:20:30",
+                    "<t:{timestamp}:d>": "Short date - 20/04/2021",
+                    "<t:{timestamp}:D>": "Long date - 20 April 2021",
+                    "<t:{timestamp}:f>": "Short date/time - 20 April 2021 16:20",
+                    "<t:{timestamp}:F>": "Long date/time - Tuesday, 20 April 2021 16:20",
+                    "<t:{timestamp}:R>": "Relative - 2 months ago / in 3 days",
                     "{user.created_at}": "Account created (formatted)",
-                    "{unix(user.created_at)}": "Account created (unix) — wrap in <t:…:R>",
+                    "{unix(user.created_at)}": "Account created (unix) - wrap in <t:…:R>",
                     "{user.joined_at}": "Server join (formatted)",
                     "{unix(user.joined_at)}": "Server join (unix)",
-                    "$v{timestamp}": "Embed flag — sets embed timestamp to now (not a content var)",
+                    "$v{timestamp}": "Embed flag - sets embed timestamp to now (not a content var)",
                 },
             },
             "honeypot": {
@@ -413,7 +533,7 @@ class ServerCommands(Package):
                 return
 
             cat = categories[category]
-            lines = [f"`{var}` — {desc}" for var, desc in cat["variables"].items()]
+            lines = [f"`{var}` - {desc}" for var, desc in cat["variables"].items()]
             embed = discord.Embed(
                 color=self.color,
                 title=cat["description"],
@@ -428,7 +548,7 @@ class ServerCommands(Package):
         pages = []
         search_options = []
         for idx, (key, cat) in enumerate(categories.items()):
-            lines = [f"`{var}` — {desc}" for var, desc in cat["variables"].items()]
+            lines = [f"`{var}` - {desc}" for var, desc in cat["variables"].items()]
             pages.append(discord.Embed(
                 color=self.color,
                 title=cat["description"],
@@ -664,6 +784,61 @@ class ServerCommands(Package):
         e.set_author(name=ctx.guild.name)
         await ctx.send(embed=e)
 
+    @command(
+        name="seticon",
+        aliases=["setservericon", "guildiconset"],
+        description="Set or clear the server icon from an attachment or image url",
+        usage="[url|none]",
+        example=",seticon https://i.imgur.com/icon.png",
+    )
+    @has_permissions(manage_guild=True)
+    async def seticon(self, ctx, source: str = None):
+        """set server icon"""
+        return await self._set_guild_media(
+            ctx,
+            field="icon",
+            label="icon",
+            source=source,
+        )
+
+    @command(
+        name="setbanner",
+        aliases=["setserverbanner", "guildbannerset"],
+        description="Set or clear the server banner from an attachment or image url (boost level 2+)",
+        usage="[url|none]",
+        example=",setbanner https://i.imgur.com/banner.png",
+    )
+    @has_permissions(manage_guild=True)
+    async def setbanner(self, ctx, source: str = None):
+        """set server banner"""
+        return await self._set_guild_media(
+            ctx,
+            field="banner",
+            label="banner",
+            source=source,
+            requires_feature="BANNER",
+            feature_hint="this server needs **boost level 2** (or the banner feature) to set a **banner**",
+        )
+
+    @command(
+        name="setsplash",
+        aliases=["setserversplash", "guildsplashset", "setinvitesplash"],
+        description="Set or clear the invite splash from an attachment or image url (boost level 1+)",
+        usage="[url|none]",
+        example=",setsplash https://i.imgur.com/splash.png",
+    )
+    @has_permissions(manage_guild=True)
+    async def setsplash(self, ctx, source: str = None):
+        """set invite splash"""
+        return await self._set_guild_media(
+            ctx,
+            field="splash",
+            label="splash",
+            source=source,
+            requires_feature="INVITE_SPLASH",
+            feature_hint="this server needs **boost level 1** (or invite splash) to set a **splash**",
+        )
+
 from asyncio import Lock
 from collections import defaultdict
 
@@ -750,7 +925,7 @@ class Server(
     Package,
     metaclass=_Meta,
 ):
-    """main server extension — all subcommands combined"""
+    """main server extension - all subcommands combined"""
 
     def __init__(self, bot: Vain) -> None:
         Package.__init__(self, bot)

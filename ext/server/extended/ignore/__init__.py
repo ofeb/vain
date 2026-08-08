@@ -135,5 +135,5 @@ class IgnoreCommands(Package):
         for i, rec in enumerate(rows, start=1):
             usr = self.bot.get_user(rec.user_id)
             label = str(usr) if usr else "Unknown User"
-            lines.append(f"`{i}` **{label}** (`{rec.user_id}`) — {rec.command}")
+            lines.append(f"`{i}` **{label}** (`{rec.user_id}`) - {rec.command}")
         return await ctx.paginate(embed, lines)

@@ -210,10 +210,10 @@ class PingOnJoinCommands(PingOnJoinEvents, Package):
         """Control auto-delete for ping on join messages.
 
         Examples:
-        - `,poj delete` — show current settings
-        - `,poj delete on` / `enable` — turn auto-delete on
-        - `,poj delete off` / `disable` — turn auto-delete off
-        - `,poj delete 10s` / `30` — set delay (default **10s**)
+        - `,poj delete` - show current settings
+        - `,poj delete on` / `enable` - turn auto-delete on
+        - `,poj delete off` / `disable` - turn auto-delete off
+        - `,poj delete 10s` / `30` - set delay (default **10s**)
         """
         await self._ensure_table()
         if not option or not str(option).strip():

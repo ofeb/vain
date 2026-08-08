@@ -153,7 +153,7 @@ class StickymessageCommands(Package):
             return new_msg
 
     def _ensure_runtime(self) -> None:
-        """Server mixin may not call this class's __init__/cog_load — start lazily."""
+        """Server mixin may not call this class's __init__/cog_load - start lazily."""
         if not hasattr(self, "_pending_repost") or self._pending_repost is None:
             self._pending_repost = set()
         if not hasattr(self, "_last_repost_at") or self._last_repost_at is None:
@@ -354,7 +354,7 @@ class StickymessageCommands(Package):
         existing = await self._get_row(ctx.guild.id, channel.id)
         if not existing:
             raise CommandError(
-                f"No sticky in {channel.mention} — use `{ctx.clean_prefix}stickymessage add` first"
+                f"No sticky in {channel.mention} - use `{ctx.clean_prefix}stickymessage add` first"
             )
         await self.db.execute(
             """UPDATE sticky_message
@@ -531,7 +531,7 @@ class StickymessageCommands(Package):
             ch = ctx.guild.get_channel(e["channel_id"])
             label = ch.mention if ch else f"`{e['channel_id']}`"
             lines.append(
-                f"`{i}` {label} — {_format_trigger(int(e['message_limit']), int(e['interval_seconds'] or 0))}"
+                f"`{i}` {label} - {_format_trigger(int(e['message_limit']), int(e['interval_seconds'] or 0))}"
             )
         return await ctx.paginate(
             Embed(title="Sticky Messages", color=self.bot.color).set_author(

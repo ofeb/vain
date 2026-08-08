@@ -293,7 +293,7 @@ class Log(LogEvents, Package):
 
         if failed:
             return await ctx.warn(
-                f"failed to add {failed} event(s) — check the database connection"
+                f"failed to add {failed} event(s) - check the database connection"
             )
 
         if all_events:
@@ -392,7 +392,7 @@ class Log(LogEvents, Package):
         if not rows:
             return await ctx.warn(f"No custom colors set for {channel.mention}")
 
-        lines = [f"`{row[0]}` — `#{row[1]}`" for row in rows]
+        lines = [f"`{row[0]}` - `#{row[1]}`" for row in rows]
         numbered = [f"`{i}` {ln}" for i, ln in enumerate(lines, start=1)]
         return await ctx.paginate(
             panel_embed(
@@ -505,7 +505,7 @@ class Log(LogEvents, Package):
             channel = ctx.guild.get_channel(row[0])
             if channel:
                 events_str = ", ".join(f"`{e}`" for e in row[1])
-                lines.append(f"{channel.mention} — {events_str}")
+                lines.append(f"{channel.mention} - {events_str}")
 
         if not lines:
             return await ctx.warn("No valid logging channels found")

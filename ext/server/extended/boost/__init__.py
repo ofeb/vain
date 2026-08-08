@@ -17,7 +17,7 @@ from core.managers.permissions import has_permissions
 
 
 class BoostCommands(Package):
-    """Boost messages — one first-boost and one second-boost script per channel."""
+    """Boost messages - one first-boost and one second-boost script per channel."""
 
     def __init__(self, bot):
         super().__init__(bot)
@@ -88,7 +88,7 @@ class BoostCommands(Package):
         if edit:
             if not exists:
                 return await ctx.fail(
-                    f"no **{slot}** message for {channel.mention} — use "
+                    f"no **{slot}** message for {channel.mention} - use "
                     f"`{ctx.clean_prefix}boosts add` first"
                     + (" `--twoboosts`" if is_second else "")
                 )
@@ -105,7 +105,7 @@ class BoostCommands(Package):
         else:
             if exists:
                 return await ctx.fail(
-                    f"there's already a **{slot}** message in {channel.mention} — "
+                    f"there's already a **{slot}** message in {channel.mention} - "
                     f"use `{ctx.clean_prefix}boosts edit` or `{ctx.clean_prefix}boosts remove`"
                     + (" `--twoboosts`" if is_second else "")
                 )
@@ -251,7 +251,7 @@ class BoostCommands(Package):
             if not ch:
                 continue
             tag = "2nd" if row.get("is_second") else "1st"
-            lines.append(f"{ch.mention} (`{ch.id}`) — **{tag} boost**")
+            lines.append(f"{ch.mention} (`{ch.id}`) - **{tag} boost**")
         if not lines:
             return await ctx.search("no boost channels set up")
         return await ctx.paginate(Embed(title="Boost Channels"), lines)

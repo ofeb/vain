@@ -57,7 +57,7 @@ class Thread(Package):
             return await ctx.fail("I don't have permission to lock this thread")
         except discord.HTTPException as e:
             return await ctx.fail(f"Failed to lock thread: {e}")
-        return await ctx.success(f"Locked {thread.mention} — {reason}")
+        return await ctx.success(f"Locked {thread.mention} - {reason}")
 
     @thread.command(
         name="unlock",
@@ -82,7 +82,7 @@ class Thread(Package):
             return await ctx.fail("I don't have permission to unlock this thread")
         except discord.HTTPException as e:
             return await ctx.fail(f"Failed to unlock thread: {e}")
-        return await ctx.success(f"Unlocked {thread.mention} — {reason}")
+        return await ctx.success(f"Unlocked {thread.mention} - {reason}")
 
     @thread.command(
         name="add",

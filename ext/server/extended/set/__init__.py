@@ -109,7 +109,7 @@ class SetCommands(Package):
             if not perms:
                 raise CommandError(f"{role.mention} has no fake permissions")
             lines = [f"`{i}` {p}" for i, p in enumerate(perms, start=1)]
-            embed = Embed(color=self.bot.color, title=f"Fake Perms — {role.name}")
+            embed = Embed(color=self.bot.color, title=f"Fake Perms - {role.name}")
             embed.set_author(name=str(ctx.author), icon_url=ctx.author.display_avatar.url)
             return await ctx.paginate(embed, lines)
         else:
@@ -129,6 +129,6 @@ class SetCommands(Package):
                     continue
                 idx += 1
                 lines.append(
-                    f"`{idx}` {r.mention} — {', '.join(f'**{p}**' for p in row.permissions)}"
+                    f"`{idx}` {r.mention} - {', '.join(f'**{p}**' for p in row.permissions)}"
                 )
             return await ctx.paginate(embed, lines)

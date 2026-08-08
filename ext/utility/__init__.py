@@ -79,7 +79,7 @@ def _snipe_accent(bot=None) -> int:
 
 
 def _build_delete_container(snipe: dict, *, accent: int | None = None) -> ui.Container:
-    """Deleted message — mention + deleted this message + relative time."""
+    """Deleted message - mention + deleted this message + relative time."""
     container = ui.Container()
     _ = accent
     when, _ = _format_when(snipe.get("timestamp", 0))
@@ -103,7 +103,7 @@ def _build_delete_container(snipe: dict, *, accent: int | None = None) -> ui.Con
 
 
 def _build_edit_container(snipe: dict, *, accent: int | None = None) -> ui.Container:
-    """Edited message card — before/after blocks."""
+    """Edited message card - before/after blocks."""
     container = ui.Container()
     _ = accent
     name = _author_name(snipe)
@@ -131,7 +131,7 @@ def _build_edit_container(snipe: dict, *, accent: int | None = None) -> ui.Conta
 
 
 def _build_reaction_container(snipe: dict, *, accent: int | None = None) -> ui.Container:
-    """Reaction removal — compact quoted line with jump link."""
+    """Reaction removal - compact quoted line with jump link."""
     container = ui.Container()
     _ = accent
     jump = snipe.get("message") or ""
@@ -164,7 +164,7 @@ def _build_snipe_container(
 
 
 def _snipe_option_label(snipe: dict, kind: str) -> str:
-    """Select option title — e.g. ``message deleted by hroe at 5:13``."""
+    """Select option title - e.g. ``message deleted by hroe at 5:13``."""
     name = _author_name(snipe)
     clock = _format_clock(snipe.get("timestamp", 0))
     if kind == "editsnipe":

@@ -54,7 +54,7 @@ def _punishment_phrase(punishments: list[str]) -> str:
 
 
 def _trap_body() -> str:
-    """Minimal trap copy — no accent, no counters in the text body."""
+    """Minimal trap copy - no accent, no counters in the text body."""
     return "\n".join(
         [
             "### Do not send messages here",
@@ -440,7 +440,7 @@ class Honeypot(Package):
             existing = ctx.guild.get_channel(int(row["channel_id"]))
             if isinstance(existing, discord.TextChannel):
                 return await ctx.warn(
-                    f"Honeypot is already armed in {existing.mention} — "
+                    f"Honeypot is already armed in {existing.mention} - "
                     f"use `{ctx.clean_prefix}honeypot disable` to turn it off"
                 )
 
@@ -472,7 +472,7 @@ class Honeypot(Package):
                     embed_script=setup_row.get("embed_script"),
                 )
                 return await ctx.success(
-                    f"Honeypot re-armed in {existing.mention} — previous configuration kept"
+                    f"Honeypot re-armed in {existing.mention} - previous configuration kept"
                 )
 
         me = ctx.guild.me
@@ -499,7 +499,7 @@ class Honeypot(Package):
             channel = await ctx.guild.create_text_channel(
                 name="honeypot",
                 overwrites=overwrites,
-                topic="Do not send messages here — trap channel for compromised accounts.",
+                topic="Do not send messages here - trap channel for compromised accounts.",
                 reason=f"Honeypot setup by {ctx.author} ({ctx.author.id})",
                 position=len(ctx.guild.channels),
             )
@@ -554,13 +554,13 @@ class Honeypot(Package):
             return await ctx.warn("Honeypot is not configured for this server")
         if not row.get("enabled"):
             return await ctx.warn(
-                f"Honeypot is already **disabled** — "
+                f"Honeypot is already **disabled** - "
                 f"use `{ctx.clean_prefix}honeypot setup` to arm it again"
             )
 
         await self._upsert(ctx.guild.id, enabled=False)
         return await ctx.success(
-            "Honeypot **disabled** — configuration and channel kept. "
+            "Honeypot **disabled** - configuration and channel kept. "
             f"Use `{ctx.clean_prefix}honeypot reset` to delete everything"
         )
 
@@ -643,7 +643,7 @@ class Honeypot(Package):
                     )
                 )
             return await ctx.warn(
-                f"No alert channel set — use `{ctx.clean_prefix}honeypot alerts #channel`"
+                f"No alert channel set - use `{ctx.clean_prefix}honeypot alerts #channel`"
             )
 
         if raw.lower() in {"clear", "none", "off", "remove", "reset", "unset", "disable"}:
@@ -705,7 +705,7 @@ class Honeypot(Package):
         ]
         if invalid:
             return await ctx.warn(
-                f"Invalid punishment(s): {', '.join(f'`{t}`' for t in invalid)} — "
+                f"Invalid punishment(s): {', '.join(f'`{t}`' for t in invalid)} - "
                 f"use `kick`, `ban`, `softban`, or `timeout`"
             )
 
@@ -736,7 +736,7 @@ class Honeypot(Package):
         row = await self._get_row(ctx.guild.id)
         if not row:
             return await ctx.warn(
-                f"Honeypot is not configured — use `{ctx.clean_prefix}honeypot setup`"
+                f"Honeypot is not configured - use `{ctx.clean_prefix}honeypot setup`"
             )
 
         channel = (
@@ -852,7 +852,7 @@ class Honeypot(Package):
         if updated.get("enabled"):
             await self._refresh_trap_message(ctx.guild, updated)
         return await ctx.success(
-            f"Honeypot trap embed updated — see `{ctx.clean_prefix}variables honeypot` for vars"
+            f"Honeypot trap embed updated - see `{ctx.clean_prefix}variables honeypot` for vars"
         )
 
     @Package.listener("on_message")

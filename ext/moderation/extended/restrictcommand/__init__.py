@@ -114,7 +114,7 @@ class Restrictcommand(Package):
                     return await ctx.warn(f"{role.mention} has no restricted commands")
                 lines = [f"`{r['command']}`" for r in rows]
                 embed = panel_embed(
-                    title=f"Restricted Commands — {role.name}",
+                    title=f"Restricted Commands - {role.name}",
                     color=None,
                     lines=lines,
                     timestamp=False,
@@ -135,7 +135,7 @@ class Restrictcommand(Package):
                 role_obj = ctx.guild.get_role(r["role_id"])
                 lines.append(role_obj.mention if role_obj else f"`{r['role_id']}`")
             embed = panel_embed(
-                title=f"Restrictions — {cmd}",
+                title=f"Restrictions - {cmd}",
                 color=None,
                 lines=lines,
                 timestamp=False,

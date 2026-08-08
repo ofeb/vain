@@ -499,7 +499,7 @@ class Fun(Package):
         if not lyrics_text:
             return await ctx.warn("Could not find lyrics for that track.")
         embed = discord.Embed(
-            title=f"{title.strip()} — {artist.strip()}",
+            title=f"{title.strip()} - {artist.strip()}",
             color=color.base,
             description=compose(body(lyrics_text[:4000])),
         )

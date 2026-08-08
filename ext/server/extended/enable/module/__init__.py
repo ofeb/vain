@@ -172,12 +172,12 @@ class ModuleEnableCommands(Package):
             label = row.module.replace("_", " ")
             ids = set(int(x) for x in (row.channel_ids or []))
             if ids and all_text and all_text.issubset(ids):
-                lines.append(f"**{label}** module — disabled in this **server**")
+                lines.append(f"**{label}** module - disabled in this **server**")
                 continue
             for cid in row.channel_ids or []:
                 ch = ctx.guild.get_channel(cid)
                 if ch:
-                    lines.append(f"**{label}** module — disabled in {ch.mention}")
+                    lines.append(f"**{label}** module - disabled in {ch.mention}")
         if not lines:
             raise CommandError("no modules are currently disabled")
         numbered = [f"`{i}` {ln}" for i, ln in enumerate(lines, start=1)]

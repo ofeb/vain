@@ -153,7 +153,7 @@ class RPSView(discord.ui.View):
             p2_score = f"**{self._p2_display()}**" if self._vs_bot else self.player2.mention
             desc = (
                 f"**Final score**\n"
-                f"{self.player1.mention}: **{p1s}** — **{p2s}** :{p2_score}\n"
+                f"{self.player1.mention}: **{p1s}** - **{p2s}** :{p2_score}\n"
                 f"**Winner:** {winner}"
             )
         else:
@@ -417,7 +417,7 @@ class TicTacToeView(discord.ui.View):
             child.disabled = True
         await _end_game(
             self.message,
-            f"{self._header()}\n\nGame cancelled — no move in {START_TIMEOUT_SECONDS} seconds.",
+            f"{self._header()}\n\nGame cancelled - no move in {START_TIMEOUT_SECONDS} seconds.",
         )
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:

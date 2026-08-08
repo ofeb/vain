@@ -1244,7 +1244,7 @@ class Antinuke(AntinukeEvents, Package):
             await self._commit_module(ctx.guild.id, module, payload)
         await self._load_config(ctx.guild.id)
         return await ctx.success(
-            "All **antinuke modules** are now **disabled** — configuration kept. "
+            "All **antinuke modules** are now **disabled** - configuration kept. "
             f"Use `{ctx.clean_prefix}antinuke reset` to delete everything."
         )
 

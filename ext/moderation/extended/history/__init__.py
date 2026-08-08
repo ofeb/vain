@@ -41,7 +41,7 @@ class History(Package):
         )
         if not rows:
             return await ctx.warn(f"{member.mention} has **no punishment history**")
-        title = f"History — {member}"
+        title = f"History - {member}"
         if command:
             title += f" ({command})"
         embed = panel_embed(

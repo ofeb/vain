@@ -77,7 +77,7 @@ class Settings:
     def _default_config(guild_id: int = 0) -> dict[str, Any]:
         return {
             "guild_id": guild_id,
-            "message": "Nice work {user.mention} — you reached **Level {level}**!",
+            "message": "Nice work {user.mention} - you reached **Level {level}**!",
             "channel_id": None,
             "multiplier": 1.0,
             "booster": 1.0,

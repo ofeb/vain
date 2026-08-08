@@ -138,7 +138,7 @@ class InviteTrackerEvents(Package):
 
         before = self._invite_cache.get(guild.id, {})
         if not before:
-            log.warning("No cached invites for %s — fetching fresh snapshot (detection may be inaccurate)", guild.name)
+            log.warning("No cached invites for %s - fetching fresh snapshot (detection may be inaccurate)", guild.name)
             before = await self._snapshot_invites(guild)
             if not before:
                 log.warning("No invites found in %s, skipping", guild.name)

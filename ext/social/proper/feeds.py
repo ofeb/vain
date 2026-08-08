@@ -714,7 +714,7 @@ def format_feed_list(platform: str, rows: list[dict[str, Any]], guild: discord.G
         if row.get("stories"):
             flags.append("stories")
         flag_s = f" · {', '.join(flags)}" if flags else ""
-        lines.append(f"**{i}.** {mention} — {link}{flag_s}")
+        lines.append(f"**{i}.** {mention} - {link}{flag_s}")
     return "\n".join(lines)
 
 

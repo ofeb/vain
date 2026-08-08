@@ -808,7 +808,7 @@ class Music(MusicEvents, Package):
     async def _player(self, ctx: Context):
         if not HAS_LYRA:
             await self.music_log(
-                title="Play blocked — library missing",
+                title="Play blocked - library missing",
                 description="`lava_lyra` is not installed on this process.",
                 guild=ctx.guild,
                 user=ctx.author,
@@ -818,7 +818,7 @@ class Music(MusicEvents, Package):
             return None
         if not await self._connect_node():
             await self.music_log(
-                title="Play blocked — node offline",
+                title="Play blocked - node offline",
                 description=(
                     f"Could not connect to nodelink/lavalink at "
                     f"`{nl.host}:{nl.port}`."
@@ -838,7 +838,7 @@ class Music(MusicEvents, Package):
             return None
         if not await self._ensure_voice(ctx):
             await self.music_log(
-                title="Play blocked — voice check failed",
+                title="Play blocked - voice check failed",
                 description=(
                     "User not in a voice channel, or bot is already in another channel."
                 ),
@@ -864,14 +864,14 @@ class Music(MusicEvents, Package):
                 )
             except NoNodesAvailable:
                 await self.music_log(
-                    title="Voice join failed — node not ready",
+                    title="Voice join failed - node not ready",
                     description="Node exists but was not ready for player creation.",
                     guild=ctx.guild,
                     user=ctx.author,
                     error=True,
                 )
                 await ctx.warn(
-                    "music node connected but not ready yet — try again in a second"
+                    "music node connected but not ready yet - try again in a second"
                 )
                 return None
             except Exception as exc:
@@ -892,7 +892,7 @@ class Music(MusicEvents, Package):
             ok = await player.wait_until_ready(timeout=10.0)
             if not ok:
                 log.warning(
-                    "voice handshake incomplete guild=%s — play may be silent",
+                    "voice handshake incomplete guild=%s - play may be silent",
                     ctx.guild.id if ctx.guild else None,
                 )
                 await self.music_log(
@@ -1253,7 +1253,7 @@ class Music(MusicEvents, Package):
                     from_search=source_url is None,
                 )
                 log.info(
-                    "resolved via %s → %s — %s (provider=%s)",
+                    "resolved via %s → %s - %s (provider=%s)",
                     source,
                     track.title,
                     track.author,
@@ -1382,7 +1382,7 @@ class Music(MusicEvents, Package):
                     return index, track
                 except Exception as exc:
                     log.debug(
-                        "resolve failed [%s] %s — %s: %s",
+                        "resolve failed [%s] %s - %s: %s",
                         index,
                         getattr(seed, "title", "?"),
                         getattr(seed, "author", "?"),
@@ -1539,9 +1539,9 @@ class Music(MusicEvents, Package):
             provider_line = "> -# source: **youtube music**"
 
         song_line = (
-            f"[**{title}** — **{artist}**]({link})"
+            f"[**{title}** - **{artist}**]({link})"
             if link
-            else f"**{title}** — **{artist}**"
+            else f"**{title}** - **{artist}**"
         )
         time_line = f"`{self._fmt_ms(pos)}` / `{self._fmt_ms(length)}`"
 
@@ -1752,10 +1752,10 @@ class Music(MusicEvents, Package):
         lines: list[str] = []
         if state.current:
             t, a, _, _ = self._display_bits(state.current)
-            lines.append(f"**now:** {t} — {a}")
+            lines.append(f"**now:** {t} - {a}")
         for i, tr in enumerate(state.tracks[:20], 1):
             t, a, _, _ = self._display_bits(tr)
-            lines.append(f"`{i}.` **{t}** — {a}")
+            lines.append(f"`{i}.` **{t}** - {a}")
         if not lines:
             text = "> queue is empty"
         else:
@@ -1773,7 +1773,7 @@ class Music(MusicEvents, Package):
         await inter.response.defer(ephemeral=True)
         player = inter.guild.voice_client if inter.guild else None
         if player is None:
-            return await inter.followup.send("nothing playing — use `,play` first", ephemeral=True)
+            return await inter.followup.send("nothing playing - use `,play` first", ephemeral=True)
 
         tracks: list = []
         normalized = self._clean_media_url(query)
@@ -1792,7 +1792,7 @@ class Music(MusicEvents, Package):
         extra = f" · +{len(tracks) - 1} more" if len(tracks) > 1 else ""
         await inter.followup.send(
             compose(
-                body("queued", f"[**{title}** — **{artist}**]({link})"),
+                body("queued", f"[**{title}** - **{artist}**]({link})"),
                 caption(f"{len(state.tracks)} in queue{extra}"),
             ),
             ephemeral=True,
@@ -1869,7 +1869,7 @@ class Music(MusicEvents, Package):
                 guild=getattr(player, "guild", None),
                 error=True,
                 fields=[
-                    ("Track", f"{title} — {artist}"),
+                    ("Track", f"{title} - {artist}"),
                     ("Queue remaining", str(len(state.tracks))),
                     ("Depth", str(_depth)),
                 ],
@@ -1986,7 +1986,7 @@ class Music(MusicEvents, Package):
                     fields=[("Provider", platform or "?")],
                 )
                 return await ctx.warn(
-                    f"couldn't load that **{platform}** playlist/album — "
+                    f"couldn't load that **{platform}** playlist/album - "
                     "no tracks resolved (check NodeLink source plugins)"
                 )
 
@@ -2027,7 +2027,7 @@ class Music(MusicEvents, Package):
                         state.tracks.insert(0, t)
                 else:
                     state.tracks.extend(tracks)
-                qmsg = f"[**{title}** — **{artist}**]({link})"
+                qmsg = f"[**{title}** - **{artist}**]({link})"
                 if platform:
                     qmsg = f"**{platform}** · {qmsg}"
                 extra = f" · +{len(tracks) - 1} more" if len(tracks) > 1 else ""
@@ -2074,7 +2074,7 @@ class Music(MusicEvents, Package):
                         user=ctx.author,
                         error=True,
                         fields=[
-                            ("Track", f"{title} — {artist}"),
+                            ("Track", f"{title} - {artist}"),
                             (
                                 "Voice ready",
                                 str(getattr(player, "voice_ready", lambda: "?")()),
@@ -2099,13 +2099,13 @@ class Music(MusicEvents, Package):
                 log.exception("initial play failed: %s", exc)
                 node = getattr(player, "_node", None)
                 await self.music_log(
-                    title="Initial play failed — retrying",
+                    title="Initial play failed - retrying",
                     description=f"```{exc}```",
                     guild=ctx.guild,
                     user=ctx.author,
                     error=True,
                     fields=[
-                        ("Track", f"{title} — {artist}"),
+                        ("Track", f"{title} - {artist}"),
                         ("Encoded", str(_safe_attr(first, "track_id") or "?")[:40]),
                         ("Source", self._track_source(first) or "?"),
                         (
@@ -2151,7 +2151,7 @@ class Music(MusicEvents, Package):
                         error=True,
                         fields=[
                             ("Query", f"`{query[:500]}`"),
-                            ("Track", f"{title} — {artist}"),
+                            ("Track", f"{title} - {artist}"),
                             ("First error", f"```{exc}```"),
                             (
                                 "Node",
@@ -2169,11 +2169,11 @@ class Music(MusicEvents, Package):
                     )
                     if "403" in err_l or "forbidden" in err_l:
                         return await ctx.fail(
-                            "couldn't start playback — **NodeLink blocked player updates (403)**. "
+                            "couldn't start playback - **NodeLink blocked player updates (403)**. "
                             "Set `allowExternalPatch: true` in NodeLink config and restart NodeLink."
                         )
                     return await ctx.fail(
-                        f"couldn't start playback — check nodelink/lavalink logs ({exc2})"
+                        f"couldn't start playback - check nodelink/lavalink logs ({exc2})"
                     )
             if state.active_preset:
                 try:
@@ -2183,7 +2183,7 @@ class Music(MusicEvents, Package):
             await self._send_control_panel(ctx.guild.id, player, first)
             await self.music_log(
                 title="Playback started",
-                description=f"[**{title}** — **{artist}**]({link})" if link else f"**{title}** — **{artist}**",
+                description=f"[**{title}** - **{artist}**]({link})" if link else f"**{title}** - **{artist}**",
                 guild=ctx.guild,
                 user=ctx.author,
                 fields=[
@@ -2253,18 +2253,18 @@ class Music(MusicEvents, Package):
         if state.current:
             m = self._meta(state.current)
             lines.append(
-                f"**now:** {m.get('display_title') or state.current.title} — "
+                f"**now:** {m.get('display_title') or state.current.title} - "
                 f"{m.get('display_author') or state.current.author}"
             )
         for i, t in enumerate(state.tracks, 1):
             m = self._meta(t)
             lines.append(
-                f"`{i}.` **{m.get('display_title') or t.title}** — "
+                f"`{i}.` **{m.get('display_title') or t.title}** - "
                 f"{m.get('display_author') or t.author}"
             )
         embed = discord.Embed(
             color=color.base,
-            title=f"Queue — {ctx.guild.name}",
+            title=f"Queue - {ctx.guild.name}",
         )
 
         return await ctx.paginate(
@@ -2405,8 +2405,8 @@ class Music(MusicEvents, Package):
         """Jump the queue to a track now (by position, name, or URL).
 
         Examples:
-        - `,fastforward 3` — play queue #3 now
-        - `,fastforward blinding lights` — find in queue / search and play
+        - `,fastforward 3` - play queue #3 now
+        - `,fastforward blinding lights` - find in queue / search and play
         - `,fastforward https://open.spotify.com/track/...`
         """
         player = ctx.voice_client
@@ -2428,7 +2428,7 @@ class Music(MusicEvents, Package):
             except Exception:
                 pass
             await self._play_next(ctx.guild.id, player, force=True)
-            return await ctx.success(f"jumped to **{title}** — **{artist}**")
+            return await ctx.success(f"jumped to **{title}** - **{artist}**")
 
         track = await self._first_track(target)
         if track is None:
@@ -2440,7 +2440,7 @@ class Music(MusicEvents, Package):
         except Exception:
             pass
         await self._play_next(ctx.guild.id, player, force=True)
-        return await ctx.success(f"jumped to **{title}** — **{artist}**")
+        return await ctx.success(f"jumped to **{title}** - **{artist}**")
 
     @hybrid(name="priority", aliases=["prio", "playnext"], guild_only=True)
     @describe(target="Queue #, song name, or URL to play after the current track")
@@ -2462,13 +2462,13 @@ class Music(MusicEvents, Package):
             if idx == 0:
                 title, artist, _, _ = self._display_bits(state.tracks[0])
                 return await ctx.success(
-                    f"**{title}** — **{artist}** is already next up"
+                    f"**{title}** - **{artist}** is already next up"
                 )
             chosen = state.tracks.pop(idx)
             state.tracks.insert(0, chosen)
             title, artist, _, _ = self._display_bits(chosen)
             return await ctx.success(
-                f"priority set · **{title}** — **{artist}** plays next"
+                f"priority set · **{title}** - **{artist}** plays next"
             )
 
         track = await self._first_track(target)
@@ -2479,7 +2479,7 @@ class Music(MusicEvents, Package):
             state.text_channel_id = ctx.channel.id
         title, artist, _, _ = self._display_bits(track)
         return await ctx.success(
-            f"priority queued · **{title}** — **{artist}** plays next"
+            f"priority queued · **{title}** - **{artist}** plays next"
         )
 
     @hybrid(name="seek", guild_only=True)

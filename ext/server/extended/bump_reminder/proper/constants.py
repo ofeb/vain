@@ -14,6 +14,6 @@ DEFAULT_REMINDER_SCRIPT = (
 DEFAULT_THANKYOU_SCRIPT = (
     "{container}"
     "$v{description: # Bump logged\n"
-    "Thanks {bumper.mention} — this guild is back on **Disboard**.\n\n"
+    "Thanks {bumper.mention} - this guild is back on **Disboard**.\n\n"
     "-# Next reminder in **2 hours** · <t:{timestamp}:R>}"
 )

@@ -181,7 +181,7 @@ class Miscellaneous(MiscellaneousEvents, Package):
             return await ctx.send_help()
 
         if language.lower() == "list":
-            lines = [f"`{code}` — {name}" for code, name in sorted(lang_codes.items())]
+            lines = [f"`{code}` - {name}" for code, name in sorted(lang_codes.items())]
             embed = c2(
                 title="Supported Languages",
                 message="\n".join(lines),
@@ -293,7 +293,7 @@ class Miscellaneous(MiscellaneousEvents, Package):
         entries = []
         for char in characters[:10]:
             code = f"U+{ord(char):04X}"
-            entries.append(f"`{char}` — {code} — {char.name if hasattr(char, 'name') and char.name else 'character'}")
+            entries.append(f"`{char}` - {code} - {char.name if hasattr(char, 'name') and char.name else 'character'}")
         embed = c2(
             title="Character Info",
             message="\n".join(entries),

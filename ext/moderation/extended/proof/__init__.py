@@ -89,7 +89,7 @@ class Proof(Package):
             lines.append(label_line(f"#{row['id']} · {mod_label}", f"{row['url'][:80]} {when}".strip()))
 
         embed = panel_embed(
-            title=f"Proof — Case #{case_id}",
+            title=f"Proof - Case #{case_id}",
             color=None,
             lines=lines,
             timestamp=False,
@@ -118,7 +118,7 @@ class Proof(Package):
 
         urls = "\n".join(f"**#{r['id']}** {r['url']}" for r in rows[:15])
         embed = panel_embed(
-            title=f"Proof — Case #{case_id}",
+            title=f"Proof - Case #{case_id}",
             color=None,
             lines=[urls],
             timestamp=False,

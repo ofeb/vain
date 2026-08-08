@@ -119,7 +119,7 @@ class Stickyrole(Package):
                 role = ctx.guild.get_role(row["role_id"])
                 lines.append(role.mention if role else f"`{row['role_id']}`")
             embed = panel_embed(
-                title=f"Sticky Roles — {member}",
+                title=f"Sticky Roles - {member}",
                 color=None,
                 lines=lines,
                 timestamp=False,
