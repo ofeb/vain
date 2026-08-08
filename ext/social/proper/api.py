@@ -107,6 +107,17 @@ def _as_int(value: Any) -> int:
     return 0
 
 
+def _first_present(*values: Any) -> Any:
+    """Return the first value that is not None (0 is valid)."""
+    for value in values:
+        if value is None:
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        return value
+    return None
+
+
 def _first_str(*values: Any) -> str:
     for v in values:
         if v is None:
@@ -259,14 +270,9 @@ async def api_get(
                 url,
                 params=params,
                 timeout=aiohttp.ClientTimeout(total=timeout),
-                
-                allow_redirects=False,
+                allow_redirects=True,
+                max_redirects=5,
             ) as resp:
-                
-                if resp.status in {301, 302, 303, 307, 308}:
-                    loc = resp.headers.get("Location") or ""
-                    log.debug("social-api %s redirected (%s) -> %s", path, resp.status, loc[:120])
-                    return None
                 if resp.status == 401 or resp.status == 403:
                     body = ""
                     try:
@@ -959,31 +965,76 @@ def parse_tiktok_user(data: dict, *, username: str = "") -> dict | None:
     Live Scalar shape is flat::
       { id, unique_id, nickname, avatar_larger, followers, following, likes, videos,
         verified, private_account, secret, ... }
+
+    Also accepts nested shapes::
+      { userInfo: { user: {...}, stats: {...} } }
+      { data: { user: {...}, stats: {...} } }
     """
     if not isinstance(data, dict):
         return None
 
-    
-    user = data
-    for key in ("user", "userInfo", "data", "result", "author"):
+    def _looks_like_user(obj: Any) -> bool:
+        if not isinstance(obj, dict):
+            return False
+        return bool(
+            obj.get("unique_id")
+            or obj.get("uniqueId")
+            or obj.get("username")
+            or obj.get("nickname")
+            or obj.get("nickName")
+            or obj.get("secUid")
+            or obj.get("sec_uid")
+        )
+
+    stats_from_parent: dict = {}
+    user: dict = data
+
+    # Walk common envelopes: userInfo/data/result → optional nested user + stats
+    for key in ("userInfo", "user_info", "data", "result", "author", "user"):
         inner = data.get(key)
-        if isinstance(inner, dict) and (
-            inner.get("unique_id")
-            or inner.get("uniqueId")
-            or inner.get("username")
-            or inner.get("nickname")
-        ):
+        if not isinstance(inner, dict) or not inner:
+            continue
+        # Shape: { user: {...}, stats: {...} }
+        nested_user = inner.get("user") if isinstance(inner.get("user"), dict) else None
+        if nested_user and _looks_like_user(nested_user):
+            stats_from_parent = _dict(
+                inner.get("stats"),
+                inner.get("statsV2"),
+                inner.get("statistics"),
+                data.get("stats"),
+                data.get("statsV2"),
+            )
+            user = nested_user
+            break
+        # Shape: envelope itself is the user
+        if _looks_like_user(inner):
+            stats_from_parent = _dict(
+                data.get("stats"),
+                data.get("statsV2"),
+                inner.get("stats"),
+                inner.get("statsV2"),
+            )
             user = inner
             break
-    
-    nested = user.get("user") if isinstance(user.get("user"), dict) else None
-    if nested and (nested.get("unique_id") or nested.get("uniqueId") or nested.get("username")):
-        stats_from_parent = _dict(user.get("stats"), user.get("statsV2"), data.get("stats"))
-        user = nested
-    else:
-        stats_from_parent = {}
 
-    stats = _dict(data.get("stats"), data.get("statsV2"), user.get("stats"), stats_from_parent)
+    # One more hop if still wrapped
+    nested = user.get("user") if isinstance(user.get("user"), dict) else None
+    if nested and _looks_like_user(nested):
+        stats_from_parent = _dict(
+            user.get("stats"),
+            user.get("statsV2"),
+            stats_from_parent,
+            data.get("stats"),
+        )
+        user = nested
+
+    stats = _dict(
+        data.get("stats"),
+        data.get("statsV2"),
+        user.get("stats"),
+        user.get("statsV2"),
+        stats_from_parent,
+    )
 
     uname = _first_str(
         user.get("uniqueId"),
@@ -1025,39 +1076,57 @@ def parse_tiktok_user(data: dict, *, username: str = "") -> dict | None:
             user.get("desc"),
         ),
         "followerCount": _as_int(
-            user.get("followerCount")
-            or user.get("followers")
-            or data.get("followers")
-            or user.get("follower_count")
-            or stats.get("followerCount")
-            or stats.get("follower_count")
+            _first_present(
+                user.get("followerCount"),
+                user.get("followers"),
+                data.get("followers"),
+                data.get("followerCount"),
+                user.get("follower_count"),
+                stats.get("followerCount"),
+                stats.get("follower_count"),
+                stats.get("followers"),
+            )
         ),
         "followingCount": _as_int(
-            user.get("followingCount")
-            or user.get("following")
-            or data.get("following")
-            or user.get("following_count")
-            or stats.get("followingCount")
-            or stats.get("following_count")
+            _first_present(
+                user.get("followingCount"),
+                user.get("following"),
+                data.get("following"),
+                data.get("followingCount"),
+                user.get("following_count"),
+                stats.get("followingCount"),
+                stats.get("following_count"),
+                stats.get("following"),
+            )
         ),
         "heartCount": _as_int(
-            user.get("heart")
-            or user.get("heartCount")
-            or user.get("heart_count")
-            or data.get("heart_count")
-            or user.get("likes")
-            or data.get("likes")
-            or stats.get("heart")
-            or stats.get("heartCount")
-            or stats.get("diggCount")
+            _first_present(
+                user.get("heart"),
+                user.get("heartCount"),
+                user.get("heart_count"),
+                data.get("heart_count"),
+                data.get("heartCount"),
+                user.get("likes"),
+                data.get("likes"),
+                user.get("digg_count"),
+                data.get("digg_count"),
+                stats.get("heart"),
+                stats.get("heartCount"),
+                stats.get("diggCount"),
+                stats.get("likes"),
+            )
         ),
         "videoCount": _as_int(
-            user.get("videoCount")
-            or user.get("videos")
-            or data.get("videos")
-            or user.get("video_count")
-            or stats.get("videoCount")
-            or stats.get("video_count")
+            _first_present(
+                user.get("videoCount"),
+                user.get("videos"),
+                data.get("videos"),
+                data.get("videoCount"),
+                user.get("video_count"),
+                stats.get("videoCount"),
+                stats.get("video_count"),
+                stats.get("videos"),
+            )
         ),
         "verified": bool(
             user.get("verified")

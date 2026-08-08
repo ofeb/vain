@@ -20,55 +20,53 @@ if TYPE_CHECKING:
 
 _MAX_BUILDER_BUTTONS = 25
 _MAX_FIELDS = 25
-_BUTTON_STYLE_NOTE = "url · blurple · green · red · grey"
-_HEADER_EB = (
-    "**Embed Builder** · live preview below\n"
-    "-# Pick a field → modal → preview updates. **Approve** DMs you the script."
-)
-_HEADER_CB = (
-    "**Container Builder** · live Components V2 preview below\n"
-    "-# Pick a field → modal → preview updates. **Approve** DMs you the script."
-)
+_MAX_IMAGES = 10
+_BUTTON_STYLE_NOTE = "blue · green · red · grey · yellow · url"
 
 
 def _normalize_btn_style(raw: str | None) -> str:
-    s = (raw or "url").strip().lower()
+    s = (raw or "grey").strip().lower()
     if s in {"url", "link", "u"}:
         return "url"
     if s in {"blurple", "blue", "primary", "blurp"}:
-        return "blurple"
+        return "blue"
     if s in {"green", "success", "g"}:
         return "green"
     if s in {"red", "danger", "r"}:
         return "red"
+    if s in {"yellow", "gold"}:
+        return "yellow"
     if s in {"grey", "gray", "secondary"}:
         return "grey"
-    return "url"
+    return "grey"
 
 
 def _discord_btn_style(name: str) -> discord.ButtonStyle:
     return {
         "url": discord.ButtonStyle.link,
-        "blurple": discord.ButtonStyle.primary,
+        "blue": discord.ButtonStyle.primary,
         "green": discord.ButtonStyle.success,
         "red": discord.ButtonStyle.danger,
         "grey": discord.ButtonStyle.secondary,
-    }.get(_normalize_btn_style(name), discord.ButtonStyle.link)
+        "yellow": discord.ButtonStyle.secondary,
+    }.get(_normalize_btn_style(name), discord.ButtonStyle.secondary)
 
 
 def _button_script_chunk(btn: dict[str, str]) -> str:
+    """Emit named button form: label: x && style: blue && message: …"""
     style = _normalize_btn_style(btn.get("style"))
     label = (btn.get("label") or "Button").strip() or "Button"
     url = (btn.get("url") or "").strip()
     emoji = (btn.get("emoji") or "").strip()
+    message = (btn.get("message") or "").strip()
+    parts = [f"label: {label}", f"style: {style}"]
     if style == "url":
-        target = url or "https://discord.com"
-        bit = f"$v{{button: {target} && {label}"
-        if emoji:
-            bit += f" && {emoji}"
-        return bit + "}"
-    target = emoji or url or "✨"
-    return f"$v{{button: {style} && {label} && {target}}}"
+        parts.append(f"url: {url or 'https://discord.com'}")
+    elif message:
+        parts.append(f"message: {message}")
+    if emoji:
+        parts.append(f"emoji: {emoji}")
+    return f"$v{{button: {' && '.join(parts)}}}"
 
 
 def _make_preview_button(btn: dict[str, str], *, index: int) -> discord.ui.Button:
@@ -77,6 +75,9 @@ def _make_preview_button(btn: dict[str, str], *, index: int) -> discord.ui.Butto
     url = (btn.get("url") or "").strip()
     emoji = (btn.get("emoji") or "").strip() or None
     style = _discord_btn_style(style_name)
+    kwargs: dict[str, Any] = {"label": label}
+    if emoji:
+        kwargs["emoji"] = emoji
     if style == discord.ButtonStyle.link:
         href = (
             url
@@ -85,16 +86,15 @@ def _make_preview_button(btn: dict[str, str], *, index: int) -> discord.ui.Butto
         )
         return discord.ui.Button(
             style=discord.ButtonStyle.link,
-            label=label,
             url=href,
-            emoji=emoji,
+            **kwargs,
         )
+    # Preview mirrors live behaviour: no message → disabled / unclickable
     return discord.ui.Button(
         style=style,
-        label=label,
-        emoji=emoji,
-        disabled=True,
+        disabled=True,  # always disabled in builder preview
         custom_id=f"builder:preview:{index}",
+        **kwargs,
     )
 
 
@@ -217,11 +217,12 @@ class _BaseBuilder:
 
     def __init__(self, author_id: int, accent: int | None = None):
         self.author_id = author_id
+        # Color is optional — empty means no accent / no $v{color} in export
         self.data: dict[str, str] = {
             "content": "",
             "title": "",
             "description": "",
-            "color": f"{(accent if accent is not None else 0x2B2D31):06x}",
+            "color": "",
             "author": "",
             "author_icon": "",
             "author_url": "",
@@ -232,23 +233,39 @@ class _BaseBuilder:
             "thumbnail": "",
             "url": "",
             "divider": "0",
+            "divider_spacing": "1",
         }
-        self.fields: list[dict[str, str]] = []  
+        self.fields: list[dict[str, str]] = []
         self.buttons: list[dict[str, str]] = []
+        self.images: list[str] = []
         self.message: discord.Message | None = None
         self.preview_message: discord.Message | None = None
         self._stopped = False
+        self._fallback_accent = (
+            int(accent) & 0xFFFFFF if accent is not None else 0x2B2D31
+        )
 
-    
-    
-    
 
-    def _accent(self) -> int:
-        raw = (self.data.get("color") or "2b2d31").lstrip("#")
+
+
+
+    def _has_color(self) -> bool:
+        return bool((self.data.get("color") or "").strip())
+
+    def _accent(self) -> int | None:
+        """Return accent color, or None when color was left optional/empty."""
+        raw = (self.data.get("color") or "").strip().lstrip("#")
+        if not raw:
+            return None
         try:
             return int(raw, 16) & 0xFFFFFF
         except ValueError:
-            return 0x2B2D31
+            return None
+
+    def _preview_accent(self) -> int:
+        """Accent used only for live preview when no color is set."""
+        accent = self._accent()
+        return accent if accent is not None else self._fallback_accent
 
     def _truthy(self, key: str) -> bool:
         return (self.data.get(key) or "").strip().lower() in {
@@ -280,10 +297,16 @@ class _BaseBuilder:
                 value="footer",
                 description="text · icon · timestamp yes/no",
             ),
-            discord.SelectOption(label="Image URL", value="image"),
             discord.SelectOption(label="Thumbnail URL", value="thumbnail"),
         ]
         if self.kind == "embed":
+            opts.append(
+                discord.SelectOption(
+                    label="Image URL",
+                    value="image",
+                    description="Single embed image",
+                )
+            )
             opts.append(
                 discord.SelectOption(
                     label="Embed URL (title link)",
@@ -312,11 +335,26 @@ class _BaseBuilder:
                     )
                 )
         else:
+            n_img = len(self.images)
+            opts.append(
+                discord.SelectOption(
+                    label=f"Images ({n_img}/{_MAX_IMAGES})",
+                    value="images",
+                    description="Up to 10 gallery images (ordered)",
+                )
+            )
+            if n_img:
+                opts.append(
+                    discord.SelectOption(
+                        label="Clear images",
+                        value="images_clear",
+                    )
+                )
             opts.append(
                 discord.SelectOption(
                     label="Divider / Separator",
                     value="divider",
-                    description="Toggle a separator line",
+                    description="visible + spacing 1 or 2",
                 )
             )
             opts.append(
@@ -381,29 +419,36 @@ class _BaseBuilder:
             parts.append(f"$v{{title: {self.data['title']}}}")
         if self.data.get("description"):
             parts.append(f"$v{{description: {self.data['description']}}}")
-        if self.data.get("color"):
-            parts.append(f"$v{{color: #{self.data['color'].lstrip('#')}}}")
+        # Only export color when the user explicitly set one
+        color_raw = (self.data.get("color") or "").strip().lstrip("#")
+        if color_raw:
+            parts.append(f"$v{{color: #{color_raw}}}")
         if self.data.get("url") and self.kind == "embed":
             parts.append(f"$v{{url: {self.data['url']}}}")
         if self.data.get("author"):
-            bits = [self.data["author"]]
+            named = [f"name: {self.data['author']}"]
             if self.data.get("author_icon"):
-                bits.append(self.data["author_icon"])
-            elif self.data.get("author_url"):
-                bits.append("")  
+                named.append(f"icon: {self.data['author_icon']}")
             if self.data.get("author_url"):
-                bits.append(self.data["author_url"])
-            parts.append(f"$v{{author: {' && '.join(bits)}}}")
+                named.append(f"url: {self.data['author_url']}")
+            parts.append(f"$v{{author: {' && '.join(named)}}}")
         if self.data.get("footer"):
-            fbits = [self.data["footer"]]
+            named = [f"text: {self.data['footer']}"]
             if self.data.get("footer_icon"):
-                fbits.append(self.data["footer_icon"])
-            parts.append(f"$v{{footer: {' && '.join(fbits)}}}")
-        if self._truthy("footer_timestamp"):
+                named.append(f"icon: {self.data['footer_icon']}")
+            parts.append(f"$v{{footer: {' && '.join(named)}}}")
+        if self._truthy("footer_timestamp") and self.kind == "embed":
             parts.append("$v{timestamp}")
         if self.kind == "container" and self._truthy("divider"):
-            parts.append("$v{divider}")
-        if self.data.get("image"):
+            spacing = (self.data.get("divider_spacing") or "1").strip() or "1"
+            parts.append(f"$v{{separator: divider: true && spacing: {spacing}}}")
+        if self.kind == "embed" and self.data.get("image"):
+            parts.append(f"$v{{image: {self.data['image']}}}")
+        if self.kind == "container" and self.images:
+            joined = " && ".join(u for u in self.images[:_MAX_IMAGES] if u)
+            if joined:
+                parts.append(f"$v{{image: {joined}}}")
+        elif self.kind == "container" and self.data.get("image"):
             parts.append(f"$v{{image: {self.data['image']}}}")
         if self.data.get("thumbnail"):
             parts.append(f"$v{{thumbnail: {self.data['thumbnail']}}}")
@@ -412,11 +457,13 @@ class _BaseBuilder:
             value = field.get("value") or "​"
             inline = field.get("inline") == "1"
             if self.kind == "embed":
-                tail = " && inline" if inline else ""
-                parts.append(f"$v{{field: {name} && {value}{tail}}}")
+                named = [f"name: {name}", f"value: {value}"]
+                if inline:
+                    named.append("inline: true")
+                parts.append(f"$v{{field: {' && '.join(named)}}}")
             else:
-                parts.append(f"$v{{field: {name} && {value}}}")
-        
+                parts.append(f"$v{{field: name: {name} && value: {value}}}")
+
         for i, btn in enumerate(self.buttons[:_MAX_BUILDER_BUTTONS]):
             if self.kind == "container" and i > 0 and i % 5 == 0:
                 parts.append("$v{actionrow}")
@@ -433,9 +480,14 @@ class _BaseBuilder:
         emb = discord.Embed(
             title=self.data.get("title") or None,
             description=self.data.get("description") or None,
-            color=self._accent(),
             url=(self.data.get("url") or None) or None,
         )
+        # Color optional — only apply when set; preview falls back for visibility
+        accent = self._accent()
+        if accent is not None:
+            emb.color = accent
+        else:
+            emb.color = self._fallback_accent
         if self.data.get("author"):
             kwargs: dict[str, Any] = {"name": self.data["author"]}
             if self.data.get("author_icon"):
@@ -500,6 +552,17 @@ class _BaseBuilder:
         layout = ui.LayoutView(timeout=None)
         container = ui.Container()
 
+        # Optional accent — only set when the user chose a color
+        accent = self._accent()
+        if accent is not None:
+            try:
+                container.accent_colour = accent  # type: ignore[attr-defined]
+            except Exception:
+                try:
+                    container.accent_color = accent  # type: ignore[attr-defined]
+                except Exception:
+                    pass
+
         lines: list[str] = []
         if self.data.get("author"):
             lines.append(f"**{self.data['author']}**")
@@ -542,19 +605,38 @@ class _BaseBuilder:
 
         if self._truthy("divider"):
             try:
-                container.add_item(ui.Separator(visible=True))
+                spacing_raw = (self.data.get("divider_spacing") or "1").strip()
+                large = spacing_raw in {"2", "large", "big", "lg"}
+                spacing_enum = getattr(discord, "SeparatorSpacing", None)
+                if spacing_enum is not None:
+                    sp = spacing_enum.large if large else spacing_enum.small
+                    container.add_item(ui.Separator(visible=True, spacing=sp))
+                else:
+                    container.add_item(ui.Separator(visible=True))
             except Exception:
-                pass
+                try:
+                    container.add_item(ui.Separator(visible=True))
+                except Exception:
+                    pass
 
-        image = (self.data.get("image") or "").strip()
-        if image.startswith("http"):
+        image_urls = [u for u in self.images[:_MAX_IMAGES] if str(u).startswith("http")]
+        if not image_urls:
+            single = (self.data.get("image") or "").strip()
+            if single.startswith("http"):
+                image_urls = [single]
+        if image_urls:
             try:
                 gallery = ui.MediaGallery()
-                gallery.add_item(media=image)
+                for image in image_urls:
+                    gallery.add_item(media=image)
                 container.add_item(gallery)
             except Exception:
                 try:
-                    container.add_item(ui.MediaGallery(discord.MediaGalleryItem(image)))
+                    container.add_item(
+                        ui.MediaGallery(
+                            *[discord.MediaGalleryItem(image) for image in image_urls]
+                        )
+                    )
                 except Exception:
                     pass
 
@@ -582,25 +664,24 @@ class _BaseBuilder:
     async def refresh(self) -> None:
         if self._stopped or not self.message:
             return
-        content_prefix = ""
-        if self.data.get("content"):
-            content_prefix = f"{self.data['content']}\n\n"
+        # Content goes on the preview only — controls message stays clean (no header fluff)
+        content = (self.data.get("content") or "").strip() or None
         try:
             if self.kind == "embed":
                 await self.message.edit(
-                    content=f"{content_prefix}{self.header}",
+                    content=content,
                     embed=self._preview_embed(),
                     view=self._controls(),
                 )
             else:
                 await self.message.edit(
-                    content=f"{content_prefix}{self.header}",
+                    content=None,
                     view=self._controls(),
                 )
                 if self.preview_message is not None:
                     try:
                         await self.preview_message.edit(
-                            content=None,
+                            content=content,
                             view=self._preview_container(),
                         )
                     except Exception:
@@ -638,9 +719,16 @@ class _BaseBuilder:
                 f"Add Button ({len(self.buttons) + 1}/{_MAX_BUILDER_BUTTONS})",
                 [
                     ("label", "Label", False, 80, ""),
-                    ("url", "URL (for style url)", False, 500, ""),
+                    ("style", "Style: blue green red grey yellow url", False, 20, "blue"),
+                    ("url", "URL (style url only)", False, 500, ""),
                     ("emoji", "Emoji (optional)", False, 100, ""),
-                    ("style", "Style: url blurple green red grey", False, 20, "url"),
+                    (
+                        "message",
+                        "Message (plain / embed / container script)",
+                        True,
+                        4000,
+                        "",
+                    ),
                 ],
             )
             if not values:
@@ -648,11 +736,18 @@ class _BaseBuilder:
             label = (values.get("label") or "").strip() or "Button"
             url = (values.get("url") or "").strip()
             emoji = (values.get("emoji") or "").strip()
-            style = _normalize_btn_style(values.get("style") or "url")
+            message = (values.get("message") or "").strip()
+            style = _normalize_btn_style(values.get("style") or "blue")
             if style == "url" and not url:
                 url = "https://discord.com"
             self.buttons.append(
-                {"label": label, "url": url, "emoji": emoji, "style": style}
+                {
+                    "label": label,
+                    "url": url,
+                    "emoji": emoji,
+                    "style": style,
+                    "message": message,
+                }
             )
             await self.refresh()
             return
@@ -667,6 +762,67 @@ class _BaseBuilder:
 
         if key == "button_clear":
             self.buttons.clear()
+            if not inter.response.is_done():
+                await inter.response.defer()
+            await self.refresh()
+            return
+
+        if key == "images":
+            # Discord modals max 5 inputs — edit slots 1-5 or 6-10 depending on count
+            editing_tail = len(self.images) >= 5
+            if editing_tail:
+                values = await self._run_modal(
+                    inter,
+                    f"Gallery Images 6–{_MAX_IMAGES}",
+                    [
+                        ("img6", "Image 6 URL", False, 500, self.images[5] if len(self.images) > 5 else ""),
+                        ("img7", "Image 7 URL", False, 500, self.images[6] if len(self.images) > 6 else ""),
+                        ("img8", "Image 8 URL", False, 500, self.images[7] if len(self.images) > 7 else ""),
+                        ("img9", "Image 9 URL", False, 500, self.images[8] if len(self.images) > 8 else ""),
+                        ("img10", "Image 10 URL", False, 500, self.images[9] if len(self.images) > 9 else ""),
+                    ],
+                )
+                if values is None:
+                    return
+                head = self.images[:5]
+                tail = [
+                    (values.get("img6") or "").strip(),
+                    (values.get("img7") or "").strip(),
+                    (values.get("img8") or "").strip(),
+                    (values.get("img9") or "").strip(),
+                    (values.get("img10") or "").strip(),
+                ]
+                self.images = [u for u in (*head, *tail) if u][:_MAX_IMAGES]
+            else:
+                values = await self._run_modal(
+                    inter,
+                    f"Gallery Images 1–5 (re-open for 6–{_MAX_IMAGES})",
+                    [
+                        ("img1", "Image 1 URL", False, 500, self.images[0] if len(self.images) > 0 else ""),
+                        ("img2", "Image 2 URL", False, 500, self.images[1] if len(self.images) > 1 else ""),
+                        ("img3", "Image 3 URL", False, 500, self.images[2] if len(self.images) > 2 else ""),
+                        ("img4", "Image 4 URL", False, 500, self.images[3] if len(self.images) > 3 else ""),
+                        ("img5", "Image 5 URL", False, 500, self.images[4] if len(self.images) > 4 else ""),
+                    ],
+                )
+                if values is None:
+                    return
+                batch = [
+                    (values.get("img1") or "").strip(),
+                    (values.get("img2") or "").strip(),
+                    (values.get("img3") or "").strip(),
+                    (values.get("img4") or "").strip(),
+                    (values.get("img5") or "").strip(),
+                ]
+                tail = self.images[5:_MAX_IMAGES] if len(self.images) > 5 else []
+                self.images = [u for u in (*batch, *tail) if u][:_MAX_IMAGES]
+            self.data["image"] = self.images[0] if self.images else ""
+            await self.refresh()
+            return
+
+        if key == "images_clear":
+            self.images.clear()
+            self.data["image"] = ""
             if not inter.response.is_done():
                 await inter.response.defer()
             await self.refresh()
@@ -729,13 +885,30 @@ class _BaseBuilder:
             values = await self._run_modal(
                 inter,
                 "Divider / Separator",
-                [("divider", "on or off", False, 10, "on" if self._truthy("divider") else "off")],
+                [
+                    (
+                        "divider",
+                        "on or off",
+                        False,
+                        10,
+                        "on" if self._truthy("divider") else "off",
+                    ),
+                    (
+                        "divider_spacing",
+                        "Spacing 1 (small) or 2 (large)",
+                        False,
+                        10,
+                        self.data.get("divider_spacing") or "1",
+                    ),
+                ],
             )
             if values:
                 val = (values.get("divider") or "").lower().strip()
                 self.data["divider"] = (
                     "1" if val in {"on", "yes", "true", "1", "enable"} else "0"
                 )
+                sp = (values.get("divider_spacing") or "1").strip()
+                self.data["divider_spacing"] = "2" if sp in {"2", "large", "big", "lg"} else "1"
             await self.refresh()
             return
 
@@ -788,7 +961,7 @@ class _BaseBuilder:
             "content": ("Content / message text", True, 2000),
             "title": ("Title", False, 256),
             "description": ("Description", True, 4000),
-            "color": ("Color hex (e.g. 5865F2)", False, 20),
+            "color": ("Color hex (optional — leave empty for none)", False, 20),
             "image": ("Image URL", False, 500),
             "thumbnail": ("Thumbnail URL", False, 500),
             "url": ("Title URL", False, 500),
@@ -887,10 +1060,10 @@ async def register_builders(bot: "Vain") -> None:
         example=",embedbuilder",
     )
     async def _run_eb(ctx: Context):
+        # Modal/select only — color optional (not forced into exported script)
         accent = getattr(ctx.bot, "color", None) or 0x2B2D31
         builder = EmbedBuilderView(ctx.author.id, accent=int(accent))
         m = await ctx.send(
-            content=builder.header,
             embed=builder._preview_embed(),
             view=builder._controls(),
             raw_embed=True,
@@ -904,12 +1077,10 @@ async def register_builders(bot: "Vain") -> None:
         example=",containerbuilder",
     )
     async def _run_cb(ctx: Context):
+        # Modal/select only — color optional (not forced into exported script)
         accent = getattr(ctx.bot, "color", None) or 0x2B2D31
         builder = ContainerBuilderView(ctx.author.id, accent=int(accent))
-        m = await ctx.send(
-            content=builder.header,
-            view=builder._controls(),
-        )
+        m = await ctx.send(view=builder._controls())
         builder.message = m
         try:
             preview = await ctx.send(view=builder._preview_container())
@@ -917,7 +1088,6 @@ async def register_builders(bot: "Vain") -> None:
         except Exception:
             builder.preview_message = None
 
-    
     for name in ("embedbuilder", "containerbuilder", "eb", "cb"):
         existing = bot.get_command(name)
         if existing is not None:

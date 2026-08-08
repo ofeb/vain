@@ -12,9 +12,6 @@ import discord
 from discord import ui
 from colorthief import ColorThief
 
-_TIKTOK_FOOTER_ICON = "https://cdn-icons-png.flaticon.com/512/3046/3046121.png"
-_INSTAGRAM_FOOTER_ICON = "https://cdn-icons-png.flaticon.com/512/2111/2111463.png"
-
 
 def _linkify_caption(caption: str, platform: str) -> str:
     """Turn #hashtags / @mentions into markdown links."""
@@ -239,7 +236,14 @@ def build_social_repost_container(
     if accent is None:
         accent = _PLATFORM_ACCENTS.get(plat, 0xE1D2DE)
     c = ui.Container()
-    _ = accent
+    if accent is not None:
+        try:
+            c.accent_colour = int(accent)  # type: ignore[attr-defined]
+        except Exception:
+            try:
+                c.accent_color = int(accent)  # type: ignore[attr-defined]
+            except Exception:
+                pass
     _ = avatar_url
 
     raw_user = (username or "").lstrip("@").strip()
@@ -414,7 +418,14 @@ def build_profile_container(
         body_bits.append(bio_clean[:500])
 
     c = ui.Container()
-    _ = accent
+    if accent is not None:
+        try:
+            c.accent_colour = int(accent)  # type: ignore[attr-defined]
+        except Exception:
+            try:
+                c.accent_color = int(accent)  # type: ignore[attr-defined]
+            except Exception:
+                pass
     header = "\n".join(body_bits)
     if avatar_url:
         try:

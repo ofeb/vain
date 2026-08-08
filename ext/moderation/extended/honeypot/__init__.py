@@ -12,11 +12,20 @@ from discord.ext.commands import BucketType, cooldown, group
 from core.discord.package import Package
 from core.discord.views.embed import panel_embed
 from core.managers.permissions import has_permissions
+from core.tools.embed import is_container_script, is_embed_script, maybe_wrap_embed_script, parse
 
 _VALID_PUNISHMENTS = ("kick", "ban", "softban", "timeout")
 _DEFAULT_PUNISHMENTS = ["ban"]
-_TIMEOUT_SECONDS = 7 * 24 * 60 * 60  
+_TIMEOUT_SECONDS = 7 * 24 * 60 * 60
 _MISSING: Any = object()
+_DEFAULT_TRAP_SCRIPT = (
+    "{container}"
+    "$v{description: ### Do not send messages here\n\n"
+    "-# This channel is a trap for compromised accounts.\n"
+    "-# Anything posted here is removed and the account is banned.}"
+    "$v{separator: divider: true && spacing: 1}"
+    "$v{button: label: Caught: {honeypot.caught} && style: grey && emoji: 🍯}"
+)
 
 
 def _normalize_punishments(raw: Iterable[str] | None) -> list[str]:
@@ -72,9 +81,15 @@ class Honeypot(Package):
                     alert_channel_id BIGINT,
                     punishments TEXT[] NOT NULL DEFAULT ARRAY['ban']::TEXT[],
                     caught INT NOT NULL DEFAULT 0,
-                    enabled BOOLEAN NOT NULL DEFAULT FALSE
+                    enabled BOOLEAN NOT NULL DEFAULT FALSE,
+                    embed_script TEXT
                 )
                 """
+            )
+        # migrate older installs that lack embed_script
+        with contextlib.suppress(Exception):
+            await self.db.execute(
+                "ALTER TABLE honeypot ADD COLUMN IF NOT EXISTS embed_script TEXT"
             )
 
     async def _get_row(self, guild_id: int) -> dict | None:
@@ -97,6 +112,7 @@ class Honeypot(Package):
         punishments: list[str] | None = None,
         caught: int | None = None,
         enabled: bool | None = None,
+        embed_script: str | None = _MISSING,
     ) -> dict:
         await self._ensure_table()
         current = await self._get_row(guild_id) or {
@@ -107,6 +123,7 @@ class Honeypot(Package):
             "punishments": list(_DEFAULT_PUNISHMENTS),
             "caught": 0,
             "enabled": False,
+            "embed_script": None,
         }
 
         next_channel = (
@@ -127,21 +144,25 @@ class Honeypot(Package):
         )
         next_caught = int(current.get("caught") or 0) if caught is None else int(caught)
         next_enabled = bool(current.get("enabled")) if enabled is None else bool(enabled)
+        next_script = (
+            current.get("embed_script") if embed_script is _MISSING else embed_script
+        )
 
         await self.db.execute(
             """
             INSERT INTO honeypot (
                 guild_id, channel_id, message_id, alert_channel_id,
-                punishments, caught, enabled
+                punishments, caught, enabled, embed_script
             )
-            VALUES ($1, $2, $3, $4, $5::TEXT[], $6, $7)
+            VALUES ($1, $2, $3, $4, $5::TEXT[], $6, $7, $8)
             ON CONFLICT (guild_id) DO UPDATE SET
                 channel_id = EXCLUDED.channel_id,
                 message_id = EXCLUDED.message_id,
                 alert_channel_id = EXCLUDED.alert_channel_id,
                 punishments = EXCLUDED.punishments,
                 caught = EXCLUDED.caught,
-                enabled = EXCLUDED.enabled
+                enabled = EXCLUDED.enabled,
+                embed_script = EXCLUDED.embed_script
             """,
             guild_id,
             next_channel,
@@ -150,6 +171,7 @@ class Honeypot(Package):
             next_punishments,
             next_caught,
             next_enabled,
+            next_script,
         )
         return {
             "guild_id": guild_id,
@@ -159,9 +181,10 @@ class Honeypot(Package):
             "punishments": next_punishments,
             "caught": next_caught,
             "enabled": next_enabled,
+            "embed_script": next_script,
         }
 
-    def _trap_layout(self, caught: int) -> ui.LayoutView:
+    def _default_trap_layout(self, caught: int) -> ui.LayoutView:
         """Minimal colorless trap card with a non-clickable Caught counter."""
         layout = ui.LayoutView(timeout=None)
         container = ui.Container()
@@ -181,12 +204,106 @@ class Honeypot(Package):
         layout.add_item(container)
         return layout
 
+    def _honeypot_kwargs(self, guild: discord.Guild, row: dict) -> dict[str, Any]:
+        channel = None
+        channel_id = row.get("channel_id")
+        if channel_id:
+            channel = guild.get_channel(int(channel_id))
+        punishments = _normalize_punishments(row.get("punishments"))
+        return {
+            "guild": guild,
+            "channel": channel,
+            "honeypot": {
+                "caught": int(row.get("caught") or 0),
+                "caught_count": int(row.get("caught") or 0),
+                "channel": channel,
+                "channel_id": channel_id,
+                "channel_name": getattr(channel, "name", "") if channel else "",
+                "channel_mention": getattr(channel, "mention", "") if channel else "",
+                "punishments": punishments,
+                "punishment": _punishment_phrase(punishments),
+            },
+        }
+
+    async def _build_trap_payload(
+        self,
+        guild: discord.Guild,
+        row: dict,
+    ) -> dict[str, Any]:
+        """Build send/edit kwargs for the trap message (script or default layout)."""
+        script = (row.get("embed_script") or "").strip()
+        caught = int(row.get("caught") or 0)
+        if not script:
+            return {"view": self._default_trap_layout(caught), "embed": None, "content": None}
+
+        try:
+            bot = getattr(self, "bot", None)
+            if bot is not None and hasattr(bot, "create_embed"):
+                prepared = await bot.create_embed(
+                    script,
+                    **self._honeypot_kwargs(guild, row),
+                )
+                data = dict(getattr(prepared, "data", None) or {})
+            else:
+                # Fallback: bare parse without full variable expansion
+                from core.tools.embed import Script
+
+                s = Script(script)
+                data = await s.data(True, **self._honeypot_kwargs(guild, row))
+        except Exception:
+            return {"view": self._default_trap_layout(caught), "embed": None, "content": None}
+
+        # Disable interactive buttons on trap (caught counter should not fire)
+        view = data.get("view")
+        if view is not None:
+            for child in list(getattr(view, "children", []) or []):
+                self._disable_buttons_recursive(child)
+            # LayoutView: walk nested containers
+            walk = list(getattr(view, "children", []) or [])
+            while walk:
+                item = walk.pop(0)
+                self._disable_buttons_recursive(item)
+                kids = getattr(item, "children", None) or getattr(item, "items", None)
+                if kids:
+                    walk.extend(list(kids))
+
+        payload: dict[str, Any] = {}
+        if data.get("content") is not None:
+            payload["content"] = data["content"]
+        else:
+            payload["content"] = None
+        if data.get("embed") is not None:
+            payload["embed"] = data["embed"]
+        else:
+            payload["embed"] = None
+        if data.get("embeds"):
+            payload["embeds"] = data["embeds"]
+        if view is not None:
+            payload["view"] = view
+        if not payload.get("view") and not payload.get("embed") and not payload.get("content"):
+            return {"view": self._default_trap_layout(caught), "embed": None, "content": None}
+        return payload
+
+    @staticmethod
+    def _disable_buttons_recursive(item: Any) -> None:
+        if isinstance(item, (discord.ui.Button, ui.Button)):
+            try:
+                item.disabled = True
+            except Exception:
+                pass
+
     async def _post_trap_message(
         self,
         channel: discord.TextChannel,
         caught: int,
+        row: dict | None = None,
     ) -> discord.Message:
-        return await channel.send(view=self._trap_layout(caught))
+        guild = channel.guild
+        base_row = dict(row or {})
+        base_row.setdefault("caught", caught)
+        base_row.setdefault("channel_id", channel.id)
+        payload = await self._build_trap_payload(guild, base_row)
+        return await channel.send(**payload)
 
     async def _refresh_trap_message(
         self,
@@ -200,15 +317,16 @@ class Honeypot(Package):
         channel = guild.get_channel(int(channel_id))
         if not isinstance(channel, discord.TextChannel):
             return
-        caught = int(row.get("caught") or 0)
-        layout = self._trap_layout(caught)
+        payload = await self._build_trap_payload(guild, row)
         with contextlib.suppress(discord.NotFound, discord.Forbidden, discord.HTTPException):
             message = await channel.fetch_message(int(message_id))
-            await message.edit(view=layout)
+            await message.edit(**payload)
             return
-        
+
         with contextlib.suppress(discord.Forbidden, discord.HTTPException):
-            msg = await self._post_trap_message(channel, caught)
+            msg = await self._post_trap_message(
+                channel, int(row.get("caught") or 0), row=row
+            )
             await self._upsert(guild.id, message_id=msg.id)
 
     def _is_exempt(self, member: discord.Member) -> bool:
@@ -362,8 +480,14 @@ class Honeypot(Package):
         punishments = _normalize_punishments(row.get("punishments") if row else None)
         caught = int(row.get("caught") or 0) if row else 0
 
+        setup_row = {
+            "channel_id": channel.id,
+            "caught": caught,
+            "punishments": punishments,
+            "embed_script": (row or {}).get("embed_script") if row else None,
+        }
         try:
-            msg = await self._post_trap_message(channel, caught)
+            msg = await self._post_trap_message(channel, caught, row=setup_row)
         except (discord.Forbidden, discord.HTTPException):
             with contextlib.suppress(discord.HTTPException):
                 await channel.delete(reason="Honeypot setup failed to post trap message")
@@ -376,6 +500,7 @@ class Honeypot(Package):
             punishments=punishments,
             caught=caught,
             enabled=True,
+            embed_script=setup_row.get("embed_script"),
         )
         return await ctx.success(f"Honeypot armed in {channel.mention}")
 
@@ -556,6 +681,8 @@ class Honeypot(Package):
         )
         punishments = _normalize_punishments(row.get("punishments"))
         status = "**armed**" if row.get("enabled") and channel else "**disabled**"
+        script = (row.get("embed_script") or "").strip()
+        script_label = "custom" if script else "default"
 
         embed = panel_embed(
             color=None,
@@ -566,11 +693,97 @@ class Honeypot(Package):
                 f"**Alerts**: {alert.mention if alert else '`none`'}",
                 f"**Punishment**: {_punishment_phrase(punishments)}",
                 f"**Accounts Caught**: **{int(row.get('caught') or 0)}**",
+                f"**Trap embed**: `{script_label}`",
             ],
             footer="honeypot · compromised account trap",
             timestamp=False,
         )
         return await ctx.send(embed=embed)
+
+    @honeypot.command(
+        name="embed",
+        aliases=["message", "script", "trap"],
+        description="Set a custom embed/container script for the honeypot trap message.",
+        example=",honeypot embed {container}$v{description: Do not post here}",
+    )
+    @has_permissions(manage_guild=True)
+    async def honeypot_embed(self, ctx, *, script: str | None = None):
+        """Customize the trap message with an embed or container script."""
+        if ctx.guild is None:
+            return await ctx.warn("This command can only be used in a server")
+        if getattr(self.db, "pool", None) is None:
+            return await ctx.warn("Database is unavailable")
+
+        row = await self._get_row(ctx.guild.id) or {}
+        raw = (script or "").strip()
+
+        if not raw:
+            current = (row.get("embed_script") or "").strip()
+            if not current:
+                return await ctx.send(
+                    embed=panel_embed(
+                        color=None,
+                        title="Honeypot Embed",
+                        lines=[
+                            "**Trap embed**: `default`",
+                            f"-# Use `{ctx.clean_prefix}honeypot embed <script>` to customize",
+                            f"-# Use `{ctx.clean_prefix}honeypot embed clear` to reset",
+                            f"-# Variables: `{ctx.clean_prefix}variables honeypot`",
+                        ],
+                        timestamp=False,
+                    )
+                )
+            preview = current if len(current) <= 900 else current[:900] + "…"
+            return await ctx.send(
+                embed=panel_embed(
+                    color=None,
+                    title="Honeypot Embed",
+                    lines=[
+                        "**Trap embed**: `custom`",
+                        f"```\n{preview}\n```",
+                        f"-# Use `{ctx.clean_prefix}honeypot embed clear` to reset",
+                        f"-# Variables: `{ctx.clean_prefix}variables honeypot`",
+                    ],
+                    timestamp=False,
+                )
+            )
+
+        if raw.lower() in {"clear", "none", "off", "reset", "default", "remove"}:
+            updated = await self._upsert(ctx.guild.id, embed_script=None)
+            if updated.get("enabled"):
+                await self._refresh_trap_message(ctx.guild, updated)
+            return await ctx.success("Honeypot trap embed reset to **default**")
+
+        # Strip surrounding code fences if pasted
+        if raw.startswith("```") and raw.endswith("```"):
+            raw = raw.strip("`")
+            if raw.lower().startswith("ts") or raw.lower().startswith("txt"):
+                raw = raw.split("\n", 1)[-1]
+            raw = raw.strip()
+
+        if not (is_embed_script(raw) or is_container_script(raw) or raw.startswith(("{", "$v"))):
+            raw = maybe_wrap_embed_script(raw)
+
+        # Validate by building once
+        try:
+            test_row = {
+                **row,
+                "embed_script": raw,
+                "caught": int(row.get("caught") or 0),
+                "channel_id": row.get("channel_id"),
+            }
+            payload = await self._build_trap_payload(ctx.guild, test_row)
+            if not payload:
+                return await ctx.fail("Couldn't parse that trap script")
+        except Exception as exc:
+            return await ctx.fail(f"Invalid trap script: {exc}")
+
+        updated = await self._upsert(ctx.guild.id, embed_script=raw)
+        if updated.get("enabled"):
+            await self._refresh_trap_message(ctx.guild, updated)
+        return await ctx.success(
+            f"Honeypot trap embed updated — see `{ctx.clean_prefix}variables honeypot` for vars"
+        )
 
     @Package.listener("on_message")
     async def on_honeypot_message(self, message: discord.Message) -> None:

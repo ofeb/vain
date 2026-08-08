@@ -658,8 +658,27 @@ class Socials(Package):
 
         uname = username.strip().lstrip("@")
         async with ctx.typing():
+            data = None
             raw = await api_user(uname)
-            data = parse_tiktok_user(raw or {}, username=uname)
+            if isinstance(raw, dict) and raw:
+                data = parse_tiktok_user(raw, username=uname)
+                # If stats are all zero but the API payload has counters, re-parse flat.
+                if data and not any(
+                    int(data.get(k) or 0)
+                    for k in ("followerCount", "followingCount", "heartCount", "videoCount")
+                ):
+                    flat = parse_tiktok_user(
+                        {
+                            **raw,
+                            "followers": raw.get("followers", raw.get("followerCount")),
+                            "following": raw.get("following", raw.get("followingCount")),
+                            "likes": raw.get("likes", raw.get("heart_count", raw.get("heartCount"))),
+                            "videos": raw.get("videos", raw.get("videoCount")),
+                        },
+                        username=uname,
+                    )
+                    if flat:
+                        data = flat
             if not data:
                 client = TikTok()
                 try:
@@ -669,19 +688,41 @@ class Socials(Package):
             if not data:
                 await ctx.fail(f"Could not find TikTok user `@{uname}`.")
                 return
-            
-            if "uniqueId" not in data and "username" in data:
+
+            if "uniqueId" not in data:
                 data = {
-                    "uniqueId": data.get("username") or uname,
+                    "uniqueId": data.get("username") or data.get("unique_id") or uname,
                     "nickname": data.get("nickname") or data.get("display_name") or uname,
-                    "avatarLarger": data.get("avatar") or data.get("avatarLarger") or "",
+                    "avatarLarger": data.get("avatar") or data.get("avatarLarger") or data.get("avatar_larger") or "",
                     "signature": data.get("signature") or data.get("bio") or "",
-                    "followerCount": int(data.get("followerCount") or data.get("followers") or 0),
-                    "followingCount": int(data.get("followingCount") or data.get("following") or 0),
-                    "heartCount": int(data.get("heartCount") or data.get("likes") or 0),
-                    "videoCount": int(data.get("videoCount") or data.get("videos") or 0),
+                    "followerCount": int(
+                        data.get("followerCount")
+                        if data.get("followerCount") is not None
+                        else data.get("followers") or 0
+                    ),
+                    "followingCount": int(
+                        data.get("followingCount")
+                        if data.get("followingCount") is not None
+                        else data.get("following") or 0
+                    ),
+                    "heartCount": int(
+                        data.get("heartCount")
+                        if data.get("heartCount") is not None
+                        else data.get("likes") or data.get("heart_count") or 0
+                    ),
+                    "videoCount": int(
+                        data.get("videoCount")
+                        if data.get("videoCount") is not None
+                        else data.get("videos") or 0
+                    ),
                     "verified": bool(data.get("verified")),
-                    "is_private": bool(data.get("is_private") or data.get("private")),
+                    "is_private": bool(
+                        data.get("is_private")
+                        or data.get("private")
+                        or data.get("private_account")
+                        or data.get("privateAccount")
+                        or data.get("secret")
+                    ),
                 }
             avatar = data.get("avatarLarger") or data.get("avatar") or ""
             accent = await get_repost_accent_color(
@@ -697,7 +738,12 @@ class Socials(Package):
                 following=int(data.get("followingCount") or 0),
                 likes=int(data.get("heartCount") or 0),
                 posts=int(data.get("videoCount") or 0),
-                is_private=bool(data.get("is_private") or data.get("privateAccount")),
+                is_private=bool(
+                    data.get("is_private")
+                    or data.get("privateAccount")
+                    or data.get("private_account")
+                    or data.get("secret")
+                ),
                 is_verified=bool(data.get("verified")),
                 accent=accent,
             )

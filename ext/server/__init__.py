@@ -260,8 +260,65 @@ class ServerCommands(Package):
                     "{date}": "Current date",
                     "{time}": "Current time",
                     "{datetime}": "Current date and time",
-                    "{timestamp}": "Unix timestamp",
-                    "{unix}": "Unix timestamp",
+                    "{timestamp}": "Unix timestamp (seconds)",
+                    "{unix}": "Unix timestamp (seconds)",
+                },
+            },
+            "timestamp": {
+                "description": "Timestamp formats",
+                "variables": {
+                    "{timestamp}": "Raw unix seconds — use inside content, not as a field param",
+                    "<t:{timestamp}:t>": "Short time — 16:20",
+                    "<t:{timestamp}:T>": "Long time — 16:20:30",
+                    "<t:{timestamp}:d>": "Short date — 20/04/2021",
+                    "<t:{timestamp}:D>": "Long date — 20 April 2021",
+                    "<t:{timestamp}:f>": "Short date/time — 20 April 2021 16:20",
+                    "<t:{timestamp}:F>": "Long date/time — Tuesday, 20 April 2021 16:20",
+                    "<t:{timestamp}:R>": "Relative — 2 months ago / in 3 days",
+                    "{user.created_at}": "Account created (formatted)",
+                    "{unix(user.created_at)}": "Account created (unix) — wrap in <t:…:R>",
+                    "{user.joined_at}": "Server join (formatted)",
+                    "{unix(user.joined_at)}": "Server join (unix)",
+                    "$v{timestamp}": "Embed flag — sets embed timestamp to now (not a content var)",
+                },
+            },
+            "honeypot": {
+                "description": "Honeypot trap variables",
+                "variables": {
+                    "{honeypot.caught}": "Accounts caught count",
+                    "{honeypot.caught_count}": "Accounts caught count",
+                    "{honeypot.channel}": "Honeypot channel mention",
+                    "{honeypot.channel.name}": "Honeypot channel name",
+                    "{honeypot.channel.id}": "Honeypot channel ID",
+                    "{honeypot.punishment}": "Configured punishment phrase",
+                    "{honeypot.punishments}": "Configured punishment phrase",
+                    "{guild.name}": "Server name",
+                    "{guild.id}": "Server ID",
+                    "{guild.icon}": "Server icon URL",
+                    "{guild.member_count}": "Member count",
+                },
+            },
+            "bumper": {
+                "description": "Bump reminder variables (Disboard)",
+                "variables": {
+                    "{bumper}": "Member who bumped (mention)",
+                    "{bumper.mention}": "Member who bumped (mention)",
+                    "{bumper.name}": "Bumper username",
+                    "{bumper.display}": "Bumper display name",
+                    "{bumper.display_name}": "Bumper display name",
+                    "{bumper.id}": "Bumper user ID",
+                    "{bumper.userid}": "Bumper user ID",
+                    "{bumper.avatar}": "Bumper avatar URL",
+                    "{bumper.created_at}": "Bumper account created (formatted)",
+                    "{user.mention}": "Same as bumper when used in bump scripts",
+                    "{bump.role}": "Configured reminder role mention",
+                    "{bump.channel}": "Configured reminder channel mention",
+                    "{bump.next}": "Next bump unix timestamp",
+                    "{bump.last}": "Last bump unix timestamp",
+                    "{next_bump_at}": "Next bump unix timestamp",
+                    "{last_bump_at}": "Last bump unix timestamp",
+                    "{timestamp}": "Unix timestamp (now)",
+                    "{guild.name}": "Guild name",
                 },
             },
             "invite": {
@@ -368,7 +425,8 @@ class ServerCommands(Package):
             return await ctx.send(embed=embed)
 
         pages = []
-        for cat in categories.values():
+        search_options = []
+        for idx, (key, cat) in enumerate(categories.items()):
             lines = [f"`{var}` — {desc}" for var, desc in cat["variables"].items()]
             pages.append(discord.Embed(
                 color=self.color,
@@ -379,8 +437,21 @@ class ServerCommands(Package):
                 ),
                 timestamp=discord.utils.utcnow(),
             ))
+            search_options.append(
+                discord.SelectOption(
+                    label=cat["description"][:100],
+                    value=str(idx),
+                    description=key[:100],
+                )
+            )
 
-        await send_pages(ctx, pages)
+        await send_pages(
+            ctx,
+            pages,
+            search_options=search_options,
+            search_title="Variable categories",
+            search_placeholder="Jump to category…",
+        )
 
     @hybrid(
         name="serverinfo",
