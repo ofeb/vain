@@ -1617,7 +1617,12 @@ class Script:
 
         honeypot = kwargs.get("honeypot")
         if isinstance(honeypot, dict):
-            caught = str(int(honeypot.get("caught") or honeypot.get("caught_count") or 0))
+            try:
+                caught = f"{int(honeypot.get('caught') or honeypot.get('caught_count') or 0):,}"
+            except (TypeError, ValueError):
+                caught = str(
+                    honeypot.get("caught") or honeypot.get("caught_count") or 0
+                )
             hp_channel = honeypot.get("channel")
             punishments = honeypot.get("punishments") or honeypot.get("punishment") or ""
             if isinstance(punishments, (list, tuple)):

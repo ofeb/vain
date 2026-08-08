@@ -9,6 +9,7 @@ from discord import ui
 from discord.ext import commands
 from discord.ext.commands import BucketType, cooldown, group
 
+from config import color
 from core.discord.package import Package
 from core.discord.views.embed import panel_embed
 from core.managers.permissions import has_permissions
@@ -20,9 +21,7 @@ _TIMEOUT_SECONDS = 7 * 24 * 60 * 60
 _MISSING: Any = object()
 _DEFAULT_TRAP_SCRIPT = (
     "{container}"
-    "$v{description: ### Do **not** send messages here\n\n"
-    "-# This channel is a **trap** for **compromised accounts**.\n"
-    "-# Anything posted here is claimed as evidence and the compromised account is **softbanned**.}"
+    "$v{description: :warning: DO NOT SEND MESSAGES HERE! :warning:}"
     "$v{separator: divider: true && spacing: 1}"
     "$v{button: label: Caught: {honeypot.caught} && style: grey}"
 )
@@ -53,16 +52,17 @@ def _punishment_phrase(punishments: list[str]) -> str:
     return ", ".join(labels[:-1]) + f", and {labels[-1]}"
 
 
+def _comma(value: Any) -> str:
+    """Format a number with thousands separators (human-friendly)."""
+    try:
+        return f"{int(value):,}"
+    except (TypeError, ValueError):
+        return str(value)
+
+
 def _trap_body() -> str:
     """Minimal trap copy - no accent, no counters in the text body."""
-    return "\n".join(
-        [
-            "### Do **not** send messages here",
-            "",
-            "-# This channel is a **trap** for **compromised accounts**.",
-            "-# Anything posted here is claimed as evidence and the compromised account is **softbanned**.",
-        ]
-    )
+    return ":warning: DO NOT SEND MESSAGES HERE! :warning:"
 
 
 class Honeypot(Package):
@@ -185,9 +185,9 @@ class Honeypot(Package):
         }
 
     def _default_trap_layout(self, caught: int) -> ui.LayoutView:
-        """Minimal colorless trap card with a non-clickable Caught counter."""
+        """Default trap card with a non-clickable Caught counter."""
         layout = ui.LayoutView(timeout=None)
-        container = ui.Container()
+        container = ui.Container(accent_colour=color.warn)
         container.add_item(ui.TextDisplay(_trap_body()))
         container.add_item(ui.Separator(visible=True))
 
@@ -195,7 +195,7 @@ class Honeypot(Package):
         row.add_item(
             ui.Button(
                 style=discord.ButtonStyle.secondary,
-                label=f"Caught: {int(caught)}",
+                label=f"Caught: {_comma(caught)}",
                 disabled=True,
             )
         )
@@ -403,7 +403,7 @@ class Honeypot(Package):
                 f"**Channel**: {channel_label}",
                 f"**Message**: {preview}",
             ],
-            footer=f"Accounts caught: {int(row.get('caught') or 0)}",
+            footer=f"Accounts caught: {_comma(row.get('caught'))}",
             timestamp=True,
         )
         with contextlib.suppress(discord.Forbidden, discord.HTTPException):
@@ -761,7 +761,7 @@ class Honeypot(Package):
                 f"**Channel**: {channel.mention if channel else '`none`'}",
                 f"**Alerts**: {alert.mention if alert else '`none`'}",
                 f"**Punishment**: {_punishment_phrase(punishments)}",
-                f"**Accounts Caught**: **{int(row.get('caught') or 0)}**",
+                f"**Accounts Caught**: **{_comma(row.get('caught'))}**",
                 f"**Trap embed**: `{script_label}`",
             ],
             footer="honeypot · compromised account trap",
