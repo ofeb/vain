@@ -16,7 +16,7 @@ from core.discord.package import Package
 
 from .events import MiscellaneousEvents
 from config import color
-from ..information.lookup import GOOGLE_FOOTER_ICON
+from ..information.proper.lookup import GOOGLE_FOOTER_ICON
 
 from core.discord.views.embed import compose, body, caption, c2
 

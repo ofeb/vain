@@ -337,25 +337,6 @@ class Fun(Package):
             await ctx.fail("Could not fetch image results.")
 
     @hybrid(
-        name="google",
-        description="Search the largest search engine on the internet",
-        aliases=["g"],
-        example=",google how to get a girlfriend",
-        **_CONTEXTS,
-    )
-    @describe(search="Search query")
-    @commands.cooldown(1, 5, commands.BucketType.user)
-    async def google(self, ctx: Context, *, search: str) -> None:
-        await self._run_ddg_search(ctx, search)
-
-    @google.error
-    async def google_error(self, ctx: Context, error: commands.CommandError) -> None:
-        if isinstance(error, commands.CommandOnCooldown):
-            await ctx.cooldown(
-                f"Please wait **{error.retry_after:.2f} seconds** before using this command again"
-            )
-
-    @hybrid(
         name="duckduckgo",
         description="Search the DuckDuckGo search engine",
         aliases=["ddg"],

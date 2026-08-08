@@ -74,7 +74,7 @@ class SetCommands(Package):
     @has_permissions(server_owner=True)
     async def fakepermissions_reset(self, ctx):
         """wipe fake perms"""
-        from ext.information.views import confirm
+        from ext.information.proper.views import confirm
         prompt = await ctx.warning("clear all fake permissions?")
         ok = await confirm(self, ctx, prompt, ctx.author)
         if not ok:

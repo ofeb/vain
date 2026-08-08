@@ -1054,7 +1054,7 @@ class Giveaway(commands.Cog):
 
     @giveaway_customize.group(
         name="dmonwin",
-        aliases=["dm", "dmonswin", "dmonswin"],
+        aliases=["dm"],
         invoke_without_command=True,
         description="Toggle DMing winners (default: off)",
         usage="[on|off]",
@@ -1135,7 +1135,7 @@ class Giveaway(commands.Cog):
     
     @giveaway.group(
         name="dmonwin",
-        aliases=["dmonswin", "dmonswin"],
+        aliases=["dmonswin"],
         invoke_without_command=True,
         description="Alias for giveaway customize dmonwin (default off)",
         guild_only=True,

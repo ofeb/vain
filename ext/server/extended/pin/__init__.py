@@ -117,7 +117,7 @@ class PinCommands(Package):
     @has_permissions(manage_guild=True)
     async def pins_reset(self, ctx):
         """clear pin config"""
-        from ext.information.views import confirm
+        from ext.information.proper.views import confirm
         prompt = await ctx.warning("clear the pin archive config?")
         ok = await confirm(self, ctx, prompt, ctx.author)
         if not ok:

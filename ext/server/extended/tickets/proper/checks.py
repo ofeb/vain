@@ -5,7 +5,7 @@ from typing import Optional, cast
 from discord import TextChannel
 from discord.ext.commands import CommandError, check
 
-from .settings import Settings, Ticket
+from ..settings import Settings, Ticket
 
 
 class TicketContext:

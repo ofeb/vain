@@ -7,7 +7,7 @@ import discord
 
 from config import emojis
 
-from .settings import Settings
+from ..settings import Settings
 
 
 def _parse_emoji(value: str | None) -> discord.PartialEmoji | str | None:

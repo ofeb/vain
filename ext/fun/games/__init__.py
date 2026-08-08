@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Optional
 import discord
 
 from config import color
-from .connect4_board import render_connect4_board
+from .proper.connect4_board import render_connect4_board
 
 from core.discord.views.embed import compose, body, c2, reply_embed
 
@@ -369,7 +369,7 @@ class TicTacToeView(discord.ui.View):
     async def _record_stats(self, winner: str) -> None:
         import logging
 
-        from ext.fun.ttt_stats import record_ttt_game, scope_ids
+        from ext.fun.proper.ttt_stats import record_ttt_game, scope_ids
 
         log = logging.getLogger("Vain.ttt")
         channel = self.message.channel if self.message else self.ctx.channel
