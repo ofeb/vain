@@ -157,7 +157,11 @@ class InformationCommands(Package):
         latency = round(bot.latency * 1000)
         uptime = discord.utils.format_dt(bot.started_at, style="R")
         shard_count = bot.shard_count or 1
-        started = discord.utils.format_dt(bot.started_at, style="F")
+        created = (
+            discord.utils.format_dt(bot.user.created_at, style="F")
+            if bot.user and bot.user.created_at
+            else "Unknown"
+        )
 
         try:
             dom_color = await get_bot_dominant_color(bot)
@@ -167,12 +171,12 @@ class InformationCommands(Package):
         bot_name = bot.user.display_name if bot.user else "vain"
 
         info_lines = [
-            f"**Guilds** — `{guilds:,}`",
-            f"**Users** — `{users:,}`",
-            f"**Commands** — `{total_commands}`",
-            f"**Shards** — `{shard_count}`",
-            f"**Latency** — `{latency}ms`",
-            f"**Uptime** — {uptime}",
+            f"**Guilds** - `{guilds:,}`",
+            f"**Users** - `{users:,}`",
+            f"**Commands** - `{total_commands}`",
+            f"**Shards** - `{shard_count}`",
+            f"**Latency** - `{latency}ms`",
+            f"**Uptime** - {uptime}",
         ]
 
         buttons = [
@@ -204,7 +208,7 @@ class InformationCommands(Package):
         layout = panel_layout(
             accent=dom_color,
             title=f"__{bot_name}__",
-            subtitle=f"Since {started}",
+            subtitle=f"Since {created}",
             lines=info_lines,
             footer=f"{platform.system()} · Python {platform.python_version()}",
             buttons=buttons,

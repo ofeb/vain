@@ -1963,39 +1963,58 @@ class ModerationCommands(Package):
             f"Text in {channel.mention} **{state}** for {role.mention}"
         )
 
+    async def _resolve_hide_channels(
+        self, ctx, channel_or_all
+    ) -> list[discord.abc.GuildChannel]:
+        raw = (channel_or_all or "").strip().lower()
+        if raw in {"all", "*", "everywhere"}:
+            return list(ctx.guild.channels)
+        if not raw:
+            return [ctx.channel]
+        try:
+            channel = await commands.GuildChannelConverter().convert(ctx, raw)
+        except CommandError:
+            return [ctx.channel]
+        return [channel]
+
     @command(
         name="unhide",
-        description="Unhide a channel from a role or member",
+        description="Unhide a channel (or all channels) from everyone",
     )
     @has_permissions(manage_channels=True)
-    async def unhide(self, ctx, role_or_member, channel: discord.abc.GuildChannel = None):
-        """unhide channel from role or member"""
-        channel = channel or ctx.channel
-        try:
-            target = await commands.RoleConverter().convert(ctx, str(role_or_member))
-        except CommandError:
-            target = await commands.MemberConverter().convert(ctx, str(role_or_member))
-        overwrite = channel.overwrites_for(target)
-        overwrite.view_channel = True
-        await channel.set_permissions(target, overwrite=overwrite, reason=f"unhide by {ctx.author}")
-        return await ctx.success(f"Unhid {channel.mention} from {target.mention}")
+    async def unhide(self, ctx, channel_or_all: str = None):
+        """unhide channel(s) from everyone"""
+        channels = await self._resolve_hide_channels(ctx, channel_or_all)
+        target = ctx.guild.default_role
+        for channel in channels:
+            overwrite = channel.overwrites_for(target)
+            overwrite.view_channel = True
+            await channel.set_permissions(
+                target, overwrite=overwrite, reason=f"unhide by {ctx.author}"
+            )
+        label = "all channels" if len(channels) > 1 else channels[0].mention
+        return await ctx.success(f"Unhid {label} from {target.mention}")
 
     @command(
         name="hide",
-        description="Hide a channel from a role or member",
+        description="Hide a channel (or all channels) from a role or member",
     )
     @has_permissions(manage_channels=True)
-    async def hide(self, ctx, role_or_member, channel: discord.abc.GuildChannel = None):
-        """hide channel from role or member"""
-        channel = channel or ctx.channel
+    async def hide(self, ctx, channel_or_all: str, role_or_user: str):
+        """hide channel(s) from role or member"""
+        channels = await self._resolve_hide_channels(ctx, channel_or_all)
         try:
-            target = await commands.RoleConverter().convert(ctx, str(role_or_member))
+            target = await commands.RoleConverter().convert(ctx, role_or_user)
         except CommandError:
-            target = await commands.MemberConverter().convert(ctx, str(role_or_member))
-        overwrite = channel.overwrites_for(target)
-        overwrite.view_channel = False
-        await channel.set_permissions(target, overwrite=overwrite, reason=f"hide by {ctx.author}")
-        return await ctx.success(f"Hid {channel.mention} from {target.mention}")
+            target = await commands.MemberConverter().convert(ctx, role_or_user)
+        for channel in channels:
+            overwrite = channel.overwrites_for(target)
+            overwrite.view_channel = False
+            await channel.set_permissions(
+                target, overwrite=overwrite, reason=f"hide by {ctx.author}"
+            )
+        label = "all channels" if len(channels) > 1 else channels[0].mention
+        return await ctx.success(f"Hid {label} from {target.mention}")
 
     async def _ensure_category(self, ctx, name: str) -> discord.CategoryChannel:
         existing = discord.utils.get(ctx.guild.categories, name=name)
