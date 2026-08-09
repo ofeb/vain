@@ -1145,10 +1145,12 @@ async def parse_container(raw: str, sendable: bool = False) -> dict:
             pass
 
     if buttons:
-        try:
-            container.add_item(ui.Separator(visible=True))
-        except Exception:
-            pass
+        children = list(getattr(container, "children", []) or [])
+        if not children or not isinstance(children[-1], ui.Separator):
+            try:
+                container.add_item(ui.Separator(visible=True))
+            except Exception:
+                pass
         for i in range(0, len(buttons), 5):
             try:
                 row = ui.ActionRow(*buttons[i : i + 5])

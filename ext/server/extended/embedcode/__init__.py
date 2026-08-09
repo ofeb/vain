@@ -182,9 +182,34 @@ class Embedcode(Package):
             if accent is not None:
                 with contextlib.suppress(Exception):
                     parts.append(f"$v{{color: #{int(accent) & 0xFFFFFF:06x}}}")
-            for item in list(getattr(container, "children", []) or []):
+            children = list(getattr(container, "children", []) or [])
+            for index, item in enumerate(children):
+                if isinstance(item, ui.Separator) and self._next_item_is_button(
+                    children, index
+                ):
+                    continue
                 self._container_item_to_code(parts, item)
         return "".join(parts)
+
+    @staticmethod
+    def _next_item_is_button(items: list, index: int) -> bool:
+        """True when the separator directly precedes a button row.
+
+        The parser auto-inserts a separator before buttons, so emitting one
+        here produces a duplicate on round-trip.
+        """
+        siblings = items[index + 1 :]
+        if not siblings:
+            return False
+        nxt = siblings[0]
+        if isinstance(nxt, ui.Button):
+            return True
+        if isinstance(nxt, ui.ActionRow):
+            return any(
+                isinstance(child, ui.Button)
+                for child in (getattr(nxt, "children", []) or [])
+            )
+        return False
 
     def _container_item_to_code(self, parts: list[str], item: Any) -> None:
         if isinstance(item, ui.TextDisplay):
@@ -294,15 +319,12 @@ class Embedcode(Package):
     def _clean_script_text(text: Any) -> str:
         """Normalise a fetched text block into script payload form.
 
-        Drops blockquote prefixes (``> ``, ``> -# ``) and collapses newlines
-        to ``\\n`` escapes so generated scripts stay single-line.
+        Preserves blockquote (``> ``) and subtext (``-# ``) prefixes so the
+        generated script round-trips into the exact same rendered layout.
         """
         lines: list[str] = []
         for raw in str(text or "").splitlines():
-            line = re.sub(r"^>\s*", "", raw)
-            if line.startswith("-# "):
-                line = line[3:]
-            lines.append(line.rstrip())
+            lines.append(raw.rstrip())
         return "\\n".join(lines).rstrip("\\n")
 
     @staticmethod
