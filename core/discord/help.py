@@ -179,7 +179,7 @@ _BLURBS: dict[str, str] = {
     "Information": "User, guild, and bot lookups, avatars, banners, fortnite, and stats.",
     "Utility": "Snipes, reminders, AFK, invite tracker, and utility commands.",
     "Fun": "Games, memes, images, uwulock, and fun commands.",
-    "Roleplay": "Hugs, kisses, punches, slaps, and other roleplay actions.",
+    "Roleplay": "Hugs, kisses and other various roleplay commands.",
     "Miscellaneous": "Various useful commands that **don't** fit elsewhere.",
     "Music": "Queue, playback, Spotify, SoundCloud, and Lavalink controls.",
     "Social": "Twitch, YouTube, TikTok, Instagram, Roblox, and feed notifications.",
