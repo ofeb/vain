@@ -149,8 +149,9 @@ _COG_MAP: dict[str, str] = {
     "Vanity":        "Server",
     "Tag":           "Server",
     "Fun":         "Fun",
-    "Roleplay":    "Fun",
+    "Roleplay":    "Roleplay",
     "Manipulation":"Fun",
+    "Uwulock":     "Fun",
     
     "Misc":        "Fun",
     "Miscellaneous": "Miscellaneous",
@@ -177,7 +178,8 @@ _BLURBS: dict[str, str] = {
     "Moderation": "Tools that help you moderate your server.",
     "Information": "User, guild, and bot lookups, avatars, banners, fortnite, and stats.",
     "Utility": "Snipes, reminders, AFK, invite tracker, and utility commands.",
-    "Fun": "Games, memes, roleplay, images, and fun commands.",
+    "Fun": "Games, memes, images, uwulock, and fun commands.",
+    "Roleplay": "Hugs, kisses, punches, slaps, and other roleplay actions.",
     "Miscellaneous": "Various useful commands that **don't** fit elsewhere.",
     "Music": "Queue, playback, Spotify, SoundCloud, and Lavalink controls.",
     "Social": "Twitch, YouTube, TikTok, Instagram, Roblox, and feed notifications.",
@@ -189,7 +191,7 @@ _BLURBS: dict[str, str] = {
 
 _ORDER: tuple[str, ...] = (
     "Server", "Security", "Moderation",
-    "Information", "Utility", "Fun", "Miscellaneous",
+    "Information", "Utility", "Fun", "Roleplay", "Miscellaneous",
     "Music", "Social", "Rewards", "Crypto", "Last.fm", "Owner",
 )
 
