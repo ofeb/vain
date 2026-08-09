@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 def _extract_dominant_color(gif_bytes: bytes) -> int | None:
     try:
         ct = ColorThief(BytesIO(gif_bytes))
-        r, g, b = ct.get_color(quality=1)
+        r, g, b = ct.get_color(quality=10)
         return (r << 16) | (g << 8) | b
     except Exception:
         return None
@@ -102,6 +102,30 @@ ACTION_MAP = {
     "yawn": "**yawns at** {}",
     "yay": "**gets excited around** {}",
     "yes": "**says yes to** {}",
+    "angry": "**is angry at** {}",
+    "baka": "**calls** {} **a baka**",
+    "blowkiss": "**blows a kiss to** {}",
+    "bonk": "**bonks** {}",
+    "bored": "**is bored with** {}",
+    "carry": "**carries** {}",
+    "feed": "**feeds** {}",
+    "handshake": "**shakes hands with** {}",
+    "kabedon": "**kabedons** {}",
+    "lappillow": "**gives** {} **a lap pillow**",
+    "lurk": "**lurks around** {}",
+    "nod": "**nods at** {}",
+    "nope": "**says nope to** {}",
+    "nya": "**nyas at** {}",
+    "peck": "**pecks** {}",
+    "salute": "**salutes** {}",
+    "shake": "**shakes** {}",
+    "shocked": "**is shocked by** {}",
+    "spin": "**spins** {}",
+    "tableflip": "**tableflips at** {}",
+    "teehee": "**teehees at** {}",
+    "think": "**thinks about** {}",
+    "wag": "**wags at** {}",
+    "yeet": "**yeets** {}",
 }
 
 ROLEPLAY_ACTIONS: tuple[str, ...] = tuple(ACTION_MAP.keys())
@@ -183,6 +207,30 @@ PAST_TENSE: dict[str, str] = {
     "yawn": "Yawned at",
     "yay": "Got excited around",
     "yes": "Said yes to",
+    "angry": "Was angry at",
+    "baka": "Called a baka",
+    "blowkiss": "Blew a kiss to",
+    "bonk": "Bonked",
+    "bored": "Was bored with",
+    "carry": "Carried",
+    "feed": "Fed",
+    "handshake": "Shook hands with",
+    "kabedon": "Kabedoned",
+    "lappillow": "Gave a lap pillow to",
+    "lurk": "Lurked around",
+    "nod": "Nodded at",
+    "nope": "Said nope to",
+    "nya": "Nya'd at",
+    "peck": "Pecked",
+    "salute": "Saluted",
+    "shake": "Shook",
+    "shocked": "Was shocked by",
+    "spin": "Spun",
+    "tableflip": "Tableflipped at",
+    "teehee": "Teeheed at",
+    "think": "Thought about",
+    "wag": "Wagged at",
+    "yeet": "Yeeted",
 }
 
 class RoleplayBackView(discord.ui.View):

@@ -100,27 +100,45 @@ _OTAKUGIFS_ACTIONS: frozenset[str] = _VALID_REACTIONS | frozenset(_REACTION_ALIA
 
 _NEKOSBEST_ACTIONS: frozenset[str] = frozenset(
     {
+        "angry",
+        "baka",
         "bleh",
         "bite",
+        "blowkiss",
         "blush",
+        "bonk",
+        "bored",
+        "carry",
         "clap",
         "confused",
         "cry",
         "cuddle",
         "dance",
         "facepalm",
+        "feed",
+        "handshake",
         "happy",
         "highfive",
         "hug",
+        "kabedon",
         "kick",
         "kiss",
+        "lappillow",
         "laugh",
+        "lurk",
+        "nod",
         "nom",
+        "nope",
+        "nya",
         "pat",
+        "peck",
         "poke",
         "pout",
         "punch",
         "run",
+        "salute",
+        "shake",
+        "shocked",
         "shoot",
         "shrug",
         "sip",
@@ -128,12 +146,18 @@ _NEKOSBEST_ACTIONS: frozenset[str] = frozenset(
         "slap",
         "smile",
         "smug",
+        "spin",
         "stare",
+        "tableflip",
+        "teehee",
+        "think",
         "thumbsup",
         "tickle",
+        "wag",
         "wave",
         "wink",
         "yawn",
+        "yeet",
     }
 )
 
@@ -141,9 +165,46 @@ _NEKOSLIFE_ACTIONS: frozenset[str] = frozenset(
     {"cuddle", "hug", "kiss", "pat", "slap", "smug", "tickle"}
 )
 
-_NEKOSBEST_PREFERRED: frozenset[str] = frozenset({"shoot", "highfive", "kick"})
+_NEKOSBEST_PREFERRED: frozenset[str] = frozenset(
+    {
+        "angry",
+        "baka",
+        "blowkiss",
+        "bonk",
+        "bored",
+        "carry",
+        "feed",
+        "handshake",
+        "highfive",
+        "kabedon",
+        "kick",
+        "lappillow",
+        "lurk",
+        "nod",
+        "nope",
+        "nya",
+        "peck",
+        "salute",
+        "shake",
+        "shocked",
+        "shoot",
+        "spin",
+        "tableflip",
+        "teehee",
+        "think",
+        "wag",
+        "yeet",
+    }
+)
 
 _NEKOSBEST_HEADERS: dict[str, str] = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:153.0) "
+        "Gecko/20100101 Firefox/153.0"
+    ),
+}
+
+_OTAKUGIFS_HEADERS: dict[str, str] = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:153.0) "
         "Gecko/20100101 Firefox/153.0"
@@ -182,6 +243,7 @@ async def _otakugifs(action: str) -> bytes:
     payload = await get_json(
         _OTAKUGIFS_ENDPOINT,
         params={"reaction": reaction},
+        headers=_OTAKUGIFS_HEADERS,
         timeout=_TIMEOUT,
     )
     return await get_bytes(payload["url"], timeout=_TIMEOUT)
