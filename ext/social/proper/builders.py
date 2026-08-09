@@ -269,6 +269,51 @@ class _BuilderControls(discord.ui.View):
         await self.owner.handle_timeout()
 
 
+class _ContentControls(discord.ui.View):
+    """Content-only select menu for the container builder.
+
+    Lives on its own message (no approve/cancel) so the C2 preview message
+    never needs to carry plain content and gets deleted on every edit.
+    """
+
+    def __init__(
+        self,
+        owner: "_BaseBuilder",
+        *,
+        field_options: list[discord.SelectOption],
+    ):
+        super().__init__(timeout=600)
+        self.owner = owner
+
+        select = discord.ui.Select(
+            placeholder="Content options...",
+            min_values=1,
+            max_values=1,
+            options=field_options[:25],
+            row=0,
+            custom_id="builder:content",
+        )
+        select.callback = self._on_select
+        self.add_item(select)
+
+    async def interaction_check(self, inter: discord.Interaction) -> bool:
+        if inter.user and inter.user.id == self.owner.author_id:
+            return True
+        if not inter.response.is_done():
+            await inter.response.send_message(
+                f"Only <@{self.owner.author_id}> can use this.",
+                ephemeral=True,
+            )
+        return False
+
+    async def _on_select(self, inter: discord.Interaction) -> None:
+        data = inter.data or {}
+        values = list(data.get("values") or []) if isinstance(data, dict) else []
+        key = values[0] if values else ""
+        if key:
+            await self.owner.handle_field(inter, key)
+
+
 class _BaseBuilder:
     """Shared state for embed / container builders."""
 
@@ -303,6 +348,7 @@ class _BaseBuilder:
         self.blocks: list[dict[str, Any]] = []
         self.message: discord.Message | None = None
         self.preview_message: discord.Message | None = None
+        self.content_message: discord.Message | None = None
         self._stopped = False
         self._fallback_accent = (
             int(accent) & 0xFFFFFF if accent is not None else 0x2B2D31
@@ -459,27 +505,33 @@ class _BaseBuilder:
         }
 
     def _field_options(self) -> list[discord.SelectOption]:
-        opts: list[discord.SelectOption] = [
-            discord.SelectOption(
-                label="Content (message text)",
-                value="content",
-                description="Plain text above the embed/container",
-            ),
-            discord.SelectOption(label="Title", value="title"),
-            discord.SelectOption(label="Description", value="description"),
-            discord.SelectOption(label="Color (hex)", value="color"),
-            discord.SelectOption(
-                label="Author",
-                value="author",
-                description="name · icon url · url",
-            ),
-            discord.SelectOption(
-                label="Footer",
-                value="footer",
-                description="text · icon · timestamp yes/no",
-            ),
-            discord.SelectOption(label="Thumbnail URL", value="thumbnail"),
-        ]
+        opts: list[discord.SelectOption] = []
+        if self.kind == "embed":
+            opts.append(
+                discord.SelectOption(
+                    label="Content (message text)",
+                    value="content",
+                    description="Plain text above the embed",
+                )
+            )
+        opts.extend(
+            [
+                discord.SelectOption(label="Title", value="title"),
+                discord.SelectOption(label="Description", value="description"),
+                discord.SelectOption(label="Color (hex)", value="color"),
+                discord.SelectOption(
+                    label="Author",
+                    value="author",
+                    description="name · icon url · url",
+                ),
+                discord.SelectOption(
+                    label="Footer",
+                    value="footer",
+                    description="text · icon · timestamp yes/no",
+                ),
+                discord.SelectOption(label="Thumbnail URL", value="thumbnail"),
+            ]
+        )
         if self.kind == "embed":
             opts.append(
                 discord.SelectOption(
@@ -597,6 +649,52 @@ class _BaseBuilder:
 
     def _controls(self) -> _BuilderControls:
         return _BuilderControls(self, field_options=self._field_options())
+
+    def _content_options(self) -> list[discord.SelectOption]:
+        opts: list[discord.SelectOption] = [
+            discord.SelectOption(
+                label="Content (message text)",
+                value="content",
+                description="Plain text above the container",
+            )
+        ]
+        if (self.data.get("content") or "").strip():
+            opts.append(
+                discord.SelectOption(
+                    label="Remove content",
+                    value="content_remove",
+                    description="Remove the plain message text",
+                )
+            )
+        return opts
+
+    def _content_controls(self) -> _ContentControls:
+        return _ContentControls(self, field_options=self._content_options())
+
+    async def _refresh_content_message(
+        self,
+        content: str | None,
+        channel: Any,
+    ) -> None:
+        content = (content or "").strip() or None
+        view = self._content_controls()
+        if self.content_message is not None:
+            try:
+                await self.content_message.edit(content=content, embed=None, view=view)
+                return
+            except Exception:
+                with contextlib.suppress(Exception):
+                    await self.content_message.delete()
+                self.content_message = None
+        if channel is not None:
+            try:
+                self.content_message = await channel.send(
+                    content=content
+                    or "No content set - pick **Content** below to add message text.",
+                    view=view,
+                )
+            except Exception:
+                self.content_message = None
 
     def _embed_preview_view(self) -> discord.ui.View:
         """Controls + clickable preview buttons for the embed builder message."""
@@ -1101,11 +1199,11 @@ class _BaseBuilder:
                     pass
 
         preview_content, preview = self._preview_container()
+        await self._refresh_content_message(preview_content, channel)
+
         if self.preview_message is not None:
             try:
-                await self.preview_message.edit(
-                    content=preview_content, embed=None, view=preview
-                )
+                await self.preview_message.edit(content=None, embed=None, view=preview)
                 return
             except Exception:
                 with contextlib.suppress(Exception):
@@ -1114,9 +1212,7 @@ class _BaseBuilder:
 
         if channel is not None:
             try:
-                self.preview_message = await channel.send(
-                    content=preview_content, view=preview
-                )
+                self.preview_message = await channel.send(content=None, view=preview)
             except Exception:
                 self.preview_message = None
 
@@ -1199,6 +1295,14 @@ class _BaseBuilder:
 
         if key == "button_clear":
             self.buttons.clear()
+            if not inter.response.is_done():
+                await inter.response.defer()
+            await self.refresh()
+            return
+
+        if key == "content_remove":
+            self.data["content"] = ""
+            self._remove_singleton_block("content")
             if not inter.response.is_done():
                 await inter.response.defer()
             await self.refresh()
@@ -1563,6 +1667,11 @@ class _BaseBuilder:
             self.stop_controls()
         except Exception:
             pass
+        if self.content_message is not None:
+            try:
+                await self.content_message.edit(view=None)
+            except Exception:
+                pass
 
     def stop_controls(self) -> None:
         if self.message and self.message.components is not None:
@@ -1585,12 +1694,22 @@ class _BaseBuilder:
                 await self.preview_message.delete()
             except Exception:
                 pass
+        if self.content_message is not None:
+            try:
+                await self.content_message.delete()
+            except Exception:
+                pass
 
     async def handle_timeout(self) -> None:
         self._stopped = True
         if self.message:
             try:
                 await self.message.edit(view=None)
+            except Exception:
+                pass
+        if self.content_message is not None:
+            try:
+                await self.content_message.edit(view=None)
             except Exception:
                 pass
 
@@ -1638,10 +1757,11 @@ async def register_builders(bot: "Vain") -> None:
         builder.message = m
         try:
             preview_content, preview_layout = builder._preview_container()
-            preview = await ctx.send(content=preview_content, view=preview_layout)
+            preview = await ctx.send(content=None, view=preview_layout)
             builder.preview_message = preview
         except Exception:
             builder.preview_message = None
+        await builder._refresh_content_message(preview_content, ctx.channel)
 
     for name in ("embedbuilder", "containerbuilder", "eb", "cb"):
         existing = bot.get_command(name)
