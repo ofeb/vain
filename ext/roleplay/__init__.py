@@ -70,7 +70,7 @@ ACTION_MAP = {
     "nervous": "**gets nervous around** {}",
     "no": "**says no to** {}",
     "nom": "**nibbles** {}",
-    "nosebleed": "**nosebleeds in front of** {}",
+    "nosebleed": "**nosebleeds** in front of {}",
     "nuzzle": "**nuzzles** {}",
     "nyah": "**nyahhh's** {}",
     "peek": "**peeks** {}",
