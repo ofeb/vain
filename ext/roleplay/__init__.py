@@ -51,7 +51,7 @@ ACTION_MAP = {
     "bleh": "**blehs at** {}",
     "brofist": "**brofists** {}",
     "celebrate": "**celebrates with** {}",
-    "cheers": "**stares angrily at** {}",
+    "cheers": "**cheers with** {}",
     "clap": "**claps for** {}",
     "confused": "**is confused at** {}",
     "cool": "**is cooling with** {}",
@@ -105,7 +105,8 @@ ACTION_MAP = {
 }
 
 ROLEPLAY_ACTIONS: tuple[str, ...] = tuple(ACTION_MAP.keys())
-PREFIX_ACTION_SKIP: frozenset[str] = frozenset({"kick", "roll"})
+PREFIX_ACTION_SKIP: frozenset[str] = frozenset({"roll"})
+PREFIX_NAME_OVERRIDES: dict[str, str] = {"kick": "rkick"}
 
 BACK_ACTIONS: frozenset[str] = frozenset(ACTION_MAP.keys())
 
@@ -131,7 +132,7 @@ PAST_TENSE: dict[str, str] = {
     "bleh": "Bleh'd at",
     "brofist": "Brofisted",
     "celebrate": "Celebrated with",
-    "cheers": "Stared angrily at",
+    "cheers": "Cheers with",
     "clap": "Clapped for",
     "confused": "Was confused at",
     "cool": "Cooled with",
@@ -364,12 +365,13 @@ class RoleplayCommands(Package):
         return [app_commands.Choice(name=name, value=name) for name in matches]
 
 def _make_prefix_action(name: str):
-    """Prefix-only roleplay action (,slap / ,highfive). Slash uses /roleplay only."""
+    """Prefix-only roleplay action (,slap / ,rkick). Slash uses /roleplay only."""
+    prefix_name = PREFIX_NAME_OVERRIDES.get(name, name)
 
     @command(
-        name=name,
-        description=f"Roleplay: {name}",
-        example=f",{name} @user",
+        name=prefix_name,
+        description=f"Roleplay: {prefix_name}",
+        example=f",{prefix_name} @user",
     )
     async def action(self, ctx: Context, member: Optional[discord.User] = None):
         return await self._perform_action(ctx, name, member)
