@@ -14,7 +14,7 @@ from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe, command
 from core.tools.human.text import ordinal
 
-from .improper.media import fetch_action_gif
+from .improper import fetch_action_gif
 
 from core.discord.views.embed import reply_embed
 
