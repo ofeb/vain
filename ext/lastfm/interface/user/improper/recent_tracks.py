@@ -3,15 +3,15 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, List, Optional, cast, Any
 
 from aiohttp import ClientSession
-from ext.lastfm.proper.compat import Redis
+from ext.lastfm.improper.compat import Redis
 from discord import Color
 from discord.ext.commands import CommandError
-from ext.lastfm.proper.http import http
+from ext.lastfm.improper.http import http
 from pydantic import BaseModel, Field
 from xxhash import xxh64_hexdigest
 
 if TYPE_CHECKING:
-    from ext.lastfm.interface.track.proper.info import Track
+    from ext.lastfm.interface.track.improper.info import Track
 
 
 class Artist(BaseModel):

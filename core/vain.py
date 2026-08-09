@@ -385,7 +385,7 @@ class Vain(commands.AutoShardedBot):
             "extensions finished (%.1fs)", time.perf_counter() - extensions_started
         )
 
-        from ext.server.extended.pagination.proper.views import (
+        from ext.server.extended.pagination.improper.views import (
             PaginationReactionListener,
             register_stored_paginations,
         )

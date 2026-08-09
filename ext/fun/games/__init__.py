@@ -369,7 +369,7 @@ class TicTacToeView(discord.ui.View):
     async def _record_stats(self, winner: str) -> None:
         import logging
 
-        from ext.fun.proper.ttt_stats import record_ttt_game, scope_ids
+        from ext.fun.improper.ttt_stats import record_ttt_game, scope_ids
 
         log = logging.getLogger("Vain.ttt")
         channel = self.message.channel if self.message else self.ctx.channel

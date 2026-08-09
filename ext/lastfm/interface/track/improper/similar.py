@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from ext.lastfm.proper.http import http
+from ext.lastfm.improper.http import http
 from pydantic import BaseModel, Field
 
 

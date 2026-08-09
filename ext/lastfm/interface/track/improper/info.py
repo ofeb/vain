@@ -3,8 +3,8 @@ from __future__ import annotations
 from typing import List, Optional, Any
 
 from discord.ext.commands import CommandError
-from ext.lastfm.proper.http import http
-from ext.lastfm.interface.spotify.proper.track import SpotifyTrack
+from ext.lastfm.improper.http import http
+from ext.lastfm.interface.spotify.improper.track import SpotifyTrack
 from pydantic import BaseModel, Field
 
 

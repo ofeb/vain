@@ -99,7 +99,7 @@ class TikTok:
 
         
         try:
-            from ext.social.proper.api import fetch_tiktok_social_post
+            from ext.social.improper.api import fetch_tiktok_social_post
 
             api_post = await fetch_tiktok_social_post(resolved or url)
             if api_post and (api_post.media_urls or api_post.caption):
@@ -255,7 +255,7 @@ class TikTok:
             return None
 
         try:
-            from ext.social.proper.api import parse_tiktok_user, tiktok_user
+            from ext.social.improper.api import parse_tiktok_user, tiktok_user
 
             raw = await tiktok_user(username)
             parsed = parse_tiktok_user(raw or {}, username=username)

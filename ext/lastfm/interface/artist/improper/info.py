@@ -3,8 +3,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, List, Optional, cast
 
 from discord.ext.commands import CommandError
-from ext.lastfm.proper.http import http
-from ext.lastfm.interface.user.proper.recent_tracks import RecentTracks
+from ext.lastfm.improper.http import http
+from ext.lastfm.interface.user.improper.recent_tracks import RecentTracks
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:

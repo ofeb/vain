@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import List
 
-from ext.lastfm.proper.compat import cache
+from ext.lastfm.improper.compat import cache
 from discord.ext.commands import CommandError
-from ext.lastfm.proper.http import http
+from ext.lastfm.improper.http import http
 from pydantic import BaseModel, Field
 
 

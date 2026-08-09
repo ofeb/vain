@@ -8,7 +8,7 @@ import discord
 
 from core.discord.package import Package
 
-from ..proper.constants import (
+from ..improper.constants import (
     BUMP_COOLDOWN,
     DEFAULT_THANKYOU_SCRIPT,
     DISBOARD_ID,

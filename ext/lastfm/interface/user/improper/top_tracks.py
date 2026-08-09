@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import List, Literal, Optional
 
 from discord.ext.commands import CommandError
-from ext.lastfm.proper.http import http
+from ext.lastfm.improper.http import http
 from pydantic import BaseModel, Field
 
 

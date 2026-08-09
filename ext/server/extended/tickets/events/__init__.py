@@ -6,7 +6,7 @@ import discord
 
 from core.discord.package import Package
 
-from ..proper.views import TicketOpenView
+from ..improper.views import TicketOpenView
 
 
 class TicketsEvents:
