@@ -18,13 +18,14 @@ from core.discord.views.paginate import send_pages
 from config import color, emojis
 
 from .games import start_connect4, start_rps, start_ttt
-from .proper.search import (
+from .improper.wyr import WyrView
+from .improper.search import (
     build_ddg_search_pages,
     build_image_search_pages,
     fetch_ddg_results,
     fetch_image_results,
 )
-from .proper.ttt_stats import (
+from .improper.ttt_stats import (
     build_leaderboard_pages,
     build_stats_embed,
     default_leaderboard_scope,
@@ -39,6 +40,21 @@ if TYPE_CHECKING:
     from core.vain import Vain
 
 _CONTEXTS = dict(guilds=True, dms=True, groupchats=True)
+
+
+def _split_wyr_options(raw: str) -> tuple[str | None, str | None]:
+    """Split `,wyr a or b` or `,wyr a, b` into two options."""
+    text = str(raw or "").strip()
+    if not text:
+        return None, None
+    parts = re.split(r"\s+(?:or)\s+|\s*,\s*", text, maxsplit=1, flags=re.IGNORECASE)
+    if len(parts) != 2:
+        return None, None
+    opt1 = parts[0].strip()
+    opt2 = parts[1].strip()
+    if not opt1 or not opt2:
+        return None, None
+    return opt1, opt2
 
 class Fun(Package):
     """Fun commands and games."""
@@ -604,20 +620,28 @@ class Fun(Package):
         name="wouldyourather",
         description="Would you rather?",
         aliases=["wyr"],
+        **_CONTEXTS,
     )
-    @describe(option1="First option", option2="Second option")
-    async def wouldyourather(self, ctx: Context, option1: str, option2: str) -> None:
-        if ctx.guild is None:
-            return await ctx.warn("This command can only be used in a server.")
-        me = ctx.guild.me or ctx.guild.get_member(ctx.bot.user.id)
-        if me is None or not ctx.channel.permissions_for(me).add_reactions:
-            return await ctx.warn("I need **Add Reactions** permission in this channel.")
+    @describe(options="Option 1 or Option 2 (split with `or` or a comma)")
+    async def wouldyourather(self, ctx: Context, *, options: str) -> None:
+        option1, option2 = _split_wyr_options(options)
+        if option1 is None:
+            return await ctx.warn("expected: `,wyr option1 or option2`")
 
         embed = discord.Embed(
             title="Would You Rather?",
             color=color.base,
-            description=compose(body(f"**1:** {option1}", f"**2:** {option2}")),
+            description=body(f"**1:** {option1}", f"**2:** {option2}"),
         )
+        if ctx.guild is None:
+            view = WyrView(ctx, option1, option2)
+            view.message = await ctx.send(embed=embed, view=view)
+            return
+
+        me = ctx.guild.me or ctx.guild.get_member(ctx.bot.user.id)
+        if me is None or not me.guild_permissions.manage_messages:
+            return await ctx.warn("I need **Manage Messages** permission in this server.")
+
         msg = await ctx.send(embed=embed)
         try:
             await msg.add_reaction("1️⃣")

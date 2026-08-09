@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Optional
 import discord
 
 from config import color
-from .proper.connect4_board import render_connect4_board
+from .improper.connect4_board import render_connect4_board
 
 from core.discord.views.embed import compose, body, c2, reply_embed
 

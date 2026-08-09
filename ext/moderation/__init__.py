@@ -90,6 +90,7 @@ class ModerationCommands(Package):
         if self.db.pool is not None:
             self.tempban_watcher.start()
             self.temprole_watcher.start()
+        await super().cog_load()
 
     async def cog_unload(self) -> None:
         if self.tempban_watcher.is_running():
@@ -102,6 +103,7 @@ class ModerationCommands(Package):
         for task in self._naughty_tasks.values():
             if not task.done():
                 task.cancel()
+        await super().cog_unload()
         self._naughty_tasks.clear()
 
     def _audit_reason(self, ctx, reason: str | None) -> str:
@@ -1976,9 +1978,9 @@ class ModerationCommands(Package):
         seen_targets: set[int] = set()
 
         converters = (
+            commands.GuildChannelConverter(),
             commands.RoleConverter(),
             commands.MemberConverter(),
-            commands.GuildChannelConverter(),
         )
 
         for token in (args or "").split():
@@ -2077,8 +2079,8 @@ class ModerationCommands(Package):
     @command(
         name="unhide",
         description="Unhide a channel (or all channels) from everyone or from specific roles/members",
-        usage="[channel|all] [role/user...]",
-        example=",unhide  |  ,unhide all  |  ,unhide @role  |  ,unhide #general @role @user",
+        usage="[channel or all] [role or user...]",
+        example=",unhide #general @role",
     )
     @has_permissions(manage_channels=True)
     async def unhide(self, ctx, *, args: str = None):
@@ -2088,8 +2090,8 @@ class ModerationCommands(Package):
     @command(
         name="hide",
         description="Hide a channel (or all channels) from everyone or from specific roles/members",
-        usage="[channel|all] [role/user...]",
-        example=",hide  |  ,hide all  |  ,hide @role  |  ,hide #general @role @user",
+        usage="[channel or all] [role or user...]",
+        example=",hide #general @role",
     )
     @has_permissions(manage_channels=True)
     async def hide(self, ctx, *, args: str = None):

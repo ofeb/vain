@@ -9,6 +9,7 @@ from core.discord.package import Package
 from core.managers.converters import EmbedConverter
 from core.tools.flags.guilds import Parameters
 from core.managers.permissions import has_permissions
+from core.tools.human.text import humanize_duration
 
 
 class WelcomeCommands(Package):
@@ -35,7 +36,7 @@ class WelcomeCommands(Package):
         aliases=["create", "set"],
         flags=Parameters,
         description="Add a welcome message to a channel (defaults to current channel)",
-        usage="[channel] <script> [--self_destruct <seconds>]",
+        usage="[channel] <script> [--self_destruct <time>]",
         example=",welcome add #hi Hi {user.mention}! --self_destruct 10",
     )
     @has_permissions(manage_guild=True)
@@ -47,11 +48,8 @@ class WelcomeCommands(Package):
         if not isinstance(channel, TextChannel):
             return await ctx.warn("You can only set welcome messages in text channels")
         timer = ctx.flags.get("self_destruct")
-        if timer:
-            if timer < 6:
-                return await ctx.warn("self-destruct timer must be at least `6` seconds")
-            if timer > 60:
-                return await ctx.warn("self-destruct timer must stay under `60` seconds")
+        if timer is not None and timer < 6:
+            return await ctx.warn("self-destruct timer must be at least `6` seconds")
         try:
             await self.db.execute(
                 """INSERT INTO welcome_messages (guild_id, channel_id, message, self_destruct) VALUES ($1, $2, $3, $4);""",
@@ -64,7 +62,7 @@ class WelcomeCommands(Package):
             return await ctx.fail(
                 f"there's already a welcome message in {channel.mention} - remove it first or use `{ctx.clean_prefix}welcome edit`"
             )
-        extra = f"\nmessages will delete after `{timer}` seconds" if timer else ""
+        extra = f"\n> **the message will delete itself after {humanize_duration(timer)}**" if timer else ""
         return await ctx.success(
             f"welcome message set for {channel.mention}{extra}"
         )
@@ -74,7 +72,7 @@ class WelcomeCommands(Package):
         aliases=["change", "update"],
         flags=Parameters,
         description="Edit the welcome script for a channel (defaults to current channel)",
-        usage="[channel] <script> [--self_destruct <seconds>]",
+        usage="[channel] <script> [--self_destruct <time>]",
         example=",welcome edit #hi Welcome back {user.mention}!",
     )
     @has_permissions(manage_guild=True)
@@ -84,11 +82,8 @@ class WelcomeCommands(Package):
         """edit an existing welcome message script"""
         channel = channel or ctx.channel
         timer = ctx.flags.get("self_destruct")
-        if timer:
-            if timer < 6:
-                return await ctx.warn("self-destruct timer must be at least `6` seconds")
-            if timer > 60:
-                return await ctx.warn("self-destruct timer must stay under `60` seconds")
+        if timer is not None and timer < 6:
+            return await ctx.warn("self-destruct timer must be at least `6` seconds")
         exists = await self.db.fetchval(
             """SELECT 1 FROM welcome_messages WHERE guild_id = $1 AND channel_id = $2""",
             ctx.guild.id,
@@ -106,7 +101,7 @@ class WelcomeCommands(Package):
             ctx.guild.id,
             channel.id,
         )
-        extra = f"\nmessages will delete after `{timer}` seconds" if timer else ""
+        extra = f"\n> **the message will delete itself after {humanize_duration(timer)}**" if timer else ""
         return await ctx.success(f"updated welcome message for {channel.mention}{extra}")
 
     @welcome.command(

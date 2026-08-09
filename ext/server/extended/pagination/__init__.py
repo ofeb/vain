@@ -11,7 +11,7 @@ from core.discord.package import Package
 from core.managers.converters import EmbedConverter
 from core.managers.permissions import has_permissions
 
-from .proper.views import embed_script_from_message, sync_stored_pagination
+from .improper.views import embed_script_from_message, sync_stored_pagination
 
 
 def _not_pagination(message: Message) -> CommandError:
@@ -258,7 +258,7 @@ class PaginationCommands(Package):
         *,
         emoji: str = None,
     ):
-        """pagination edit reaction <message> [left|right] [emoji|default]"""
+        """pagination edit reaction <message> [left or right] [emoji or default]"""
         try:
             row = await self.db.fetchrow(
                 """

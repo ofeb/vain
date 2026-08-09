@@ -27,7 +27,7 @@ class ModuleDisableCommands(Package):
         *,
         payload: str,
     ) -> tuple[str, Optional[Union[TextChannel, Member, Role, str]]]:
-        """Parse ``[channel|member|role|server] <module>`` or reverse."""
+        """Parse ``[channel or member or role or server] <module>`` or reverse."""
         text = (payload or "").strip()
         if not text:
             raise CommandError("provide a module to disable")

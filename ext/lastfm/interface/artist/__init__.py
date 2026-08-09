@@ -1,8 +1,8 @@
-from .proper.info import Artist
-from .proper.search import ArtistSearch
-from .proper.similar import SimilarArtists
-from .proper.top_albums import TopAlbums
-from .proper.top_tracks import TopTracks
+from .improper.info import Artist
+from .improper.search import ArtistSearch
+from .improper.similar import SimilarArtists
+from .improper.top_albums import TopAlbums
+from .improper.top_tracks import TopTracks
 
 __all__ = (
     "Artist",

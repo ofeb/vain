@@ -22,7 +22,7 @@ from .events import VoiceMasterEvents
 from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe, group
 from config import bot as bot_config, color, emojis
-from .proper.views import VoiceInterface
+from .improper.views import VoiceInterface
 from core.managers.permissions import has_permissions
 from .settings import Settings as VoiceMasterSettings
 

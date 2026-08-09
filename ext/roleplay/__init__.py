@@ -14,7 +14,7 @@ from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe, command
 from core.tools.human.text import ordinal
 
-from .proper.media import fetch_action_gif
+from .improper.media import fetch_action_gif
 
 from core.discord.views.embed import reply_embed
 
@@ -81,6 +81,7 @@ ACTION_MAP = {
     "sad": "**is sad because of** {}",
     "scared": "**is scared of** {}",
     "shout": "**shouts at** {}",
+    "shoot": "**shoots** {}",
     "shy": "**gets shy around** {}",
     "sigh": "**sighs at** {}",
     "sip": "**sips** {}",
@@ -160,6 +161,7 @@ PAST_TENSE: dict[str, str] = {
     "sad": "Was sad because of",
     "scared": "Was scared of",
     "shout": "Shouted at",
+    "shoot": "Shot",
     "shy": "Got shy around",
     "sigh": "Sighed at",
     "sip": "Sipped",

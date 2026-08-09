@@ -17,7 +17,7 @@ from core.tools.embed import Script, is_container_script, is_embed_script, maybe
 from config import color
 
 from .events import BumpReminderEvents
-from .proper.constants import (
+from .improper.constants import (
     BUMP_COOLDOWN,
     DEFAULT_REMINDER_SCRIPT,
     DEFAULT_THANKYOU_SCRIPT,
@@ -180,7 +180,9 @@ class BumpReminder(BumpReminderEvents, Package):
                 payload.pop(k, None)
 
         with contextlib.suppress(discord.Forbidden, discord.HTTPException):
-            return await dest.send(**payload)
+            from core.tools.embed import send_script_payload
+
+            return await send_script_payload(dest, payload)
         return None
 
     

@@ -10,7 +10,7 @@ from discord.ext import tasks
 
 from core.discord.views.embed import c2
 
-from .ui import (
+from .improper.ui import (
     build_social_repost_container,
     layout_from_items,
 )

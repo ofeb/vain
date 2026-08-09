@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS auto_reactions (
     response TEXT[],
     owner_id BIGINT,
     strict BOOLEAN DEFAULT FALSE,
+    reply BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (guild_id, trigger, response)
 );
@@ -117,6 +118,7 @@ CREATE INDEX IF NOT EXISTS idx_boost_messages_guild ON boost_messages(guild_id);
 CREATE INDEX IF NOT EXISTS idx_sticky_message_guild ON sticky_message(guild_id);
 CREATE INDEX IF NOT EXISTS idx_auto_responders_guild ON auto_responders(guild_id);
 CREATE INDEX IF NOT EXISTS idx_auto_reactions_guild ON auto_reactions(guild_id);
+ALTER TABLE auto_reactions ADD COLUMN IF NOT EXISTS reply BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE SCHEMA IF NOT EXISTS monitor;
 
@@ -228,3 +230,6 @@ CREATE INDEX IF NOT EXISTS idx_monitor_youtube_guild ON monitor.youtube(guild_id
 CREATE INDEX IF NOT EXISTS idx_monitor_twitch_guild ON monitor.twitch(guild_id);
 CREATE INDEX IF NOT EXISTS idx_monitor_pinterest_guild ON monitor.pinterest(guild_id);
 CREATE INDEX IF NOT EXISTS idx_monitor_snapchat_guild ON monitor.snapchat(guild_id);
+
+ALTER TABLE log_config ADD COLUMN IF NOT EXISTS color TEXT;
+ALTER TABLE log_event_colors ADD COLUMN IF NOT EXISTS color TEXT;

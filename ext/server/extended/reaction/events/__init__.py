@@ -44,7 +44,7 @@ class ReactionEvents(Package):
         try:
             records = await self.bot.db.fetch(
                 """
-                SELECT trigger, response, strict FROM auto_reactions
+                SELECT trigger, response, strict, reply FROM auto_reactions
                 WHERE guild_id = $1
                 """,
                 ctx.guild.id,
@@ -81,12 +81,24 @@ class ReactionEvents(Package):
             ):
                 continue
 
+            matched_emojis = []
             for reaction in record["response"] or []:
                 try:
                     await ctx.message.add_reaction(str(reaction))
                     applied += 1
+                    matched_emojis.append(str(reaction))
                 except Exception:
                     continue
+
+            if record.get("reply") and matched_emojis:
+                try:
+                    await ctx.channel.send(
+                        " ".join(matched_emojis),
+                        reference=ctx.message,
+                        mention_author=False,
+                    )
+                except Exception:
+                    log.debug("failed to send auto reaction reply", exc_info=True)
 
             
             if trigger != channel_id and applied:

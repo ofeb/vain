@@ -1,10 +1,10 @@
-from .proper.config import Config
-from .proper.info import User
-from .proper.loved_tracks import LovedTracks
-from .proper.recent_tracks import RecentTracks
-from .proper.top_albums import TopAlbums
-from .proper.top_artists import TopArtists
-from .proper.top_tracks import TopTracks
+from .improper.config import Config
+from .improper.info import User
+from .improper.loved_tracks import LovedTracks
+from .improper.recent_tracks import RecentTracks
+from .improper.top_albums import TopAlbums
+from .improper.top_artists import TopArtists
+from .improper.top_tracks import TopTracks
 
 __all__ = (
     "Config",

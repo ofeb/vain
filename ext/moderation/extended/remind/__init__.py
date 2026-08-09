@@ -25,10 +25,12 @@ class Remind(Package):
     async def cog_load(self) -> None:
         if not self._remind_loop.is_running():
             self._remind_loop.start()
+        await super().cog_load()
 
     async def cog_unload(self) -> None:
         if self._remind_loop.is_running():
             self._remind_loop.cancel()
+        await super().cog_unload()
 
     def _format_duration(self, seconds: int) -> str:
         units = (

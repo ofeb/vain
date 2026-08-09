@@ -48,6 +48,33 @@ def ordinal(n: int) -> str:
     return "%d%s" % (n, "tsnrhtdd"[(n // 10 % 10 != 1) * (n % 10 < 4) * n % 10 :: 4])
 
 
+def humanize_duration(seconds: int) -> str:
+    """Humanize a duration in seconds: 3600 -> 'an hour', 300 -> '5 minutes'."""
+    seconds = max(0, int(seconds))
+    if seconds == 0:
+        return "0 seconds"
+    units = (
+        ("year", 31_536_000),
+        ("week", 604_800),
+        ("day", 86_400),
+        ("hour", 3_600),
+        ("minute", 60),
+        ("second", 1),
+    )
+    parts: list[str] = []
+    for name, size in units:
+        count, seconds = divmod(seconds, size)
+        if not count:
+            continue
+        if count == 1:
+            parts.append(("an" if name == "hour" else "a") + f" {name}")
+        else:
+            parts.append(f"{count} {name}s")
+    if len(parts) == 1:
+        return parts[0]
+    return ", ".join(parts[:-1]) + " and " + parts[-1]
+
+
 def plural(value: Union[int, list], singular: str, plural_form: str | None = None) -> str:
     """return singular or plural word based on count"""
     count = len(value) if isinstance(value, list) else value

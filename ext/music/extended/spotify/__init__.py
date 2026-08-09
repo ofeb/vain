@@ -11,7 +11,7 @@ from core.discord.ctx import Context
 from core.discord.hybrid import describe, group, hybrid
 from config import color, emojis, music_enabled
 
-from .proper.api import SpotifyUserAPI, redirect_uri
+from .improper.api import SpotifyUserAPI, redirect_uri
 
 from core.discord.views.embed import body, panel_embed
 

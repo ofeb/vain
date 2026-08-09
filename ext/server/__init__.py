@@ -227,10 +227,13 @@ class ServerCommands(Package):
         except Exception:
             pass
 
-        from core.tools.embed import is_container_script, is_embed_script
+        from core.tools.embed import extract_self_destruct, is_container_script, is_embed_script
 
         if not is_embed_script(normalized) and not is_container_script(normalized):
+            normalized, self_destruct = extract_self_destruct(normalized)
             payload = {"content": normalized}
+            if self_destruct is not None:
+                payload["delete_after"] = self_destruct
         else:
             try:
                 payload = await parse(normalized, sendable=True)

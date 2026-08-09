@@ -12,9 +12,10 @@ from discord.ext.commands import CommandError, group
 
 from core.discord.package import Package
 from core.tools.embed import Script
+from core.tools.human.text import humanize_duration
 from core.managers.permissions import has_permissions
 
-from .proper.helpers import (
+from .improper.helpers import (
     _split_trigger_response,
     _parse_response_flags,
     _is_embed_script,
@@ -228,11 +229,8 @@ class AutoresponderCommands(Package):
             except Exception as err:
                 raise CommandError(str(err)) from err
         timer = flags["self_destruct"]
-        if timer is not None:
-            if timer < 6:
-                raise CommandError("self-destruct timer must be at least `6` seconds")
-            if timer > 60:
-                raise CommandError("self-destruct timer must stay under `60` seconds")
+        if timer is not None and timer < 6:
+            raise CommandError("self-destruct timer must be at least `6` seconds")
         strict = bool(flags["strict"]) if flags["strict"] is not None else False
         should_delete = bool(flags["delete"])
         should_reply = bool(flags["reply"])
@@ -270,7 +268,7 @@ class AutoresponderCommands(Package):
             details.append("ignore command check")
         detail_text = f" ({', '.join(details)})" if details else ""
         if timer is not None:
-            detail_text += f"\ndeletes after `{timer}` seconds"
+            detail_text += f"\n> **the message will delete itself after {humanize_duration(timer)}**"
         action = "updated" if existed else "added"
         return await ctx.success(f"{action} autoresponder for **{trigger}**{detail_text}")
 
@@ -279,8 +277,8 @@ class AutoresponderCommands(Package):
         aliases=["arp", "autoresponders", "ars", "ar"],
         description=(
             "Auto-reply to messages matching a trigger. "
-            "Flags: `--strict`, `--not_strict` (default), `--self_destruct <6-60>`, "
-            "`--reply`, `--delete`, `--ignore_command_check`"
+            "Flags: `--strict`, `--not_strict` (default), `--self_destruct <time>`, "
+            "`--reply [yes/no]`, `--delete`, `--ignore_command_check`"
         ),
         invoke_without_command=True,
     )

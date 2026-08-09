@@ -582,14 +582,18 @@ class Context(commands.Context):
         if isinstance(view, discord.ui.LayoutView):
             send_kw = dict(base_kw)
             send_kw.pop("suppress_embeds", None)
-            if content is not None:
-                send_kw["content"] = content
             if len(file_list) == 1:
                 send_kw["file"] = file_list[0]
             elif file_list:
                 send_kw["files"] = file_list
-            
-            
+            if content is not None and str(content).strip():
+                content_kw = dict(send_kw)
+                content_kw.pop("file", None)
+                content_kw.pop("files", None)
+                try:
+                    await super().send(content=str(content), **content_kw)
+                except Exception:
+                    pass
             return await super().send(view=view, **send_kw)
 
         

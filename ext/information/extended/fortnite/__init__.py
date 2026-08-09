@@ -77,7 +77,7 @@ class Fortnite(Package):
         return payload.get("data") or {}
 
     async def fetch_fortnite_shop_layout(self):
-        from .proper.shop_renderer import ShopLayout, ShopSection, ShopTile
+        from .improper.shop_renderer import ShopLayout, ShopSection, ShopTile
 
         data = await self._fetch_fortnite_api_shop_raw()
         catalog: dict[str, dict[str, Any]] = {}
@@ -186,7 +186,7 @@ class Fortnite(Package):
             if not layout.sections:
                 return await ctx.warn("The shop is currently empty.")
 
-            from .proper.shop_renderer import render_shop_image
+            from .improper.shop_renderer import render_shop_image
 
             try:
                 image_bytes = await render_shop_image(layout)

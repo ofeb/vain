@@ -25,9 +25,9 @@ def _parse_response_flags(raw: str) -> tuple[str, dict[str, object], str | None]
 
     Supported flags:
     - ``--strict`` / ``--not_strict`` (default: **not strict**)
-    - ``--self_destruct <6-60>`` / ``--self-destruct``
+    - ``--self_destruct <time>`` / ``--self-destruct`` (e.g. 10, 10s, 5m, 5mins, 1h)
     - ``--delete`` (delete the trigger message)
-    - ``--reply`` (reply to the trigger)
+    - ``--reply on|off|yes|no|true|false`` (reply to the trigger)
     - ``--ignore_command_check``
     """
     flags = {
@@ -60,14 +60,29 @@ def _parse_response_flags(raw: str) -> tuple[str, dict[str, object], str | None]
         elif flag == "delete":
             flags["delete"] = True
         elif flag == "reply":
-            flags["reply"] = True
+            if value is None:
+                flags["reply"] = True
+            else:
+                low = value.lower()
+                if low in {"yes", "true", "on", "1", "y"}:
+                    flags["reply"] = True
+                elif low in {"no", "false", "off", "0", "n"}:
+                    flags["reply"] = False
+                else:
+                    error = "reply must be `on`/`yes`/`true` or `off`/`no`/`false`."
         elif flag in {"ignore_command_check", "ignore-command-check"}:
             flags["ignore_command_check"] = True
         elif flag in {"self_destruct", "self-destruct"}:
-            if value is None or not value.isdigit():
-                error = "self_destruct must be a number between 6 and 60."
-            else:
-                flags["self_destruct"] = int(value)
+                if value is None:
+                    error = "self_destruct must be a duration like 10, 10s, 5m, 5mins or 1h."
+                else:
+                    from core.tools.embed import parse_duration_token
+
+                    seconds = parse_duration_token(value)
+                    if seconds is None:
+                        error = "self_destruct must be a duration like 10, 10s, 5m, 5mins or 1h."
+                    else:
+                        flags["self_destruct"] = seconds
 
         remaining = remaining[: match.start()].rstrip()
 

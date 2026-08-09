@@ -14,6 +14,7 @@ from core.discord.package import Package
 from core.managers.converters import EmbedConverter
 from core.tools.flags.guilds import Parameters
 from core.managers.permissions import has_permissions
+from core.tools.human.text import humanize_duration
 
 
 class BoostCommands(Package):
@@ -71,11 +72,8 @@ class BoostCommands(Package):
     ) -> Message:
         if not isinstance(channel, TextChannel):
             return await ctx.warn("You can only set boost messages in text channels")
-        if timer is not None:
-            if timer < 6:
-                return await ctx.warn("self-destruct timer must be at least `6` seconds")
-            if timer > 60:
-                return await ctx.warn("self-destruct timer must stay under `60` seconds")
+        if timer is not None and timer < 6:
+            return await ctx.warn("self-destruct timer must be at least `6` seconds")
 
         exists = await self.db.fetchval(
             """SELECT 1 FROM boost_messages
@@ -126,18 +124,18 @@ class BoostCommands(Package):
                 )
             verb = "set"
 
-        extra = f"\nmessages will delete after `{timer}` seconds" if timer else ""
+        extra = f"\n> **the message will delete itself after {humanize_duration(timer)}**" if timer else ""
         return await ctx.success(
             f"**{slot}** message {verb} for {channel.mention}{extra}"
         )
 
     @boosts.command(
         name="add",
-        example=",boosts add #general thanks {user.mention}!  |  ,boosts add thanks again! --twoboosts",
+        example=",boosts add #general thanks {user.mention}!",
         aliases=["create", "set"],
         flags=Parameters,
         description="Add a boost message (defaults to current channel). Use --twoboosts for the 2nd boost script.",
-        usage="[channel] <script> [--self_destruct <seconds>] [--twoboosts]",
+        usage="[channel] <script> [--self_destruct <time>] [--twoboosts]",
     )
     @has_permissions(manage_guild=True)
     async def boosts_add(
@@ -161,7 +159,7 @@ class BoostCommands(Package):
         example=",boosts edit #general thanks {user.mention} for the boost!",
         flags=Parameters,
         description="Edit an existing boost script (defaults to current channel)",
-        usage="[channel] <script> [--self_destruct <seconds>] [--twoboosts]",
+        usage="[channel] <script> [--self_destruct <time>] [--twoboosts]",
     )
     @has_permissions(manage_guild=True)
     async def boosts_edit(
@@ -181,7 +179,7 @@ class BoostCommands(Package):
 
     @boosts.command(
         name="remove",
-        example=",boosts remove #general  |  ,boosts remove --twoboosts",
+        example=",boosts remove #general",
         aliases=["delete", "del"],
         flags=Parameters,
         description="Remove a boost message (defaults to current channel). --twoboosts removes the second-boost slot.",

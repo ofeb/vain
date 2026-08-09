@@ -325,6 +325,7 @@ class _BaseBuilder:
 
         self.data: dict[str, str] = {
             "content": "",
+            "self_destruct": "",
             "title": "",
             "description": "",
             "color": "",
@@ -532,6 +533,21 @@ class _BaseBuilder:
                 discord.SelectOption(label="Thumbnail URL", value="thumbnail"),
             ]
         )
+        opts.append(
+            discord.SelectOption(
+                label="Self destruct",
+                value="self_destruct",
+                description="Auto-delete after 5s / 30s / 1h / mins",
+            )
+        )
+        if (self.data.get("self_destruct") or "").strip():
+            opts.append(
+                discord.SelectOption(
+                    label="Remove self destruct",
+                    value="self_destruct_remove",
+                    description="Cancel the auto-delete timer",
+                )
+            )
         if self.kind == "embed":
             opts.append(
                 discord.SelectOption(
@@ -690,7 +706,7 @@ class _BaseBuilder:
             try:
                 self.content_message = await channel.send(
                     content=content
-                    or "No content set - pick **Content** below to add message text.",
+                    or "use the dropdown to replace this text with whatever you put in",
                     view=view,
                 )
             except Exception:
@@ -855,6 +871,9 @@ class _BaseBuilder:
 
         for btn in self.buttons[:_MAX_BUILDER_BUTTONS]:
             parts.append(_button_script_chunk(btn))
+        sd = (self.data.get("self_destruct") or "").strip()
+        if sd:
+            parts.append(f" --self_destruct {sd}")
         if len(parts) == 1:
             return f"{mode}$v{{description: }}"
         return "".join(parts)
@@ -1604,6 +1623,44 @@ class _BaseBuilder:
             await self.refresh()
             return
 
+        if key == "self_destruct":
+            values = await self._run_modal(
+                inter,
+                "Self destruct",
+                [
+                    (
+                        "self_destruct",
+                        "Time (5s, 30s, 1h, 5m or seconds)",
+                        False,
+                        20,
+                        self.data.get("self_destruct") or "",
+                    )
+                ],
+            )
+            if values is None:
+                return
+            raw = (values.get("self_destruct") or "").strip()
+            if raw and not raw.isdigit():
+                from core.tools.moderation_args import parse_duration_seconds
+
+                if parse_duration_seconds(raw) is None:
+                    if not inter.response.is_done():
+                        await inter.response.send_message(
+                            f"Invalid time: `{raw}` - use 5s, 30s, 1h, 5m or seconds.",
+                            ephemeral=True,
+                        )
+                    return
+            self.data["self_destruct"] = raw
+            await self.refresh()
+            return
+
+        if key == "self_destruct_remove":
+            self.data["self_destruct"] = ""
+            if not inter.response.is_done():
+                await inter.response.defer()
+            await self.refresh()
+            return
+
         labels = {
             "content": ("Content / message text", True, 2000),
             "title": ("Title", False, 256),
@@ -1753,15 +1810,15 @@ async def register_builders(bot: "Vain") -> None:
         
         accent = getattr(ctx.bot, "color", None) or 0x2B2D31
         builder = ContainerBuilderView(ctx.author.id, accent=int(accent))
+        preview_content, preview_layout = builder._preview_container()
+        await builder._refresh_content_message(preview_content, ctx.channel)
         m = await ctx.send(view=builder._controls())
         builder.message = m
         try:
-            preview_content, preview_layout = builder._preview_container()
             preview = await ctx.send(content=None, view=preview_layout)
             builder.preview_message = preview
         except Exception:
             builder.preview_message = None
-        await builder._refresh_content_message(preview_content, ctx.channel)
 
     for name in ("embedbuilder", "containerbuilder", "eb", "cb"):
         existing = bot.get_command(name)

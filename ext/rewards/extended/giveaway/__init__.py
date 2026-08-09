@@ -19,7 +19,7 @@ from core.tools.moderation_args import (
 )
 
 from .events import GiveawayEvents
-from .proper.requirements import (
+from .improper.requirements import (
     apply_start_flags,
     catalog_lines,
     empty_requirements,
@@ -27,7 +27,7 @@ from .proper.requirements import (
     has_any_requirement,
     split_start_payload,
 )
-from .proper.views import build_giveaway_panel
+from .improper.views import build_giveaway_panel
 
 _INVISIBLE_RE = re.compile(r"[\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff]")
 _COMMA_DURATION = re.compile(

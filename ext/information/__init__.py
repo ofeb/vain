@@ -118,7 +118,7 @@ async def get_bot_dominant_color(bot) -> int:
         return await get_dominant_color(str(bot.user.display_avatar.url))
     return 0xE1D2DE
 
-from .proper.lookup import (
+from .improper.lookup import (
     build_cashapp_embed,
     build_define_embed,
     build_github_embed,

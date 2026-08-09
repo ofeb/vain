@@ -117,23 +117,28 @@ class Reaction(ReactionEvents, Package):
         name="add",
         description="Add an auto reaction trigger (emoji(s) + trigger word/phrase)",
         aliases=["create"],
-        example=",autoreaction add 😂 pic --not_strict",
+        example=",autoreaction add 😂 pic --not_strict --reply yes",
     )
     @describe(emoji="Emoji(s) to react with", trigger="Word/phrase that triggers the reaction")
     @has_permissions(manage_expressions=True)
     async def reaction_add(self, ctx: Context, emoji: str, *, trigger: str) -> None:
         """Add a reaction trigger.
 
-        Usage: `,autoreaction add <emoji(s)> <trigger> [--strict|--not_strict]`
+        Usage: `,autoreaction add <emoji(s)> <trigger> [--strict or --not_strict] [--reply yes/no]`
 
         Default is **not strict** (word-boundary match), so `pic` won't fire on
         words like `suspicious`. Multi-word triggers work: `rep for pic`.
+
+        `--reply yes` makes the bot reply to the matching message with the
+        emoji(s) as text in addition to adding the reactions.
         """
         strict = False
+        reply = False
         trigger_raw = trigger.strip()
         
         flag_re = re.compile(
-            r"(?:\s+--(?P<flag>strict|not_strict|not-strict))\s*$",
+            r"(?:\s+--(?P<flag>strict|not_strict|not-strict|reply)"
+            r"(?:=(?P<eqval>\S+)|\s+(?P<val>(?!\-\-)\S+))?)\s*$",
             re.IGNORECASE,
         )
         while True:
@@ -143,8 +148,18 @@ class Reaction(ReactionEvents, Package):
             flag = m.group("flag").lower()
             if flag == "strict":
                 strict = True
-            else:
+            elif flag in {"not_strict", "not-strict"}:
                 strict = False
+            elif flag == "reply":
+                value = m.group("eqval") or m.group("val")
+                if value is None:
+                    reply = True
+                elif value.lower() in {"yes", "true", "on", "1", "y"}:
+                    reply = True
+                elif value.lower() in {"no", "false", "off", "0", "n"}:
+                    reply = False
+                else:
+                    return await ctx.warn("`--reply` must be `on`/`yes`/`true` or `off`/`no`/`false`")
             trigger_raw = trigger_raw[: m.start()].rstrip()
 
         trigger_raw = trigger_raw.strip()
@@ -164,12 +179,13 @@ class Reaction(ReactionEvents, Package):
 
         await self.bot.db.execute(
             """
-            INSERT INTO auto_reactions (guild_id, trigger, response, owner_id, strict)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO auto_reactions (guild_id, trigger, response, owner_id, strict, reply)
+            VALUES ($1, $2, $3, $4, $5, $6)
             ON CONFLICT (guild_id, trigger, response)
             DO UPDATE SET
                 response = EXCLUDED.response,
                 strict = EXCLUDED.strict,
+                reply = EXCLUDED.reply,
                 owner_id = EXCLUDED.owner_id
             """,
             ctx.guild.id,
@@ -177,10 +193,14 @@ class Reaction(ReactionEvents, Package):
             emojis_list,
             ctx.author.id,
             strict,
+            reply,
         )
         mode = "strict" if strict else "not strict"
+        details = [mode]
+        if reply:
+            details.append("reply")
         await ctx.success(
-            f"Created auto reaction for **{trigger_raw}** → {' '.join(emojis_list)} ({mode})"
+            f"Created auto reaction for **{trigger_raw}** → {' '.join(emojis_list)} ({', '.join(details)})"
         )
 
     @reaction_group.command(

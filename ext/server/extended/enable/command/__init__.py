@@ -41,7 +41,7 @@ class CommandEnableCommands(Package):
         *,
         payload: str,
     ) -> tuple[Optional[Union[TextChannel, Member, Role, str]], object]:
-        """Parse ``[channel|member|role|server|guild] <command>``."""
+        """Parse ``[channel or member or role or server or guild] <command>``."""
         text = (payload or "").strip()
         if not text:
             raise CommandError("provide a command to enable")

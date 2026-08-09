@@ -362,6 +362,63 @@ def maybe_wrap_embed_script(text: str) -> str:
     return stripped
 
 
+_SELF_DESTRUCT_RE = re.compile(
+    r"(?:--self[_-]?destruct|--delete[_-]?after)\s+(\d+)"
+    r"(?:\s*((?:secs?|seconds?|mins?|minutes?|hrs?|hours?|days?|weeks?|[smhdw])))?\b",
+    re.IGNORECASE,
+)
+
+_self_destruct_units = {
+    "s": 1, "sec": 1, "secs": 1, "second": 1, "seconds": 1,
+    "m": 60, "min": 60, "mins": 60, "minute": 60, "minutes": 60,
+    "h": 3600, "hr": 3600, "hrs": 3600, "hour": 3600, "hours": 3600,
+    "d": 86400, "day": 86400, "days": 86400,
+    "w": 604800, "week": 604800, "weeks": 604800,
+}
+
+
+def extract_self_destruct(raw: str) -> tuple[str, int | None]:
+    """Strip ``--self_destruct <time>`` / ``--delete_after <time>`` tokens from a script.
+
+    Accepts bare seconds (``10``) and durations with aliases, spaced or not:
+    seconds (``10s``/``10sec``/``10 seconds``), minutes (``5m``/``5mins``/``5 mins``),
+    hours (``1h``/``1hr``/``1 hour``), plus ``d``/``day(s)`` and ``w``/``week(s)``.
+    A bare number always means seconds. Returns ``(cleaned_script, seconds_or_none)``
+    so every script sender can apply ``delete_after`` centrally.
+    """
+    seconds: int | None = None
+
+    def _replace(match: re.Match) -> str:
+        nonlocal seconds
+        amount = int(match.group(1))
+        unit = (match.group(2) or "").lower()
+        seconds = amount * _self_destruct_units.get(unit, 1)
+        return ""
+
+    cleaned = _SELF_DESTRUCT_RE.sub(_replace, str(raw))
+    return cleaned, seconds
+
+
+def parse_duration_token(token: str) -> int | None:
+    """Parse a duration token into seconds.
+
+    Accepts bare numbers (``10`` = seconds) and unit aliases, spaced or not:
+    ``10s``/``10sec``/``10 seconds``, ``5m``/``5mins``/``5 mins``,
+    ``1h``/``1hr``/``1 hour``, plus ``d``/``day(s)`` and ``w``/``week(s)``.
+    Returns ``None`` when the token is not a valid duration.
+    """
+    match = re.fullmatch(
+        r"(\d+)(?:\s*((?:secs?|seconds?|mins?|minutes?|hrs?|hours?|days?|weeks?|[smhdw])))?",
+        str(token or "").strip(),
+        re.IGNORECASE,
+    )
+    if not match:
+        return None
+    amount = int(match.group(1))
+    unit = (match.group(2) or "").lower()
+    return amount * _self_destruct_units.get(unit, 1)
+
+
 def _over_by(val, limit: int) -> int:
     return limit - (val if isinstance(val, int) else len(val))
 
@@ -1182,9 +1239,13 @@ async def parse_container(raw: str, sendable: bool = False) -> dict:
 
 async def parse(raw: str, sendable: bool = False) -> dict:
     """parse embed or container script string into dict or embed"""
+    raw, self_destruct = extract_self_destruct(str(raw))
     raw_in = str(raw).strip()
     if is_container_script(raw_in):
-        return await parse_container(raw_in, sendable=sendable)
+        payload = await parse_container(raw_in, sendable=sendable)
+        if self_destruct is not None:
+            payload.setdefault("delete_after", self_destruct)
+        return payload
 
     raw = raw_in
     
@@ -1223,6 +1284,8 @@ async def parse(raw: str, sendable: bool = False) -> dict:
                     datetime.datetime.now(datetime.timezone.utc).isoformat()
                 )
                 continue
+            if self_destruct is not None:
+                return {"content": key, "delete_after": self_destruct}
             return {"content": key}
 
         payload = part.payload.strip()
@@ -1393,6 +1456,8 @@ async def parse(raw: str, sendable: bool = False) -> dict:
     if not final["view"].children:
         final.pop("view", None)
 
+    if self_destruct is not None:
+        final["delete_after"] = self_destruct
     return final
 
 
@@ -1471,6 +1536,42 @@ def to_code(
     return code.replace("```", "`​`​`")
 
 
+async def send_script_payload(
+    destination,
+    payload: dict[str, Any],
+    **kwargs,
+) -> discord.Message | None:
+    """Send a parsed embed/container payload to ``destination``.
+
+    Container payloads (a ``LayoutView``) with message content send the content
+    as its own message first and then the container message, so the container
+    never has to carry plain text above it. Embed payloads are untouched.
+    """
+    merged = {**payload, **kwargs}
+    if isinstance(destination, discord.Message):
+        merged.pop("delete_after", None)
+        merged.pop("raw_embed", None)
+        return await destination.edit(**merged)
+
+    content = merged.get("content")
+    view = merged.get("view")
+    if content and view is not None and not isinstance(view, discord.ui.View):
+        text = content if isinstance(content, str) else str(content)
+        if text.strip():
+            content_kw = dict(merged)
+            content_kw.pop("content", None)
+            content_kw.pop("view", None)
+            content_kw.pop("file", None)
+            content_kw.pop("files", None)
+            content_kw.pop("raw_embed", None)
+            try:
+                await destination.send(content=text, **content_kw)
+            except Exception:
+                pass
+        merged["content"] = None
+    return await destination.send(**merged)
+
+
 class PreparedScript:
     """prepared embed payload returned by bot.create_embed."""
 
@@ -1479,10 +1580,7 @@ class PreparedScript:
 
     async def send(self, destination, **kwargs) -> discord.Message:
         payload = {**self.data, **kwargs}
-        if isinstance(destination, discord.Message):
-            payload.pop("delete_after", None)
-            return await destination.edit(**payload)
-        return await destination.send(**payload)
+        return await send_script_payload(destination, payload)
 
 
 class Script:
@@ -1930,11 +2028,14 @@ class Script:
 
     async def data(self, sendable: bool = False, **kwargs) -> dict[str, Any]:
         rendered = self.render(**kwargs)
+        rendered, self_destruct = extract_self_destruct(rendered)
         rendered = maybe_wrap_embed_script(rendered)
         if is_container_script(rendered) or is_embed_script(rendered):
             payload = await parse(rendered, sendable=sendable)
         else:
             payload = {"content": rendered}
+        if self_destruct is not None:
+            payload.setdefault("delete_after", self_destruct)
         for option in ("delete_after", "allowed_mentions", "reference", "ephemeral"):
             if option in kwargs and kwargs[option] is not None:
                 payload[option] = kwargs[option]
@@ -1960,11 +2061,7 @@ class Script:
                         payload.setdefault("raw_embed", True)
                 except (TypeError, ValueError):
                     payload.setdefault("raw_embed", True)
-        if isinstance(destination, discord.Message):
-            payload.pop("delete_after", None)
-            payload.pop("raw_embed", None)
-            return await destination.edit(**payload)
-        return await destination.send(**payload)
+        return await send_script_payload(destination, payload)
 
     async def compile(self, **kwargs) -> bool:
         await self.data(False, **kwargs)

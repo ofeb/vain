@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import datetime
 import io
+import re
 from typing import TYPE_CHECKING, Optional, Union
 
 import discord
@@ -272,7 +273,7 @@ class Log(LogEvents, Package):
                 all_events = True
             elif event not in EVENT_TYPES:
                 return await ctx.warn(
-                    f"Invalid event type. Valid: {', '.join(f'`{e}`' for e in EVENT_TYPES)}"
+                    f"Invalid event type, all valid types are: {', '.join(f'`{e}`' for e in EVENT_TYPES)}"
                 )
             else:
                 events = [event]
@@ -333,7 +334,7 @@ class Log(LogEvents, Package):
         event = event.lower()
         if event not in EVENT_TYPES:
             return await ctx.warn(
-                f"Invalid event type. Valid: {', '.join(f'`{e}`' for e in EVENT_TYPES)}"
+                f"Invalid event type, all valid types are: {', '.join(f'`{e}`' for e in EVENT_TYPES)}"
             )
 
         await self.db.execute(
@@ -346,33 +347,82 @@ class Log(LogEvents, Package):
 
     @log.group(
         name="color",
-        description="Customize embed color for an event",
+        description="Customize embed color for an event (or `all` for every event)",
         invoke_without_command=True,
-        example=",log color #logs messages ff0000",
+        example=",log color #logs messages ff0000  or  ,log color all ff0000",
     )
     @has_permissions(manage_guild=True)
-    async def log_color(self, ctx: Context, channel: discord.TextChannel = None, event: str = None, *, hex_color: str = None) -> None:
-        channel = channel or (ctx.channel if isinstance(ctx.channel, discord.TextChannel) else None)
-        if channel is None or event is None or hex_color is None:
+    async def log_color(self, ctx: Context, *tokens: str) -> None:
+        """`,log color [channel] <event|all> <hex>`"""
+        if not tokens:
             return await ctx.send_help(ctx.command)
 
-        event = event.lower()
-        if event not in EVENT_TYPES:
-            return await ctx.warn(f"Invalid event type. Valid: {', '.join(f'`{e}`' for e in EVENT_TYPES)}")
+        color_token: str | None = None
+        event: str | None = None
+        channel: discord.TextChannel | None = None
+        remaining: list[str] = []
 
-        hex_color = hex_color.strip("#")
-        try:
-            int(hex_color, 16)
-        except ValueError:
-            return await ctx.warn("Invalid hex color code")
+        color_re = re.compile(r"^#?([0-9a-fA-F]{6})$")
+        for token in tokens:
+            if color_token is None and color_re.fullmatch(token.strip()):
+                color_token = token.strip().lstrip("#")
+                continue
+            remaining.append(token)
+
+        if color_token is None:
+            return await ctx.warn("Provide a hex color code, e.g. `#ff0000`")
+
+        async def _as_channel(token: str) -> discord.TextChannel | None:
+            with contextlib.suppress(Exception):
+                from discord.ext.commands import TextChannelConverter
+
+                ch = await TextChannelConverter().convert(ctx, token)
+                if isinstance(ch, discord.TextChannel):
+                    return ch
+            return None
+
+        for token in remaining:
+            low = token.lower()
+            if event is None and (low in EVENT_TYPES or low == "all"):
+                event = low
+                continue
+            ch = await _as_channel(token)
+            if ch is not None:
+                channel = ch
+                continue
+            return await ctx.warn(
+                f"Invalid event type, all valid types are: {', '.join(f'`{e}`' for e in EVENT_TYPES)} and `all`"
+            )
+
+        if event is None:
+            return await ctx.warn(
+                f"Specify an event or `all` - valid types: {', '.join(f'`{e}`' for e in EVENT_TYPES)}"
+            )
+
+        channel = channel or (ctx.channel if isinstance(ctx.channel, discord.TextChannel) else None)
+        if channel is None:
+            return await ctx.warn("Provide a **text channel** (or run this in one)")
+
+        if event == "all":
+            await self.db.execute(
+                """INSERT INTO log_config (guild_id, channel_id, events, color)
+                   VALUES ($1, $2, ARRAY[]::TEXT[], $3)
+                   ON CONFLICT (guild_id, channel_id) DO UPDATE SET color = $3""",
+                ctx.guild.id, channel.id, color_token,
+            )
+            return await ctx.success(
+                f"set the color **#{color_token}** for **all logs** in {channel.mention}"
+            )
 
         await self.db.execute(
             """INSERT INTO log_event_colors (guild_id, channel_id, event, color)
                VALUES ($1, $2, $3, $4)
                ON CONFLICT (guild_id, channel_id, event) DO UPDATE SET color = $4""",
-            ctx.guild.id, channel.id, event, hex_color,
+            ctx.guild.id, channel.id, event, color_token,
         )
-        return await ctx.success(f"Log color for `{event}` in {channel.mention} set to `#{hex_color}`")
+        return await ctx.success(
+            f"set the color **#{color_token}** for **`{event}` logs** in {channel.mention}"
+        )
 
     @log_color.command(
         name="list",

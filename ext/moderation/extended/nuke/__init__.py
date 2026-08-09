@@ -46,10 +46,12 @@ class Nuke(Package):
     async def cog_load(self) -> None:
         if not self._autonuke_loop.is_running():
             self._autonuke_loop.start()
+        await super().cog_load()
 
     async def cog_unload(self) -> None:
         if self._autonuke_loop.is_running():
             self._autonuke_loop.cancel()
+        await super().cog_unload()
 
     
     
@@ -235,7 +237,7 @@ class Nuke(Package):
         name="nuke",
         description="Clone and delete a channel (optionally schedule via autonuke)",
         invoke_without_command=True,
-        example=",nuke  |  ,nuke #general",
+        example=",nuke #general",
     )
     @has_permissions(administrator=True)
     async def nuke(self, ctx, channel: Optional[TextChannel] = None):
@@ -278,7 +280,7 @@ class Nuke(Package):
         name="script",
         aliases=["message", "embed", "msg"],
         description="Set the default message/embed script posted after a nuke",
-        example=",nuke script first  |  ,nuke script {embed}$v{description: channel nuked}",
+        example=",nuke script {embed}$v{description: channel nuked}",
     )
     @has_permissions(administrator=True)
     async def nuke_script(self, ctx, *, message: Optional[str] = None):
@@ -325,7 +327,7 @@ class Nuke(Package):
         aliases=["anuke"],
         description="Schedule automatic channel nukes",
         invoke_without_command=True,
-        example=",autonuke add #general 2h  |  ,anuke list",
+        example=",autonuke add #general 2h",
     )
     @has_permissions(administrator=True)
     async def autonuke(self, ctx):
@@ -335,7 +337,7 @@ class Nuke(Package):
         name="add",
         aliases=["create", "cr", "c", "a", "set"],
         description="Schedule a channel to be nuked on an interval",
-        example=",autonuke add #general 2h  |  ,autonuke add 1h {embed}$v{description: wiped}",
+        example=",autonuke add #general 2h",
     )
     @has_permissions(administrator=True)
     async def autonuke_add(self, ctx, *, args: str = ""):
@@ -423,7 +425,7 @@ class Nuke(Package):
         name="remove",
         aliases=["delete", "del", "rem", "r", "d"],
         description="Remove a scheduled autonuke",
-        example=",autonuke remove #text  |  ,autonuke remove",
+        example=",autonuke remove #text",
     )
     @has_permissions(administrator=True)
     async def autonuke_remove(self, ctx, channel: Optional[TextChannel] = None):
