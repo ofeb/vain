@@ -175,7 +175,7 @@ PAST_TENSE: dict[str, str] = {
     "nervous": "Got nervous around",
     "no": "Said no to",
     "nom": "Nibbled",
-    "nosebleed": "Nosebleeded at",
+    "nosebleed": "Had a Nosebleed infront of",
     "nuzzle": "Nuzzled",
     "nyah": "Nyahhh'd",
     "peek": "Peeked",
