@@ -13,7 +13,7 @@ from humanize import naturaldelta
 from core.discord.package import Package
 from core.discord.views.confirm import ConfirmView
 from core.managers.permissions import has_permissions
-from core.tools.moderation_args import parse_duration_seconds, is_duration_token
+from core.tools.embed import parse_duration_token
 
 if TYPE_CHECKING:
     from core.vain import Vain
@@ -362,12 +362,9 @@ class Nuke(Package):
 
         while i < len(tokens):
             tok = tokens[i]
-            if is_duration_token(tok):
-                interval_seconds = parse_duration_seconds(tok)
-                i += 1
-                break
-            if tok.isdigit() and int(tok) > 0:
-                interval_seconds = int(tok)
+            parsed = parse_duration_token(tok)
+            if parsed is not None:
+                interval_seconds = parsed
                 i += 1
                 break
             script_tokens.append(tok)
@@ -377,12 +374,9 @@ class Nuke(Package):
 
         if interval_seconds is None:
             for idx, tok in enumerate(list(script_tokens)):
-                if is_duration_token(tok):
-                    interval_seconds = parse_duration_seconds(tok)
-                    script_tokens.pop(idx)
-                    break
-                if tok.isdigit() and int(tok) > 0:
-                    interval_seconds = int(tok)
+                parsed = parse_duration_token(tok)
+                if parsed is not None:
+                    interval_seconds = parsed
                     script_tokens.pop(idx)
                     break
 
@@ -523,9 +517,7 @@ class Nuke(Package):
                 f"Provide an interval (e.g. `30m`, `2h`, `1d`)\n"
                 f"Example: `{ctx.clean_prefix}autonuke change interval #general 2h`"
             )
-        seconds = parse_duration_seconds(interval_token)
-        if seconds is None and interval_token.isdigit():
-            seconds = int(interval_token)
+        seconds = parse_duration_token(interval_token)
         if seconds is None or seconds < 60:
             raise CommandError("Interval must be at least **60 seconds**")
         if not isinstance(channel, TextChannel):
