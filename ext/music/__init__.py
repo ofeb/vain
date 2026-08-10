@@ -1533,10 +1533,10 @@ class Music(MusicEvents, Package):
 
         if platform:
             header = f"playing **{platform}**"
-            provider_line = f"> -# provider: **{platform}** · audio: **youtube music**"
+            provider_line = f"-# **provider:** {platform} · **audio:** youtube music"
         else:
             header = "now playing"
-            provider_line = "> -# source: **youtube music**"
+            provider_line = "-# **source:** youtube music"
 
         song_line = (
             f"[**{title}** - **{artist}**]({link})"
@@ -1757,7 +1757,7 @@ class Music(MusicEvents, Package):
             t, a, _, _ = self._display_bits(tr)
             lines.append(f"`{i}.` **{t}** - {a}")
         if not lines:
-            text = "> queue is empty"
+            text = "queue is empty"
         else:
             text = compose(body(*lines), caption(f"{len(state.tracks)} queued"))
         if inter.response.is_done():

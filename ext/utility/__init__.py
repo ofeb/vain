@@ -148,7 +148,7 @@ def _build_reaction_container(snipe: dict, *, accent: int | None = None) -> ui.C
         msg_bit = "`a message`"
 
     container.add_item(
-        ui.TextDisplay(f"> -# {who} reacted with {reaction_display} to {msg_bit}")
+        ui.TextDisplay(f"-# **{who}** reacted with {reaction_display} to {msg_bit}")
     )
     return container
 

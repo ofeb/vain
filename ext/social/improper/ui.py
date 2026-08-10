@@ -311,11 +311,11 @@ def build_social_repost_container(
     else:
         handle_md = _platform_label(plat)
     meta_lines = [
-        f"> {handle_md}",
-        f"> {stats}",
+        f"{handle_md}",
+        f"{stats}",
     ]
     if page_total > 1:
-        meta_lines.append(f"> slide **{page_index + 1}**/**{page_total}**")
+        meta_lines.append(f"slide **{page_index + 1}**/**{page_total}**")
     c.add_item(ui.TextDisplay("\n".join(meta_lines)))
 
     whisper: list[str] = []

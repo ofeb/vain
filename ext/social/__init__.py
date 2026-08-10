@@ -1413,7 +1413,7 @@ class Socials(Package):
                 url = r.get("url") or ""
                 snip = (r.get("snippet") or "")[:90]
                 if url:
-                    lines.append(f"**{i}.** [{title}]({url})" + (f"\n> {snip}" if snip else ""))
+                    lines.append(f"**{i}.** [{title}]({url})" + (f"\n-# {snip}" if snip else ""))
                 else:
                     lines.append(f"**{i}.** {title}")
             await ctx.send(
@@ -1507,7 +1507,7 @@ class Socials(Package):
                 url = r.get("url") or ""
                 snip = (r.get("snippet") or "")[:90]
                 if url:
-                    lines.append(f"**{i}.** [{title}]({url})" + (f"\n> {snip}" if snip else ""))
+                    lines.append(f"**{i}.** [{title}]({url})" + (f"\n-# {snip}" if snip else ""))
                 else:
                     lines.append(f"**{i}.** {title}")
             await ctx.send(

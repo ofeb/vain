@@ -806,7 +806,7 @@ class Lastfm(LastfmEvents, Package):
             metric_lines.append(f"Most active day of the week is **{most_active_day}**")
 
         color = await self._resolve_color(target.id)
-        insights = self._quote_block(*metric_lines) if metric_lines else "> No additional insights available."
+        insights = self._quote_block(*metric_lines) if metric_lines else "No additional insights available."
         embed = panel_embed(
             title=user.get("name", username),
             url=profile_url,
@@ -945,7 +945,7 @@ class Lastfm(LastfmEvents, Package):
         elif mode == "compact":
             desc = (
                 f"**[{track_name}]({url})**\n"
-                f"> {artist} · *{album}*"
+                f"{artist} · *{album}*"
             )
         else:
             scrobble_line = (
@@ -955,8 +955,8 @@ class Lastfm(LastfmEvents, Package):
             )
             desc = (
                 f"### [{track_name}]({url})\n"
-                f"> **{artist}**\n"
-                f"> *{album}*"
+                f"**{artist}**\n"
+                f"*{album}*"
                 f"{scrobble_line}"
             )
 
@@ -1725,7 +1725,7 @@ class Lastfm(LastfmEvents, Package):
                 changed_text = "now"
                 if changed_at:
                     changed_text = f"<t:{int(changed_at.timestamp())}:R>"
-                lines.append(f"> {new_name} stole from {prev_name} ({changed_text})")
+                lines.append(f"{new_name} stole from {prev_name} ({changed_text})")
             embed.add_field(name="Recent steals", value="\n".join(lines), inline=False)
         self._set_lastfm_guild_author(embed, ctx.guild, ctx.author)
         self._set_lastfm_footer(embed, "Run whoknows on this artist to refresh crown ownership")

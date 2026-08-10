@@ -179,7 +179,7 @@ class BadgeCommands(Package):
         return await msg.edit(
             embed=Embed(
                 color=self.bot.color,
-                description=f"> {ctx.author.mention}: done in **{elapsed}**",
+                description=f"{ctx.author.mention}: done in **{elapsed}**",
             )
         )
 
@@ -215,6 +215,6 @@ class BadgeCommands(Package):
         return await msg.edit(
             embed=Embed(
                 color=self.bot.color,
-                description=f"> {ctx.author.mention}: done in **{elapsed}**",
+                description=f"{ctx.author.mention}: done in **{elapsed}**",
             )
         )

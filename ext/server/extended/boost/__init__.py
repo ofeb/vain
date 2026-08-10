@@ -124,7 +124,7 @@ class BoostCommands(Package):
                 )
             verb = "set"
 
-        extra = f"\n> **the message will delete itself after {humanize_duration(timer)}**" if timer else ""
+        extra = f"\n-# **the message will delete itself after {humanize_duration(timer)}**" if timer else ""
         return await ctx.success(
             f"**{slot}** message {verb} for {channel.mention}{extra}"
         )

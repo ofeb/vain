@@ -120,13 +120,13 @@ class InviteTracker(Package):
         emb = _discord.Embed(
             color=color_values.base,
             description=(
-                "> This will **wipe all invite stats** for this server.\n"
-                "> This action **cannot be undone**.\n"
-                "> Are you sure you want to do this?\n"
+                "This will **wipe all invite stats** for this server.\n"
+                "This action **cannot be undone**.\n"
+                "Are you sure you want to do this?\n"
             ),
         )
         if not await view.prompt(embed=emb):
-            return await ctx.warn("Reset **cancelled**")
+            return await ctx.warn("Reset cancelled\n-# **invite tracker clear was cancelled**")
         await self.db.execute(
             "DELETE FROM invite_counts WHERE guild_id = $1", ctx.guild.id
         )

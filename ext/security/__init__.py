@@ -355,7 +355,7 @@ class Antinuke(AntinukeEvents, Package):
                 owner = await self.bot.fetch_user(guild.owner_id)
         if owner is None:
             return
-        embed = Embed(color=self.color, description=f"> {body.replace(chr(10), chr(10) + '> ')}")
+        embed = Embed(color=self.color, description=body)
         with contextlib.suppress(discord.Forbidden, discord.HTTPException):
             await owner.send(embed=embed)
 
@@ -390,8 +390,8 @@ class Antinuke(AntinukeEvents, Package):
         embed.add_field(
             name=title,
             value=(
-                f"> **Staff:** @{getattr(moderator, 'name', str(moderator))}\n"
-                f"> **Cause:** {reason or 'no reason provided'}"
+                f"**Staff:** @{getattr(moderator, 'name', str(moderator))}\n"
+                f"**Cause:** {reason or 'no reason provided'}"
             ),
             inline=False,
         )
@@ -624,14 +624,14 @@ class Antinuke(AntinukeEvents, Package):
         await self._alert_guild_owner(guild, owner_body)
 
         log_lines = [
-            f"> **Module** : {MODULE_NAMES.get(module_name, module_name)}",
-            f"> **Offender** : {actor.mention} (`{actor.id}`)",
-            f"> **Action** : {self._owner_verb(module.punishment)}",
+            f"**Module** : {MODULE_NAMES.get(module_name, module_name)}",
+            f"**Offender** : {actor.mention} (`{actor.id}`)",
+            f"**Action** : {self._owner_verb(module.punishment)}",
         ]
         if used_count is not None and used_limit is not None and window_tag is not None:
-            log_lines.append(f"> **Rate** : {used_count}/{used_limit} ({window_tag})")
+            log_lines.append(f"**Rate** : {used_count}/{used_limit} ({window_tag})")
         if not sanctioned:
-            log_lines.append("> **Status** : action failed (missing permissions)")
+            log_lines.append("**Status** : action failed (missing permissions)")
         await self._send_antinuke_log(
             guild,
             build_security_log_embed(
@@ -714,18 +714,18 @@ class Antinuke(AntinukeEvents, Package):
         await self._alert_guild_owner(guild, "\n".join(lines))
 
         perm_log_lines = [
-            f"> **Type** : permission change",
-            f"> **Offender** : {actor.mention} (`{actor.id}`)",
-            f"> **Detail** : {label}",
-            f"> **Action** : {self._owner_verb(penalty)}",
+            f"**Type** : permission change",
+            f"**Offender** : {actor.mention} (`{actor.id}`)",
+            f"**Detail** : {label}",
+            f"**Action** : {self._owner_verb(penalty)}",
         ]
         if revert is not None:
             perm_log_lines.append(
-                "> **Rollback** : "
+                "**Rollback** : "
                 + ("successful" if reverted else "failed")
             )
         if not sanctioned:
-            perm_log_lines.append("> **Status** : action failed (missing permissions)")
+            perm_log_lines.append("**Status** : action failed (missing permissions)")
         await self._send_antinuke_log(
             guild,
             build_security_log_embed(

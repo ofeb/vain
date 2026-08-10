@@ -57,7 +57,7 @@ class WyrView(discord.ui.View):
                 color=color.base,
                 description=compose(
                     body(f"**1:** {self.option1}", f"**2:** {self.option2}"),
-                    f"> {self.ctx.author.mention} chose **{option}**",
+                    f"{self.ctx.author.mention} chose **{option}**",
                 ),
             )
             await inter.response.edit_message(embed=embed, view=self)

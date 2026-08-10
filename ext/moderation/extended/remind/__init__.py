@@ -102,7 +102,7 @@ class Remind(Package):
         rid = row["id"] if row else "?"
         label = self._format_duration(seconds)
         return await ctx.success(
-            f"Reminder **#{rid}** set for **{label}**\n> {message[:200]}"
+            f"Reminder **#{rid}** set for **{label}**\n-# **{message[:200]}**"
         )
 
     @remind.command(

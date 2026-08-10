@@ -30,8 +30,8 @@ from ..improper.views import (
 DEFAULT_DM_SCRIPT = (
     "{embed}$v{title: You won a giveaway!}$v"
     "{description: **Congratulations** {user.mention}\n\n"
-    "> You won **{prize}** in **{guild.name}**\n"
-    "-# thanks for entering}$v{color: #A8D8A8}"
+    "You won **{prize}** in **{guild.name}**\n"
+    "-# **thanks for entering**}$v{color: #A8D8A8}"
 )
 
 
@@ -804,8 +804,8 @@ class GiveawayEvents(Cog):
                 title="You won a giveaway!" if not reroll else "You won a reroll!",
                 description=(
                     f"**Congratulations** {member.mention}\n\n"
-                    f"> You won **{prize}** in **{guild.name}**\n"
-                    f"-# thanks for entering"
+                    f"You won **{prize}** in **{guild.name}**\n"
+                    f"-# **thanks for entering**"
                 ),
                 color=color.base,
             )
