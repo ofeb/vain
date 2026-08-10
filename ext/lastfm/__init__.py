@@ -949,7 +949,7 @@ class Lastfm(LastfmEvents, Package):
             )
         else:
             scrobble_line = (
-                f"\n-# {self._format_number(total_scrobbles)} scrobbles"
+                f"\n> -# {self._format_number(total_scrobbles)} scrobbles"
                 if total_scrobbles
                 else ""
             )

@@ -40,7 +40,7 @@ def panel_container(
     header = f"**{title}**" if title else None
     if header and thumbnail:
         try:
-            body_text = header if not subtitle else f"{header}\n-# {subtitle}"
+            body_text = header if not subtitle else f"{header}\n> -# {subtitle}"
             c.add_item(
                 ui.Section(
                     ui.TextDisplay(body_text),
@@ -50,13 +50,13 @@ def panel_container(
         except Exception:
             c.add_item(ui.TextDisplay(header))
             if subtitle:
-                c.add_item(ui.TextDisplay(f"-# {subtitle}"))
+                c.add_item(ui.TextDisplay(f"> -# {subtitle}"))
     elif header:
         c.add_item(ui.TextDisplay(header))
         if subtitle:
-            c.add_item(ui.TextDisplay(f"-# {subtitle}"))
+            c.add_item(ui.TextDisplay(f"> -# {subtitle}"))
     elif subtitle:
-        c.add_item(ui.TextDisplay(f"-# {subtitle}"))
+        c.add_item(ui.TextDisplay(f"> -# {subtitle}"))
 
     if lines:
         if header or subtitle:

@@ -360,9 +360,9 @@ class Giveaway(commands.Cog):
         lines = catalog_lines()
         header = (
             "**Giveaway entry rules**\n"
-            "-# Attach with `--requirement …` on `,giveaway start`\n"
-            "-# Combine several: `--requirement level 5, badge`\n"
-            "-# Winners flag: `--winners 3`\n"
+            "> -# Attach with `--requirement …` on `,giveaway start`\n"
+            "> -# Combine several: `--requirement level 5, badge`\n"
+            "> -# Winners flag: `--winners 3`\n"
         )
         body = "\n".join(lines)
         examples = (
@@ -698,8 +698,8 @@ class Giveaway(commands.Cog):
         if not arguments or not str(arguments).strip():
             await ctx.warn(
                 "Usage: `,giveaway start [channel] <prize>, <duration>`\n"
-                "-# e.g. `,giveaway start #chat Nitro, 2 hours --winners 3`\n"
-                "-# rules: `,giveaway requirements`"
+                "> -# e.g. `,giveaway start #chat Nitro, 2 hours --winners 3`\n"
+                "> -# rules: `,giveaway requirements`"
             )
             return
 

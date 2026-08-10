@@ -69,14 +69,14 @@ class ServerCommands(Package):
             attachment = ctx.message.attachments[0]
             ctype = (attachment.content_type or "").lower()
             if ctype and not ctype.startswith("image/"):
-                await ctx.warn("Invalid file type\n-# **must be a valid image**")
+                await ctx.warn("Invalid file type\n> -# **must be a valid image**")
                 return None
             if attachment.size and attachment.size > _MAX_GUILD_MEDIA_BYTES:
-                await ctx.warn("File too large\n-# **must be under 10MB**")
+                await ctx.warn("File too large\n> -# **must be under 10MB**")
                 return None
             data = await attachment.read()
             if len(data) > _MAX_GUILD_MEDIA_BYTES:
-                await ctx.warn("File too large\n-# **must be under 10MB**")
+                await ctx.warn("File too large\n> -# **must be under 10MB**")
                 return None
             return data
 
@@ -85,7 +85,7 @@ class ServerCommands(Package):
             return b""
 
         if not self._is_image_url(raw):
-            await ctx.warn("Invalid URL\n-# **must be http or https image url**")
+            await ctx.warn("Invalid URL\n> -# **must be http or https image url**")
             return None
 
         try:
@@ -93,19 +93,19 @@ class ServerCommands(Package):
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.get(raw) as response:
                     if response.status != 200:
-                        await ctx.fail("Failed to fetch image\n-# **could not retrieve from url**")
+                        await ctx.fail("Failed to fetch image\n> -# **could not retrieve from url**")
                         return None
                     content_type = (response.headers.get("content-type") or "").lower()
                     if "image/" not in content_type:
-                        await ctx.warn("Invalid content type\n-# **url must point to a valid image**")
+                        await ctx.warn("Invalid content type\n> -# **url must point to a valid image**")
                         return None
                     data = await response.read()
                     if len(data) > _MAX_GUILD_MEDIA_BYTES:
-                        await ctx.warn("File too large\n-# **must be under 10MB**")
+                        await ctx.warn("File too large\n> -# **must be under 10MB**")
                         return None
                     return data
         except (aiohttp.ClientError, asyncio.TimeoutError, ValueError):
-            await ctx.fail("Failed to fetch image\n-# **could not retrieve from url**")
+            await ctx.fail("Failed to fetch image\n> -# **could not retrieve from url**")
             return None
 
     async def _set_guild_media(
@@ -120,18 +120,18 @@ class ServerCommands(Package):
     ):
         """Shared set/clear path for icon, banner, and splash."""
         if ctx.guild is None:
-            return await ctx.warn("Server only\n-# **this command only works in a server**")
+            return await ctx.warn("Server only\n> -# **this command only works in a server**")
 
         me = ctx.guild.me
         if me is None or not me.guild_permissions.manage_guild:
             return await ctx.warn(
-                f"Missing permissions\n-# **need manage server to change {label}**"
+                f"Missing permissions\n> -# **need manage server to change {label}**"
             )
 
         if requires_feature and requires_feature not in (ctx.guild.features or []):
             return await ctx.warn(
                 feature_hint
-                or f"Feature required\n-# **need {requires_feature.replace('_', ' ').title()} to set {label}**"
+                or f"Feature required\n> -# **need {requires_feature.replace('_', ' ').title()} to set {label}**"
             )
 
         clear = bool(source and source.strip().lower() in _CLEAR_MEDIA)
@@ -142,7 +142,7 @@ class ServerCommands(Package):
             if data is None:
                 if not source and not ctx.message.attachments:
                     await ctx.warn(
-                        f"Missing image\n-# **provide url or attachment (or `none` to clear {label})**"
+                        f"Missing image\n> -# **provide url or attachment (or `none` to clear {label})**"
                     )
                 return
             if data == b"":
@@ -155,14 +155,14 @@ class ServerCommands(Package):
                 await ctx.guild.edit(**{field: data}, reason=reason)
         except discord.Forbidden:
             return await ctx.warn(
-                f"Missing permissions\n-# **cannot change server {label}**"
+                f"Missing permissions\n> -# **cannot change server {label}**"
             )
         except discord.HTTPException as error:
             message = getattr(error, "text", None) or str(error)
             if "):" in message:
                 message = message.split("):", 1)[-1].strip()
             return await ctx.fail(
-                f"Failed to update {label}\n-# **{message or 'unknown error'}**"
+                f"Failed to update {label}\n> -# **{message or 'unknown error'}**"
             )
 
         if clear:
@@ -238,7 +238,7 @@ class ServerCommands(Package):
                 payload = await parse(normalized, sendable=True)
             except (ParseError, BadEmbed) as error:
                 return await ctx.warn(
-                    f"Parse error\n-# **{error}**"
+                    f"Parse error\n> -# **{error}**"
                 )
 
         if not payload or (
@@ -246,7 +246,7 @@ class ServerCommands(Package):
             and payload.get("embed") is None
             and payload.get("view") is None
         ):
-            return await ctx.warn("Invalid script\n-# **provide valid embed/container code**")
+            return await ctx.warn("Invalid script\n> -# **provide valid embed/container code**")
 
         try:
             
@@ -288,7 +288,7 @@ class ServerCommands(Package):
     async def embedcreate_preview(self, ctx, *, script: str = None):
         """Preview an embed script without sending it."""
         if script is None:
-            return await ctx.fail("Missing script\n-# **provide an embed script to preview**")
+            return await ctx.fail("Missing script\n> -# **provide an embed script to preview**")
         return await self._send_embed_script(ctx, script, prefer="embed")
 
     @group(
@@ -313,7 +313,7 @@ class ServerCommands(Package):
     async def containercreate_preview(self, ctx, *, script: str = None):
         """Preview a container script."""
         if script is None:
-            return await ctx.fail("Missing script\n-# **provide a container script to preview**")
+            return await ctx.fail("Missing script\n> -# **provide a container script to preview**")
         return await self._send_embed_script(ctx, script, prefer="container")
 
     @command(
@@ -534,7 +534,7 @@ class ServerCommands(Package):
             category = category.lower()
             if category not in categories:
                 await ctx.fail(
-                    f"Invalid category\n-# **{category} is not a valid category**"
+                    f"Invalid category\n> -# **{category} is not a valid category**"
                 )
                 return
 

@@ -48,7 +48,7 @@ def build_giveaway_panel(
 
     req_block = ""
     if requirement_lines:
-        bullets = "\n".join(f"-# · {line}" for line in requirement_lines)
+        bullets = "\n".join(f"> -# · {line}" for line in requirement_lines)
         req_block = f"\n**To enter**\n{bullets}"
 
     if custom_body:
@@ -60,8 +60,8 @@ def build_giveaway_panel(
             body = (
                 f"## {prize}\n"
                 f"**Entries** {entries}\n"
-                f"-# ended · **no valid entries**\n"
-                f"-# hosted by {host_mention}"
+                f"> -# ended · **no valid entries**\n"
+                f"> -# hosted by {host_mention}"
             )
         else:
             wlabel = "Winner" if (winner_mentions or "").count("<@") <= 1 else "Winners"
@@ -69,7 +69,7 @@ def build_giveaway_panel(
                 f"## {prize}\n"
                 f"**{wlabel}** {winner_mentions or '-'}\n"
                 f"**Entries** {entries}\n"
-                f"-# ended · hosted by {host_mention}"
+                f"> -# ended · hosted by {host_mention}"
             )
     else:
         entries_bit = f"  **Entries** {entries}" if show_entries else ""
@@ -78,7 +78,7 @@ def build_giveaway_panel(
             f"{_ends_line(end_time)}\n"
             f"**Winners** {winners}{entries_bit}"
             f"{req_block}\n"
-            f"-# hosted by {host_mention}"
+            f"> -# hosted by {host_mention}"
         )
 
     if guild_icon:
@@ -150,11 +150,11 @@ def build_win_announce_panel(
     container = ui.Container()
     _ = accent
     verb = "rerolled and won" if reroll else "won"
-    host_line = f"\n-# Hosted by {host_mention}" if host_mention else ""
+    host_line = f"\n> -# Hosted by {host_mention}" if host_mention else ""
     container.add_item(
         ui.TextDisplay(
             f"**{winner_mentions}** {verb} **{prize}**\n"
-            f"-# congratulations · enjoy your prize{host_line}"
+            f"> -# congratulations · enjoy your prize{host_line}"
         )
     )
     layout.add_item(container)
@@ -206,7 +206,7 @@ class EntriesPaginator(ui.View):
         if interaction.user and interaction.user.id == self.owner_id:
             return True
         await interaction.response.send_message(
-            "-# only **you** can use this paginator", ephemeral=True
+            "> -# only **you** can use this paginator", ephemeral=True
         )
         return False
 
@@ -242,7 +242,7 @@ def build_entries_pages(
     if not members:
         emb = discord.Embed(
             title=f"Entries · {prize}",
-            description="-# **no entries** yet",
+            description="> -# **no entries** yet",
             color=color.base,
         )
         return [emb]

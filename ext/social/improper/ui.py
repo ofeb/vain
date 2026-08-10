@@ -334,7 +334,7 @@ def build_social_repost_container(
             c.add_item(ui.Separator(visible=False))
         except Exception:
             pass
-        c.add_item(ui.TextDisplay("-# " + "  ·  ".join(whisper)))
+        c.add_item(ui.TextDisplay(> -# " + "  ·  ".join(whisper)))
 
     if include_actions:
         link = source_url or profile
@@ -448,7 +448,7 @@ def build_profile_container(
             stats.append(f"**{label_s}:** `{_full_count(value)}`")
         else:
             stats.append(f"**{label_s}:** `{value}`")
-    c.add_item(ui.TextDisplay("-# " + " · ".join(stats)))
+    c.add_item(ui.TextDisplay(> -# " + " · ".join(stats)))
     return [c]
 
 

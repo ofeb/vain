@@ -197,7 +197,7 @@ class Socials(Package):
                 embed=c2(
                     color=color.base,
                     title="Social Feeds",
-                    message="No social feeds configured.\n-# Use `,socials <platform> add @user`",
+                    message="No social feeds configured.\n> -# Use `,socials <platform> add @user`",
                 )
             )
             return
@@ -259,7 +259,7 @@ class Socials(Package):
             await ctx.success(f"Cleared {label} notification template.")
         else:
             await ctx.success(
-                f"Set {label} template for **{n}** feed(s).\n-# vars: `{{user}}` `{{url}}` `{{platform}}`"
+                f"Set {label} template for **{n}** feed(s).\n> -# vars: `{{user}}` `{{url}}` `{{platform}}`"
             )
 
     async def _media_list_preview(
@@ -1413,7 +1413,7 @@ class Socials(Package):
                 url = r.get("url") or ""
                 snip = (r.get("snippet") or "")[:90]
                 if url:
-                    lines.append(f"**{i}.** [{title}]({url})" + (f"\n-# {snip}" if snip else ""))
+                    lines.append(f"**{i}.** [{title}]({url})" + (f"\n> -# {snip}" if snip else ""))
                 else:
                     lines.append(f"**{i}.** {title}")
             await ctx.send(
@@ -1507,7 +1507,7 @@ class Socials(Package):
                 url = r.get("url") or ""
                 snip = (r.get("snippet") or "")[:90]
                 if url:
-                    lines.append(f"**{i}.** [{title}]({url})" + (f"\n-# {snip}" if snip else ""))
+                    lines.append(f"**{i}.** [{title}]({url})" + (f"\n> -# {snip}" if snip else ""))
                 else:
                     lines.append(f"**{i}.** {title}")
             await ctx.send(

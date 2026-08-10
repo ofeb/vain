@@ -102,7 +102,7 @@ class Autorole(commands.Cog):
             ),
         )
         if not await view.prompt(embed=emb):
-            return await ctx.warn("Reset cancelled\n-# **autorole clear was cancelled**")
+            return await ctx.warn("Reset cancelled\n> -# **autorole clear was cancelled**")
         settings = await AutoroleSettings.fetch(self.bot, ctx.guild)
         await settings.delete_all()
         await ctx.success(
@@ -181,7 +181,7 @@ class Autorole(commands.Cog):
             ),
         )
         if not await view.prompt(embed=emb):
-            return await ctx.warn("Reset cancelled\n-# **button role clear was cancelled**")
+            return await ctx.warn("Reset cancelled\n> -# **button role clear was cancelled**")
         for row in await self.bot.db.fetch(
             "SELECT message_id, channel_id FROM button_roles WHERE guild_id = $1",
             ctx.guild.id,
@@ -372,7 +372,7 @@ class Autorole(commands.Cog):
             ),
         )
         if not await view.prompt(embed=emb):
-            return await ctx.warn("Reset cancelled\n-# **reaction role clear was cancelled**")
+            return await ctx.warn("Reset cancelled\n> -# **reaction role clear was cancelled**")
         await self.bot.db.execute(
             "DELETE FROM reaction_role WHERE guild_id = $1",
             ctx.guild.id,

@@ -84,7 +84,7 @@ async def do_mass_role(
     pending = await ctx.warn(
         f"{action.title()[:5]}ing {role.mention} {verb} "
         f"**{plural(len(targets), 'member')}**...\n"
-        f"-# This should take around **{_eta(len(targets))}**",
+        f"> -# This should take around **{_eta(len(targets))}**",
     )
 
     success: list[discord.Member] = []
@@ -140,7 +140,7 @@ class Role(Package):
             with contextlib.suppress(Exception):
                 await ctx.warn(
                     "There is already an ongoing mass role operation\n"
-                    f"-# Cancel it early with `{ctx.clean_prefix}role cancel`"
+                    f"> -# Cancel it early with `{ctx.clean_prefix}role cancel`"
                 )
             return
         return

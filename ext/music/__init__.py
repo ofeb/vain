@@ -1533,10 +1533,10 @@ class Music(MusicEvents, Package):
 
         if platform:
             header = f"playing **{platform}**"
-            provider_line = f"-# **provider:** {platform} · **audio:** youtube music"
+            provider_line = f"> -# **provider:** {platform} · **audio:** youtube music"
         else:
             header = "now playing"
-            provider_line = "-# **source:** youtube music"
+            provider_line = "> -# **source:** youtube music"
 
         song_line = (
             f"[**{title}** - **{artist}**]({link})"

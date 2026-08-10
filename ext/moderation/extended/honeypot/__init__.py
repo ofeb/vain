@@ -493,8 +493,8 @@ class Honeypot(Package):
                         title="Honeypot Alerts",
                         lines=[
                             f"**Alert channel**: {label}",
-                            f"-# Use `{ctx.clean_prefix}honeypot alerts #channel` to change",
-                            f"-# Use `{ctx.clean_prefix}honeypot alerts clear` to remove",
+                            f"> -# Use `{ctx.clean_prefix}honeypot alerts #channel` to change",
+                            f"> -# Use `{ctx.clean_prefix}honeypot alerts clear` to remove",
                         ],
                         timestamp=False,
                     )
@@ -540,8 +540,8 @@ class Honeypot(Package):
                     title="Honeypot Punishment",
                     lines=[
                         f"**Current**: {_punishment_phrase(current)}",
-                        "-# Options: `kick`, `ban`, `softban`, `timeout`",
-                        f"-# Example: `{ctx.clean_prefix}honeypot punishment ban timeout`",
+                        "> -# Options: `kick`, `ban`, `softban`, `timeout`",
+                        f"> -# Example: `{ctx.clean_prefix}honeypot punishment ban timeout`",
                     ],
                     timestamp=False,
                 )
@@ -653,9 +653,9 @@ class Honeypot(Package):
                         title="Honeypot Embed",
                         lines=[
                             "**Trap embed**: `default`",
-                            f"-# Use `{ctx.clean_prefix}honeypot embed <script>` to customize",
-                            f"-# Use `{ctx.clean_prefix}honeypot embed clear` to reset",
-                            f"-# Variables: `{ctx.clean_prefix}variables honeypot`",
+                            f"> -# Use `{ctx.clean_prefix}honeypot embed <script>` to customize",
+                            f"> -# Use `{ctx.clean_prefix}honeypot embed clear` to reset",
+                            f"> -# Variables: `{ctx.clean_prefix}variables honeypot`",
                         ],
                         timestamp=False,
                     )
@@ -668,8 +668,8 @@ class Honeypot(Package):
                     lines=[
                         "**Trap embed**: `custom`",
                         f"```\n{preview}\n```",
-                        f"-# Use `{ctx.clean_prefix}honeypot embed clear` to reset",
-                        f"-# Variables: `{ctx.clean_prefix}variables honeypot`",
+                        f"> -# Use `{ctx.clean_prefix}honeypot embed clear` to reset",
+                        f"> -# Variables: `{ctx.clean_prefix}variables honeypot`",
                     ],
                     timestamp=False,
                 )

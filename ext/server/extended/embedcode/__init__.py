@@ -216,7 +216,7 @@ class Embedcode(Package):
             text = self._clean_script_text(getattr(item, "content", "") or "").strip()
             if text.startswith("## "):
                 parts.append(f"$v{{title: {text[3:].strip()}}}")
-            elif text.startswith("-# ") and "\\n" not in text:
+            elif text.startswith("> -# ") and "\\n" not in text:
                 parts.append(f"$v{{footer: {text[3:].strip()}}}")
             elif text:
                 parts.append(f"$v{{description: {text}}}")

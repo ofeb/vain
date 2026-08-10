@@ -334,7 +334,7 @@ class StickymessageCommands(Package):
         )
         self._msg_counts[channel.id] = 0
         new_msg = await self._repost(channel, script, user=ctx.author)
-        extra = f"\n-# **preview of the stickymessage · {new_msg.jump_url}**" if new_msg else ""
+        extra = f"\n> -# **preview of the stickymessage · {new_msg.jump_url}**" if new_msg else ""
         return await ctx.success(
             f"Sticky set in {channel.mention}\n• {_format_trigger(message_limit, interval_seconds)}{extra}"
         )

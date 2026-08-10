@@ -320,8 +320,8 @@ class BumpReminder(BumpReminderEvents, Package):
             title="Bump Reminder",
             message=(
                 f"**Enabled** in {target.mention}\n"
-                f"-# Guild members are reminded after a successful Disboard `/bump` (every 2 hours)\n"
-                f"-# Customize with `{ctx.clean_prefix}bumpreminder message` · "
+                f"> -# Guild members are reminded after a successful Disboard `/bump` (every 2 hours)\n"
+                f"> -# Customize with `{ctx.clean_prefix}bumpreminder message` · "
                 f"`{ctx.clean_prefix}bumpreminder thankyou` · "
                 f"`{ctx.clean_prefix}bumpreminder role`"
             ),
@@ -453,8 +453,8 @@ class BumpReminder(BumpReminderEvents, Package):
                     title="Bump Reminder Message",
                     lines=[
                         f"```\n{preview}\n```",
-                        f"-# Clear with `{ctx.clean_prefix}bumpreminder message clear`",
-                        f"-# Vars: `{ctx.clean_prefix}variables bumper`",
+                        f"> -# Clear with `{ctx.clean_prefix}bumpreminder message clear`",
+                        f"> -# Vars: `{ctx.clean_prefix}variables bumper`",
                     ],
                     timestamp=False,
                 )
@@ -517,8 +517,8 @@ class BumpReminder(BumpReminderEvents, Package):
                     title="Bump Thank-You Message",
                     lines=[
                         f"```\n{preview}\n```",
-                        f"-# Clear with `{ctx.clean_prefix}bumpreminder thankyou clear`",
-                        f"-# Vars: `{ctx.clean_prefix}variables bumper`",
+                        f"> -# Clear with `{ctx.clean_prefix}bumpreminder thankyou clear`",
+                        f"> -# Vars: `{ctx.clean_prefix}variables bumper`",
                     ],
                     timestamp=False,
                 )
@@ -578,7 +578,7 @@ class BumpReminder(BumpReminderEvents, Package):
                         title="Bump Reminder Role",
                         lines=[
                             f"**Role**: {current.mention}",
-                            f"-# Clear with `{ctx.clean_prefix}bumpreminder role clear`",
+                            f"> -# Clear with `{ctx.clean_prefix}bumpreminder role clear`",
                         ],
                         timestamp=False,
                     )

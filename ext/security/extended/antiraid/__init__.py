@@ -64,7 +64,7 @@ class Antiraid(AntiraidEvents, Package):
                     title="Raid Mode Updated",
                     lines=[
                         f"**Status** : {'**active**' if active else '**inactive**'}",
-                        "-# Massjoin protection " + ("engaged" if active else "cleared"),
+                        "> -# Massjoin protection " + ("engaged" if active else "cleared"),
                     ],
                 ),
             )

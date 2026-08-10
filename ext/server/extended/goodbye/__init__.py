@@ -62,7 +62,7 @@ class GoodbyeCommands(Package):
             return await ctx.fail(
                 f"there's already a goodbye message in {channel.mention} - remove it first or use `{ctx.clean_prefix}goodbye edit`"
             )
-        extra = f"\n-# **the message will delete itself after {humanize_duration(timer)}**" if timer else ""
+        extra = f"\n> -# **the message will delete itself after {humanize_duration(timer)}**" if timer else ""
         return await ctx.success(
             f"goodbye message set for {channel.mention}{extra}"
         )
@@ -101,7 +101,7 @@ class GoodbyeCommands(Package):
             ctx.guild.id,
             channel.id,
         )
-        extra = f"\n-# **the message will delete itself after {humanize_duration(timer)}**" if timer else ""
+        extra = f"\n> -# **the message will delete itself after {humanize_duration(timer)}**" if timer else ""
         return await ctx.success(f"updated goodbye message for {channel.mention}{extra}")
 
     @goodbye.command(

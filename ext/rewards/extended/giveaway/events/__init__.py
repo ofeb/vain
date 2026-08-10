@@ -31,7 +31,7 @@ DEFAULT_DM_SCRIPT = (
     "{embed}$v{title: You won a giveaway!}$v"
     "{description: **Congratulations** {user.mention}\n\n"
     "You won **{prize}** in **{guild.name}**\n"
-    "-# **thanks for entering**}$v{color: #A8D8A8}"
+    "> -# **thanks for entering**}$v{color: #A8D8A8}"
 )
 
 
@@ -641,7 +641,7 @@ class GiveawayEvents(Cog):
         )
         if not row:
             await interaction.response.send_message(
-                "-# giveaway **not found**", ephemeral=True
+                "> -# giveaway **not found**", ephemeral=True
             )
             return
 
@@ -805,7 +805,7 @@ class GiveawayEvents(Cog):
                 description=(
                     f"**Congratulations** {member.mention}\n\n"
                     f"You won **{prize}** in **{guild.name}**\n"
-                    f"-# **thanks for entering**"
+                    f"> -# **thanks for entering**"
                 ),
                 color=color.base,
             )

@@ -91,7 +91,7 @@ def _build_delete_container(snipe: dict, *, accent: int | None = None) -> ui.Con
     if body.strip():
         container.add_item(ui.TextDisplay(body[:3900]))
     else:
-        container.add_item(ui.TextDisplay("-# no text"))
+        container.add_item(ui.TextDisplay("> -# no text"))
 
     media = (snipe.get("attachments") or snipe.get("stickers") or [None])[0]
     if media:
@@ -114,16 +114,16 @@ def _build_edit_container(snipe: dict, *, accent: int | None = None) -> ui.Conta
     if jump:
         container.add_item(ui.TextDisplay(f"[Jump to message]({jump}) - {when}"))
     else:
-        container.add_item(ui.TextDisplay(f"-# {when}"))
+        container.add_item(ui.TextDisplay(f"> -# {when}"))
 
     container.add_item(ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small))
 
-    before = _filter_invites(snipe.get("content") or "") or "-# empty"
+    before = _filter_invites(snipe.get("content") or "") or "> -# empty"
     after_raw = snipe.get("after")
     after = (
         _filter_invites(str(after_raw))
         if after_raw is not None
-        else "-# unknown"
+        else "> -# unknown"
     )
     container.add_item(ui.TextDisplay(f"**Before**\n{before[:1800]}"))
     container.add_item(ui.TextDisplay(f"**After**\n{after[:1800]}"))
@@ -148,7 +148,7 @@ def _build_reaction_container(snipe: dict, *, accent: int | None = None) -> ui.C
         msg_bit = "`a message`"
 
     container.add_item(
-        ui.TextDisplay(f"-# **{who}** reacted with {reaction_display} to {msg_bit}")
+        ui.TextDisplay(f"> -# **{who}** reacted with {reaction_display} to {msg_bit}")
     )
     return container
 

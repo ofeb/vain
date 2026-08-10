@@ -121,7 +121,7 @@ class PingOnJoinCommands(PingOnJoinEvents, Package):
         )
         emb = Embed(
             title="Ping on Join",
-            description="\n".join(lines) + f"\n\n-# {footer}",
+            description="\n".join(lines) + f"\n\n> -# {footer}",
             color=self.color,
         )
         return await ctx.reply(embed=emb)

@@ -393,7 +393,7 @@ class MusicControlView(ui.View):
             await inter.response.edit_message(
                 embed=discord.Embed(
                     color=0x2B2D31,
-                    description="stopped\n-# **queue cleared**",
+                    description="stopped\n> -# **queue cleared**",
                 ),
                 attachments=[],
                 view=None,

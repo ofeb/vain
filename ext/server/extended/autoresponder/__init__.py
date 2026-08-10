@@ -11,7 +11,7 @@ from discord import Embed, Role, TextChannel
 from discord.ext.commands import CommandError, group
 
 from core.discord.package import Package
-from core.tools.embed import Script
+from core.tools.embed import Script, is_container_script as _is_container_script
 from core.tools.human.text import humanize_duration
 from core.managers.permissions import has_permissions
 
@@ -89,6 +89,31 @@ class AutoresponderCommands(Package):
     async def _send_message_response(self, ctx, record: dict) -> None:
         response = str(record["response"])
         reply_reference = ctx.message if record["reply"] else None
+        if _is_container_script(response):
+            try:
+                builder = await self.create_container(
+                    response,
+                    ctx=ctx,
+                    user=ctx.author,
+                    member=ctx.author,
+                    guild=ctx.guild,
+                    channel=ctx.channel,
+                )
+            except Exception as error:
+                with contextlib.suppress(discord.HTTPException):
+                    await ctx.send(f"Container script error: {error}\n`{response}`")
+                return
+            if record["self_destruct"] is not None:
+                builder.data["delete_after"] = record["self_destruct"]
+            content_text = getattr(builder, "content", None)
+            if content_text and reply_reference is not None:
+                await ctx.send(content_text, reference=reply_reference)
+                await builder.send(ctx.channel)
+            else:
+                if reply_reference is not None:
+                    builder.data["reference"] = reply_reference
+                await builder.send(ctx.channel)
+            return
         if _is_embed_script(response):
             try:
                 builder = await self.create_embed(
@@ -267,11 +292,12 @@ class AutoresponderCommands(Package):
         )
         action = "Added" if not existed else "Updated"
         lines = [f"{action} autoresponder for **{trigger}**"]
-        lines.append(f"-# **Mode: {'strict' if strict else 'not strict'}**")
+        if strict:
+            lines.append("> -# **Mode: strict**")
         if should_reply:
-            lines.append("-# **Replies to the trigger**")
+            lines.append("> -# **Replies to the trigger**")
         if timer is not None:
-            lines.append(f"-# **Deletes after {humanize_duration(timer)}**")
+            lines.append(f"> -# **Deletes after {humanize_duration(timer)}**")
         return await ctx.success("\n".join(lines))
 
     @group(
@@ -303,12 +329,12 @@ class AutoresponderCommands(Package):
             "This action **cannot be undone**."
         )
         if not ok:
-            return await ctx.warn("Cancelled\n-# **autoresponder reset was cancelled**")
+            return await ctx.warn("Cancelled\n> -# **autoresponder reset was cancelled**")
         await self.db.execute("DELETE FROM auto_responders WHERE guild_id = $1", ctx.guild.id)
         await self.db.execute("DELETE FROM autoresponder_exclusive WHERE guild_id = $1", ctx.guild.id)
         await self.db.execute("DELETE FROM autoresponder_roles WHERE guild_id = $1", ctx.guild.id)
         return await ctx.success(
-            "All autoresponders cleared\n-# **this action cannot be undone**"
+            "All autoresponders cleared\n> -# **this action cannot be undone**"
         )
 
     @autoresponder.command(name="variables", aliases=["vars"], description="View a list of available variables")
@@ -404,7 +430,7 @@ class AutoresponderCommands(Package):
                     raise CommandError("no autoresponders found")
                 strict_n = sum(1 for r in rows if r["strict"])
                 return await ctx.success(
-                    f"**{strict_n}** strict · **{len(rows) - strict_n}** not strict\n-# **of {len(rows)} total**"
+                    f"**{strict_n}** strict · **{len(rows) - strict_n}** not strict\n> -# **of {len(rows)} total**"
                 )
             stored = await self._find_trigger(ctx.guild.id, trigger)
             if not stored:
@@ -421,7 +447,7 @@ class AutoresponderCommands(Package):
         elif low in {"off", "disable", "false", "no", "0", "loose", "not_strict", "not-strict"}:
             strict = False
         else:
-            return await ctx.warn("Invalid input\n-# **use `on` or `off`**")
+            return await ctx.warn("Invalid input\n> -# **use `on` or `off`**")
         if trigger.lower() in {"all", "*", "every"}:
             await self.db.execute(
                 "UPDATE auto_responders SET strict = $2 WHERE guild_id = $1",
@@ -459,13 +485,13 @@ class AutoresponderCommands(Package):
             return await ctx.success(
                 "\n".join([
                     f"Added exclusive access for {target.mention} to **{trigger}**",
-                    f"-# **Type: {target_type}**",
+                    f"> -# **Type: {target_type}**",
                 ])
             )
         return await ctx.success(
             "\n".join([
                 f"Removed exclusive access for {target.mention} on **{trigger}**",
-                f"-# **Type: {target_type}**",
+                f"> -# **Type: {target_type}**",
             ])
         )
 
@@ -504,13 +530,13 @@ class AutoresponderCommands(Package):
             return await ctx.success(
                 "\n".join([
                     f"Added {role.mention} assignment upon **{trigger}** trigger",
-                    "-# **Action: role add**",
+                    "> -# **Action: role add**",
                 ])
             )
         return await ctx.success(
             "\n".join([
                 f"Removed {role.mention} assignment upon **{trigger}** trigger",
-                "-# **Action: role add**",
+                "> -# **Action: role add**",
             ])
         )
 
@@ -529,13 +555,13 @@ class AutoresponderCommands(Package):
             return await ctx.success(
                 "\n".join([
                     f"Added {role.mention} removal upon **{trigger}** trigger",
-                    "-# **Action: role remove**",
+                    "> -# **Action: role remove**",
                 ])
             )
         return await ctx.success(
             "\n".join([
                 f"Removed {role.mention} removal upon **{trigger}** trigger",
-                "-# **Action: role remove**",
+                "> -# **Action: role remove**",
             ])
         )
 

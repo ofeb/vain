@@ -204,7 +204,7 @@ class Emoji(Package):
             ]
             e = c2(
                 title=f"Server emotes · {ctx.guild.name}",
-                message="\n".join(lines) + "\n-# usage tracking not available yet",
+                message="\n".join(lines) + "\n> -# usage tracking not available yet",
                 timestamp=False,
             )
             return await ctx.send(embed=e)

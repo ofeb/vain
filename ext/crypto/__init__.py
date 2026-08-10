@@ -420,7 +420,7 @@ class Crypto(commands.Cog):
                 await channel.send(embed=embed)
         await ctx.success(
             f"Crypto feed **{label}** → {channel.mention}\n"
-            f"-# Posts when price/24h change/market cap moves meaningfully"
+            f"> -# Posts when price/24h change/market cap moves meaningfully"
         )
 
     @crypto_feeds.command(

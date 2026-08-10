@@ -54,11 +54,11 @@ class TagCommands(TagEvents, Package):
         lines = [
             f"Roles: {roles}",
             f"Notifications: {channel}",
-            "-# Awards members whose **primary guild** tag is this server.",
+            "> -# Awards members whose **primary guild** tag is this server.",
         ]
         if unassignable:
             lines.append(
-                f"-# cannot assign (hierarchy): {', '.join(unassignable)}"
+                f"> -# cannot assign (hierarchy): {', '.join(unassignable)}"
             )
         embed.description = "\n".join(lines)
         template = settings.template or settings._default_template
@@ -86,7 +86,7 @@ class TagCommands(TagEvents, Package):
             msg = f"Tag role set to {role.mention}"
         if not role.is_assignable():
             await ctx.warn(
-                f"{msg}\n-# I **cannot assign** it - move my role **above** "
+                f"{msg}\n> -# I **cannot assign** it - move my role **above** "
                 f"{role.mention} in Server Settings → Roles."
             )
         else:
@@ -181,7 +181,7 @@ class TagCommands(TagEvents, Package):
         else:
             await ctx.warn(
                 "\n".join(lines)
-                + "\n-# Enable this server's **tag** on your profile (primary guild)."
+                + "\n> -# Enable this server's **tag** on your profile (primary guild)."
             )
 
     @tag.command(name="sync", description="Scan members and apply tag roles")

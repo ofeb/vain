@@ -273,7 +273,7 @@ class Nuke(Package):
             description=(
                 f"This will **nuke** {channel.mention}.\n"
                 f"Are you sure you want to do this?\n"
-                f"-# **the channel will be cloned then deleted**"
+                f"> -# **the channel will be cloned then deleted**"
             ),
         )
         if not await view.prompt(embed=embed):
@@ -289,7 +289,7 @@ class Nuke(Package):
             author=ctx.author,
         )
         if new_channel is None:
-            return await ctx.fail("Nuke failed\n-# **missing permissions or channel error**")
+            return await ctx.fail("Nuke failed\n> -# **missing permissions or channel error**")
 
         if ctx.channel.id == old_id:
             return
@@ -317,14 +317,14 @@ class Nuke(Package):
         if message.strip().lower() in {"reset", "clear", "default", "none"}:
             await self._set_default_message(ctx.guild.id, _DEFAULT_MESSAGE)
             return await ctx.success(
-                "Reset default nuke message\n-# **manual nukes only**"
+                "Reset default nuke message\n> -# **manual nukes only**"
             )
 
         script = message.script if hasattr(message, "script") else message
         await self._set_default_message(ctx.guild.id, script)
         preview = script if len(script) <= 200 else script[:200] + "…"
         return await ctx.success(
-            f"Default nuke message updated\n-# **manual nukes only**\n```\n{preview}\n```"
+            f"Default nuke message updated\n> -# **manual nukes only**\n```\n{preview}\n```"
         )
 
     @nuke.command(
@@ -378,14 +378,14 @@ class Nuke(Package):
         if message.strip().lower() in {"reset", "clear", "default", "none"}:
             await self._set_autonuke_default_message(ctx.guild.id, _DEFAULT_MESSAGE)
             return await ctx.success(
-                "Reset default autonuke message\n-# **applies to all autonukes**"
+                "Reset default autonuke message\n> -# **applies to all autonukes**"
             )
 
         script = message.script if hasattr(message, "script") else message
         await self._set_autonuke_default_message(ctx.guild.id, script)
         preview = script if len(script) <= 200 else script[:200] + "…"
         return await ctx.success(
-            f"Default autonuke message updated\n-# **applies to all autonukes**\n```\n{preview}\n```"
+            f"Default autonuke message updated\n> -# **applies to all autonukes**\n```\n{preview}\n```"
         )
 
     @autonuke.command(
@@ -466,8 +466,8 @@ class Nuke(Package):
         preview = message if len(message) <= 120 else message[:120] + "…"
         return await ctx.success(
             f"Scheduled **autonuke** for {channel.mention}\n"
-            f"-# **every {naturaldelta(interval_seconds)}**\n"
-            f"-# **message:** `{preview}`"
+            f"> -# **every {naturaldelta(interval_seconds)}**\n"
+            f"> -# **message:** `{preview}`"
         )
 
     @autonuke.command(
@@ -521,7 +521,7 @@ class Nuke(Package):
             short = msg if len(msg) <= 40 else msg[:40] + "…"
             values.append(
                 f"`{i}` {ch.mention} - every **{naturaldelta(row['nuke_threshold'])}**\n"
-                f"-# **message:** `{short}`"
+                f"> -# **message:** `{short}`"
             )
         if not values:
             raise CommandError("No scheduled autonuke channels found")

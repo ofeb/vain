@@ -180,7 +180,7 @@ def build_urban_embed(
         timestamp=False,
     )
     embed.set_footer(
-        text=f"-# Page {page}/{total} of Urban Dictionary Results",
+        text=f"> -# Page {page}/{total} of Urban Dictionary Results",
         icon_url=UD_FOOTER_ICON,
     )
     return embed
@@ -289,7 +289,7 @@ def build_cashapp_embed(profile: dict[str, Any], author: discord.User) -> discor
         timestamp=False,
         thumbnail=image_url,
     )
-    embed.set_footer(text="-# CashApp", icon_url=CASHAPP_FOOTER_ICON)
+    embed.set_footer(text="> -# CashApp", icon_url=CASHAPP_FOOTER_ICON)
     return embed
 
 def _format_github_repo_date(iso: str) -> str:

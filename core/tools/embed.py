@@ -1442,7 +1442,11 @@ async def parse(raw: str, sendable: bool = False) -> dict:
         out.pop("fields")
 
     if out and "color" not in out:
-        out["color"] = 0x2F3136
+        try:
+            from config import color
+            out["color"] = color.base
+        except ImportError:
+            out["color"] = 0xE1D2DE
 
     if out:
         await _validate(out)
