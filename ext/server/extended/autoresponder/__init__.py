@@ -89,32 +89,7 @@ class AutoresponderCommands(Package):
     async def _send_message_response(self, ctx, record: dict) -> None:
         response = str(record["response"])
         reply_reference = ctx.message if record["reply"] else None
-        if _is_container_script(response):
-            try:
-                builder = await self.create_container(
-                    response,
-                    ctx=ctx,
-                    user=ctx.author,
-                    member=ctx.author,
-                    guild=ctx.guild,
-                    channel=ctx.channel,
-                )
-            except Exception as error:
-                with contextlib.suppress(discord.HTTPException):
-                    await ctx.send(f"Container script error: {error}\n`{response}`")
-                return
-            if record["self_destruct"] is not None:
-                builder.data["delete_after"] = record["self_destruct"]
-            content_text = getattr(builder, "content", None)
-            if content_text and reply_reference is not None:
-                await ctx.send(content_text, reference=reply_reference)
-                await builder.send(ctx.channel)
-            else:
-                if reply_reference is not None:
-                    builder.data["reference"] = reply_reference
-                await builder.send(ctx.channel)
-            return
-        if _is_embed_script(response):
+        if _is_container_script(response) or _is_embed_script(response):
             try:
                 builder = await self.create_embed(
                     response,
@@ -126,19 +101,13 @@ class AutoresponderCommands(Package):
                 )
             except Exception as error:
                 with contextlib.suppress(discord.HTTPException):
-                    await ctx.send(f"Embed script error: {error}\n`{response}`")
+                    await ctx.send(f"Script error: {error}\n`{response}`")
                 return
             if record["self_destruct"] is not None:
                 builder.data["delete_after"] = record["self_destruct"]
-            content_text = getattr(builder, "content", None)
-            if content_text and reply_reference is not None:
-                await ctx.send(content_text, reference=reply_reference)
-                builder.data.pop("content", None)
-                await builder.send(ctx.channel)
-            else:
-                if reply_reference is not None:
-                    builder.data["reference"] = reply_reference
-                await builder.send(ctx.channel)
+            if reply_reference is not None:
+                builder.data["reference"] = reply_reference
+            await builder.send(ctx.channel)
             return
         rendered = Script(response, ctx.author).render(
             ctx=ctx,
