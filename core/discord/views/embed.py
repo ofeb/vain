@@ -19,9 +19,10 @@ def body(*lines: str) -> str:
             continue
         for subline in line.split("\n"):
             subline = subline.strip()
-            if subline.startswith("-#") or subline.startswith("> -#"):
-                clean = subline.lstrip("> ").strip()
-                parts.append(f"> {clean}")
+            if subline.startswith("> -#"):
+                parts.append(subline)
+            elif subline.startswith("-#"):
+                parts.append(f"> {subline}")
             else:
                 parts.append(f"> {subline}")
     return "\n".join(parts)
