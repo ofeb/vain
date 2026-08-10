@@ -13,7 +13,18 @@ def compose(*parts: str) -> str:
 
 
 def body(*lines: str) -> str:
-    return "\n".join(f"> {line}" for line in lines if line)
+    parts = []
+    for line in lines:
+        if not line:
+            continue
+        for subline in line.split("\n"):
+            subline = subline.strip()
+            if subline.startswith("-#") or subline.startswith("> -#"):
+                clean = subline.lstrip("> ").strip()
+                parts.append(f"> {clean}")
+            else:
+                parts.append(f"> {subline}")
+    return "\n".join(parts)
 
 
 def caption(text: str) -> str:
@@ -21,7 +32,8 @@ def caption(text: str) -> str:
     cleaned = str(text or "").strip()
     if not cleaned:
         return ""
-    
+    while cleaned.startswith("> -#"):
+        cleaned = cleaned[4:].strip()
     while cleaned.startswith("-#"):
         cleaned = cleaned[2:].lstrip()
     return f"-# {cleaned}" if cleaned else ""

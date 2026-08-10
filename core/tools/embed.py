@@ -1573,6 +1573,7 @@ async def send_script_payload(
             except Exception:
                 pass
         merged["content"] = None
+        merged.pop("reference", None)
     return await destination.send(**merged)
 
 
