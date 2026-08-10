@@ -2068,7 +2068,7 @@ class ModerationCommands(Package):
             channel_label = f"**{len(channels)}** channels"
 
         if defaulted:
-            target_label = f"everyone and **{len(targets)}** non-admin role(s)"
+            target_label = f"**all members**"
         elif len(targets) == 1:
             target_label = targets[0].mention
         else:

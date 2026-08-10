@@ -105,9 +105,15 @@ class AutoresponderCommands(Package):
                 return
             if record["self_destruct"] is not None:
                 builder.data["delete_after"] = record["self_destruct"]
-            if reply_reference is not None:
-                builder.data["reference"] = reply_reference
-            await builder.send(ctx.channel)
+            content_text = getattr(builder, "content", None)
+            if content_text and reply_reference is not None:
+                await ctx.send(content_text, reference=reply_reference)
+                builder.data.pop("content", None)
+                await builder.send(ctx.channel)
+            else:
+                if reply_reference is not None:
+                    builder.data["reference"] = reply_reference
+                await builder.send(ctx.channel)
             return
         rendered = Script(response, ctx.author).render(
             ctx=ctx,
@@ -259,18 +265,13 @@ class AutoresponderCommands(Package):
             ctx.guild.id, trigger, response, strict, should_reply,
             timer, should_delete, ignore_command_check,
         )
-        details = ["strict" if strict else "not strict"]
+        lines = [f"> {action} autoresponder for **{trigger}**"]
+        lines.append(f"> -# **{'strict' if strict else 'not strict'}**")
         if should_reply:
-            details.append("reply")
-        if should_delete:
-            details.append("delete trigger")
-        if ignore_command_check:
-            details.append("ignore command check")
-        detail_text = f" ({', '.join(details)})" if details else ""
+            lines.append("> -# **replies to the trigger**")
         if timer is not None:
-            detail_text += f"\n> **the message will delete itself after {humanize_duration(timer)}**"
-        action = "updated" if existed else "added"
-        return await ctx.success(f"{action} autoresponder for **{trigger}**{detail_text}")
+            lines.append(f"> -# **trigger will delete itself after {humanize_duration(timer)}**")
+        return await ctx.success("\n".join(lines))
 
     @group(
         name="autoresponder",
@@ -306,7 +307,7 @@ class AutoresponderCommands(Package):
         await self.db.execute("DELETE FROM autoresponder_exclusive WHERE guild_id = $1", ctx.guild.id)
         await self.db.execute("DELETE FROM autoresponder_roles WHERE guild_id = $1", ctx.guild.id)
         return await ctx.success(
-            "All autoresponders cleared. This action cannot be undone."
+            "> All autoresponders cleared\n> -# **this action cannot be undone**"
         )
 
     @autoresponder.command(name="variables", aliases=["vars"], description="View a list of available variables")
@@ -352,7 +353,7 @@ class AutoresponderCommands(Package):
         )
         if not removed:
             raise CommandError("no autoresponder found for that trigger")
-        return await ctx.success(f"removed autoresponder for `{trigger}`")
+        return await ctx.success(f"> removed autoresponder for **{trigger}**")
 
     @autoresponder.group(
         name="list", aliases=["view", "show", "ls"],
@@ -402,7 +403,7 @@ class AutoresponderCommands(Package):
                     raise CommandError("no autoresponders found")
                 strict_n = sum(1 for r in rows if r["strict"])
                 return await ctx.success(
-                    f"**{strict_n}** strict · **{len(rows) - strict_n}** not strict (of {len(rows)})"
+                    f"> **{strict_n}** strict · **{len(rows) - strict_n}** not strict\n> -# **of {len(rows)} total**"
                 )
             stored = await self._find_trigger(ctx.guild.id, trigger)
             if not stored:
@@ -412,7 +413,7 @@ class AutoresponderCommands(Package):
                 ctx.guild.id, stored,
             )
             mode = "strict" if row and row["strict"] else "not strict"
-            return await ctx.success(f"**{stored}** is **{mode}**")
+            return await ctx.success(f"> **{stored}** is **{mode}**")
         low = state.lower().strip()
         if low in {"on", "enable", "true", "yes", "1", "strict"}:
             strict = True
@@ -426,7 +427,7 @@ class AutoresponderCommands(Package):
                 ctx.guild.id, strict,
             )
             return await ctx.success(
-                f"All autoresponders are now **{'strict' if strict else 'not strict'}**"
+                f"> All autoresponders are now **{'strict' if strict else 'not strict'}**"
             )
         stored = await self._find_trigger(ctx.guild.id, trigger)
         if not stored:
@@ -436,7 +437,7 @@ class AutoresponderCommands(Package):
             ctx.guild.id, stored, strict,
         )
         return await ctx.success(
-            f"**{stored}** is now **{'strict' if strict else 'not strict'}**"
+            f"> **{stored}** is now **{'strict' if strict else 'not strict'}**"
         )
 
     @autoresponder.group(
@@ -455,10 +456,16 @@ class AutoresponderCommands(Package):
         )
         if added:
             return await ctx.success(
-                f"**added** exclusive access for {target.mention} to **{trigger}**"
+                "\n".join([
+                    f"> added exclusive access for {target.mention} to **{trigger}**",
+                    f"> -# **{target_type}**",
+                ])
             )
         return await ctx.success(
-            f"**removed** exclusive access for {target.mention} on **{trigger}**"
+            "\n".join([
+                f"> removed exclusive access for {target.mention} on **{trigger}**",
+                f"> -# **{target_type}**",
+            ])
         )
 
     @autoresponder_exclusive.command(name="list")
@@ -494,10 +501,16 @@ class AutoresponderCommands(Package):
         added = await self.db.toggle_autoresponder_role(ctx.guild.id, trigger, role.id, "add")
         if added:
             return await ctx.success(
-                f"**added** {role.mention} assignment upon **{trigger}** trigger"
+                "\n".join([
+                    f"> added {role.mention} assignment upon **{trigger}** trigger",
+                    "> -# **role add**",
+                ])
             )
         return await ctx.success(
-            f"**removed** {role.mention} assignment upon **{trigger}** trigger"
+            "\n".join([
+                f"> removed {role.mention} assignment upon **{trigger}** trigger",
+                "> -# **role add**",
+            ])
         )
 
     @autoresponder_role_add.command(name="list")
@@ -513,10 +526,16 @@ class AutoresponderCommands(Package):
         added = await self.db.toggle_autoresponder_role(ctx.guild.id, trigger, role.id, "remove")
         if added:
             return await ctx.success(
-                f"**added** {role.mention} removal upon **{trigger}** trigger"
+                "\n".join([
+                    f"> added {role.mention} removal upon **{trigger}** trigger",
+                    "> -# **role remove**",
+                ])
             )
         return await ctx.success(
-            f"**removed** {role.mention} removal upon **{trigger}** trigger"
+            "\n".join([
+                f"> removed {role.mention} removal upon **{trigger}** trigger",
+                "> -# **role remove**",
+            ])
         )
 
     @autoresponder_role_remove.command(name="list")
