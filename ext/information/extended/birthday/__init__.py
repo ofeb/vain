@@ -140,15 +140,10 @@ class Birthday(Package):
             "ON CONFLICT(user_id, guild_id) DO UPDATE SET birthday_date = excluded.birthday_date",
             ctx.author.id, ctx.guild.id, parsed
         )
-        await ctx.send(
-            embed=c2(
-                message=(
+        await ctx.success(
                     f"> **{ctx.author.display_name}'s** birthday set\n"
                     f"> -# **date:** {_format_date(parsed)}"
-                ),
-                timestamp=False,
-            )
-        )
+                )
 
     @birthday.command(
         name="remove",
