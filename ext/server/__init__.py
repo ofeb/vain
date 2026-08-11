@@ -69,7 +69,7 @@ class ServerCommands(Package):
             attachment = ctx.message.attachments[0]
             ctype = (attachment.content_type or "").lower()
             if ctype and not ctype.startswith("image/"):
-                    await ctx.warn("Invalid file type\n> -# **provide an image (png, jpg, gif, etc.)**")
+                await ctx.warn("Invalid file type\n> -# **provide an image (png, jpg, gif, etc.)**")
                 return None
             if attachment.size and attachment.size > _MAX_GUILD_MEDIA_BYTES:
                 await ctx.warn("File too large\n> -# **max size is 10MB — try compressing the image**")
