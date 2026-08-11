@@ -73,7 +73,7 @@ class Highlight(Package):
         keywords = [f"`{h['keyword']}`" for h in highlights]
         await ctx.success(
             f"Your keywords\n"
-            f"> {', '.join(keywords)}"
+            f"{', '.join(keywords)}"
         )
 
     @highlight.command(
