@@ -11,6 +11,250 @@ from core.discord.package import Package
 from core.discord.views.embed import c2
 
 
+COUNTRY_TO_TZ: dict[str, str] = {
+    "afghanistan": "Asia/Kabul",
+    "albania": "Europe/Tirane",
+    "algeria": "Africa/Algiers",
+    "andorra": "Europe/Andorra",
+    "angola": "Africa/Luanda",
+    "antigua": "America/Antigua",
+    "argentina": "America/Argentina/Buenos_Aires",
+    "armenia": "Asia/Yerevan",
+    "australia": "Australia/Sydney",
+    "austria": "Europe/Vienna",
+    "azerbaijan": "Asia/Baku",
+    "bahamas": "America/Nassau",
+    "bahrain": "Asia/Bahrain",
+    "bangladesh": "Asia/Dhaka",
+    "barbados": "America/Barbados",
+    "belarus": "Europe/Minsk",
+    "belgium": "Europe/Brussels",
+    "belize": "America/Belize",
+    "benin": "Africa/Porto-Novo",
+    "bhutan": "Asia/Thimphu",
+    "bolivia": "America/La_Paz",
+    "bosnia": "Europe/Sarajevo",
+    "botswana": "Africa/Gaborone",
+    "brazil": "America/Sao_Paulo",
+    "brunei": "Asia/Brunei",
+    "bulgaria": "Europe/Sofia",
+    "burkina": "Africa/Ouagadougou",
+    "burundi": "Africa/Bujumbura",
+    "cambodia": "Asia/Phnom_Penh",
+    "cameroon": "Africa/Douala",
+    "canada": "America/Toronto",
+    "cape verde": "Atlantic/Cape_Verde",
+    "caribbean": "America/Barbados",
+    "chad": "Africa/Ndjamena",
+    "chile": "America/Santiago",
+    "china": "Asia/Shanghai",
+    "colombia": "America/Bogota",
+    "comoros": "Indian/Comoro",
+    "congo": "Africa/Brazzaville",
+    "costa rica": "America/Costa_Rica",
+    "croatia": "Europe/Zagreb",
+    "cuba": "America/Havana",
+    "cyprus": "Asia/Nicosia",
+    "czech": "Europe/Prague",
+    "czechia": "Europe/Prague",
+    "denmark": "Europe/Copenhagen",
+    "djibouti": "Africa/Djibouti",
+    "dominica": "America/Dominica",
+    "dominican": "America/Santo_Domingo",
+    "east timor": "Asia/Dili",
+    "ecuador": "America/Guayaquil",
+    "egypt": "Africa/Cairo",
+    "el salvador": "America/El_Salvador",
+    "england": "Europe/London",
+    "equatorial guinea": "Africa/Malabo",
+    "eritrea": "Africa/Asmara",
+    "estonia": "Europe/Tallinn",
+    "eswatini": "Africa/Mbabane",
+    "ethiopia": "Africa/Addis_Ababa",
+    "fiji": "Pacific/Fiji",
+    "finland": "Europe/Helsinki",
+    "france": "Europe/Paris",
+    "gabon": "Africa/Libreville",
+    "gambia": "Africa/Banjul",
+    "georgia": "Asia/Tbilisi",
+    "germany": "Europe/Berlin",
+    "ghana": "Africa/Accra",
+    "greece": "Europe/Athens",
+    "grenada": "America/Grenada",
+    "guatemala": "America/Guatemala",
+    "guinea": "Africa/Conakry",
+    "guinea-bissau": "Africa/Bissau",
+    "guyana": "America/Guyana",
+    "haiti": "America/Port-au-Prince",
+    "honduras": "America/Tegucigalpa",
+    "hungary": "Europe/Budapest",
+    "iceland": "Atlantic/Reykjavik",
+    "india": "Asia/Kolkata",
+    "indonesia": "Asia/Jakarta",
+    "iran": "Asia/Tehran",
+    "iraq": "Asia/Baghdad",
+    "ireland": "Europe/Dublin",
+    "israel": "Asia/Jerusalem",
+    "italy": "Europe/Rome",
+    "ivory coast": "Africa/Abidjan",
+    "jamaica": "America/Jamaica",
+    "japan": "Asia/Tokyo",
+    "jordan": "Asia/Amman",
+    "kazakhstan": "Asia/Almaty",
+    "kenya": "Africa/Nairobi",
+    "kiribati": "Pacific/Tarawa",
+    "kosovo": "Europe/Belgrade",
+    "kuwait": "Asia/Kuwait",
+    "kyrgyzstan": "Asia/Bishkek",
+    "laos": "Asia/Vientiane",
+    "latvia": "Europe/Riga",
+    "lebanon": "Asia/Beirut",
+    "lesotho": "Africa/Maseru",
+    "liberia": "Africa/Monrovia",
+    "libya": "Africa/Tripoli",
+    "liechtenstein": "Europe/Vaduz",
+    "lithuania": "Europe/Vilnius",
+    "luxembourg": "Europe/Luxembourg",
+    "madagascar": "Indian/Antananarivo",
+    "malawi": "Africa/Blantyre",
+    "malaysia": "Asia/Kuala_Lumpur",
+    "maldives": "Indian/Maldives",
+    "mali": "Africa/Bamako",
+    "malta": "Europe/Malta",
+    "mauritania": "Africa/Nouakchott",
+    "mauritius": "Indian/Mauritius",
+    "mexico": "America/Mexico_City",
+    "moldova": "Europe/Chisinau",
+    "monaco": "Europe/Monaco",
+    "mongolia": "Asia/Ulaanbaatar",
+    "montenegro": "Europe/Podgorica",
+    "morocco": "Africa/Casablanca",
+    "mozambique": "Africa/Maputo",
+    "myanmar": "Asia/Yangon",
+    "namibia": "Africa/Windhoek",
+    "nauru": "Pacific/Nauru",
+    "nepal": "Asia/Kathmandu",
+    "netherlands": "Europe/Amsterdam",
+    "new zealand": "Pacific/Auckland",
+    "nicaragua": "America/Managua",
+    "niger": "Africa/Niamey",
+    "nigeria": "Africa/Lagos",
+    "north korea": "Asia/Pyongyang",
+    "north macedonia": "Europe/Skopje",
+    "norway": "Europe/Oslo",
+    "oman": "Asia/Muscat",
+    "pakistan": "Asia/Karachi",
+    "palau": "Pacific/Palau",
+    "palestine": "Asia/Gaza",
+    "panama": "America/Panama",
+    "papua new guinea": "Pacific/Port_Moresby",
+    "paraguay": "America/Asuncion",
+    "peru": "America/Lima",
+    "philippines": "Asia/Manila",
+    "poland": "Europe/Warsaw",
+    "portugal": "Europe/Lisbon",
+    "qatar": "Asia/Qatar",
+    "romania": "Europe/Bucharest",
+    "russia": "Europe/Moscow",
+    "rwanda": "Africa/Kigali",
+    "saint kitts": "America/St_Kitts",
+    "saint lucia": "America/St_Lucia",
+    "saint vincent": "America/St_Vincent",
+    "samoa": "Pacific/Apia",
+    "san marino": "Europe/San_Marino",
+    "sao tome": "Africa/Sao_Tome",
+    "saudi arabia": "Asia/Riyadh",
+    "scotland": "Europe/London",
+    "senegal": "Africa/Dakar",
+    "serbia": "Europe/Belgrade",
+    "seychelles": "Indian/Mahe",
+    "sierra leone": "Africa/Freetown",
+    "singapore": "Asia/Singapore",
+    "slovakia": "Europe/Bratislava",
+    "slovenia": "Europe/Ljubljana",
+    "solomon islands": "Pacific/Guadalcanal",
+    "somalia": "Africa/Mogadishu",
+    "south africa": "Africa/Johannesburg",
+    "south korea": "Asia/Seoul",
+    "south sudan": "Africa/Juba",
+    "spain": "Europe/Madrid",
+    "sri lanka": "Asia/Colombo",
+    "sudan": "Africa/Khartoum",
+    "suriname": "America/Paramaribo",
+    "sweden": "Europe/Stockholm",
+    "switzerland": "Europe/Zurich",
+    "syria": "Asia/Damascus",
+    "taiwan": "Asia/Taipei",
+    "tajikistan": "Asia/Dushanbe",
+    "tanzania": "Africa/Dar_es_Salaam",
+    "thailand": "Asia/Bangkok",
+    "togo": "Africa/Lome",
+    "tonga": "Pacific/Tongatapu",
+    "trinidad": "America/Port_of_Spain",
+    "tunisia": "Africa/Tunis",
+    "turkey": "Europe/Istanbul",
+    "turkmenistan": "Asia/Ashgabat",
+    "tuvalu": "Pacific/Funafuti",
+    "uganda": "Africa/Kampala",
+    "ukraine": "Europe/Kiev",
+    "united arab emirates": "Asia/Dubai",
+    "uae": "Asia/Dubai",
+    "united kingdom": "Europe/London",
+    "uk": "Europe/London",
+    "united states": "America/New_York",
+    "us": "America/New_York",
+    "usa": "America/New_York",
+    "uruguay": "America/Montevideo",
+    "uzbekistan": "Asia/Tashkent",
+    "vanuatu": "Pacific/Efate",
+    "vatican": "Europe/Vatican",
+    "venezuela": "America/Caracas",
+    "vietnam": "Asia/Ho_Chi_Minh",
+    "wales": "Europe/London",
+    "yemen": "Asia/Aden",
+    "zambia": "Africa/Lusaka",
+    "zimbabwe": "Africa/Harare",
+}
+
+
+def _resolve_timezone(raw: str) -> Optional[str]:
+    """Resolve a user-provided string to an IANA timezone.
+
+    Tries in order:
+    1. Direct pytz lookup (e.g. "Europe/Dublin")
+    2. Case-insensitive country name lookup
+    3. Partial / fuzzy match on country names
+    """
+    s = raw.strip()
+    if not s:
+        return None
+
+    try:
+        tz = pytz.timezone(s)
+        return str(tz)
+    except pytz.exceptions.UnknownTimeZoneError:
+        pass
+
+    lower = s.lower()
+    if lower in COUNTRY_TO_TZ:
+        resolved = COUNTRY_TO_TZ[lower]
+        try:
+            pytz.timezone(resolved)
+            return resolved
+        except pytz.exceptions.UnknownTimeZoneError:
+            pass
+
+    matches = [
+        (country, tz)
+        for country, tz in COUNTRY_TO_TZ.items()
+        if lower in country or country in lower
+    ]
+    if len(matches) == 1:
+        return matches[0][1]
+
+    return None
+
+
 def _time_period(hour: int) -> str:
     if 0 <= hour < 6:
         return "early morning"
@@ -77,9 +321,8 @@ class Timezone(Package):
     )
     async def timezone_set(self, ctx, *, location: str):
         """set timezone"""
-        try:
-            pytz.timezone(location)
-        except pytz.exceptions.UnknownTimeZoneError:
+        resolved = _resolve_timezone(location)
+        if not resolved:
             return await ctx.fail(
                 "Please provide a **valid timezone**\n"
                 f"> -# **example:** `Europe/Dublin` or a country like `Ireland`"
@@ -88,12 +331,12 @@ class Timezone(Package):
         await self.bot.db.execute(
             "INSERT INTO users (user_id, guild_id, timezone) VALUES($1, $2, $3) "
             "ON CONFLICT(user_id, guild_id) DO UPDATE SET timezone = excluded.timezone",
-            ctx.author.id, ctx.guild.id, location
+            ctx.author.id, ctx.guild.id, resolved
         )
         await ctx.success(
-                    f"> **{ctx.author.display_name}'s** timezone set\n"
-                    f"> -# **zone:** {location}"
-                )
+            f"**{ctx.author.display_name}'s** timezone set\n"
+            f"> -# **location:** {resolved}"
+        )
 
     @timezone.command(
         name="remove",
@@ -113,7 +356,7 @@ class Timezone(Package):
             )
         await ctx.send(
             embed=c2(
-                message=f"> **{ctx.author.display_name}'s** timezone removed",
+                message=f"**{ctx.author.display_name}'s** timezone removed",
                 timestamp=False,
             )
         )
@@ -178,7 +421,7 @@ class Timezone(Package):
         await ctx.send(
             embed=c2(
                 message=(
-                    f"> **{ctx.author.display_name}** ↔ **{member.display_name}**\n"
+                    f"**{ctx.author.display_name}** ↔ **{member.display_name}**\n"
                     f"> -# **you:** {my_str} {my_period} ({my_tz_name})\n"
                     f"> -# **them:** {their_str} {their_period} ({their_tz_name})\n"
                     f"> -# **difference:** {diff_str}"
@@ -221,7 +464,7 @@ class Timezone(Package):
 
         await ctx.send(
             embed=c2(
-                message=f"> **all timezones**\n" + "\n".join(lines),
+                message=f"**all timezones**\n" + "\n".join(lines),
                 timestamp=False,
             )
         )
