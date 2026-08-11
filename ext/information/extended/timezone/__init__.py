@@ -59,7 +59,7 @@ class Timezone(Package):
             await ctx.send(
                 embed=c2(
                     message=(
-                        f"> **{target.display_name}'s** time is "
+                        f"**{target.display_name}'s** time is "
                         f"**{time_str}** **{day_str}** **{period}**"
                     ),
                     timestamp=False,
@@ -90,15 +90,10 @@ class Timezone(Package):
             "ON CONFLICT(user_id, guild_id) DO UPDATE SET timezone = excluded.timezone",
             ctx.author.id, ctx.guild.id, location
         )
-        await ctx.send(
-            embed=c2(
-                message=(
+        await ctx.success(
                     f"> **{ctx.author.display_name}'s** timezone set\n"
                     f"> -# **zone:** {location}"
-                ),
-                timestamp=False,
-            )
-        )
+                )
 
     @timezone.command(
         name="remove",
