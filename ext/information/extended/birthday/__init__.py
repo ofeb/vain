@@ -8,6 +8,7 @@ from discord import Member
 from discord.ext.commands import group, has_permissions, command
 
 from core.discord.package import Package
+from core.discord.views.embed import c2
 
 
 class Birthday(Package):
@@ -32,9 +33,14 @@ class Birthday(Package):
                 f"{target.mention} has not set their birthday"
             )
 
-        await ctx.success(
-            f"{target.mention}'s birthday\n"
-            f"> -# **date:** {birthday_data}"
+        await ctx.send(
+            embed=c2(
+                message=(
+                    f"> **{target.display_name}'s** birthday\n"
+                    f"> -# **date:** {birthday_data}"
+                ),
+                timestamp=False,
+            )
         )
 
     @birthday.command(
@@ -56,9 +62,14 @@ class Birthday(Package):
             "ON CONFLICT(user_id, guild_id) DO UPDATE SET birthday_date = excluded.birthday_date",
             ctx.author.id, ctx.guild.id, date
         )
-        await ctx.success(
-            f"Set your birthday\n"
-            f"> -# **date:** {date}"
+        await ctx.send(
+            embed=c2(
+                message=(
+                    f"> **{ctx.author.display_name}'s** birthday set\n"
+                    f"> -# **date:** {date}"
+                ),
+                timestamp=False,
+            )
         )
 
     @birthday.command(
@@ -77,7 +88,12 @@ class Birthday(Package):
                 "You have no birthday set\n"
                 f"> -# **set one with:** `,birthday set`"
             )
-        await ctx.success("Removed your birthday")
+        await ctx.send(
+            embed=c2(
+                message=f"> **{ctx.author.display_name}'s** birthday removed",
+                timestamp=False,
+            )
+        )
 
     @birthday.command(
         name="compare",
@@ -128,10 +144,15 @@ class Birthday(Package):
         my_str = f"in **{my_days_until}** days" if my_days_until > 0 else "**today**"
         their_str = f"in **{their_days_until}** days" if their_days_until > 0 else "**today**"
 
-        await ctx.success(
-            f"Comparing {ctx.author.display_name} ↔ {member.display_name}\n"
-            f"> -# **you:** {my_date} ({my_str})\n"
-            f"> -# **them:** {their_date} ({their_str})"
+        await ctx.send(
+            embed=c2(
+                message=(
+                    f"> **{ctx.author.display_name}** ↔ **{member.display_name}**\n"
+                    f"> -# **you:** {my_date} ({my_str})\n"
+                    f"> -# **them:** {their_date} ({their_str})"
+                ),
+                timestamp=False,
+            )
         )
 
     @birthday.command(
@@ -146,7 +167,12 @@ class Birthday(Package):
             "VALUES($1, $2, $3, $4) ON CONFLICT(guild_id) DO UPDATE SET channel_id = excluded.channel_id",
             ctx.guild.id, ctx.channel.id, "Happy birthday {user}!", None
         )
-        await ctx.success("Birthday feature unlocked")
+        await ctx.send(
+            embed=c2(
+                message=f"> **{ctx.guild.name}** birthday feature unlocked",
+                timestamp=False,
+            )
+        )
 
     @birthday.command(
         name="lock",
@@ -159,7 +185,12 @@ class Birthday(Package):
             "DELETE FROM birthday_notifications WHERE guild_id = $1",
             ctx.guild.id
         )
-        await ctx.success("Birthday feature locked")
+        await ctx.send(
+            embed=c2(
+                message=f"> **{ctx.guild.name}** birthday feature locked",
+                timestamp=False,
+            )
+        )
 
     @birthday.command(
         name="channel",
@@ -173,9 +204,14 @@ class Birthday(Package):
             "VALUES($1, $2, $3, $4) ON CONFLICT(guild_id) DO UPDATE SET channel_id = excluded.channel_id",
             ctx.guild.id, channel.id, "Happy birthday {user}!", None
         )
-        await ctx.success(
-            f"Set announcement channel\n"
-            f"> -# **channel:** {channel.mention}"
+        await ctx.send(
+            embed=c2(
+                message=(
+                    f"> **{ctx.guild.name}** birthday channel set\n"
+                    f"> -# **channel:** {channel.mention}"
+                ),
+                timestamp=False,
+            )
         )
 
     @birthday.command(
@@ -190,9 +226,14 @@ class Birthday(Package):
             "VALUES($1, $2, $3, $4) ON CONFLICT(guild_id) DO UPDATE SET role_id = excluded.role_id",
             ctx.guild.id, ctx.channel.id, "Happy birthday {user}!", role.id
         )
-        await ctx.success(
-            f"Set birthday role\n"
-            f"> -# **role:** {role.mention}"
+        await ctx.send(
+            embed=c2(
+                message=(
+                    f"> **{ctx.guild.name}** birthday role set\n"
+                    f"> -# **role:** {role.mention}"
+                ),
+                timestamp=False,
+            )
         )
 
     @birthday.command(
@@ -215,11 +256,16 @@ class Birthday(Package):
         channel = ctx.guild.get_channel(config['channel_id'])
         role = ctx.guild.get_role(config['role_id']) if config['role_id'] else None
 
-        await ctx.success(
-            f"Server configuration\n"
-            f"> -# **channel:** {channel.mention if channel else 'not set'}\n"
-            f"> -# **role:** {role.mention if role else 'not set'}\n"
-            f"> -# **message:** {config['message']}"
+        await ctx.send(
+            embed=c2(
+                message=(
+                    f"> **{ctx.guild.name}** birthday config\n"
+                    f"> -# **channel:** {channel.mention if channel else 'not set'}\n"
+                    f"> -# **role:** {role.mention if role else 'not set'}\n"
+                    f"> -# **message:** {config['message']}"
+                ),
+                timestamp=False,
+            )
         )
 
     @birthday.command(
@@ -245,6 +291,9 @@ class Birthday(Package):
             if member:
                 lines.append(f"> {member.mention} — {birthday['birthday_date']}")
 
-        await ctx.success(
-            f"All birthdays\n" + "\n".join(lines)
+        await ctx.send(
+            embed=c2(
+                message=f"> **all birthdays**\n" + "\n".join(lines),
+                timestamp=False,
+            )
         )

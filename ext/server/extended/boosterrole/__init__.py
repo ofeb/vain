@@ -171,11 +171,12 @@ class BoosterroleCommands(Package):
             f"> -# **create a new one with:** `,boosterrole`"
         )
 
-    @boosterrole.command(
+    @boosterrole.group(
         name="icon",
         aliases=["image", "img"],
         description="Set an icon for your booster role (emoji, URL, or attachment)",
         example=",boosterrole icon https://example.com/img.png",
+        invoke_without_command=True,
     )
     @is_booster()
     async def boosterrole_icon(

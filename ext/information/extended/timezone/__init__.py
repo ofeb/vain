@@ -8,6 +8,20 @@ from discord import Member
 from discord.ext.commands import group, has_permissions, command
 
 from core.discord.package import Package
+from core.discord.views.embed import c2
+
+
+def _time_period(hour: int) -> str:
+    if 0 <= hour < 6:
+        return "early morning"
+    elif 6 <= hour < 12:
+        return "morning"
+    elif 12 <= hour < 17:
+        return "afternoon"
+    elif 17 <= hour < 21:
+        return "evening"
+    else:
+        return "night"
 
 
 class Timezone(Package):
@@ -38,10 +52,18 @@ class Timezone(Package):
         try:
             user_tz = pytz.timezone(tz)
             current_time = datetime.now(user_tz)
-            await ctx.success(
-                f"{target.mention}'s current time\n"
-                f"> -# **time:** {current_time.strftime('%Y-%m-%d %H:%M:%S')}\n"
-                f"> -# **zone:** {tz}"
+            hour = current_time.hour
+            period = _time_period(hour)
+            time_str = current_time.strftime("%I:%M").lstrip("0")
+            day_str = current_time.strftime("%A").lower()
+            await ctx.send(
+                embed=c2(
+                    message=(
+                        f"> **{target.display_name}'s** time is "
+                        f"**{time_str}** **{day_str}** **{period}**"
+                    ),
+                    timestamp=False,
+                )
             )
         except pytz.exceptions.UnknownTimeZoneError:
             return await ctx.fail(
@@ -68,9 +90,14 @@ class Timezone(Package):
             "ON CONFLICT(user_id, guild_id) DO UPDATE SET timezone = excluded.timezone",
             ctx.author.id, ctx.guild.id, location
         )
-        await ctx.success(
-            f"Set your timezone\n"
-            f"> -# **zone:** {location}"
+        await ctx.send(
+            embed=c2(
+                message=(
+                    f"> **{ctx.author.display_name}'s** timezone set\n"
+                    f"> -# **zone:** {location}"
+                ),
+                timestamp=False,
+            )
         )
 
     @timezone.command(
@@ -89,7 +116,12 @@ class Timezone(Package):
                 "You have no timezone set\n"
                 f"> -# **set one with:** `,timezone set`"
             )
-        await ctx.success("Removed your timezone")
+        await ctx.send(
+            embed=c2(
+                message=f"> **{ctx.author.display_name}'s** timezone removed",
+                timestamp=False,
+            )
+        )
 
     @timezone.command(
         name="compare",
@@ -135,6 +167,11 @@ class Timezone(Package):
         my_time = datetime.now(my_tz)
         their_time = datetime.now(their_tz)
 
+        my_period = _time_period(my_time.hour)
+        their_period = _time_period(their_time.hour)
+        my_str = my_time.strftime("%I:%M").lstrip("0")
+        their_str = their_time.strftime("%I:%M").lstrip("0")
+
         diff_hours = (their_time.utcoffset().total_seconds() - my_time.utcoffset().total_seconds()) / 3600
         if diff_hours == 0:
             diff_str = "same timezone"
@@ -143,11 +180,16 @@ class Timezone(Package):
         else:
             diff_str = f"{diff_hours:.1f}h behind"
 
-        await ctx.success(
-            f"Comparing {ctx.author.display_name} ↔ {member.display_name}\n"
-            f"> -# **you:** {my_time.strftime('%H:%M')} ({my_tz_name})\n"
-            f"> -# **them:** {their_time.strftime('%H:%M')} ({their_tz_name})\n"
-            f"> -# **difference:** {diff_str}"
+        await ctx.send(
+            embed=c2(
+                message=(
+                    f"> **{ctx.author.display_name}** ↔ **{member.display_name}**\n"
+                    f"> -# **you:** {my_str} {my_period} ({my_tz_name})\n"
+                    f"> -# **them:** {their_str} {their_period} ({their_tz_name})\n"
+                    f"> -# **difference:** {diff_str}"
+                ),
+                timestamp=False,
+            )
         )
 
     @timezone.command(
@@ -174,12 +216,17 @@ class Timezone(Package):
                 try:
                     user_tz = pytz.timezone(tz['timezone'])
                     current_time = datetime.now(user_tz)
+                    period = _time_period(current_time.hour)
+                    time_str = current_time.strftime("%I:%M").lstrip("0")
                     lines.append(
-                        f"> {member.mention} — {current_time.strftime('%H:%M')} ({tz['timezone']})"
+                        f"> {member.mention} — {time_str} {period} ({tz['timezone']})"
                     )
                 except pytz.exceptions.UnknownTimeZoneError:
                     lines.append(f"> {member.mention} — invalid ({tz['timezone']})")
 
-        await ctx.success(
-            f"All set timezones\n" + "\n".join(lines)
+        await ctx.send(
+            embed=c2(
+                message=f"> **all timezones**\n" + "\n".join(lines),
+                timestamp=False,
+            )
         )
