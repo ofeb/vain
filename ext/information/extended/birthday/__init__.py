@@ -112,11 +112,11 @@ class Birthday(Package):
         name = target.display_name
         until = _until_birthday(bday, date.today())
         if until is None:
-            message = f"> **{name}'s** birthday is **today**!"
+            message = f"**{name}'s** birthday is **today**!"
         else:
             months, days = until
             message = (
-                f"> **{name}'s** birthday is on **{_format_date(bday)}**, "
+                f"**{name}'s** birthday is on **{_format_date(bday)}**, "
                 f"that's in {_until_str(months, days)}"
             )
 
