@@ -75,7 +75,7 @@ class FilterCommands(Package):
             "Clear **all** legacy filtered words? This action **cannot be undone**."
         )
         if not ok:
-            return await ctx.warn("Word filter reset **cancelled**")
+            return await ctx.warn("Cancelled\n> -# **no changes were made to the word filter**")
         rule = next(
             (
                 r
@@ -95,7 +95,7 @@ class FilterCommands(Package):
             reason=f"filter reset by {ctx.author}",
         )
         return await ctx.success(
-            "Word filter cleared. This action cannot be undone."
+            "Word filter cleared\n> -# **this action cannot be undone**"
         )
 
     @filter_.group(
@@ -226,7 +226,7 @@ class FilterCommands(Package):
             )
         state = "ENABLED" if setting else "DISABLED"
         return await ctx.success(
-            f"{state} spam filter across **{len(channels)}** channel(s). threshold: **{flags.threshold}** msgs/5s. punishment: {flags.punishment}"
+            f"{state} spam filter\n> -# **{flags.threshold} msgs/5s · {flags.punishment}**"
         )
 
     @filter_spam.group(
@@ -372,7 +372,7 @@ class FilterCommands(Package):
             )
         state = "ENABLED" if setting else "DISABLED"
         return await ctx.success(
-            f"{state} link filter across **{len(channels)}** channel(s)"
+            f"{state} link filter\n> -# **{len(channels)} channel(s)**"
         )
 
     @filter_links.group(
@@ -450,7 +450,7 @@ class FilterCommands(Package):
             updated,
             ctx.guild.id,
         )
-        return await ctx.success(f"whitelisted: {human_join(link_list, final='and')}")
+        return await ctx.success(f"Whitelisted links\n> -# **{human_join(link_list, final='and')}**")
 
     @filter_.group(
         name="invites",
@@ -488,7 +488,7 @@ class FilterCommands(Package):
             )
         state = "Enabled" if setting else "Disabled"
         return await ctx.success(
-            f"{state} invite filter across **{len(channels)}** channel(s)"
+            f"{state} invite filter\n> -# **{len(channels)} channel(s)**"
         )
 
     @filter_invites.group(
@@ -544,7 +544,7 @@ class FilterCommands(Package):
             ctx.guild.id,
         )
         return await ctx.success(
-            f"whitelisted invites: {human_join(inv_list, final='and')}"
+            f"Whitelisted invites\n> -# **{human_join(inv_list, final='and')}**"
         )
 
     @filter_invites_exempt.command(name="list", aliases=["ls", "show", "view"])
@@ -665,7 +665,7 @@ class FilterCommands(Package):
             )
         state = "ENABLED" if setting else "DISABLED"
         return await ctx.success(
-            f"{state} spoiler filter. threshold: **{flags.threshold}**"
+            f"{state} spoiler filter\n> -# **threshold: {flags.threshold}**"
         )
 
     @filter_spoilers.group(
@@ -749,7 +749,7 @@ class FilterCommands(Package):
             )
         state = "ENABLED" if setting else "DISABLED"
         return await ctx.success(
-            f"{state} music file filter across **{len(channels)}** channel(s)"
+            f"{state} music file filter\n> -# **{len(channels)} channel(s)**"
         )
 
     @filter_musicfile.group(
@@ -836,7 +836,7 @@ class FilterCommands(Package):
             )
         state = "ENABLED" if setting else "DISABLED"
         return await ctx.success(
-            f"{state} mass mention filter. threshold: **{flags.threshold}**"
+            f"{state} mass mention filter\n> -# **threshold: {flags.threshold}**"
         )
 
     @filter_massmention.group(
@@ -923,7 +923,7 @@ class FilterCommands(Package):
             )
         state = "ENABLED" if setting else "DISABLED"
         return await ctx.success(
-            f"{state} emoji filter. threshold: **{flags.threshold}**"
+            f"{state} emoji filter\n> -# **threshold: {flags.threshold}**"
         )
 
     @filter_emoji.group(
@@ -998,7 +998,7 @@ class FilterCommands(Package):
                 ctx.guild.id,
                 pattern,
             )
-            return await ctx.success(f"`{pattern}` removed from regex filter")
+            return await ctx.success(f"Removed regex\n> -# **`{pattern}`**")
         await self.db.execute(
             """INSERT INTO moderation.regex (guild_id, regex, action) VALUES($1, $2, $3) ON CONFLICT(guild_id, regex) DO UPDATE SET action = excluded.action""",
             ctx.guild.id,
@@ -1006,7 +1006,7 @@ class FilterCommands(Package):
             flags.punishment,
         )
         return await ctx.success(
-            f"added regex `{pattern}`. punishment: **{flags.punishment}**"
+            f"Added regex\n> -# **{pattern} · {flags.punishment}**"
         )
 
     @filter_regex.command(name="list", aliases=["ls", "show", "view"])

@@ -26,7 +26,7 @@ def _parse_response_flags(raw: str) -> tuple[str, dict[str, object], str | None]
     Supported flags:
     - ``--strict`` / ``--not_strict`` (default: **not strict**)
     - ``--self_destruct <time>`` / ``--self-destruct`` (e.g. 10, 10s, 5m, 5mins, 1h)
-    - ``--delete`` (delete the trigger message)
+    - ``--delete`` / ``--delete_trigger`` (delete the trigger message)
     - ``--reply on|off|yes|no|true|false`` (reply to the trigger)
     - ``--ignore_command_check``
     """
@@ -40,7 +40,7 @@ def _parse_response_flags(raw: str) -> tuple[str, dict[str, object], str | None]
     remaining = raw
     error: str | None = None
     flag_re = re.compile(
-        r"(?:\s+--(?P<flag>strict|not_strict|not-strict|delete|reply|"
+        r"(?:\s+--(?P<flag>strict|not_strict|not-strict|delete|delete_trigger|delete-trigger|reply|"
         r"ignore_command_check|ignore-command-check|self_destruct|self-destruct)"
         r"(?:=(?P<eqval>\S+)|\s+(?P<val>(?!\-\-)\S+))?)\s*$",
         re.IGNORECASE,
@@ -57,7 +57,7 @@ def _parse_response_flags(raw: str) -> tuple[str, dict[str, object], str | None]
             flags["strict"] = True
         elif flag in {"not_strict", "not-strict"}:
             flags["strict"] = False
-        elif flag == "delete":
+        elif flag in {"delete", "delete_trigger", "delete-trigger"}:
             flags["delete"] = True
         elif flag == "reply":
             if value is None:

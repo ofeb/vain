@@ -54,7 +54,7 @@ class AliasCommands(Package):
             command.qualified_name,
             ctx.guild.id,
         )
-        return await ctx.success(f"removed all aliases for `{command.qualified_name}`")
+        return await ctx.success(f"Removed aliases for `{command.qualified_name}`")
 
     @alias.command(
         name="list",
@@ -95,7 +95,7 @@ class AliasCommands(Package):
             command.qualified_name,
             shortcut,
         )
-        return await ctx.success(f"**{shortcut}** will now run `{command.qualified_name}`")
+        return await ctx.success(f"Alias added\n> -# **{shortcut}** → `{command.qualified_name}`")
 
     @alias.command(
         name="remove",
@@ -111,7 +111,7 @@ class AliasCommands(Package):
             ctx.guild.id,
             shortcut,
         )
-        return await ctx.success(f"removed alias `{shortcut}`")
+        return await ctx.success(f"Removed alias\n> -# **`{shortcut}`**")
 
     @alias.command(
         name="reset",
@@ -129,10 +129,10 @@ class AliasCommands(Package):
             "This action **cannot be undone**."
         )
         if not ok:
-            return await ctx.warn("Alias reset **cancelled**")
+            return await ctx.warn("Cancelled\n> -# **alias reset was cancelled**")
         await self.db.execute(
             """DELETE FROM aliases WHERE guild_id = $1""", ctx.guild.id
         )
         return await ctx.success(
-            "All aliases cleared. This action cannot be undone."
+            "All aliases cleared\n> -# **this action cannot be undone**"
         )

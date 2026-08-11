@@ -90,13 +90,13 @@ class Emoji(Package):
         """Show a large custom emoji - `,emoji enlarge <:name:id>`."""
         token = (emoji or "").strip()
         if not token:
-            return await ctx.warn("that is **not** a **valid emoji**")
+            return await ctx.warn("Please provide a **valid emoji**\n> -# **usage:** `,emoji enlarge <:name:id>`")
 
         
         token = token.split()[0]
         custom = _parse_partial_emoji(token)
         if custom is None or not custom.id or not custom.url:
-            return await ctx.warn("that is **not** a **valid emoji**")
+            return await ctx.warn("Please provide a **valid emoji**\n> -# **usage:** `,emoji enlarge <:name:id>`")
 
         e = c2(message=str(custom), timestamp=False)
         e.set_image(url=str(custom.url))
@@ -130,7 +130,7 @@ class Emoji(Package):
             except Exception:
                 failed += 1
 
-        await ctx.success(f"Removed {removed} emotes, failed {failed}")
+        await ctx.success(f"Removed emotes\n> -# **count:** {removed} deleted, {failed} failed")
 
     @emoji.command(
         name="removeduplicates",
@@ -152,7 +152,7 @@ class Emoji(Package):
             else:
                 seen.add(emoji.name)
 
-        await ctx.success(f"Removed {removed} duplicate emotes")
+        await ctx.success(f"Duplicates removed\n> -# **count:** {removed} deleted")
 
     @emoji.command(
         name="remove",
@@ -164,17 +164,17 @@ class Emoji(Package):
         try:
             custom_emoji = _parse_partial_emoji(emoji)
             if custom_emoji is None:
-                return await ctx.warn("Provide a custom emoji to remove")
+                return await ctx.warn("No emoji was provided\n> -# **usage:** `,emoji remove <:name:id>`")
             emoji_obj = discord.utils.get(ctx.guild.emojis, id=custom_emoji.id)
             if emoji_obj is None:
                 emoji_obj = discord.utils.get(ctx.guild.emojis, name=custom_emoji.name)
             if emoji_obj:
                 await emoji_obj.delete()
-                await ctx.success(f"Removed emote `{emoji_obj.name}`")
+                await ctx.success(f"Emote removed\n> -# **name:** `{emoji_obj.name}`")
             else:
-                await ctx.warn("Emote not found in this server")
+                await ctx.warn("That emote was not found in this server\n> -# **reason:** it may have been deleted or is from another guild")
         except Exception as e:
-            await ctx.fail(f"Failed to remove emote: {str(e)[:150]}")
+            await ctx.fail(f"Could not remove that emote\n> -# **error:** {str(e)[:100]}")
 
     @emoji.command(
         name="stats",
@@ -184,7 +184,7 @@ class Emoji(Package):
     async def emoji_stats(self, ctx):
         """show emote usage stats"""
         if ctx.guild is None:
-            return await ctx.warn("This command can only be used in a server")
+            return await ctx.warn("This command can only be used in a **server**\n> -# **usage:** this command requires a guild")
         try:
             emoji_data = await self.bot.db.fetch(
                 "SELECT emoji_name, uses FROM emoji_usage WHERE guild_id = $1 ORDER BY uses DESC LIMIT 10",
@@ -197,7 +197,7 @@ class Emoji(Package):
             
             emojis = list(ctx.guild.emojis)
             if not emojis:
-                return await ctx.warn("No emoji usage data or server emotes available")
+                return await ctx.warn("No emote usage data available\n> -# **reason:** no usage stats or emotes found")
             lines = [
                 f"**#{i}** {em} `{em.name}`"
                 for i, em in enumerate(sorted(emojis, key=lambda e: e.name.lower())[:10], start=1)
@@ -251,8 +251,7 @@ class Emoji(Package):
 
         if pe is None or not pe.id:
             return await ctx.warn(
-                "Provide a custom emoji or message link "
-                f"- e.g. `{ctx.clean_prefix}emoji information <:name:id>`"
+                "Please provide a **valid emoji or message link**\n> -# **usage:** `,emoji information <:name:id>` or a message link"
             )
 
         guild_emoji = None
@@ -309,7 +308,7 @@ class Emoji(Package):
                 except Exception:
                     failed += 1
 
-        await ctx.success(f"Added {added} emotes, failed {failed}")
+        await ctx.success(f"Emotes added\n> -# **count:** {added} added, {failed} failed")
 
     @emoji.command(
         name="rename",
@@ -321,18 +320,18 @@ class Emoji(Package):
         try:
             custom_emoji = _parse_partial_emoji(emoji)
             if custom_emoji is None:
-                return await ctx.warn("Provide a custom emoji to rename")
+                return await ctx.warn("No emoji was provided\n> -# **usage:** `,emoji rename <:name:id> newname`")
             emoji_obj = discord.utils.get(ctx.guild.emojis, id=custom_emoji.id)
             if emoji_obj is None:
                 emoji_obj = discord.utils.get(ctx.guild.emojis, name=custom_emoji.name)
             if emoji_obj:
                 clean = _sanitize_name(new_name, fallback=emoji_obj.name)
                 await emoji_obj.edit(name=clean)
-                await ctx.success(f"Renamed emote to `{clean}`")
+                await ctx.success(f"Emote renamed\n> -# **name:** `{clean}`")
             else:
-                await ctx.warn("Emote not found in this server")
+                await ctx.warn("That emote was not found in this server\n> -# **reason:** it may have been deleted or is from another guild")
         except Exception as e:
-            await ctx.fail(f"Failed to rename emote: {str(e)[:150]}")
+            await ctx.fail(f"Could not rename that emote\n> -# **error:** {str(e)[:100]}")
 
     @emoji.command(
         name="add",
@@ -347,11 +346,11 @@ class Emoji(Package):
           • URL / attachment → file stem
         """
         if ctx.guild is None:
-            return await ctx.warn("This command can only be used in a server")
+            return await ctx.warn("This command can only be used in a **server**\n> -# **usage:** this command requires a guild")
 
         me = ctx.guild.me
         if me is None or not me.guild_permissions.manage_expressions:
-            return await ctx.warn("I need **Manage Expressions** to add emotes")
+            return await ctx.warn("Missing **Manage Expressions** permission\n> -# **required:** Manage Expressions")
 
         raw = (args or "").strip()
         tokens = raw.split() if raw else []
@@ -413,13 +412,11 @@ class Emoji(Package):
             else:
                 
                 return await ctx.warn(
-                    "Provide a custom emoji, image URL, attachment, or sticker "
-                    f"- e.g. `{ctx.clean_prefix}emoji add <:name:id>` "
-                    f"or `{ctx.clean_prefix}emoji add https://… name`"
+                    "Please provide a **source** for the emoji\n> -# **usage:** provide an emoji, URL, attachment, or sticker"
                 )
 
         if not source_url:
-            return await ctx.warn("Couldn't resolve an image source for that emoji")
+            return await ctx.warn("Could not resolve an image from your input\n> -# **reason:** check the URL or attachment")
 
         name = _sanitize_name(optional_name, fallback=default_name) if optional_name else default_name
         if not _NAME_RE.match(name):
@@ -428,7 +425,7 @@ class Emoji(Package):
         async with aiohttp.ClientSession() as session:
             data = await _download(session, source_url)
         if not data:
-            return await ctx.fail("Couldn't download that image (missing, too large, or blocked)")
+            return await ctx.fail("Could not download the image\n> -# **reason:** image missing, too large, or blocked")
 
         try:
             created = await ctx.guild.create_custom_emoji(
@@ -437,8 +434,8 @@ class Emoji(Package):
                 reason=f"emoji add by {ctx.author} ({ctx.author.id})",
             )
         except discord.Forbidden:
-            return await ctx.warn("I don't have permission to create emotes here")
+            return await ctx.warn("Missing **Manage Expressions** permission\n> -# **required:** Manage Expressions")
         except discord.HTTPException as e:
-            return await ctx.fail(f"Discord rejected the emote: {getattr(e, 'text', e)}"[:180])
+            return await ctx.fail(f"Discord rejected that emote\n> -# **error:** {getattr(e, 'text', e)}"[:180])
 
-        await ctx.success(f"Added emote {created} (`{created.name}`)")
+        await ctx.success(f"Emote added\n> -# **name:** {created} (`{created.name}`)")

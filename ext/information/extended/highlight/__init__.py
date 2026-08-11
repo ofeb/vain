@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from discord.ext.commands import group
+import discord
+from discord.ext.commands import group, has_permissions, command
 
 from core.discord.package import Package
 
@@ -13,6 +14,7 @@ class Highlight(Package):
 
     @group(
         name="highlight",
+        aliases=["hl"],
         description="Set notifications for when a keyword is said",
         invoke_without_command=True,
     )
@@ -21,20 +23,39 @@ class Highlight(Package):
         return await ctx.send_help(ctx.command)
 
     @highlight.command(
+        name="add",
+        description="Add a highlighted keyword",
+    )
+    async def highlight_add(self, ctx, *, keyword: str):
+        """add highlighted keyword"""
+        await self.bot.db.execute(
+            "INSERT INTO highlights (guild_id, user_id, keyword) VALUES($1, $2, $3) "
+            "ON CONFLICT(guild_id, user_id, keyword) DO NOTHING",
+            ctx.guild.id, ctx.author.id, keyword.lower()
+        )
+        await ctx.success(
+            f"Added keyword\n"
+            f"> -# **keyword:** `{keyword.lower()}`"
+        )
+
+    @highlight.command(
         name="remove",
         description="Remove a highlighted keyword",
     )
-    async def highlight_remove(self, ctx, keyword: str):
+    async def highlight_remove(self, ctx, *, keyword: str):
         """remove highlighted keyword"""
         await self.bot.db.execute(
             "DELETE FROM highlights WHERE guild_id = $1 AND user_id = $2 AND keyword = $3",
             ctx.guild.id, ctx.author.id, keyword.lower()
         )
-        await ctx.success(f"Removed highlight `{keyword}`")
+        await ctx.success(
+            f"Removed keyword\n"
+            f"> -# **keyword:** `{keyword.lower()}`"
+        )
 
     @highlight.command(
         name="list",
-        description="List all keywords set in a server",
+        description="List all your highlighted keywords",
     )
     async def highlight_list(self, ctx):
         """list highlighted keywords"""
@@ -42,16 +63,22 @@ class Highlight(Package):
             "SELECT keyword FROM highlights WHERE guild_id = $1 AND user_id = $2",
             ctx.guild.id, ctx.author.id
         )
-        
+
         if not highlights:
-            return await ctx.send("You have no highlights set")
-        
-        keywords = [h['keyword'] for h in highlights]
-        await ctx.send(f"Your highlights: {', '.join(keywords)}")
+            return await ctx.warn(
+                "You have no keywords set\n"
+                f"> -# **add one with:** `,highlight add <keyword>`"
+            )
+
+        keywords = [f"`{h['keyword']}`" for h in highlights]
+        await ctx.success(
+            f"Your keywords\n"
+            f"> {', '.join(keywords)}"
+        )
 
     @highlight.command(
         name="reset",
-        description="No description given",
+        description="Remove all your highlighted keywords",
     )
     async def highlight_reset(self, ctx):
         """reset all highlights"""
@@ -59,38 +86,85 @@ class Highlight(Package):
             "DELETE FROM highlights WHERE guild_id = $1 AND user_id = $2",
             ctx.guild.id, ctx.author.id
         )
-        await ctx.success("Reset all your highlights")
+        await ctx.success("Removed all keywords")
 
     @highlight.command(
         name="ignore",
-        description="Ignore notifications from members or a channel or a role",
+        description="Ignore notifications from a member, channel, or role",
     )
-    async def highlight_ignore(self, ctx, member_or_channel_or_role):
+    async def highlight_ignore(self, ctx, target: discord.Role | discord.Member | discord.TextChannel):
         """ignore highlight from member/channel/role"""
-        target_type = None
-        target_id = None
-        
-        if isinstance(member_or_channel_or_role, discord.Member):
+        if isinstance(target, discord.Member):
             target_type = "user"
-            target_id = member_or_channel_or_role.id
-        elif isinstance(member_or_channel_or_role, discord.Role):
+            target_id = target.id
+            label = target.mention
+        elif isinstance(target, discord.Role):
             target_type = "role"
-            target_id = member_or_channel_or_role.id
-        elif isinstance(member_or_channel_or_role, discord.abc.GuildChannel):
+            target_id = target.id
+            label = target.mention
+        elif isinstance(target, discord.abc.GuildChannel):
             target_type = "channel"
-            target_id = member_or_channel_or_role.id
+            target_id = target.id
+            label = target.mention
         else:
-            return await ctx.send("Invalid target type")
-        
+            return await ctx.fail(
+                "Please provide a **valid target**\n"
+                f"> -# **accepted:** member, role, or channel"
+            )
+
         await self.bot.db.execute(
-            "INSERT INTO highlight_ignores (guild_id, user_id, target_id, target_type) VALUES($1, $2, $3, $4) ON CONFLICT(guild_id, user_id, target_id, target_type) DO NOTHING",
+            "INSERT INTO highlight_ignores (guild_id, user_id, target_id, target_type) "
+            "VALUES($1, $2, $3, $4) ON CONFLICT(guild_id, user_id, target_id, target_type) DO NOTHING",
             ctx.guild.id, ctx.author.id, target_id, target_type
         )
-        await ctx.success(f"Ignored {member_or_channel_or_role.mention}")
+        await ctx.success(
+            f"Now ignoring\n"
+            f"> -# **target:** {label}\n"
+            f"> -# **type:** {target_type}"
+        )
 
     @highlight.command(
-        name="ignore list",
-        description="List all ignored members, channel & roles",
+        name="unignore",
+        description="Stop ignoring a member, channel, or role",
+    )
+    async def highlight_unignore(self, ctx, target: discord.Role | discord.Member | discord.TextChannel):
+        """unignore highlight target"""
+        if isinstance(target, discord.Member):
+            target_type = "user"
+            target_id = target.id
+            label = target.mention
+        elif isinstance(target, discord.Role):
+            target_type = "role"
+            target_id = target.id
+            label = target.mention
+        elif isinstance(target, discord.abc.GuildChannel):
+            target_type = "channel"
+            target_id = target.id
+            label = target.mention
+        else:
+            return await ctx.fail(
+                "Please provide a **valid target**\n"
+                f"> -# **accepted:** member, role, or channel"
+            )
+
+        result = await self.bot.db.execute(
+            "DELETE FROM highlight_ignores WHERE guild_id = $1 AND user_id = $2 AND target_id = $3 AND target_type = $4",
+            ctx.guild.id, ctx.author.id, target_id, target_type
+        )
+        if result == "DELETE 0":
+            return await ctx.warn(
+                f"{label} is not ignored\n"
+                f"> -# **check with:** `,highlight ignores`"
+            )
+        await ctx.success(
+            f"Stopped ignoring\n"
+            f"> -# **target:** {label}"
+        )
+
+    @highlight.command(
+        name="ignores",
+        aliases=["ignorelist", "ignored"],
+        description="List all ignored members, channels, and roles",
     )
     async def highlight_ignore_list(self, ctx):
         """list ignored highlights"""
@@ -98,35 +172,34 @@ class Highlight(Package):
             "SELECT target_id, target_type FROM highlight_ignores WHERE guild_id = $1 AND user_id = $2",
             ctx.guild.id, ctx.author.id
         )
-        
+
         if not ignores:
-            return await ctx.send("You have no ignored targets")
-        
-        rows = []
+            return await ctx.warn(
+                "You have no ignored targets\n"
+                f"> -# **ignore with:** `,highlight ignore <target>`"
+            )
+
+        lines = []
         for ignore in ignores:
             if ignore['target_type'] == "user":
                 member = ctx.guild.get_member(ignore['target_id'])
                 if member:
-                    rows.append(f"User: {member.mention}")
+                    lines.append(f"> {member.mention} (user)")
             elif ignore['target_type'] == "role":
                 role = ctx.guild.get_role(ignore['target_id'])
                 if role:
-                    rows.append(f"Role: {role.mention}")
+                    lines.append(f"> {role.mention} (role)")
             elif ignore['target_type'] == "channel":
                 channel = ctx.guild.get_channel(ignore['target_id'])
                 if channel:
-                    rows.append(f"Channel: {channel.mention}")
-        
-        await ctx.send("\n".join(rows))
+                    lines.append(f"> {channel.mention} (channel)")
 
-    @highlight.command(
-        name="add",
-        description="Add a highlighted keyword",
-    )
-    async def highlight_add(self, ctx, keyword: str):
-        """add highlighted keyword"""
-        await self.bot.db.execute(
-            "INSERT INTO highlights (guild_id, user_id, keyword) VALUES($1, $2, $3) ON CONFLICT(guild_id, user_id, keyword) DO NOTHING",
-            ctx.guild.id, ctx.author.id, keyword.lower()
+        if not lines:
+            return await ctx.warn(
+                "All ignored targets are no longer in this server\n"
+                f"> -# **they may have left or been deleted**"
+            )
+
+        await ctx.success(
+            f"Ignored targets\n" + "\n".join(lines)
         )
-        await ctx.success(f"Added highlight `{keyword}`")

@@ -191,16 +191,18 @@ class Antinuke(AntinukeEvents, Package):
 
         label = MODULE_NAMES[name]
         if not status:
-            return await ctx.success(f"Disabled **{label}** antinuke module")
+            return await ctx.success(
+                f"Disabled **{label}**\n> -# Module turned off"
+            )
 
         verb = "Updated" if was_enabled else "Enabled"
-        parts = [f"Punishment is set to **{payload['punishment']}**"]
+        parts = [f"punishment: **{payload['punishment']}**"]
         if with_threshold:
-            parts.append(f"threshold is set to **{payload['threshold']}**")
+            parts.append(f"threshold: **{payload['threshold']}**")
         if with_command:
-            parts.append(f"command detection is **{'on' if payload['command'] else 'off'}**")
+            parts.append(f"command detection: **{'on' if payload['command'] else 'off'}**")
         return await ctx.success(
-            f"{verb} **{label}** antinuke module. {', '.join(parts)}"
+            f"{verb} **{label}**\n> -# {', '.join(parts)}"
         )
 
     def _count_perms(self, config: AntinukeConfig, *, kind: str) -> int:
@@ -903,9 +905,9 @@ class Antinuke(AntinukeEvents, Package):
 
         if member.id in (whitelist or []):
             if getattr(member, "bot", False) and ctx.guild.get_member(member.id) is None:
-                return await ctx.success(f"{member} is now whitelisted and can join")
-            return await ctx.success(f"{member} is now whitelisted and will not trigger **antinuke**")
-        return await ctx.success(f"{member} is no longer whitelisted")
+                return await ctx.success(f"{member} whitelisted\n> -# Can now join the server")
+            return await ctx.success(f"{member} whitelisted\n> -# Will not trigger **antinuke**")
+        return await ctx.success(f"{member} removed from whitelist")
 
     @antinuke.command(
         name="admin",
@@ -915,10 +917,10 @@ class Antinuke(AntinukeEvents, Package):
     async def antinuke_admin(self, ctx, *, member: MemberConvert):
         """Give a member permissions to edit antinuke settings."""
         if getattr(member, "bot", False):
-            return await ctx.warn("Bots cannot be **antinuke admins**")
+            return await ctx.warn("Bots cannot be **antinuke admins**\n> -# **reason:** only server members can hold this role")
         if member.id == ctx.guild.owner_id:
             return await ctx.warn(
-                "The **server owner** already has admin access by default"
+                "The **server owner** already has admin access by default\n> -# **reason:** no need to add them again"
             )
 
         admins = await self.db.fetchval(
@@ -939,10 +941,10 @@ class Antinuke(AntinukeEvents, Package):
 
         if member.id in (admins or []):
             return await ctx.success(
-                f"{member} is now an **antinuke admin** and can edit **antinuke settings**"
+                f"{member} is now an **antinuke admin**\n> -# Can edit antinuke settings"
             )
         return await ctx.success(
-            f"{member} is no longer an **antinuke admin** and can no longer edit **antinuke settings**"
+            f"{member} removed as **antinuke admin**\n> -# Can no longer edit antinuke settings"
         )
 
     @antinuke.command(name="admins")
@@ -955,7 +957,7 @@ class Antinuke(AntinukeEvents, Package):
             uid for uid in admin_ids if not (uid in seen or seen.add(uid))
         ]
         if not deduped:
-            return await ctx.warn("No **antinuke admins** configured")
+            return await ctx.warn("No antinuke admins are configured\n> -# **usage:** `,antinuke admin <member>` to add one")
         width = max(2, len(str(len(deduped))))
         embed = Embed(title="Antinuke admins", color=self.color).set_author(
             name=str(ctx.author),
@@ -992,7 +994,7 @@ class Antinuke(AntinukeEvents, Package):
             entries.append(f"{label} whitelisted ({uid}) [{tag}]")
 
         if not entries:
-            return await ctx.warn("No **antinuke modules** are currently active")
+            return await ctx.warn("No antinuke modules are currently active\n> -# **usage:** `,antinuke enable` to turn on protection")
         width = max(2, len(str(len(entries))))
         numbered = [
             f"{idx:0{width}d} {entry}" for idx, entry in enumerate(entries, start=1)
@@ -1070,7 +1072,7 @@ class Antinuke(AntinukeEvents, Package):
         normalized = normalize_dangerous_permission(permission)
         if not normalized:
             return await ctx.warn(
-                "You passed an **invalid permission name**, please visit the documentation [here](https://docs.vain.bot/help/commands/antinuke/antinuke-permissions)"
+                "That permission name is not recognized\n> -# Check the [documentation](https://docs.vain.bot/help/commands/antinuke/antinuke-permissions) for valid names"
             )
 
         penalty = str(ctx.flags.get("punishment") or "kick").lower()
@@ -1115,12 +1117,12 @@ class Antinuke(AntinukeEvents, Package):
         if toggled_off:
             direction = "granting" if option == "grant" else "removal"
             return await ctx.success(
-                f"Stopped watching for **{direction} of** `{entry.permission}`"
+                f"Stopped watching **{direction}**\n> -# \`{entry.permission}\`"
             )
 
         direction = "granting" if option == "grant" else "removal"
         return await ctx.success(
-            f"Now watching for **{direction} of** `{entry.permission}`. Offenders will be **{entry.punishment}**"
+            f"Now watching **{direction}**\n> -# \`{entry.permission}\` - penalty: **{entry.punishment}**"
         )
 
     @antinuke.command(
@@ -1206,8 +1208,7 @@ class Antinuke(AntinukeEvents, Package):
                 await self._commit_module(ctx.guild.id, module, {**payload, "status": True})
             await self._load_config(ctx.guild.id)
             return await ctx.success(
-                "Antinuke is now **fully enabled** with **recommended settings**.\n"
-                "All modules active with balanced punishments and thresholds."
+                "Antinuke **fully enabled**\n> -# Recommended settings applied"
             )
 
         modules = ["ban", "kick", "channel", "role", "webhook", "emoji", "vanity", "botadd"]
@@ -1223,7 +1224,7 @@ class Antinuke(AntinukeEvents, Package):
                 }
                 await self._commit_module(ctx.guild.id, module, payload)
         await self._load_config(ctx.guild.id)
-        return await ctx.success("All **antinuke modules** are now **enabled**.")
+        return await ctx.success("All antinuke modules **enabled**")
 
     @antinuke.command(
         name="disable",
@@ -1244,8 +1245,7 @@ class Antinuke(AntinukeEvents, Package):
             await self._commit_module(ctx.guild.id, module, payload)
         await self._load_config(ctx.guild.id)
         return await ctx.success(
-            "All **antinuke modules** are now **disabled** - configuration kept. "
-            f"Use `{ctx.clean_prefix}antinuke reset` to delete everything."
+            "All antinuke modules **disabled**\n> -# Config kept. Use `{ctx.clean_prefix}antinuke reset` to delete"
         )
 
     @antinuke.command(
@@ -1262,7 +1262,7 @@ class Antinuke(AntinukeEvents, Package):
             "This action **cannot be undone**."
         )
         if not ok:
-            return await ctx.warn("Antinuke reset **cancelled**")
+            return await ctx.warn("Reset was **cancelled**\n> -# **antinuke:** no changes were made")
 
         await self.bot.db.execute(
             "DELETE FROM antinuke WHERE guild_id = $1",
@@ -1277,7 +1277,7 @@ class Antinuke(AntinukeEvents, Package):
             if key[0] == ctx.guild.id:
                 self._stale_cmd_actions.pop(key, None)
         return await ctx.success(
-            "Antinuke configuration has been **reset**. This action cannot be undone."
+            "Antinuke configuration **reset**\n> -# This action cannot be undone"
         )
 
 

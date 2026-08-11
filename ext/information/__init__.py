@@ -227,9 +227,9 @@ class InformationCommands(Package):
         try:
             inv = await self.bot.fetch_invite(code, with_counts=True, with_expiration=True)
         except discord.NotFound:
-            return await ctx.fail("Could not find that invite.")
+            return await ctx.fail("That invite could not be found\n> -# **code:** invalid or expired")
         except discord.HTTPException:
-            return await ctx.fail("Could not fetch that invite.")
+            return await ctx.fail("Could not fetch that invite\n> -# **reason:** Discord API error")
 
         guild = inv.guild
         channel = inv.channel
@@ -390,16 +390,16 @@ class InformationCommands(Package):
         from config import api
 
         if not api.openweathermap.strip():
-            return await ctx.warn("OpenWeatherMap API key is not configured.")
+            return await ctx.warn("Weather API key is not configured\n> -# **service:** OpenWeatherMap — set `api.openweathermap` in config")
         try:
             async with aiohttp.ClientSession() as session:
                 data = await fetch_weather(session, location)
             embed = build_weather_embed(data, ctx.author)
             await ctx.send(embed=embed)
         except ValueError as exc:
-            await ctx.warn(str(exc))
+            await ctx.warn(f"Could not find weather for that location\n> -# **reason:** {exc}")
         except aiohttp.ClientError:
-            await ctx.fail("Could not reach the weather service.")
+            await ctx.fail("Weather service is unavailable\n> -# **service:** OpenWeatherMap")
 
     @hybrid(
         name="cashapp",
@@ -414,9 +414,9 @@ class InformationCommands(Package):
                 profile = await fetch_cashapp_profile(session, username)
             await ctx.send(embed=build_cashapp_embed(profile, ctx.author))
         except ValueError as exc:
-            await ctx.warn(str(exc))
+            await ctx.warn(f"Could not find that CashApp profile\n> -# **reason:** {exc}")
         except aiohttp.ClientError:
-            await ctx.fail("Could not reach Cash App.")
+            await ctx.fail("CashApp service is unavailable\n> -# **service:** CashApp")
 
     @hybrid(
         name="github",
@@ -433,9 +433,9 @@ class InformationCommands(Package):
                 profile = await fetch_github_profile(session, username)
             await ctx.send(embed=build_github_embed(profile, ctx.author))
         except ValueError as exc:
-            await ctx.warn(str(exc))
+            await ctx.warn(f"Could not find that GitHub profile\n> -# **reason:** {exc}")
         except aiohttp.ClientError:
-            await ctx.fail("Could not reach GitHub.")
+            await ctx.fail("GitHub service is unavailable\n> -# **service:** GitHub")
 
     @github.error
     async def github_error(self, ctx: Context, error: commands.CommandError) -> None:
@@ -457,9 +457,9 @@ class InformationCommands(Package):
                 entry = await fetch_dictionary(session, word)
             await ctx.send(embed=build_define_embed(entry, ctx.author))
         except ValueError as exc:
-            await ctx.warn(str(exc))
+            await ctx.warn(f"Could not find a definition for that word\n> -# **reason:** {exc}")
         except aiohttp.ClientError:
-            await ctx.fail("Could not reach the dictionary service.")
+            await ctx.fail("Dictionary service is unavailable\n> -# **service:** dictionary")
 
     @hybrid(
         name="urbandictionary",
@@ -474,9 +474,9 @@ class InformationCommands(Package):
             async with aiohttp.ClientSession() as session:
                 results = await fetch_urban_dictionary(session, word)
         except ValueError as exc:
-            return await ctx.warn(str(exc))
+            return await ctx.warn(f"Could not find that on Urban Dictionary\n> -# **reason:** {exc}")
         except aiohttp.ClientError:
-            return await ctx.fail("Could not reach Urban Dictionary.")
+            return await ctx.fail("Urban Dictionary service is unavailable\n> -# **service:** Urban Dictionary")
 
         total = min(len(results), 10)
         pages = [

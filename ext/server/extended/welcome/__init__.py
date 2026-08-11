@@ -46,10 +46,10 @@ class WelcomeCommands(Package):
         """add a welcome channel"""
         channel = channel or ctx.channel
         if not isinstance(channel, TextChannel):
-            return await ctx.warn("You can only set welcome messages in text channels")
+            return await ctx.warn("Text channels only\n> -# **welcome messages can only be sent in text channels**")
         timer = ctx.flags.get("self_destruct")
         if timer is not None and timer < 6:
-            return await ctx.warn("self-destruct timer must be at least `6` seconds")
+            return await ctx.warn("Invalid timer\n> -# **self-destruct timer must be at least `6` seconds**")
         try:
             await self.db.execute(
                 """INSERT INTO welcome_messages (guild_id, channel_id, message, self_destruct) VALUES ($1, $2, $3, $4);""",
@@ -60,11 +60,11 @@ class WelcomeCommands(Package):
             )
         except UniqueViolationError:
             return await ctx.fail(
-                f"there's already a welcome message in {channel.mention} - remove it first or use `{ctx.clean_prefix}welcome edit`"
+                f"Welcome message exists\n> -# **remove the existing one first, or use `{ctx.clean_prefix}welcome edit`**"
             )
         extra = f"\n> -# **the message will delete itself after {humanize_duration(timer)}**" if timer else ""
         return await ctx.success(
-            f"welcome message set for {channel.mention}{extra}"
+            f"Welcome message set for {channel.mention}{extra}"
         )
 
     @welcome.command(
@@ -83,7 +83,7 @@ class WelcomeCommands(Package):
         channel = channel or ctx.channel
         timer = ctx.flags.get("self_destruct")
         if timer is not None and timer < 6:
-            return await ctx.warn("self-destruct timer must be at least `6` seconds")
+            return await ctx.warn("Invalid timer\n> -# **self-destruct timer must be at least `6` seconds**")
         exists = await self.db.fetchval(
             """SELECT 1 FROM welcome_messages WHERE guild_id = $1 AND channel_id = $2""",
             ctx.guild.id,
@@ -91,7 +91,7 @@ class WelcomeCommands(Package):
         )
         if not exists:
             return await ctx.fail(
-                f"no welcome message for {channel.mention} - use `{ctx.clean_prefix}welcome add` first"
+                f"No welcome message\n> -# **use `{ctx.clean_prefix}welcome add` to create one first**"
             )
         await self.db.execute(
             """UPDATE welcome_messages SET message = $1, self_destruct = $2
@@ -102,7 +102,7 @@ class WelcomeCommands(Package):
             channel.id,
         )
         extra = f"\n> -# **the message will delete itself after {humanize_duration(timer)}**" if timer else ""
-        return await ctx.success(f"updated welcome message for {channel.mention}{extra}")
+        return await ctx.success(f"Updated welcome message for {channel.mention}{extra}")
 
     @welcome.command(
         name="remove",
@@ -121,8 +121,8 @@ class WelcomeCommands(Package):
             channel.id,
         )
         if deleted:
-            return await ctx.success(f"removed welcome message for {channel.mention}")
-        return await ctx.fail(f"no welcome message set for {channel.mention}")
+            return await ctx.success(f"Removed welcome message for {channel.mention}")
+        return await ctx.fail(f"No welcome message\n> -# **{channel.mention} doesn't have a welcome message set**")
 
     @welcome.command(
         name="view",
@@ -141,7 +141,7 @@ class WelcomeCommands(Package):
             channel.id,
         )
         if not msg:
-            return await ctx.fail(f"no welcome message for {channel.mention}")
+            return await ctx.fail(f"No welcome message\n> -# **{channel.mention} doesn't have a welcome message set**")
         return await self.bot.send_embed(ctx, msg, member=ctx.author)
 
     @welcome.command(

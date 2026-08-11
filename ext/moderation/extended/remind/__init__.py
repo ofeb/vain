@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 import contextlib
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 import discord
 from discord.ext import tasks
-from discord.ext.commands import group
+from discord.ext.commands import group, has_permissions, command
 
 from core.discord.package import Package
 from core.tools.moderation_args import parse_duration_seconds, is_duration_token
-from core.discord.views.embed import panel_embed, reply_embed
 
 
 def label_line(label: str, value: str) -> str:
@@ -75,18 +74,21 @@ class Remind(Package):
 
         if not seconds or seconds < 30:
             return await ctx.warn(
-                "Provide a duration of at least **30 seconds** (e.g. `30m`, `2h`, `1d`)"
+                "Please provide a **valid duration**\n"
+                f"> -# **minimum:** 30 seconds (e.g. `30m`, `2h`, `1d`)"
             )
         if seconds > 30 * 86400:
-            return await ctx.warn("Reminders cannot exceed **30 days**")
+            return await ctx.warn(
+                "Reminders cannot exceed **30 days**\n"
+                f"> -# **maximum:** 30 days"
+            )
 
         message = " ".join(message_tokens).strip()
         if not message:
-            return await ctx.warn("Provide a reminder message")
-
-        when = datetime.now(timezone.utc).replace(tzinfo=None) + discord.utils.utcnow().__class__.resolution  # type: ignore
-        
-        from datetime import timedelta
+            return await ctx.fail(
+                "Please provide a **reminder message**\n"
+                f"> -# **usage:** `,remind <duration> <message>`"
+            )
 
         when = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=seconds)
 
@@ -102,7 +104,9 @@ class Remind(Package):
         rid = row["id"] if row else "?"
         label = self._format_duration(seconds)
         return await ctx.success(
-            f"Reminder **#{rid}** set for **{label}**\n> -# **{message[:200]}**"
+            f"Reminder **#{rid}** set\n"
+            f"> -# **duration:** {label}\n"
+            f"> -# **message:** {message[:200]}"
         )
 
     @remind.command(
@@ -120,22 +124,21 @@ class Remind(Package):
             ctx.author.id,
         )
         if not rows:
-            return await ctx.warn("You have **no active reminders**")
+            return await ctx.warn(
+                "You have no active reminders\n"
+                f"> -# **create one with:** `,remind <duration> <message>`"
+            )
 
         lines = []
         for row in rows[:25]:
             when = row["time"]
             stamp = discord.utils.format_dt(when, style="R") if when else "unknown"
             msg = (row["message"] or "")[:80]
-            lines.append(label_line(f"#{row['id']}", f"{msg} - {stamp}"))
+            lines.append(f"> **#{row['id']}**: {msg} — {stamp}")
 
-        embed = panel_embed(
-            title=f"Your Reminders ({len(rows)})",
-            color=None,
-            lines=lines,
-            timestamp=False,
+        await ctx.success(
+            f"Your reminders ({len(rows)})\n" + "\n".join(lines)
         )
-        await ctx.send(embed=embed)
 
     @remind.command(
         name="remove",
@@ -151,8 +154,14 @@ class Remind(Package):
             ctx.author.id,
         )
         if result == "DELETE 0":
-            return await ctx.warn(f"Reminder **#{id}** not found")
-        return await ctx.success(f"Removed reminder **#{id}**")
+            return await ctx.warn(
+                f"Reminder **#{id}** not found\n"
+                f"> -# **check your reminders with:** `,remind list`"
+            )
+        return await ctx.success(
+            f"Removed reminder\n"
+            f"> -# **id:** #{id}"
+        )
 
     @tasks.loop(seconds=20.0)
     async def _remind_loop(self) -> None:
@@ -180,12 +189,11 @@ class Remind(Package):
                         user = await self.bot.fetch_user(row["user_id"])
                 if user is None:
                     continue
-                embed = reply_embed(
-                    color=None,
-                    message=f"**Reminder**\n{row['message']}",
-                )
                 with contextlib.suppress(discord.Forbidden, discord.HTTPException):
-                    await user.send(embed=embed)
+                    await user.send(
+                        f"It's time!\n"
+                        f"> {row['message']}"
+                    )
             except Exception:
                 continue
 

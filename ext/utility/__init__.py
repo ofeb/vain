@@ -350,7 +350,7 @@ class Snipe(commands.Cog):
             if ctx.message.reference:
                 message = await ctx.channel.fetch_message(ctx.message.reference.message_id)
             else:
-                await ctx.warn("You must reply or provide a message id")
+                await ctx.warn("Please reply to a message or provide a **message ID**\n> -# **usage:** reply to a message or use `,reactionhistory <message_id>`")
                 return
 
         data = await self.bot.db.fetch(
@@ -360,7 +360,7 @@ class Snipe(commands.Cog):
 
         if not data:
             await ctx.fail(
-                f"No reactions logged for the [message]({message.jump_url}) provided"
+                f"No reactions logged for that [message]({message.jump_url})\n> -# **reason:** no reaction history found"
             )
             return
 
@@ -400,7 +400,7 @@ class Snipe(commands.Cog):
             await self.bot.snipes.delete_entry(ctx.channel, "snipe", index)
             await ctx.success(f"Deleted snipe at index `{index}`")
         except SnipeError:
-            await ctx.fail(f"No snipe found at index `{index}`")
+            await ctx.fail(f"No snipe found at that index\n> -# **index:** `{index}` — try a smaller number")
 
 
 async def setup(bot: commands.Bot):

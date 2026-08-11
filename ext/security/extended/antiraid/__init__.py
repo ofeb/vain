@@ -299,7 +299,7 @@ class Antiraid(AntiraidEvents, Package):
 
         if unlocked:
             return await ctx.success(
-                f"Raid state **ended** and **{unlocked}** channel{'s' if unlocked != 1 else ''} unlocked"
+                f"Raid state **ended**\n> -# **{unlocked}** channel{'s' if unlocked != 1 else ''} unlocked"
             )
         return await ctx.success("Raid state **ended**")
 
@@ -317,8 +317,8 @@ class Antiraid(AntiraidEvents, Package):
 
         added = await self.db.toggle_antiraid_whitelist(ctx.guild.id, member.id)
         if added:
-            return await ctx.success(f"{member} is now temporarily whitelisted and can join")
-        return await ctx.success(f"{member} is no longer whitelisted")
+            return await ctx.success(f"{member} whitelisted\n> -# Can now join the server")
+        return await ctx.success(f"{member} removed from whitelist")
 
     @antiraid_whitelist.command(name="view", aliases=["list"])
     @has_permissions(manage_guild=True)
@@ -326,7 +326,7 @@ class Antiraid(AntiraidEvents, Package):
         """View all current one-time antiraid whitelist entries."""
         rows = await self.db.fetch_antiraid_whitelist(ctx.guild.id)
         if not rows:
-            return await ctx.warn("No **antiraid whitelist** entries exist")
+            return await ctx.warn("No antiraid whitelist entries exist\n> -# **usage:** `,antiraid whitelist <member>` to add one")
 
         width = max(2, len(str(len(rows))))
         lines = [
@@ -352,7 +352,7 @@ class Antiraid(AntiraidEvents, Package):
         """Protect the server against mass joins."""
         if not status:
             await self._store_module(ctx.guild.id, "massjoin", enabled=False)
-            return await ctx.success("**massjoin** antiraid turned off")
+            return await ctx.success("Massjoin **disabled**")
 
         current = (await self._cached_config(ctx.guild.id)).massjoin
         threshold = ctx.flags.get("threshold")
@@ -381,11 +381,7 @@ class Antiraid(AntiraidEvents, Package):
         )
         verb = "Updated" if was_enabled else "Enabled"
         return await ctx.success(
-            f"{verb} **massjoin** antiraid. "
-            f"Punishment set to {action}, "
-            f"threshold set to {threshold}, "
-            f"lock channels set to {lock_channels}, "
-            f"punish new members set to {punish_new}"
+            f"{verb} **massjoin**\n> -# action: **{action}**, threshold: **{threshold}**, lock: **{lock_channels}**, punish new: **{punish_new}**"
         )
 
     @antiraid.command(
@@ -400,7 +396,7 @@ class Antiraid(AntiraidEvents, Package):
         """Punish accounts that join without a profile picture."""
         if not status:
             await self._store_module(ctx.guild.id, "avatar", enabled=False)
-            return await ctx.success("**avatar** antiraid turned off")
+            return await ctx.success("Avatar **disabled**")
 
         current = (await self._cached_config(ctx.guild.id)).avatar
         action = self._validate_action(
@@ -416,7 +412,7 @@ class Antiraid(AntiraidEvents, Package):
         )
         verb = "Updated" if was_enabled else "Enabled"
         return await ctx.success(
-            f"{verb} **avatar** antiraid. Punishment set to {action}"
+            f"{verb} **avatar**\n> -# action: **{action}**"
         )
 
     @antiraid.command(
@@ -431,7 +427,7 @@ class Antiraid(AntiraidEvents, Package):
         """Punish newly registered accounts that join the server."""
         if not status:
             await self._store_module(ctx.guild.id, "newaccounts", enabled=False)
-            return await ctx.success("**new accounts** antiraid turned off")
+            return await ctx.success("New accounts **disabled**")
 
         current = (await self._cached_config(ctx.guild.id)).newaccounts
         threshold = ctx.flags.get("threshold")
@@ -455,8 +451,7 @@ class Antiraid(AntiraidEvents, Package):
         )
         verb = "Updated" if was_enabled else "Enabled"
         return await ctx.success(
-            f"{verb} **newaccounts** antiraid. "
-            f"Punishment set to {action}, threshold set to {threshold}"
+            f"{verb} **newaccounts**\n> -# action: **{action}**, threshold: **{threshold}** days"
         )
     @antiraid.command(
         name="enable",
@@ -478,8 +473,7 @@ class Antiraid(AntiraidEvents, Package):
             await self._store_module(ctx.guild.id, "newaccounts",
                 enabled=True, threshold=7, action="ban")
             await ctx.success(
-                "**Antiraid** is now fully enabled with **recommended settings**.\n"
-                "Massjoin: ban @ 5/s, lock, punish | Avatar: kick | New accounts: ban < 7 days"
+                "Antiraid **fully enabled**\n> -# Recommended settings applied"
             )
             return
 
@@ -499,7 +493,7 @@ class Antiraid(AntiraidEvents, Package):
                 enabled=True,
                 threshold=current.newaccounts.threshold or 7,
                 action=current.newaccounts.action or "ban")
-        await ctx.success("All **antiraid modules** are now **enabled**.")
+        await ctx.success("All antiraid modules **enabled**")
 
     @antiraid.command(
         name="disable",
@@ -512,8 +506,7 @@ class Antiraid(AntiraidEvents, Package):
         await self._store_module(ctx.guild.id, "avatar", enabled=False)
         await self._store_module(ctx.guild.id, "newaccounts", enabled=False)
         await ctx.success(
-            "All **antiraid modules** are now **disabled** - configuration kept. "
-            f"Use `{ctx.clean_prefix}antiraid reset` to delete everything."
+            "All antiraid modules **disabled**\n> -# Config kept. Use `{ctx.clean_prefix}antiraid reset` to delete"
         )
 
     @antiraid.command(
@@ -531,7 +524,7 @@ class Antiraid(AntiraidEvents, Package):
             "This action **cannot be undone**."
         )
         if not ok:
-            return await ctx.warn("Antiraid reset **cancelled**")
+            return await ctx.warn("Reset was **cancelled**\n> -# **antiraid:** no changes were made")
 
         unlocked = await self._enable_chat(ctx.guild)
         await self.bot.db.execute(
@@ -554,10 +547,9 @@ class Antiraid(AntiraidEvents, Package):
         self.join_log.pop(ctx.guild.id, None)
         suffix = ""
         if unlocked:
-            suffix = f" and **{unlocked}** channel{'s' if unlocked != 1 else ''} unlocked"
+            suffix = f"\n> -# **{unlocked}** channel{'s' if unlocked != 1 else ''} unlocked"
         await ctx.success(
-            f"Antiraid configuration has been **reset**{suffix}. "
-            "This action cannot be undone."
+            f"Antiraid configuration **reset**{suffix}\n> -# This action cannot be undone"
         )
 async def setup(bot: Vain) -> None:
     await bot.add_cog(Antiraid(bot))

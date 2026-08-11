@@ -54,7 +54,7 @@ class Autorole(commands.Cog):
         settings = await AutoroleSettings.fetch(self.bot, ctx.guild)
         role_ids = settings.rows
         if not role_ids:
-            await ctx.warn("There are no auto roles setup")
+            await ctx.warn("No auto roles\n> -# **use `autorole add` to configure one**")
             return
         
         roles = [
@@ -80,7 +80,7 @@ class Autorole(commands.Cog):
             ctx.guild.id,
             role.id,
         )
-        await ctx.success(f"Successfully removed the auto role of {role.mention}")
+        await ctx.success(f"Auto role removed\n> -# **{role.mention}**")
 
     @autorole.command(
         name="reset",
@@ -102,11 +102,11 @@ class Autorole(commands.Cog):
             ),
         )
         if not await view.prompt(embed=emb):
-            return await ctx.warn("Reset cancelled\n> -# **autorole clear was cancelled**")
+            return await ctx.warn("Cancelled\n> -# **no autoroles were removed**")
         settings = await AutoroleSettings.fetch(self.bot, ctx.guild)
         await settings.delete_all()
         await ctx.success(
-            "Successfully cleared auto roles. This action cannot be undone."
+            "Auto roles cleared\n> -# **this action cannot be undone**"
         )
 
     @autorole.command(
@@ -123,7 +123,7 @@ class Autorole(commands.Cog):
             ctx.guild.id,
             role.id,
         )
-        await ctx.success(f"Successfully added {role.mention} as an auto role")
+        await ctx.success(f"Auto role added\n> -# **{role.mention}**")
 
     @group(
         name="buttonrole",
@@ -159,7 +159,7 @@ class Autorole(commands.Cog):
         )
         
         await message.edit(view=None)
-        await ctx.success(f"Successfully removed that button from the button roles on [this message]({message.jump_url})")
+        await ctx.success(f"Button removed\n> -# **[message]({message.jump_url})**")
 
     @buttonrole.command(
         name="reset",
@@ -181,7 +181,7 @@ class Autorole(commands.Cog):
             ),
         )
         if not await view.prompt(embed=emb):
-            return await ctx.warn("Reset cancelled\n> -# **button role clear was cancelled**")
+            return await ctx.warn("Cancelled\n> -# **no button roles were removed**")
         for row in await self.bot.db.fetch(
             "SELECT message_id, channel_id FROM button_roles WHERE guild_id = $1",
             ctx.guild.id,
@@ -200,7 +200,7 @@ class Autorole(commands.Cog):
             ctx.guild.id,
         )
         await ctx.success(
-            "Successfully cleared all button roles. This action cannot be undone."
+            "Button roles cleared\n> -# **this action cannot be undone**"
         )
 
     @buttonrole.command(
@@ -217,7 +217,7 @@ class Autorole(commands.Cog):
             "DELETE FROM button_roles WHERE message_id = $1",
             message.id,
         )
-        await ctx.success(f"Successfully removed all button roles from [this message]({message.jump_url})")
+        await ctx.success(f"Button roles removed\n> -# **[message]({message.jump_url})**")
 
     @buttonrole.command(
         name="list",
@@ -293,10 +293,10 @@ class Autorole(commands.Cog):
     ) -> None:
         """Add a button role to a message."""
         if message.author.id != self.bot.user.id:
-            await ctx.warn("That is not a message that I created")
+            await ctx.warn("Invalid message\n> -# **the message must be sent by this bot**")
             return
         if not emoji and not label:
-            await ctx.warn("Either an emoji or label must be provided")
+            await ctx.warn("Missing input\n> -# **provide an emoji or label for the button**")
             return
         
         indexes = await self.bot.db.fetch(
@@ -309,7 +309,7 @@ class Autorole(commands.Cog):
             index = 1
         
         if len(label) > 100:
-            await ctx.warn("Label must be 100 characters or less")
+            await ctx.warn("Label too long\n> -# **button labels must be 100 characters or fewer**")
             return
         
         await self.bot.db.execute(
@@ -323,7 +323,7 @@ class Autorole(commands.Cog):
             label,
             index,
         )
-        await ctx.success("Successfully added button role")
+        await ctx.success("Button role added")
 
     @group(
         name="reactionrole",
@@ -350,7 +350,7 @@ class Autorole(commands.Cog):
             ctx.guild.id,
             message.id,
         )
-        await ctx.success(f"Successfully cleared all reaction roles from [this message]({message.jump_url})")
+        await ctx.success(f"Reaction roles cleared\n> -# **[message]({message.jump_url})**")
 
     @reactionrole.command(
         name="reset",
@@ -372,13 +372,13 @@ class Autorole(commands.Cog):
             ),
         )
         if not await view.prompt(embed=emb):
-            return await ctx.warn("Reset cancelled\n> -# **reaction role clear was cancelled**")
+            return await ctx.warn("Cancelled\n> -# **no reaction roles were removed**")
         await self.bot.db.execute(
             "DELETE FROM reaction_role WHERE guild_id = $1",
             ctx.guild.id,
         )
         await ctx.success(
-            "Successfully cleared all reaction roles. This action cannot be undone."
+            "Reaction roles cleared\n> -# **this action cannot be undone**"
         )
 
     @reactionrole.command(
@@ -396,7 +396,7 @@ class Autorole(commands.Cog):
             message.id,
             str(emoji),
         )
-        await ctx.success("Successfully removed that reaction role")
+        await ctx.success("Reaction role removed")
 
     @reactionrole.command(
         name="list",
@@ -419,7 +419,7 @@ class Autorole(commands.Cog):
             ctx.guild.id,
         )
         if not rows:
-            await ctx.warn("No Reaction Roles have been setup yet")
+            await ctx.warn("No reaction roles\n> -# **use `reactionrole add` to configure one**")
             return
         
         rows = [
@@ -447,7 +447,7 @@ class Autorole(commands.Cog):
         try:
             await message.add_reaction(emoji)
         except Exception:
-            await ctx.warn(f"Emoji {emoji} is not a valid emoji")
+            await ctx.warn(f"Invalid emoji\n> -# **`{emoji}` is not a valid emoji**")
             return
         
         await self.bot.db.execute(
@@ -458,7 +458,7 @@ class Autorole(commands.Cog):
             str(emoji),
             role.id,
         )
-        await ctx.success(f"Successfully added that reaction role to [this message]({message.jump_url})")
+        await ctx.success(f"Reaction role added\n> -# **[message]({message.jump_url})**")
 
 async def setup(bot: commands.Bot):
     """Load the Autorole cog."""

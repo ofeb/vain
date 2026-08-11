@@ -1,41 +1,226 @@
 from __future__ import annotations
 
-from discord.ext.commands import group
 from datetime import datetime
+from typing import Optional
+
+import discord
+from discord import Member
+from discord.ext.commands import group, has_permissions, command
 
 from core.discord.package import Package
+
+
 class Birthday(Package):
     """birthday management"""
 
     @group(
         name="birthday",
+        aliases=["bday"],
         description="View your birthday or somebody elses",
         invoke_without_command=True,
     )
-    async def birthday(self, ctx, member=None):
+    async def birthday(self, ctx, member: Optional[Member] = None):
         """view birthday"""
         target = member or ctx.author
         birthday_data = await self.bot.db.fetchval(
             "SELECT birthday_date FROM birthday WHERE user_id = $1 AND guild_id = $2",
             target.id, ctx.guild.id
         )
-        
+
         if not birthday_data:
-            return await ctx.send(f"{target.mention} has not set their birthday")
-        
-        await ctx.send(f"{target.mention}'s birthday is {birthday_data}")
+            return await ctx.warn(
+                f"{target.mention} has not set their birthday"
+            )
+
+        await ctx.success(
+            f"{target.mention}'s birthday\n"
+            f"> -# **date:** {birthday_data}"
+        )
+
+    @birthday.command(
+        name="set",
+        description="Set your birthday",
+    )
+    async def birthday_set(self, ctx, *, date: str):
+        """set birthday"""
+        try:
+            parsed = datetime.strptime(date, "%Y-%m-%d")
+        except ValueError:
+            return await ctx.fail(
+                "Please provide a **valid date**\n"
+                f"> -# **format:** `YYYY-MM-DD` (e.g. `1995-07-21`)"
+            )
+
+        await self.bot.db.execute(
+            "INSERT INTO birthday (user_id, guild_id, birthday_date) VALUES($1, $2, $3) "
+            "ON CONFLICT(user_id, guild_id) DO UPDATE SET birthday_date = excluded.birthday_date",
+            ctx.author.id, ctx.guild.id, date
+        )
+        await ctx.success(
+            f"Set your birthday\n"
+            f"> -# **date:** {date}"
+        )
+
+    @birthday.command(
+        name="remove",
+        aliases=["delete", "del", "reset", "clear"],
+        description="Remove your birthday",
+    )
+    async def birthday_remove(self, ctx):
+        """remove birthday"""
+        result = await self.bot.db.execute(
+            "DELETE FROM birthday WHERE user_id = $1 AND guild_id = $2",
+            ctx.author.id, ctx.guild.id
+        )
+        if result == "DELETE 0":
+            return await ctx.warn(
+                "You have no birthday set\n"
+                f"> -# **set one with:** `,birthday set`"
+            )
+        await ctx.success("Removed your birthday")
+
+    @birthday.command(
+        name="compare",
+        description="Compare your birthday with another member",
+    )
+    async def birthday_compare(self, ctx, member: Member):
+        """compare birthdays"""
+        if member.id == ctx.author.id:
+            return await ctx.warn(
+                "You cannot compare with yourself\n"
+                f"> -# **usage:** `,birthday compare @user`"
+            )
+
+        my_date = await self.bot.db.fetchval(
+            "SELECT birthday_date FROM birthday WHERE user_id = $1 AND guild_id = $2",
+            ctx.author.id, ctx.guild.id
+        )
+        their_date = await self.bot.db.fetchval(
+            "SELECT birthday_date FROM birthday WHERE user_id = $1 AND guild_id = $2",
+            member.id, ctx.guild.id
+        )
+
+        if not my_date:
+            return await ctx.fail(
+                "You haven't set your birthday yet\n"
+                f"> -# **set one with:** `,birthday set`"
+            )
+        if not their_date:
+            return await ctx.fail(
+                f"{member.mention} hasn't set their birthday\n"
+                f"> -# **ask them to use:** `,birthday set`"
+            )
+
+        today = datetime.now()
+        my_bday = datetime.strptime(my_date, "%Y-%m-%d").replace(year=today.year)
+        their_bday = datetime.strptime(their_date, "%Y-%m-%d").replace(year=today.year)
+
+        my_days_until = (my_bday - today).days
+        their_days_until = (their_bday - today).days
+
+        if my_days_until < 0:
+            my_bday = my_bday.replace(year=today.year + 1)
+            my_days_until = (my_bday - today).days
+        if their_days_until < 0:
+            their_bday = their_bday.replace(year=today.year + 1)
+            their_days_until = (their_bday - today).days
+
+        my_str = f"in **{my_days_until}** days" if my_days_until > 0 else "**today**"
+        their_str = f"in **{their_days_until}** days" if their_days_until > 0 else "**today**"
+
+        await ctx.success(
+            f"Comparing {ctx.author.display_name} ↔ {member.display_name}\n"
+            f"> -# **you:** {my_date} ({my_str})\n"
+            f"> -# **them:** {their_date} ({their_str})"
+        )
 
     @birthday.command(
         name="unlock",
-        description="No description given",
+        description="Unlock birthday feature for this server",
     )
+    @has_permissions(manage_guild=True)
     async def birthday_unlock(self, ctx):
         """unlock birthday feature"""
         await self.bot.db.execute(
-            "INSERT INTO birthday_notifications (guild_id, channel_id, message, role_id) VALUES($1, $2, $3, $4) ON CONFLICT(guild_id) DO UPDATE SET channel_id = excluded.channel_id",
+            "INSERT INTO birthday_notifications (guild_id, channel_id, message, role_id) "
+            "VALUES($1, $2, $3, $4) ON CONFLICT(guild_id) DO UPDATE SET channel_id = excluded.channel_id",
             ctx.guild.id, ctx.channel.id, "Happy birthday {user}!", None
         )
         await ctx.success("Birthday feature unlocked")
+
+    @birthday.command(
+        name="lock",
+        description="Lock birthday feature for this server",
+    )
+    @has_permissions(manage_guild=True)
+    async def birthday_lock(self, ctx):
+        """lock birthday feature"""
+        await self.bot.db.execute(
+            "DELETE FROM birthday_notifications WHERE guild_id = $1",
+            ctx.guild.id
+        )
+        await ctx.success("Birthday feature locked")
+
+    @birthday.command(
+        name="channel",
+        description="Set the birthday announcement channel",
+    )
+    @has_permissions(manage_guild=True)
+    async def birthday_channel(self, ctx, channel: discord.TextChannel):
+        """set birthday channel"""
+        await self.bot.db.execute(
+            "INSERT INTO birthday_notifications (guild_id, channel_id, message, role_id) "
+            "VALUES($1, $2, $3, $4) ON CONFLICT(guild_id) DO UPDATE SET channel_id = excluded.channel_id",
+            ctx.guild.id, channel.id, "Happy birthday {user}!", None
+        )
+        await ctx.success(
+            f"Set announcement channel\n"
+            f"> -# **channel:** {channel.mention}"
+        )
+
+    @birthday.command(
+        name="role",
+        description="Set the birthday role",
+    )
+    @has_permissions(manage_guild=True)
+    async def birthday_role(self, ctx, role: discord.Role):
+        """set birthday role"""
+        await self.bot.db.execute(
+            "INSERT INTO birthday_notifications (guild_id, channel_id, message, role_id) "
+            "VALUES($1, $2, $3, $4) ON CONFLICT(guild_id) DO UPDATE SET role_id = excluded.role_id",
+            ctx.guild.id, ctx.channel.id, "Happy birthday {user}!", role.id
+        )
+        await ctx.success(
+            f"Set birthday role\n"
+            f"> -# **role:** {role.mention}"
+        )
+
+    @birthday.command(
+        name="config",
+        description="View birthday configuration",
+    )
+    async def birthday_config(self, ctx):
+        """view birthday config"""
+        config = await self.bot.db.fetchrow(
+            "SELECT channel_id, message, role_id FROM birthday_notifications WHERE guild_id = $1",
+            ctx.guild.id
+        )
+
+        if not config:
+            return await ctx.warn(
+                "Birthday feature not configured\n"
+                f"> -# **unlock with:** `,birthday unlock`"
+            )
+
+        channel = ctx.guild.get_channel(config['channel_id'])
+        role = ctx.guild.get_role(config['role_id']) if config['role_id'] else None
+
+        await ctx.success(
+            f"Server configuration\n"
+            f"> -# **channel:** {channel.mention if channel else 'not set'}\n"
+            f"> -# **role:** {role.mention if role else 'not set'}\n"
+            f"> -# **message:** {config['message']}"
+        )
 
     @birthday.command(
         name="list",
@@ -47,117 +232,19 @@ class Birthday(Package):
             "SELECT user_id, birthday_date FROM birthday WHERE guild_id = $1 ORDER BY birthday_date",
             ctx.guild.id
         )
-        
+
         if not birthdays:
-            return await ctx.send("No birthdays set in this server")
-        
-        rows = []
+            return await ctx.warn(
+                "No birthdays set in this server\n"
+                f"> -# **add yours with:** `,birthday set`"
+            )
+
+        lines = []
         for birthday in birthdays:
             member = ctx.guild.get_member(birthday['user_id'])
             if member:
-                rows.append(f"{member.mention}: {birthday['birthday_date']}")
-        
-        await ctx.send("\n".join(rows))
+                lines.append(f"> {member.mention} — {birthday['birthday_date']}")
 
-    @birthday.command(
-        name="channel",
-        description="No description given",
-    )
-    async def birthday_channel(self, ctx, channel):
-        """set birthday channel"""
-        await self.bot.db.execute(
-            "INSERT INTO birthday_notifications (guild_id, channel_id, message, role_id) VALUES($1, $2, $3, $4) ON CONFLICT(guild_id) DO UPDATE SET channel_id = excluded.channel_id",
-            ctx.guild.id, channel.id, "Happy birthday {user}!", None
+        await ctx.success(
+            f"All birthdays\n" + "\n".join(lines)
         )
-        await ctx.success(f"Birthday channel set to {channel.mention}")
-
-    @birthday.command(
-        name="role",
-        description="No description given",
-    )
-    async def birthday_role(self, ctx, role):
-        """set birthday role"""
-        await self.bot.db.execute(
-            "INSERT INTO birthday_notifications (guild_id, channel_id, message, role_id) VALUES($1, $2, $3, $4) ON CONFLICT(guild_id) DO UPDATE SET role_id = excluded.role_id",
-            ctx.guild.id, ctx.channel.id, "Happy birthday {user}!", role.id
-        )
-        await ctx.success(f"Birthday role set to {role.mention}")
-
-    @birthday.command(
-        name="lock",
-        description="No description given",
-    )
-    async def birthday_lock(self, ctx):
-        """lock birthday feature"""
-        await self.bot.db.execute(
-            "DELETE FROM birthday_notifications WHERE guild_id = $1",
-            ctx.guild.id
-        )
-        await ctx.success("Birthday feature locked")
-
-    @birthday.command(
-        name="config",
-        description="No description given",
-    )
-    async def birthday_config(self, ctx):
-        """configure birthday feature"""
-        config = await self.bot.db.fetchrow(
-            "SELECT channel_id, message, role_id FROM birthday_notifications WHERE guild_id = $1",
-            ctx.guild.id
-        )
-        
-        if not config:
-            return await ctx.send("Birthday feature not configured")
-        
-        channel = ctx.guild.get_channel(config['channel_id'])
-        role = ctx.guild.get_role(config['role_id']) if config['role_id'] else None
-        
-        await ctx.send(f"Channel: {channel.mention if channel else 'Not set'}\nMessage: {config['message']}\nRole: {role.mention if role else 'Not set'}")
-
-    @birthday.command(
-        name="set",
-        description="No description given",
-    )
-    async def birthday_set(self, ctx, date: str):
-        """set birthday"""
-        try:
-            datetime.strptime(date, "%Y-%m-%d")
-        except ValueError:
-            return await ctx.send("Invalid date format. Use YYYY-MM-DD")
-        
-        await self.bot.db.execute(
-            "INSERT INTO birthday (user_id, guild_id, birthday_date) VALUES($1, $2, $3) ON CONFLICT(user_id, guild_id) DO UPDATE SET birthday_date = excluded.birthday_date",
-            ctx.author.id, ctx.guild.id, date
-        )
-        await ctx.success(f"Birthday set to {date}")
-
-    @birthday.command(
-        name="celebrate",
-        description="No description given",
-    )
-    async def birthday_celebrate(self, ctx, role):
-        """celebrate birthday"""
-        await self.bot.db.execute(
-            "INSERT INTO birthday_notifications (guild_id, channel_id, message, role_id) VALUES($1, $2, $3, $4) ON CONFLICT(guild_id) DO UPDATE SET role_id = excluded.role_id",
-            ctx.guild.id, ctx.channel.id, "Happy birthday {user}!", role.id
-        )
-        await ctx.success(f"Birthday celebration role set to {role.mention}")
-
-    @birthday.command(
-        name="celebrate list",
-        description="No description given",
-    )
-    async def birthday_celebrate_list(self, ctx):
-        """list birthday celebrations"""
-        config = await self.bot.db.fetchrow(
-            "SELECT channel_id, message, role_id FROM birthday_notifications WHERE guild_id = $1",
-            ctx.guild.id
-        )
-        
-        if not config:
-            return await ctx.send("Birthday celebration not configured")
-        
-        channel = ctx.guild.get_channel(config['channel_id'])
-        role = ctx.guild.get_role(config['role_id']) if config['role_id'] else None
-        
-        await ctx.send(f"Channel: {channel.mention if channel else 'Not set'}\nMessage: {config['message']}\nRole: {role.mention if role else 'Not set'}")

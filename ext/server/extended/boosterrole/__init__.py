@@ -1,6 +1,7 @@
-from typing import Optional, Union, List
+from typing import Optional
+import discord
 from discord.ext.commands import group, CommandError, ColourConverter as ColorConverter
-from discord import Embed, Role, Emoji, PartialEmoji, Color, Member
+from discord import Role, Color
 from core.discord.package import Package
 from core.tools.color import get_dominant_color
 from core.tools.checks import is_booster
@@ -11,13 +12,13 @@ import random
 
 from core.managers.permissions import has_permissions
 class BoosterroleCommands(Package):
-    """booster role management commands"""
+    """Personal booster colour roles for your server boosters."""
 
     @group(
         name="boosterrole",
         aliases=["boostrole", "br"],
-        description="manage your personal booster color role",
-        example=",boosterrole ff0000 sexy",
+        description="Create and customize your personal booster color role",
+        example=",boosterrole ff0000",
         extras={"checks": "Boosters Only"},
         invoke_without_command=True,
     )
@@ -30,8 +31,9 @@ class BoosterroleCommands(Package):
 
     @boosterrole.command(
         name="create",
-        description="get your own custom booster color role",
-        example=",boosterrole create #f47373 sup",
+        aliases=["color", "colour"],
+        description="Assign a custom color to yourself",
+        example=",boosterrole create #f47373",
     )
     @is_booster()
     async def boosterrole_create(
@@ -47,9 +49,15 @@ class BoosterroleCommands(Package):
         extras = {}
         if name:
             if len(name) > 32:
-                raise CommandError("role name **can't** exceed **32** characters")
+                raise CommandError(
+                    "Name cannot exceed **32** characters\n"
+                    f"> -# **provided:** {len(name)} characters"
+                )
             if len(name) < 2:
-                raise CommandError("role name needs at least **2** characters")
+                raise CommandError(
+                    "Name needs at least **2** characters\n"
+                    f"> -# **provided:** {len(name)} character{'s' if len(name) != 1 else ''}"
+                )
             extras["name"] = name
         cfg = await self.db.fetchrow(
             """SELECT base_id, role_limit FROM booster_roles WHERE guild_id = $1""",
@@ -65,7 +73,10 @@ class BoosterroleCommands(Package):
                     ctx.guild.id,
                 )
                 if count >= cfg.role_limit:
-                    raise CommandError(f"hit the max limit of {cfg.role_limit} roles")
+                    raise CommandError(
+                        "Role limit reached\n"
+                        f"> -# **limit:** {cfg.role_limit} · contact an admin to increase"
+                    )
         existing_id = await self.db.fetchval(
             """SELECT role_id FROM custom_roles WHERE guild_id = $1 AND user_id = $2""",
             ctx.guild.id,
@@ -86,15 +97,347 @@ class BoosterroleCommands(Package):
                 ctx.author.id,
                 role.id,
             )
-            return await ctx.success(f"made and gave you {role.mention}")
+            return await ctx.success(
+                f"Created and assigned {role.mention}\n"
+                f"> -# **color:** `{color}`"
+            )
         else:
             await role.edit(color=color, **extras, reason="booster role")
-            return await ctx.success(f"updated your color to `{color}`")
+            return await ctx.success(
+                f"Updated your color\n"
+                f"> -# **color:** `{color}`"
+            )
+
+    @boosterrole.command(
+        name="dominant",
+        aliases=["avatar", "pfp", "av"],
+        description="Set your role color to your avatar's dominant color",
+    )
+    @is_booster()
+    async def boosterrole_dominant(self, ctx):
+        """auto color from avatar"""
+        role_id = await self.db.fetchval(
+            """SELECT role_id FROM custom_roles WHERE guild_id = $1 AND user_id = $2""",
+            ctx.guild.id,
+            ctx.author.id,
+        )
+        if not role_id:
+            raise CommandError(
+                "You don't have a booster role yet\n"
+                f"> -# **create one with:** `,boosterrole`"
+            )
+        col = Color.from_str(await get_dominant_color(ctx.author) or "#303135")
+        role = ctx.guild.get_role(role_id)
+        if role:
+            await role.edit(color=col, reason=f"dominant color set by {ctx.author}")
+            return await ctx.success(
+                f"Color updated to your avatar's dominant\n"
+                f"> -# **color:** `{col}`"
+            )
+        raise CommandError(
+            "Your role was deleted\n"
+            f"> -# **create a new one with:** `,boosterrole`"
+        )
+
+    @boosterrole.command(
+        name="random",
+        aliases=["rand", "randomhex"],
+        description="Set your role to a random hex color",
+    )
+    @is_booster()
+    async def boosterrole_random(self, ctx):
+        """randomize booster role color"""
+        role_id = await self.db.fetchval(
+            """SELECT role_id FROM custom_roles WHERE guild_id = $1 AND user_id = $2""",
+            ctx.guild.id,
+            ctx.author.id,
+        )
+        if not role_id:
+            raise CommandError(
+                "You don't have a booster role yet\n"
+                f"> -# **create one with:** `,boosterrole`"
+            )
+        rand = random.randint(0, 0xFFFFFF)
+        col = Color.from_str(f"#{rand:06X}")
+        role = ctx.guild.get_role(role_id)
+        if role:
+            await role.edit(color=col, reason=f"random color by {ctx.author}")
+            return await ctx.success(
+                f"Color randomized\n"
+                f"> -# **color:** `{col}`"
+            )
+        raise CommandError(
+            "Your role was deleted\n"
+            f"> -# **create a new one with:** `,boosterrole`"
+        )
+
+    @boosterrole.command(
+        name="icon",
+        aliases=["image", "img"],
+        description="Set an icon for your booster role (emoji, URL, or attachment)",
+        example=",boosterrole icon https://example.com/img.png",
+    )
+    @is_booster()
+    async def boosterrole_icon(
+        self,
+        ctx,
+        *,
+        icon: Optional[str] = None,
+    ):
+        """set booster role icon"""
+        if "role_icons" not in [f.lower() for f in ctx.guild.features]:
+            raise CommandError(
+                "This server doesn't have **Role Icons**\n"
+                f"> -# **requires level 2 boost**"
+            )
+
+        role_id = await self.db.fetchval(
+            """SELECT role_id FROM custom_roles WHERE guild_id = $1 AND user_id = $2""",
+            ctx.guild.id,
+            ctx.author.id,
+        )
+        if not role_id:
+            raise CommandError(
+                "You don't have a booster role yet\n"
+                f"> -# **create one with:** `,boosterrole`"
+            )
+        role = ctx.guild.get_role(role_id)
+        if not role:
+            raise CommandError(
+                "Your role was deleted\n"
+                f"> -# **create a new one with:** `,boosterrole`"
+            )
+
+        resolved = await self._resolve_boosterrole_icon(ctx, icon)
+
+        await role.edit(
+            display_icon=resolved,
+            reason=f"icon changed by {ctx.author}",
+        )
+        if resolved is not None:
+            return await ctx.success("Icon updated")
+        return await ctx.success("Icon removed")
+
+    @boosterrole_icon.command(
+        name="remove",
+        aliases=["delete", "del", "rm"],
+        description="Remove your booster role icon",
+    )
+    @is_booster()
+    async def boosterrole_icon_remove(self, ctx):
+        """remove booster role icon"""
+        role_id = await self.db.fetchval(
+            """SELECT role_id FROM custom_roles WHERE guild_id = $1 AND user_id = $2""",
+            ctx.guild.id,
+            ctx.author.id,
+        )
+        if not role_id:
+            raise CommandError(
+                "You don't have a booster role\n"
+                f"> -# **create one with:** `,boosterrole`"
+            )
+        role = ctx.guild.get_role(role_id)
+        if not role:
+            raise CommandError(
+                "Your role was deleted\n"
+                f"> -# **create a new one with:** `,boosterrole`"
+            )
+        if not role.display_icon:
+            raise CommandError(
+                "Your role doesn't have an icon\n"
+                f"> -# **set one with:** `,boosterrole icon`"
+            )
+
+        await role.edit(display_icon=None, reason=f"icon removed by {ctx.author}")
+        return await ctx.success("Icon removed")
+
+    async def _resolve_boosterrole_icon(
+        self,
+        ctx,
+        source: str | None = None,
+    ) -> bytes | str | None:
+        """Resolve a booster role icon from emoji, URL, or attached image."""
+        if ctx.message and ctx.message.attachments:
+            attachment = ctx.message.attachments[0]
+            content_type = (attachment.content_type or "").lower()
+            filename = (attachment.filename or "").lower()
+            is_image = content_type.startswith("image/") or filename.endswith(
+                (".png", ".jpg", ".jpeg", ".gif", ".webp")
+            )
+            if not is_image:
+                raise CommandError(
+                    "Attached file must be an **image**\n"
+                    f"> -# **accepted:** PNG, JPG, GIF, WEBP"
+                )
+            data = await attachment.read()
+            if len(data) > 256 * 1024:
+                raise CommandError(
+                    "Image is too large\n"
+                    f"> -# **limit:** 256 KB"
+                )
+            return data
+
+        if not source:
+            return None
+
+        raw = source.strip()
+        if not raw:
+            return None
+
+        try:
+            partial = discord.PartialEmoji.from_str(raw)
+        except Exception:
+            partial = None
+
+        if partial is not None and partial.is_custom_emoji() and partial.id:
+            ext = "gif" if partial.animated else "png"
+            cdn_url = f"https://cdn.discordapp.com/emojis/{partial.id}.{ext}?size=256&quality=lossless"
+            try:
+                timeout = aiohttp.ClientTimeout(total=15)
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.get(cdn_url) as resp:
+                        if resp.status != 200:
+                            raise CommandError(
+                                "Could not download that emoji\n"
+                                f"> -# **try a different one or use a URL**"
+                            )
+                        data = await resp.read()
+            except CommandError:
+                raise
+            except Exception as exc:
+                raise CommandError(
+                    "Could not download that emoji\n"
+                    f"> -# **try a different one or use a URL**"
+                ) from exc
+            if len(data) > 256 * 1024:
+                raise CommandError(
+                    "Emoji is too large\n"
+                    f"> -# **limit:** 256 KB"
+                )
+            return data
+
+        if raw.startswith(("http://", "https://")):
+            try:
+                timeout = aiohttp.ClientTimeout(total=15)
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.get(raw) as resp:
+                        if resp.status != 200:
+                            raise CommandError(
+                                "Could not download that image\n"
+                                f"> -# **check the URL and try again**"
+                            )
+                        content_type = (resp.headers.get("Content-Type") or "").lower()
+                        if content_type and not content_type.startswith("image/"):
+                            raise CommandError(
+                                "URL must point to an **image**\n"
+                                f"> -# **accepted:** PNG, JPG, GIF, WEBP"
+                            )
+                        data = await resp.read()
+            except CommandError:
+                raise
+            except Exception as exc:
+                raise CommandError(
+                    "Could not download that image\n"
+                    f"> -# **check the URL and try again**"
+                ) from exc
+            if len(data) > 256 * 1024:
+                raise CommandError(
+                    "Image is too large\n"
+                    f"> -# **limit:** 256 KB"
+                )
+            return data
+
+        if raw.startswith(("<@", "<#")):
+            raise CommandError(
+                "Please provide a **valid icon**\n"
+                f"> -# **accepted:** custom emoji, unicode emoji, image URL, or attachment"
+            )
+
+        if len(raw) <= 16 and not raw.isascii():
+            return raw
+        if len(raw) <= 8 and all(
+            ord(ch) > 127 or ch.isspace() or ch in "️‍" for ch in raw
+        ):
+            return raw
+
+        raise CommandError(
+            "Please provide a **valid icon**\n"
+            f"> -# **accepted:** custom emoji, unicode emoji, image URL, or attachment"
+        )
+
+    @boosterrole.command(
+        name="rename",
+        aliases=["name"],
+        description="Change the name of your booster role",
+        example=",boosterrole rename richgang",
+    )
+    @is_booster()
+    async def boosterrole_rename(self, ctx, *, name: str):
+        """rename booster role"""
+        if len(name) > 32:
+            raise CommandError(
+                "Name cannot exceed **32** characters\n"
+                f"> -# **provided:** {len(name)} characters"
+            )
+        if len(name) < 2:
+            raise CommandError(
+                "Name needs at least **2** characters\n"
+                f"> -# **provided:** {len(name)} character{'s' if len(name) != 1 else ''}"
+            )
+        role_id = await self.db.fetchval(
+            """SELECT role_id FROM custom_roles WHERE guild_id = $1 AND user_id = $2""",
+            ctx.guild.id,
+            ctx.author.id,
+        )
+        if not role_id:
+            raise CommandError(
+                "You don't have a booster role yet\n"
+                f"> -# **create one with:** `,boosterrole`"
+            )
+        role = ctx.guild.get_role(role_id)
+        if role:
+            await role.edit(name=name, reason=f"renamed by {ctx.author}")
+            return await ctx.success(
+                f"Role renamed\n"
+                f"> -# **name:** `{name}`"
+            )
+        raise CommandError(
+            "Your role was deleted\n"
+            f"> -# **create a new one with:** `,boosterrole`"
+        )
+
+    @boosterrole.command(
+        name="remove",
+        aliases=["delete", "del", "rm"],
+        description="Delete your booster role",
+    )
+    @is_booster()
+    async def boosterrole_remove(self, ctx):
+        """delete your booster role"""
+        role_id = await self.db.fetchval(
+            """SELECT role_id FROM custom_roles WHERE guild_id = $1 AND user_id = $2""",
+            ctx.guild.id,
+            ctx.author.id,
+        )
+        if not role_id:
+            raise CommandError(
+                "You don't have a booster role set up\n"
+                f"> -# **create one with:** `,boosterrole`"
+            )
+        role = ctx.guild.get_role(role_id)
+        if role:
+            await role.delete(reason=f"booster role removed by {ctx.author}")
+        await self.db.execute(
+            """DELETE FROM custom_roles WHERE guild_id = $1 AND user_id = $2""",
+            ctx.guild.id,
+            ctx.author.id,
+        )
+        return await ctx.success("Booster role deleted")
 
     @boosterrole.group(
         name="award",
         aliases=["reward"],
-        description="Reward a member a specific role upon boost",
+        description="Reward a member with a role when they boost",
         example=",boosterrole award @rich",
         invoke_without_command=True,
     )
@@ -112,9 +455,16 @@ class BoosterroleCommands(Package):
                     await member.add_roles(role)
                 except Exception:
                     pass
-        return await ctx.success(f"giving all boosters {role.mention}")
+        return await ctx.success(
+            f"Now awarding all boosters\n"
+            f"> -# **role:** {role.mention}"
+        )
 
-    @boosterrole_award.command(name="view", description="View the current award role")
+    @boosterrole_award.command(
+        name="view",
+        aliases=["show"],
+        description="View the current award role",
+    )
     @has_permissions(manage_roles=True, manage_guild=True)
     async def boosterrole_award_view(self, ctx):
         """show boost award role"""
@@ -123,21 +473,21 @@ class BoosterroleCommands(Package):
             ctx.guild.id,
         )
         if not role_id:
-            raise CommandError("no booster award role set")
-        role = ctx.guild.get_role(role_id)
-        return await ctx.send(
-            embed=Embed(
-                title="Boost Award Role",
-                description=f"**Role:** {role.mention}\n**Members:** {len(role.members)}",
-            ).set_author(
-                name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url
+            raise CommandError(
+                "No award role set\n"
+                f"> -# **set one with:** `,boosterrole award <role>`"
             )
+        role = ctx.guild.get_role(role_id)
+        return await ctx.success(
+            f"Current award role\n"
+            f"> -# **role:** {role.mention}\n"
+            f"> -# **members:** {len(role.members)}"
         )
 
     @boosterrole_award.command(
         name="unset",
-        aliases=["delete", "remove"],
-        description="Remove the reward role",
+        aliases=["delete", "remove", "clear"],
+        description="Remove the award role",
     )
     @has_permissions(manage_roles=True, manage_guild=True)
     async def boosterrole_award_unset(self, ctx):
@@ -149,20 +499,26 @@ class BoosterroleCommands(Package):
                 ctx.guild.id,
             )
         except Exception:
-            raise CommandError("no booster award role is set")
-        return await ctx.success("booster award role removed")
+            raise CommandError(
+                "No award role is set\n"
+                f"> -# **set one with:** `,boosterrole award <role>`"
+            )
+        return await ctx.success("Award role removed")
 
     @boosterrole.command(
         name="base",
-        aliases=["baseid"],
-        description="Set the base role for where boost roles will go under",
+        aliases=["set", "baseid"],
+        description="Set the base role that booster roles are positioned under",
         example=",boosterrole base @brs",
     )
     @has_permissions(manage_guild=True)
     async def boosterrole_base(self, ctx, *, role: Role):
         """set booster role position"""
         if not role.is_assignable():
-            raise CommandError(f"**can't** edit {role.mention}")
+            raise CommandError(
+                f"Cannot edit {role.mention}\n"
+                f"> -# **role may be too high or managed**"
+            )
         await self.db.execute(
             """INSERT INTO booster_roles (guild_id, base_id) VALUES($1, $2) ON CONFLICT(guild_id) DO UPDATE SET base_id = excluded.base_id""",
             ctx.guild.id,
@@ -189,11 +545,14 @@ class BoosterroleCommands(Package):
             ctx.guild.id,
             dead_ids,
         )
-        return await ctx.success(f"base role set to {role.mention}")
+        return await ctx.success(
+            f"Base role set\n"
+            f"> -# **role:** {role.mention}"
+        )
 
     @boosterrole.command(
         name="limit",
-        description="Set limit for booster roles",
+        description="Set how many booster roles can exist (0 = unlimited)",
         example=",boosterrole limit 30",
     )
     @has_permissions(manage_guild=True)
@@ -206,8 +565,79 @@ class BoosterroleCommands(Package):
             ctx.guild.id,
             limit,
         )
-        msg = f"booster role cap set to {limit}" if limit else "booster role cap removed"
-        return await ctx.success(msg)
+        if limit:
+            return await ctx.success(
+                f"Role cap set\n"
+                f"> -# **limit:** {limit}"
+            )
+        return await ctx.success("Role cap removed")
+
+    @boosterrole.command(
+        name="cleanup",
+        aliases=["clean", "prune", "purge", "truncate"],
+        description="Clean up booster roles that have no members",
+    )
+    @has_permissions(manage_roles=True, manage_guild=True)
+    async def boosterrole_cleanup(self, ctx):
+        """clean stale booster roles"""
+        entries = await self.db.fetch(
+            """SELECT role_id, user_id FROM custom_roles WHERE guild_id = $1""",
+            ctx.guild.id,
+        )
+        if not entries:
+            raise CommandError(
+                "No roles to clean up\n"
+                f"> -# **all roles have active members**"
+            )
+        removed_ids = []
+        for entry in entries:
+            role = ctx.guild.get_role(entry.role_id)
+            if role:
+                if not ctx.guild.get_member(entry.user_id):
+                    await role.delete(reason=f"cleanup by {ctx.author}")
+                    removed_ids.append(entry.role_id)
+            else:
+                removed_ids.append(entry.role_id)
+        await self.db.execute(
+            """DELETE FROM custom_roles WHERE role_id = ANY($1::BIGINT[])""",
+            removed_ids,
+        )
+        return await ctx.success(
+            f"Cleanup complete\n"
+            f"> -# **removed:** {len(removed_ids)}"
+        )
+
+    @boosterrole.command(
+        name="list",
+        aliases=["all", "view"],
+        description="Show every booster role in this server",
+    )
+    @has_permissions(manage_guild=True)
+    async def boosterrole_list(self, ctx):
+        """show all boost roles"""
+        all_roles = await self.db.fetch(
+            """SELECT user_id, role_id FROM custom_roles WHERE guild_id = $1""",
+            ctx.guild.id,
+        )
+        if not all_roles:
+            raise CommandError(
+                "No booster roles found\n"
+                f"> -# **members can create with:** `,boosterrole`"
+            )
+        stale = [
+            r for r in all_roles
+            if not ctx.guild.get_member(r.user_id) or not ctx.guild.get_role(r.role_id)
+        ]
+        valid = [r for r in all_roles if ctx.guild.get_member(r.user_id)]
+        lines = [
+            f"> {ctx.guild.get_member(r.user_id).mention} — {ctx.guild.get_role(r.role_id).mention}"
+            for r in valid
+        ]
+        if stale:
+            asyncio.ensure_future(self._purge_roles(ctx, stale))
+        return await ctx.success(
+            f"All booster roles ({len(valid)})\n" + "\n".join(lines)
+        )
 
     async def _purge_roles(self, ctx, records):
         """delete stale booster roles"""
@@ -224,259 +654,170 @@ class BoosterroleCommands(Package):
         )
         return True
 
-    @boosterrole.command(
+    @boosterrole.group(
+        name="share",
+        description="Share your personal booster role with another member",
+        invoke_without_command=True,
+    )
+    @is_booster()
+    async def boosterrole_share(self, ctx, member: Optional[discord.Member] = None):
+        """share booster role"""
+        if member is None:
+            return await ctx.send_help(ctx.command)
+
+        if member.id == ctx.author.id:
+            raise CommandError(
+                "You cannot share with yourself\n"
+                f"> -# **usage:** `,boosterrole share @user`"
+            )
+        if member.bot:
+            raise CommandError(
+                "You cannot share with a bot\n"
+                f"> -# **usage:** `,boosterrole share @user`"
+            )
+
+        role_id = await self.db.fetchval(
+            """SELECT role_id FROM custom_roles WHERE guild_id = $1 AND user_id = $2""",
+            ctx.guild.id,
+            ctx.author.id,
+        )
+        if not role_id:
+            raise CommandError(
+                "You don't have a booster role yet\n"
+                f"> -# **create one with:** `,boosterrole`"
+            )
+        role = ctx.guild.get_role(role_id)
+        if not role:
+            raise CommandError(
+                "Your role was deleted\n"
+                f"> -# **create a new one with:** `,boosterrole`"
+            )
+
+        if role in member.roles:
+            raise CommandError(
+                f"{member.mention} already has this role\n"
+                f"> -# **no action needed**"
+            )
+
+        await member.add_roles(role, reason=f"shared by {ctx.author}")
+        return await ctx.success(
+            f"Shared role\n"
+            f"> -# **member:** {member.mention}\n"
+            f"> -# **role:** {role.mention}"
+        )
+
+    @boosterrole_share.command(
         name="list",
-        aliases=["view"],
-        description="View all booster roles",
+        aliases=["members"],
+        description="List everyone in a booster role",
+    )
+    @is_booster()
+    async def boosterrole_share_list(self, ctx):
+        """list shared role members"""
+        role_id = await self.db.fetchval(
+            """SELECT role_id FROM custom_roles WHERE guild_id = $1 AND user_id = $2""",
+            ctx.guild.id,
+            ctx.author.id,
+        )
+        if not role_id:
+            raise CommandError(
+                "You don't have a booster role\n"
+                f"> -# **create one with:** `,boosterrole`"
+            )
+        role = ctx.guild.get_role(role_id)
+        if not role:
+            raise CommandError(
+                "Your role was deleted\n"
+                f"> -# **create a new one with:** `,boosterrole`"
+            )
+
+        members = [m.mention for m in role.members if m.id != ctx.author.id]
+        if not members:
+            return await ctx.warn(
+                "No members in your shared role\n"
+                f"> -# **share with:** `,boosterrole share @user`"
+            )
+
+        return await ctx.success(
+            f"Shared members ({len(members)})\n"
+            + "\n".join(f"> {m}" for m in members)
+        )
+
+    @boosterrole_share.command(
+        name="remove",
+        aliases=["kick"],
+        description="Remove someone from your booster role",
+    )
+    @is_booster()
+    async def boosterrole_share_remove(self, ctx, member: discord.Member):
+        """remove shared member"""
+        role_id = await self.db.fetchval(
+            """SELECT role_id FROM custom_roles WHERE guild_id = $1 AND user_id = $2""",
+            ctx.guild.id,
+            ctx.author.id,
+        )
+        if not role_id:
+            raise CommandError(
+                "You don't have a booster role\n"
+                f"> -# **create one with:** `,boosterrole`"
+            )
+        role = ctx.guild.get_role(role_id)
+        if not role:
+            raise CommandError(
+                "Your role was deleted\n"
+                f"> -# **create a new one with:** `,boosterrole`"
+            )
+
+        if role not in member.roles:
+            raise CommandError(
+                f"{member.mention} doesn't have your role\n"
+                f"> -# **check with:** `,boosterrole share list`"
+            )
+
+        await member.remove_roles(role, reason=f"removed by {ctx.author}")
+        return await ctx.success(
+            f"Removed member\n"
+            f"> -# **member:** {member.mention}"
+        )
+
+    @boosterrole_share.command(
+        name="max",
+        description="Set the maximum number of members allowed in a shared role",
     )
     @has_permissions(manage_guild=True)
-    async def boosterrole_list(self, ctx):
-        """show all boost roles"""
-        all_roles = await self.db.fetch(
-            """SELECT user_id, role_id FROM custom_roles WHERE guild_id = $1""",
-            ctx.guild.id,
-        )
-        if not all_roles:
-            raise CommandError("no booster roles found")
-        stale = [
-            r for r in all_roles
-            if not ctx.guild.get_member(r.user_id) or not ctx.guild.get_role(r.role_id)
-        ]
-        valid = [r for r in all_roles if ctx.guild.get_member(r.user_id)]
-        lines = [
-            f"`{i}` {ctx.guild.get_member(r.user_id).mention} - {ctx.guild.get_role(r.role_id).mention}"
-            for i, r in enumerate(valid, start=1)
-        ]
-        if stale:
-            asyncio.ensure_future(self._purge_roles(ctx, stale))
-        return await ctx.paginate(
-            Embed(title="Booster Roles").set_author(
-                name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url
-            ),
-            lines,
-        )
-
-    @boosterrole.command(
-        name="dominant",
-        description="Set booster roles color to the most dominant color in avatar",
-    )
-    @is_booster()
-    async def boosterrole_dominant(self, ctx):
-        """auto color from avatar"""
-        role_id = await self.db.fetchval(
-            """SELECT role_id FROM custom_roles WHERE guild_id = $1 AND user_id = $2""",
-            ctx.guild.id,
-            ctx.author.id,
-        )
-        if not role_id:
-            raise CommandError("set up a booster role first with `boosterrole`")
-        col = Color.from_str(await get_dominant_color(ctx.author) or "#303135")
-        role = ctx.guild.get_role(role_id)
-        if role:
-            await role.edit(color=col, reason=f"dominant color set by {ctx.author}")
-            return await ctx.success(f"color updated to `{col}`")
-        raise CommandError("your booster role was deleted, use `boosterrole remove` and start fresh")
-
-    @boosterrole.command(
-        name="color",
-        aliases=["colour"],
-        description="Get your own custom booster color role",
-        example=",boosterrole color #ff0000",
-    )
-    @is_booster()
-    async def boosterrole_color(
-        self, ctx, color: ColorConverter, *, name: Optional[str] = None
-    ):
-        """change booster role color"""
-        extras = {}
-        if name:
-            if len(name) > 32:
-                raise CommandError("role name **can't** exceed **32** characters")
-            if len(name) < 2:
-                raise CommandError("role name needs at least **2** characters")
-            extras["name"] = name
-        data = await self.db.fetchrow(
-            """SELECT base_id, role_limit FROM booster_roles WHERE guild_id = $1""",
-            ctx.guild.id,
-        )
-        pos = None
-        if data and data.base_id:
-            base = ctx.guild.get_role(data.base_id)
-            if base:
-                pos = base.position - 1 if base.position > 1 else 1
-        if data and data.role_limit:
-            count = await self.db.fetchval(
-                """SELECT COUNT(*) FROM custom_roles WHERE guild_id = $1""",
-                ctx.guild.id,
+    async def boosterrole_share_max(self, ctx, limit: int):
+        """set max shared members"""
+        if limit < 1:
+            raise CommandError(
+                "Limit must be at least **1**\n"
+                f"> -# **provided:** {limit}"
             )
-            if count >= data.role_limit:
-                raise CommandError(f"hit the max of {data.role_limit} roles")
-        existing_id = await self.db.fetchval(
-            """SELECT role_id FROM custom_roles WHERE guild_id = $1 AND user_id = $2""",
-            ctx.guild.id,
-            ctx.author.id,
-        )
-        role = ctx.guild.get_role(existing_id)
-        if not role:
-            if not name:
-                name = ctx.author.name
-            role = await ctx.guild.create_role(name=name, color=color, reason="booster role")
-            if pos:
-                await role.edit(position=pos, reason="booster role")
-            await self.db.execute(
-                """INSERT INTO custom_roles (guild_id, user_id, role_id) VALUES($1, $2, $3) ON CONFLICT(guild_id, user_id) DO UPDATE SET role_id = excluded.role_id""",
-                ctx.guild.id,
-                ctx.author.id,
-                role.id,
-            )
-            return await ctx.success(f"made and gave you {role.mention}")
-        await role.edit(color=color, **extras, reason="booster role")
-        return await ctx.success(f"color set to `{color}`")
-
-    @boosterrole.command(
-        name="remove",
-        aliases=["delete", "del"],
-        description="Remove custom color booster role",
-    )
-    @is_booster()
-    async def boosterrole_remove(self, ctx):
-        """delete your booster role"""
-        role_id = await self.db.fetchval(
-            """SELECT role_id FROM custom_roles WHERE guild_id = $1 AND user_id = $2""",
-            ctx.guild.id,
-            ctx.author.id,
-        )
-        if not role_id:
-            raise CommandError("you dont have a booster role set up")
-        role = ctx.guild.get_role(role_id)
-        if role:
-            await role.delete(reason=f"booster role removed by {ctx.author}")
         await self.db.execute(
-            """DELETE FROM custom_roles WHERE guild_id = $1 AND user_id = $2""",
+            """INSERT INTO booster_roles (guild_id, share_limit) VALUES($1, $2) ON CONFLICT(guild_id) DO UPDATE SET share_limit = excluded.share_limit""",
             ctx.guild.id,
-            ctx.author.id,
-        )
-        return await ctx.success("booster role removed")
-
-    @boosterrole.command(
-        name="cleanup",
-        aliases=["purge", "truncate"],
-        description="Clean up unused booster roles",
-    )
-    @has_permissions(manage_roles=True, manage_guild=True)
-    async def boosterrole_cleanup(self, ctx):
-        """clean stale booster roles"""
-        entries = await self.db.fetch(
-            """SELECT role_id, user_id FROM custom_roles WHERE guild_id = $1""",
-            ctx.guild.id,
-        )
-        if not entries:
-            raise CommandError("no booster roles to clean up")
-        removed_ids = []
-        for entry in entries:
-            role = ctx.guild.get_role(entry.role_id)
-            if role:
-                if not ctx.guild.get_member(entry.user_id):
-                    await role.delete(reason=f"cleanup by {ctx.author}")
-                    removed_ids.append(entry.role_id)
-            else:
-                removed_ids.append(entry.role_id)
-        await self.db.execute(
-            """DELETE FROM custom_roles WHERE role_id = ANY($1::BIGINT[])""",
-            removed_ids,
-        )
-        return await ctx.success(f"cleaned up `{len(removed_ids)}` booster roles")
-
-    @boosterrole.command(
-        name="random",
-        aliases=["randomhex"],
-        description="Set a booster role with a random hex code",
-    )
-    @is_booster()
-    async def boosterrole_random(self, ctx):
-        """randomize booster role color"""
-        role_id = await self.db.fetchval(
-            """SELECT role_id FROM custom_roles WHERE guild_id = $1 AND user_id = $2""",
-            ctx.guild.id,
-            ctx.author.id,
-        )
-        if not role_id:
-            raise CommandError("set up a booster role first with `boosterrole`")
-        rand = random.randint(0, 0xFFFFFF)
-        col = Color.from_str(f"#{rand:06X}")
-        role = ctx.guild.get_role(role_id)
-        if role:
-            await role.edit(color=col, reason=f"random color by {ctx.author}")
-            return await ctx.success(f"color randomized to `{col}`")
-        raise CommandError("your booster role got deleted, use `boosterrole remove` and start fresh")
-
-    @boosterrole.command(
-        name="icon",
-        description="Set an icon for booster role",
-        example=",boosterrole icon https://example.com/img.png",
-    )
-    @is_booster()
-    async def boosterrole_icon(
-        self,
-        ctx,
-        *,
-        icon: Optional[Union[Emoji, PartialEmoji, str]] = None,
-    ):
-        """set booster role icon"""
-        if "role_icons" not in [f.lower() for f in ctx.guild.features]:
-            raise CommandError("server doesnt have the **Role Icons** feature")
-
-        async def fetch_icon(src):
-            if src is None:
-                return None
-            if isinstance(src, (Emoji, PartialEmoji)):
-                return await src.read()
-            async with aiohttp.ClientSession() as s:
-                async with s.get(src) as resp:
-                    return await resp.read()
-
-        if isinstance(icon, str) and not icon.startswith("https://"):
-            return await ctx.fail("that url doesnt look valid")
-        role_id = await self.db.fetchval(
-            """SELECT role_id FROM custom_roles WHERE guild_id = $1 AND user_id = $2""",
-            ctx.guild.id,
-            ctx.author.id,
-        )
-        if not role_id:
-            raise CommandError("set up your booster role first with `boosterrole`")
-        role = ctx.guild.get_role(role_id)
-        if not role:
-            raise CommandError("your booster role got deleted, use `boosterrole remove` and start fresh")
-        await role.edit(
-            display_icon=await fetch_icon(icon) if icon else None,
-            reason=f"icon changed by {ctx.author}",
+            limit,
         )
         return await ctx.success(
-            "booster role icon set" if icon else "booster role icon cleared"
+            f"Share limit set\n"
+            f"> -# **limit:** {limit}"
         )
 
     @boosterrole.command(
-        name="rename",
-        aliases=["name"],
-        description="Edit your booster roles name",
-        example=",boosterrole rename richgang",
+        name="toggle",
+        description="Toggle the booster roles system in this server",
     )
-    @is_booster()
-    async def boosterrole_rename(self, ctx, *, name: str):
-        """rename booster role"""
-        if len(name) > 32:
-            raise CommandError("name **can't** exceed **32** characters")
-        if len(name) < 2:
-            raise CommandError("name needs at least **2** characters")
-        role_id = await self.db.fetchval(
-            """SELECT role_id FROM custom_roles WHERE guild_id = $1 AND user_id = $2""",
+    @has_permissions(manage_guild=True)
+    async def boosterrole_toggle(self, ctx):
+        """toggle booster roles"""
+        current = await self.db.fetchval(
+            """SELECT enabled FROM booster_roles WHERE guild_id = $1""",
             ctx.guild.id,
-            ctx.author.id,
         )
-        if not role_id:
-            raise CommandError("set up your booster role first with `boosterrole`")
-        role = ctx.guild.get_role(role_id)
-        if role:
-            await role.edit(name=name, reason=f"renamed by {ctx.author}")
-            return await ctx.success("booster role renamed")
-        raise CommandError("your booster role got deleted, use `boosterrole remove` and start fresh")
+        new_state = not current if current is not None else True
+        await self.db.execute(
+            """INSERT INTO booster_roles (guild_id, enabled) VALUES($1, $2) ON CONFLICT(guild_id) DO UPDATE SET enabled = excluded.enabled""",
+            ctx.guild.id,
+            new_state,
+        )
+        state_str = "enabled" if new_state else "disabled"
+        return await ctx.success(f"Booster roles {state_str}")

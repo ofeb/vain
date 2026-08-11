@@ -439,18 +439,18 @@ class Giveaway(commands.Cog):
             message.id,
         )
         if not giveaway:
-            await ctx.warn("That is not a giveaway")
+            await ctx.warn("Invalid target\n> -# **not a giveaway**")
             return
         if not giveaway.get("win_message_id"):
-            await ctx.warn("That giveaway **isn't over** yet")
+            await ctx.warn("Not ended\n> -# **giveaway isn't over yet**")
             return
         if winners_count < 1:
-            await ctx.warn("Winner count must be at least **1**")
+            await ctx.warn("Invalid count\n> -# **winner count must be at least 1**")
             return
 
         events = self._events()
         if events is None:
-            await ctx.warn("Giveaway events are not loaded")
+            await ctx.warn("Not loaded\n> -# **giveaway events are not loaded**")
             return
 
         new_winners = await events.reroll_giveaway(
@@ -459,7 +459,7 @@ class Giveaway(commands.Cog):
             channel=message.channel,
         )
         if not new_winners:
-            await ctx.warn("No valid entries to reroll")
+            await ctx.warn("No entries\n> -# **no valid entries to reroll**")
             return
         await ctx.message.add_reaction("👍")
 
@@ -478,7 +478,7 @@ class Giveaway(commands.Cog):
         message = await self._resolve_giveaway_message(ctx, target)
         if not message:
             await ctx.warn(
-                "Reply to a giveaway, or pass a **message id** / **jump link**."
+                "Not found\n> -# **reply to a giveaway** or pass a message id / jump link"
             )
             return
 
@@ -487,15 +487,15 @@ class Giveaway(commands.Cog):
             message.id,
         )
         if not giveaway:
-            await ctx.warn("That is not a giveaway")
+            await ctx.warn("Invalid target\n> -# **not a giveaway**")
             return
         if giveaway.get("win_message_id"):
-            await ctx.warn("That giveaway has **already ended**")
+            await ctx.warn("Already ended\n> -# **giveaway has already ended**")
             return
 
         events = self._events()
         if events is None:
-            await ctx.warn("Giveaway events are not loaded")
+            await ctx.warn("Not loaded\n> -# **giveaway events are not loaded**")
             return
         await events.end_giveaway(dict(giveaway), force=True)
         await ctx.message.add_reaction("👍")
@@ -531,7 +531,7 @@ class Giveaway(commands.Cog):
             if ctx.message.reference:
                 message = await ctx.channel.fetch_message(ctx.message.reference.message_id)
             if not message:
-                await ctx.warn("A message link is required")
+                await ctx.warn("Required\n> -# **a message link is required**")
                 return
         
         try:
@@ -541,7 +541,7 @@ class Giveaway(commands.Cog):
                 message.id,
             )
         except Exception:
-            await ctx.warn("That is not a giveaway")
+            await ctx.warn("Invalid target\n> -# **not a giveaway**")
             return
         
         giveaway = await self.bot.db.fetchrow(
@@ -549,7 +549,7 @@ class Giveaway(commands.Cog):
             message.id,
         )
         if not giveaway:
-            await ctx.warn("That is not a giveaway")
+            await ctx.warn("Invalid target\n> -# **not a giveaway**")
             return
         events = self._events()
         if events:
@@ -579,11 +579,11 @@ class Giveaway(commands.Cog):
             if ctx.message.reference:
                 message = await ctx.channel.fetch_message(ctx.message.reference.message_id)
             if not message:
-                await ctx.warn("A message link is required")
+                await ctx.warn("Required\n> -# **a message link is required**")
                 return
 
         if not prize:
-            await ctx.warn("A prize is required")
+            await ctx.warn("Required\n> -# **a prize is required**")
             return
 
         giveaway = await self.bot.db.fetchrow(
@@ -591,7 +591,7 @@ class Giveaway(commands.Cog):
             message.id,
         )
         if not giveaway:
-            await ctx.warn("That is not a giveaway")
+            await ctx.warn("Invalid target\n> -# **not a giveaway**")
             return
 
         await self.bot.db.execute(
@@ -629,11 +629,11 @@ class Giveaway(commands.Cog):
             if ctx.message.reference:
                 message = await ctx.channel.fetch_message(ctx.message.reference.message_id)
             if not message:
-                await ctx.warn("A message link is required")
+                await ctx.warn("Required\n> -# **a message link is required**")
                 return
 
         if not duration:
-            await ctx.warn("A duration is required (e.g. `1h`, `30m`, `2d`)")
+            await ctx.warn("Required\n> -# **a duration is required (e.g. 1h, 30m, 2d)**")
             return
 
         
@@ -646,7 +646,7 @@ class Giveaway(commands.Cog):
                 message.id,
             )
         except Exception:
-            await ctx.warn("That is not a giveaway")
+            await ctx.warn("Invalid target\n> -# **not a giveaway**")
             return
 
         giveaway = await self.bot.db.fetchrow(
@@ -654,7 +654,7 @@ class Giveaway(commands.Cog):
             message.id,
         )
         if not giveaway:
-            await ctx.warn("That is not a giveaway")
+            await ctx.warn("Invalid target\n> -# **not a giveaway**")
             return
         giveaway = dict(giveaway)
         giveaway["expiration"] = end_time
@@ -668,7 +668,7 @@ class Giveaway(commands.Cog):
             if not giveaway.get("win_message_id"):
                 events.schedule_end(message.id, delay_seconds=float(secs))
         await ctx.success(
-            f"Expiration set to {discord.utils.format_dt(end_time, style='R')}"
+            f"Duration updated\n> -# **ends:** {discord.utils.format_dt(end_time, style='R')}"
         )
 
     @giveaway.command(
@@ -865,7 +865,7 @@ class Giveaway(commands.Cog):
     async def giveaway_customize(self, ctx: Context) -> None:
         events = self._events()
         if not events:
-            await ctx.warn("Giveaway events are not loaded")
+            await ctx.warn("Not loaded\n> -# **giveaway events are not loaded**")
             return
         s = await events.get_settings(ctx.guild.id)
         lines = [
@@ -904,14 +904,14 @@ class Giveaway(commands.Cog):
             if cur:
                 await ctx.send(f"```\n{cur[:1900]}\n```")
             else:
-                await ctx.success("Using the **default** giveaway panel")
+                await ctx.success("Using default\n> -# **giveaway panel**")
             return
         if script.strip().lower() in {"clear", "reset", "default", "none", "remove"}:
             await events.update_settings(ctx.guild.id, embed_script=None)
-            await ctx.success("Giveaway panel script **reset** to default")
+            await ctx.success("Script reset\n> -# **giveaway panel** → default")
             return
         await events.update_settings(ctx.guild.id, embed_script=script.strip())
-        await ctx.success("Updated **giveaway panel** script")
+        await ctx.success("Script updated\n> -# **giveaway panel**")
 
     @giveaway_customize.group(
         name="join",
@@ -927,9 +927,9 @@ class Giveaway(commands.Cog):
         if join_type is None:
             s = await events.get_settings(ctx.guild.id)
             await ctx.success(
-                f"Join type is **{s.get('join_type') or 'button'}**"
+                f"Join type\n> -# **method:** {s.get('join_type') or 'button'}"
                 + (
-                    f" · reaction `{s.get('join_reaction') or '🎉'}`"
+                    f"\n> -# **reaction:** {s.get('join_reaction') or '🎉'}"
                     if (s.get("join_type") or "") == "reaction"
                     else ""
                 )
@@ -938,16 +938,16 @@ class Giveaway(commands.Cog):
         low = join_type.lower().strip()
         if low in {"button", "btn", "buttons"}:
             await events.update_settings(ctx.guild.id, join_type="button")
-            await ctx.success("Giveaways now use a **button** to join")
+            await ctx.success("Join type set\n> -# **method:** button")
             return
         if low in {"reaction", "react", "emoji"}:
             await events.update_settings(ctx.guild.id, join_type="reaction")
             await ctx.success(
-                "Giveaways now use a **reaction** to join "
-                "(set emoji with `,giveaway customize join reaction`)"
+                "Join type set\n> -# **method:** reaction"
+                "\n> -# **set emoji:** `,giveaway customize join reaction`"
             )
             return
-        await ctx.warn("Use `button` or `reaction`")
+        await ctx.warn("Invalid option\n> -# **use:** `button` or `reaction`")
 
     @customize_join.command(
         name="type",
@@ -972,7 +972,7 @@ class Giveaway(commands.Cog):
         if not emoji or not emoji.strip():
             s = await events.get_settings(ctx.guild.id)
             await ctx.success(
-                f"Join reaction is `{s.get('join_reaction') or '🎉'}`"
+                f"Reaction\n> -# **emoji:** {s.get('join_reaction') or '🎉'}"
             )
             return
         await events.update_settings(
@@ -981,7 +981,7 @@ class Giveaway(commands.Cog):
             join_reaction=emoji.strip(),
         )
         await ctx.success(
-            f"Join type set to **reaction** with emoji {emoji.strip()}"
+            f"Reaction set\n> -# **emoji:** {emoji.strip()}"
         )
 
     @giveaway_customize.command(
@@ -1001,8 +1001,8 @@ class Giveaway(commands.Cog):
         if label is None and emoji is None:
             s = await events.get_settings(ctx.guild.id)
             await ctx.success(
-                f"Button: **{s.get('button_label') or 'Enter'}** "
-                f"{s.get('button_emoji') or '🎉'}"
+                f"Button\n> -# **label:** {s.get('button_label') or 'Enter'}\n"
+                f"> -# **emoji:** {s.get('button_emoji') or '🎉'}"
             )
             return
         fields: dict = {}
@@ -1019,8 +1019,8 @@ class Giveaway(commands.Cog):
         await events.update_settings(ctx.guild.id, **fields)
         s = await events.get_settings(ctx.guild.id)
         await ctx.success(
-            f"Button set to **{s.get('button_label') or 'Enter'}** "
-            f"{s.get('button_emoji') or '🎉'}"
+            f"Button set\n> -# **label:** {s.get('button_label') or 'Enter'}\n"
+            f"> -# **emoji:** {s.get('button_emoji') or '🎉'}"
         )
 
     @giveaway_customize.command(
@@ -1038,19 +1038,19 @@ class Giveaway(commands.Cog):
         if state is None:
             s = await events.get_settings(ctx.guild.id)
             await ctx.success(
-                f"Show entries is **{'on' if s.get('show_entries', True) else 'off'}**"
+                f"Show entries\n> -# **status:** {'on' if s.get('show_entries', True) else 'off'}"
             )
             return
         low = state.lower().strip()
         if low in {"on", "enable", "true", "yes", "1"}:
             await events.update_settings(ctx.guild.id, show_entries=True)
-            await ctx.success("Entry count will be **shown**")
+            await ctx.success("Entries shown\n> -# **status:** visible")
             return
         if low in {"off", "disable", "false", "no", "0"}:
             await events.update_settings(ctx.guild.id, show_entries=False)
-            await ctx.success("Entry count will be **hidden**")
+            await ctx.success("Entries hidden\n> -# **status:** hidden")
             return
-        await ctx.warn("Use `on` or `off`")
+        await ctx.warn("Invalid option\n> -# **use:** `on` or `off`")
 
     @giveaway_customize.group(
         name="dmonwin",
@@ -1064,26 +1064,26 @@ class Giveaway(commands.Cog):
         """`,giveaway customize dmonwin on|off` - off by default."""
         events = self._events()
         if events is None:
-            await ctx.warn("Giveaway events are not loaded")
+            await ctx.warn("Not loaded\n> -# **giveaway events are not loaded**")
             return
         if state is None:
             settings = await events.get_settings(ctx.guild.id)
             on = settings.get("dm_on_win", False)
             await ctx.success(
-                f"DM on win is **{'on' if on else 'off'}**"
-                + (" · custom script set" if settings.get("dm_script") else "")
+                f"DM on win\n> -# **status:** {'on' if on else 'off'}"
+                + ("\n> -# **script:** custom" if settings.get("dm_script") else "")
             )
             return
         low = state.lower().strip()
         if low in {"on", "enable", "true", "yes", "1"}:
             await events.set_dm_on_win(ctx.guild.id, True)
-            await ctx.success("Winners will be **DM'd** when they win")
+            await ctx.success("DM on win\n> -# **status:** enabled")
             return
         if low in {"off", "disable", "false", "no", "0"}:
             await events.set_dm_on_win(ctx.guild.id, False)
-            await ctx.success("Winners will **not** be DM'd (channel announce only)")
+            await ctx.success("DM on win\n> -# **status:** disabled")
             return
-        await ctx.warn("Use `on` or `off`, or `,giveaway customize dmonwin script ...`")
+        await ctx.warn("Invalid option\n> -# **use:** `on` or `off`\n> -# **or:** `,giveaway customize dmonwin script ...`")
 
     @customize_dmonwin.command(name="on", description="Enable DMing winners")
     @has_permissions(manage_guild=True)
@@ -1092,7 +1092,7 @@ class Giveaway(commands.Cog):
         if not events:
             return
         await events.set_dm_on_win(ctx.guild.id, True)
-        await ctx.success("Winners will be **DM'd** when they win")
+        await ctx.success("DM on win\n> -# **status:** enabled")
 
     @customize_dmonwin.command(name="off", description="Disable DMing winners")
     @has_permissions(manage_guild=True)
@@ -1101,7 +1101,7 @@ class Giveaway(commands.Cog):
         if not events:
             return
         await events.set_dm_on_win(ctx.guild.id, False)
-        await ctx.success("Winners will **not** be DM'd")
+        await ctx.success("DM on win\n> -# **status:** disabled")
 
     @customize_dmonwin.command(
         name="script",
@@ -1115,7 +1115,7 @@ class Giveaway(commands.Cog):
         """Customize the winner DM (embed script). Variables work in DMs."""
         events = self._events()
         if not events:
-            await ctx.warn("Giveaway events are not loaded")
+            await ctx.warn("Not loaded\n> -# **giveaway events are not loaded**")
             return
         if not script or not script.strip():
             settings = await events.get_settings(ctx.guild.id)
@@ -1123,14 +1123,14 @@ class Giveaway(commands.Cog):
             if current:
                 await ctx.send(f"```\n{current[:1900]}\n```")
             else:
-                await ctx.success("Using the **default** winner DM script")
+                await ctx.success("Using default\n> -# **winner DM script**")
             return
         if script.strip().lower() in {"clear", "reset", "default", "none", "remove"}:
             await events.set_dm_script(ctx.guild.id, None)
-            await ctx.success("Winner DM script **reset** to default")
+            await ctx.success("Script reset\n> -# **winner DM** → default")
             return
         await events.set_dm_script(ctx.guild.id, script.strip())
-        await ctx.success("Updated **winner DM** script")
+        await ctx.success("Script updated\n> -# **winner DM**")
 
     
     @giveaway.group(

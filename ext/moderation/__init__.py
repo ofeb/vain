@@ -247,12 +247,12 @@ class ModerationCommands(Package):
         from discord.ext.commands import CommandError as _CmdErr
 
         if ctx.guild is None:
-            await ctx.warn("This command can only be used in a server")
+            await ctx.warn("Server only\n> -# **this command can only be used in a server**")
             return False
         try:
             await ensure_member_hierarchy(ctx, member, allow_self=False)
         except _CmdErr as e:
-            await ctx.warn(str(e))
+            await ctx.warn(f"{e}")
             return False
         return True
 
@@ -429,7 +429,7 @@ class ModerationCommands(Package):
         if not await self._ensure_targetable(ctx, member):
             return False
         if respond and not await self._confirm_if_booster(ctx, member, action):
-            await ctx.warn("Action cancelled.")
+            await ctx.warn("Action cancelled\n> -# **booster confirmation declined**")
             return False
         if not respond and getattr(member, "premium_since", None):
             return False
@@ -493,9 +493,9 @@ class ModerationCommands(Package):
                 return True
             purge = f" (purged {delete_days}d)" if delete_days else ""
             duration = f" for {duration_label}" if duration_label else ""
-            await ctx.success(
-                f"{action.title()}ned **{target_display}**{duration}{purge}\n> -# **Reason: {self._default_reason(reason)}**"
-            )
+        return await ctx.success(
+            f"{action.title()}ed **{target_display}**{duration}{purge}\n> -# **reason:** {self._default_reason(reason)}"
+        )
         return True
 
     async def _run_tempban(
@@ -579,7 +579,7 @@ class ModerationCommands(Package):
         ):
             return
         return await ctx.success(
-            f"Tempbanned **{target_display}** for {duration_label}\n> -# **Reason: {self._default_reason(reason)}**"
+            f"Tempbanned **{target_display}** for {duration_label}\n> -# **reason:** {self._default_reason(reason)}"
         )
 
     @command(
@@ -623,7 +623,7 @@ class ModerationCommands(Package):
         if await self._invoke_response(ctx, "warn", user=member, reason=reason, case_id=case_id):
             return
         return await ctx.success(
-            f"Warned **{member}**\n> -# **Reason: {self._default_reason(reason)}**"
+            f"Warned **{member}**\n> -# **reason:** {self._default_reason(reason)}"
         )
 
     @command(
@@ -698,7 +698,9 @@ class ModerationCommands(Package):
         if not removed:
             return await ctx.warn(f"No dangerous roles\n> -# **{member.mention} has none to strip**")
 
-        return await ctx.success(f"Stripped **{len(removed)}** dangerous roles from {member.mention}\n> -# **{', '.join(removed)}**")
+        return await ctx.success(
+            f"Stripped **{len(removed)}** dangerous roles from {member.mention}\n> -# **{', '.join(removed)}**"
+        )
 
     @command(
         name="jail",
@@ -717,7 +719,7 @@ class ModerationCommands(Package):
 
         row = await self._ensure_jail_ready(ctx)
         if not row:
-            return await ctx.warn("Jail setup failed\n> -# **try ,setupjail**")
+            return await ctx.warn("Jail setup failed\n> -# **try** `,setupjail`")
 
         jail_role = row["jail_role"]
         jail_channel = row["jail_channel"]
@@ -727,7 +729,7 @@ class ModerationCommands(Package):
             ctx.guild.id, member.id,
         )
         if existing:
-            return await ctx.warn(f"Already jailed\n> -# **{member} is already in jail**")
+            return await ctx.warn(f"Already jailed\n> -# **{member}** is already in jail")
 
         role_ids = [r.id for r in member.roles if r != ctx.guild.default_role]
 
@@ -794,7 +796,7 @@ class ModerationCommands(Package):
         if await self._invoke_response(ctx, "jail", user=member, reason=reason, case_id=case_id):
             return
         return await ctx.success(
-            f"Jailed **{member}** in {jail_channel.mention} - {self._default_reason(reason)}"
+            f"Jailed **{member}** in {jail_channel.mention}\n> -# **reason:** {self._default_reason(reason)}"
         )
 
     @command(
@@ -809,7 +811,7 @@ class ModerationCommands(Package):
             ctx.guild.id, member.id,
         )
         if not row:
-            return await ctx.warn(f"Not jailed\n> -# **{member} is not in jail**")
+            return await ctx.warn(f"Not jailed\n> -# **{member}** is not in jail")
 
         role_ids = row["role_ids"]
         jail_role_id = (await self.db.fetchrow(
@@ -848,7 +850,7 @@ class ModerationCommands(Package):
         )
         if await self._invoke_response(ctx, "unjail", user=member, reason=reason, case_id=case_id):
             return
-        return await ctx.success(f"Unjailed **{member}**\n> -# **Reason: {self._default_reason(reason)}**")
+        return await ctx.success(f"Unjailed **{member}**\n> -# **reason:** {self._default_reason(reason)}")
 
     @command(
         name="modstats",
@@ -890,7 +892,7 @@ class ModerationCommands(Package):
             ctx.guild.id, member.id, action="warn", limit=25
         )
         if not rows:
-            return await ctx.warn(f"No warnings\n> -# **{member.mention} has no warnings**")
+            return await ctx.warn(f"No warnings\n> -# **{member.mention}** has no warnings")
         embed = panel_embed(
             title=f"Warnings - {member}",
             color=self.color,
@@ -915,7 +917,7 @@ class ModerationCommands(Package):
             limit=25,
         )
         if not rows:
-            return await ctx.warn(f"No actions\n> -# **{member.mention} has no recorded actions**")
+            return await ctx.warn(f"No actions\n> -# **{member.mention}** has no recorded actions")
         title = f"Moderation History - {member}"
         if command:
             title += f" ({command})"
@@ -939,7 +941,7 @@ class ModerationCommands(Package):
             ctx.guild.id,
         )
         if not rows:
-            return await ctx.warn("No jailed members\n> -# **no members currently in jail**")
+            return await ctx.warn("No jailed members\n> -# **no members are currently in jail**")
 
         lines = []
         for row in rows:
@@ -967,7 +969,7 @@ class ModerationCommands(Package):
         """view case log"""
         embed = await self._build_case_embed(ctx, case_id)
         if embed is None:
-            return await ctx.warn(f"Case not found\n> -# **#{case_id} does not exist**")
+            return await ctx.warn(f"Case not found\n> -# **#{case_id}** does not exist")
         await ctx.send(embed=embed)
 
     @group(
@@ -992,9 +994,9 @@ class ModerationCommands(Package):
 
         seconds = parsed.duration_seconds or (60 * 60)
         if seconds < 60:
-            return await ctx.warn("Duration too short\n> -# **must be at least 60 seconds**")
+            return await ctx.warn("Please provide a **valid duration**\n> -# **minimum timeout is `60 seconds` (e.g. `5m`, `1h`, `1d`)**")
         if seconds > 28 * 86400:
-            return await ctx.warn("Duration too long\n> -# **cannot exceed 28 days**")
+            return await ctx.warn("Please provide a **shorter duration**\n> -# **Discord limits timeouts to `28 days` maximum**")
 
         reason = parsed.reason
         duration_label = self._format_duration(seconds)
@@ -1025,7 +1027,7 @@ class ModerationCommands(Package):
         ):
             return
         return await ctx.success(
-            f"Timed out **{member}** for {duration_label}\n> -# **Reason: {self._default_reason(reason)}**"
+            f"Timed out **{member}** for {duration_label}\n> -# **reason:** {self._default_reason(reason)}"
         )
 
     @timeout.command(
@@ -1066,7 +1068,7 @@ class ModerationCommands(Package):
     async def untimeout(self, ctx, member: discord.Member, *, reason=None):
         """remove timeout from a member"""
         if not member.timed_out_until or member.timed_out_until <= discord.utils.utcnow():
-            return await ctx.warn(f"Not timed out\n> -# **{member.mention} is not timed out**")
+            return await ctx.warn(f"Not timed out\n> -# **{member.mention}** is not timed out")
         case_id = await self._create_case(
             ctx, action="untimeout", target_id=member.id, reason=reason,
         )
@@ -1083,7 +1085,7 @@ class ModerationCommands(Package):
         if await self._invoke_response(ctx, "untimeout", user=member, reason=reason, case_id=case_id):
             return
         return await ctx.success(
-            f"Removed timeout for **{member}**\n> -# **Reason: {self._default_reason(reason)}**"
+            f"Removed timeout for **{member}**\n> -# **reason:** {self._default_reason(reason)}"
         )
 
     async def _mute_member(
@@ -1108,7 +1110,7 @@ class ModerationCommands(Package):
         if not row or not row.get(role_key):
             setting_name = {"": "muted", "i": "imuted", "r": "rmuted"}.get(mute_type, mute_type)
             return await ctx.warn(
-                f"No mute role\n> -# **use {ctx.clean_prefix}settings {setting_name} to configure**"
+                f"No mute role\n> -# **use** `{ctx.clean_prefix}settings {setting_name}` to configure"
             )
         role = ctx.guild.get_role(row[role_key])
         if not role:
@@ -1121,11 +1123,11 @@ class ModerationCommands(Package):
         if duration:
             seconds = self._parse_duration_seconds(duration)
             if not seconds:
-                return await ctx.warn(f"Invalid duration\n> -# **{duration} is not valid (examples: 30m, 2h, 7d)**")
+                return await ctx.warn(f"Invalid duration\n> -# **{duration}** is not valid (examples: 30m, 2h, 7d)")
             expires_at = discord.utils.utcnow() + timedelta(seconds=seconds)
 
         if role in member.roles:
-            return await ctx.warn(f"Already muted\n> -# **{member} is already {role_label}**")
+            return await ctx.warn(f"Already muted\n> -# **{member}** is already {role_label}")
 
         case_id = await self._create_case(
             ctx, action=role_label, target_id=member.id, reason=reason,
@@ -1207,7 +1209,7 @@ class ModerationCommands(Package):
             await self._invoke_dm(ctx, member, "unmute", reason=reason)
             if await self._invoke_response(ctx, "unmute", user=member, reason=reason):
                 return
-        return await ctx.success(f"Un{mute_type if mute_type else 'mute'}d **{member}**\n> -# **Reason: {self._default_reason(reason)}**")
+        return await ctx.success(f"Un{mute_type if mute_type else 'mute'}d **{member}**\n> -# **reason:** {self._default_reason(reason)}")
 
     async def _resolve_member_or_role(self, ctx, target: str):
         """Resolve a message token to a Member or Role."""
@@ -1233,7 +1235,7 @@ class ModerationCommands(Package):
         if isinstance(target, discord.Role):
             members = [m for m in target.members if not m.bot]
             if not members:
-                return await ctx.warn(f"No members\n> -# **no members found with {target.mention}**")
+                return await ctx.warn(f"No members\n> -# **no members found with** {target.mention}")
             ok = 0
             for member in members:
                 try:
@@ -1265,7 +1267,7 @@ class ModerationCommands(Package):
         """Image mute a member or everyone with a role."""
         resolved = await self._resolve_member_or_role(ctx, target)
         if resolved is None:
-            return await ctx.warn(f"Not found\n> -# **no member or role matching {target}**")
+            return await ctx.warn(f"Not found\n> -# **no member or role matching** {target}")
         return await self._apply_special_mute(ctx, resolved, "i", reason=reason)
 
     @command(
@@ -1279,7 +1281,7 @@ class ModerationCommands(Package):
         """Remove image mute from a member or everyone with a role."""
         resolved = await self._resolve_member_or_role(ctx, target)
         if resolved is None:
-            return await ctx.warn(f"Not found\n> -# **no member or role matching {target}**")
+            return await ctx.warn(f"Not found\n> -# **no member or role matching** {target}")
         return await self._apply_special_mute(
             ctx, resolved, "i", reason=reason, remove=True
         )
@@ -1295,7 +1297,7 @@ class ModerationCommands(Package):
         """Reaction mute a member or everyone with a role."""
         resolved = await self._resolve_member_or_role(ctx, target)
         if resolved is None:
-            return await ctx.warn(f"Not found\n> -# **no member or role matching {target}**")
+            return await ctx.warn(f"Not found\n> -# **no member or role matching** {target}")
         return await self._apply_special_mute(ctx, resolved, "r", reason=reason)
 
     @command(
@@ -1309,7 +1311,7 @@ class ModerationCommands(Package):
         """Remove reaction mute from a member or everyone with a role."""
         resolved = await self._resolve_member_or_role(ctx, target)
         if resolved is None:
-            return await ctx.warn(f"Not found\n> -# **no member or role matching {target}**")
+            return await ctx.warn(f"Not found\n> -# **no member or role matching** {target}")
         return await self._apply_special_mute(
             ctx, resolved, "r", reason=reason, remove=True
         )
@@ -1353,7 +1355,7 @@ class ModerationCommands(Package):
         if await self._invoke_response(ctx, "hardban", user=member, reason=reason, case_id=case_id):
             return
         return await ctx.success(
-            f"Hardbanned **{member}**\n> -# **Reason: {self._default_reason(reason)}**"
+            f"Hardbanned **{member}**\n> -# **reason:** {self._default_reason(reason)}"
         )
 
     @command(
@@ -1444,15 +1446,15 @@ class ModerationCommands(Package):
         """unban all members"""
         existing = self._unbanall_tasks.get(ctx.guild.id)
         if existing and not existing.done():
-            return await ctx.warn("An **unban all** task is already running")
+            return await ctx.warn("Already running\n> -# **unban all task is already in progress**")
 
         try:
             bans = [entry async for entry in ctx.guild.bans()]
         except discord.Forbidden:
-            return await ctx.fail("I don't have permission to view bans")
+            return await ctx.fail("Missing permissions\n> -# **need Ban Members permission to view the ban list**")
 
         if not bans:
-            return await ctx.warn("No members are **banned**")
+            return await ctx.warn("No bans\n> -# **no members are banned**")
 
         channel = ctx.channel
 
@@ -1486,10 +1488,10 @@ class ModerationCommands(Package):
         """cancel unban all task"""
         task = self._unbanall_tasks.get(ctx.guild.id)
         if not task or task.done():
-            return await ctx.warn("No **unban all** task is running")
+            return await ctx.warn("No task\n> -# **no unban all task is running**")
         task.cancel()
         self._unbanall_tasks.pop(ctx.guild.id, None)
-        return await ctx.success("Cancelled the **unban all** task")
+        return await ctx.success("Task cancelled\n> -# **unban all**")
 
     @command(
         name="unban",
@@ -1503,9 +1505,9 @@ class ModerationCommands(Package):
         try:
             await ctx.guild.fetch_ban(user)
         except discord.NotFound:
-            return await ctx.warn(f"**{user}** is not banned")
+            return await ctx.warn(f"Not banned\n> -# **{user}** is not banned")
         except discord.Forbidden:
-            return await ctx.warn("I don't have permission to view the ban list")
+            return await ctx.warn("Missing permissions\n> -# **need Ban Members permission to view bans**")
 
         case_id = await self._create_case(
             ctx,
@@ -1521,9 +1523,9 @@ class ModerationCommands(Package):
                 reason=self._audit_reason(ctx, reason),
             )
         except discord.Forbidden:
-            return await ctx.fail("I don't have permission to unban members")
+            return await ctx.fail("Missing permissions\n> -# **need Ban Members permission to unban members**")
         except discord.HTTPException as e:
-            return await ctx.fail(f"Failed to unban **{user}**: {e}")
+            return await ctx.fail(f"Unban failed\n> -# **{user}**: {e}")
 
         if getattr(self.db, "pool", None) is not None:
             with contextlib.suppress(Exception):
@@ -1559,7 +1561,7 @@ class ModerationCommands(Package):
         if not await self._ensure_targetable(ctx, member):
             return
         if not await self._confirm_if_booster(ctx, member, "softban"):
-            return await ctx.warn("Action cancelled.")
+            return await ctx.warn("Action cancelled\n> -# **booster confirmation declined**")
 
         delete_days = self._coerce_delete_days(delete_history, default=1)
         role_ids = [
@@ -1632,7 +1634,7 @@ class ModerationCommands(Package):
         if not await self._ensure_targetable(ctx, member):
             return
         if not await self._confirm_if_booster(ctx, member, "ban"):
-            return await ctx.warn("Action cancelled.")
+            return await ctx.warn("Action cancelled\n> -# **booster confirmation declined**")
 
         delete_days = parsed.delete_days or 0
         role_ids = [role.id for role in member.roles if role != ctx.guild.default_role]
@@ -1691,7 +1693,7 @@ class ModerationCommands(Package):
         if not await self._ensure_targetable(ctx, member):
             return
         if not await self._confirm_if_booster(ctx, member, "kick"):
-            return await ctx.warn("Action cancelled.")
+            return await ctx.warn("Action cancelled\n> -# **booster confirmation declined**")
 
         role_ids = [role.id for role in member.roles if role != ctx.guild.default_role]
         target_display = str(member)
@@ -1759,7 +1761,7 @@ class ModerationCommands(Package):
             reverse=True,
         )[:amount]
         if not members:
-            return await ctx.warn("No members found to ban")
+            return await ctx.warn("No members found\n> -# **no recent members matched the criteria**")
         banned = 0
         for member in members:
             if member.id in {ctx.author.id, ctx.guild.owner_id, ctx.guild.me.id}:
@@ -1787,7 +1789,7 @@ class ModerationCommands(Package):
             if not m.bot and m.id not in {ctx.author.id, ctx.guild.owner_id, ctx.guild.me.id}
         ]
         if not members:
-            return await ctx.warn("No members found to ban")
+            return await ctx.warn("No members found\n> -# **no members available to ban**")
         banned = 0
         for member in members:
             if not await self._ensure_targetable(ctx, member):
@@ -1815,15 +1817,15 @@ class ModerationCommands(Package):
         if not await self._ensure_targetable(ctx, member):
             return
         if role >= ctx.guild.me.top_role:
-            return await ctx.warn("That role is **higher** than my top role")
+            return await ctx.warn("Invalid role\n> -# **role is higher than my top role**")
         seconds = self._parse_duration_seconds(duration)
         if not seconds or seconds < 60:
-            return await ctx.warn("Duration must be at least **60 seconds**")
+                return await ctx.warn("Invalid duration\n> -# **must be at least `60 seconds` (e.g. `30m`, `2h`, `7d`)**")
         expires_at = discord.utils.utcnow() + timedelta(seconds=seconds)
         try:
             await member.add_roles(role, reason=f"temprole by {ctx.author}")
         except discord.HTTPException as e:
-            return await ctx.fail(f"Failed to add role: {e}")
+            return await ctx.fail(f"Role update failed\n> -# **{e}**")
         if getattr(self.db, "pool", None) is not None:
             await self.db.add_temprole(
                 ctx.guild.id, member.id, role.id, expires_at, ctx.author.id,
@@ -1841,10 +1843,10 @@ class ModerationCommands(Package):
     async def temprole_list(self, ctx):
         """list temporary roles"""
         if getattr(self.db, "pool", None) is None:
-            return await ctx.warn("Database is unavailable")
+            return await ctx.warn("Database unavailable\n> -# **could not load temporary roles**")
         rows = await self.db.fetch_temproles(ctx.guild.id)
         if not rows:
-            return await ctx.warn("No **temporary roles** are active")
+            return await ctx.warn("No active roles\n> -# **no temporary roles are currently active**")
         lines = []
         for row in rows[:25]:
             member = ctx.guild.get_member(row["user_id"])
@@ -1871,7 +1873,7 @@ class ModerationCommands(Package):
         """dump role members"""
         members = role.members
         if not members:
-            return await ctx.warn(f"No members have {role.mention}")
+            return await ctx.warn(f"No members\n> -# **no members have** {role.mention}")
         lines = [member.mention for member in members[:50]]
         embed = panel_embed(
             title=f"Members - {role.name}",
@@ -1895,7 +1897,7 @@ class ModerationCommands(Package):
             reverse=True,
         )[:count]
         if not members:
-            return await ctx.warn("No members found")
+            return await ctx.warn("No members found\n> -# **no members matched the criteria**")
         lines = [
             label_line(
                 member.mention,
@@ -1951,7 +1953,7 @@ class ModerationCommands(Package):
         """toggle channel text for role (defaults to current channel)"""
         channel = channel or ctx.channel
         if not isinstance(channel, discord.TextChannel):
-            return await ctx.warn("This command only works on **text channels**")
+            return await ctx.warn("Text channels only\n> -# **this command only works on text channels**")
         overwrite = channel.overwrites_for(role)
         if overwrite.send_messages is False:
             overwrite.send_messages = True
@@ -2032,7 +2034,7 @@ class ModerationCommands(Package):
         for channel in channels:
             for target in targets:
                 overwrite = channel.overwrites_for(target)
-                overwrite.view_channel = hidden
+                overwrite.view_channel = not hidden
                 with contextlib.suppress(discord.HTTPException, discord.Forbidden):
                     await channel.set_permissions(
                         target,
@@ -2056,7 +2058,7 @@ class ModerationCommands(Package):
 
         applied = await self._apply_hide_state(ctx, channels, targets, hidden=hidden)
         if not applied:
-            return await ctx.warn("No channel permissions could be updated")
+            return await ctx.warn("No changes made\n> -# **no channel permissions could be updated**")
 
         action = "Hid" if hidden else "Unhid"
         if used_all:
@@ -2211,7 +2213,7 @@ class ModerationCommands(Package):
             "and clears the modlog configuration. **This cannot be undone.**"
         )
         if not ok:
-            return await ctx.warn("Moderation unsetup **cancelled**")
+            return await ctx.warn("Cancelled\n> -# **moderation unsetup was cancelled**")
 
         async with ctx.typing():
             removed = []
@@ -2236,7 +2238,7 @@ class ModerationCommands(Package):
                 f"Use `{ctx.clean_prefix}setup` to recreate them."
             )
         else:
-            await ctx.warn("No setup channels found to remove.")
+            await ctx.warn("No setup found\n> -# **no moderation setup channels to remove**")
 
     @command(
         name="setupjail",
@@ -2248,7 +2250,7 @@ class ModerationCommands(Package):
         async with ctx.typing():
             row = await self._ensure_jail_ready(ctx)
             if not row:
-                return await ctx.warn("Failed to set up jail.")
+                return await ctx.warn("Jail setup failed\n> -# **could not create jail channel or role**")
         embed = build_modlog_embed(
             color=self.color,
             action="jail setup",
@@ -2277,7 +2279,7 @@ class ModerationCommands(Package):
             "**This cannot be undone.**"
         )
         if not ok:
-            return await ctx.warn("Jail unsetup **cancelled**")
+            return await ctx.warn("Cancelled\n> -# **jail unsetup was cancelled**")
 
         async with ctx.typing():
             removed = []
@@ -2345,7 +2347,7 @@ class ModerationCommands(Package):
                 f"Use `{ctx.clean_prefix}setupjail` to recreate them."
             )
         else:
-            await ctx.warn("No jail setup found to remove.")
+            await ctx.warn("No jail setup found\n> -# **no jail system to remove**")
 
     @command(
         name="setupmute",
@@ -2420,7 +2422,7 @@ class ModerationCommands(Package):
             "and clears the mute configuration. **This cannot be undone.**"
         )
         if not ok:
-            return await ctx.warn("Mute unsetup **cancelled**")
+            return await ctx.warn("Cancelled\n> -# **mute unsetup was cancelled**")
 
         async with ctx.typing():
             removed = []
@@ -2466,7 +2468,7 @@ class ModerationCommands(Package):
                 f"Use `{ctx.clean_prefix}setupmute` to recreate them."
             )
         else:
-            await ctx.warn("No mute setup found to remove.")
+            await ctx.warn("No mute setup found\n> -# **no mute system to remove**")
 
     @command(
         name="rename",
@@ -2483,9 +2485,9 @@ class ModerationCommands(Package):
                 reason=f"rename by {ctx.author}",
             )
         except discord.Forbidden:
-            return await ctx.fail("I don't have permission to rename this member")
+            return await ctx.fail("Missing permissions\n> -# **need Manage Nicknames permission**")
         except discord.HTTPException as e:
-            return await ctx.fail(f"Failed to rename member: {e}")
+            return await ctx.fail(f"Rename failed\n> -# **{e}**")
         return await ctx.success(f"Renamed **{member}** to **{newnick[:32]}**")
 
     @command(
@@ -2497,10 +2499,10 @@ class ModerationCommands(Package):
         """raid mode"""
         seconds = self._parse_duration_seconds(time)
         if not seconds:
-            return await ctx.warn("Provide a valid time like `30m`, `2h`, or `1d`")
+            return await ctx.warn("Please provide a **valid duration**\n> -# **examples: `30m`, `2h`, `1d`**")
         action = action.lower().strip()
         if action not in {"ban", "kick"}:
-            return await ctx.warn("Action must be **ban** or **kick**")
+            return await ctx.warn("Invalid action\n> -# **must be** `ban` or `kick`")
 
         cutoff = discord.utils.utcnow() - timedelta(seconds=seconds)
         targets = [
@@ -2511,7 +2513,7 @@ class ModerationCommands(Package):
             and m.id not in {ctx.author.id, ctx.guild.owner_id, ctx.guild.me.id}
         ]
         if not targets:
-            return await ctx.warn("No members joined in that window")
+            return await ctx.warn("No members found\n> -# **no members joined in that time window**")
 
         affected = 0
         for member in targets:
@@ -2544,7 +2546,7 @@ class ModerationCommands(Package):
     async def topic(self, ctx, *, text: str):
         """change channel topic"""
         if not isinstance(ctx.channel, discord.TextChannel):
-            return await ctx.warn("This command only works in **text channels**")
+            return await ctx.warn("Text channels only\n> -# **this command only works in text channels**")
         await ctx.channel.edit(topic=text[:1024], reason=f"topic by {ctx.author}")
         return await ctx.success("Updated this channel's **topic**")
 
@@ -2572,22 +2574,20 @@ class ModerationCommands(Package):
                     duration = None
                     seconds = None
                 except commands.BadArgument:
-                    return await ctx.warn(
-                        f"Invalid duration `{duration}`. Use e.g. `30s`, `5m`, `1h`, `1d`, `1w`"
-                    )
+                    return await ctx.warn("Invalid duration\n> -# **use e.g. 30s, 5m, 1h, 1d, 1w**")
         else:
             seconds = self._parse_duration_seconds(duration) if duration else None
             if duration and seconds is None:
                 return await ctx.warn(
-                    f"Invalid duration `{duration}`. Use e.g. `30s`, `5m`, `1h`, `1d`, `1w`"
+                    f"Invalid duration\n> -# **{duration}** is not valid (examples: 30s, 5m, 1h, 1d, 1w)"
                 )
 
         channel = channel or ctx.channel
         if not isinstance(channel, discord.TextChannel):
-            return await ctx.warn("This command only works on **text channels**")
+            return await ctx.warn("Text channels only\n> -# **this command only works on text channels**")
 
         if not channel.permissions_for(ctx.guild.me).manage_channels:
-            return await ctx.warn("I don't have **Manage Channels** for that channel")
+            return await ctx.warn("Missing permissions\n> -# **need Manage Channels for that channel**")
 
         
         pending = self._naughty_tasks.pop(channel.id, None)
@@ -2602,15 +2602,15 @@ class ModerationCommands(Package):
         try:
             await channel.edit(nsfw=target, reason=reason)
         except discord.Forbidden:
-            return await ctx.fail("I don't have permission to edit this channel")
+            return await ctx.fail("Missing permissions\n> -# **cannot edit this channel**")
         except discord.HTTPException as e:
-            return await ctx.fail(f"Failed to update channel: {e}")
+            return await ctx.fail(f"Channel update failed\n> -# **{e}**")
 
         if seconds and seconds > 0:
             label = self._format_duration(seconds)
             await ctx.success(
-                f"{action.title()} NSFW on {channel.mention} for **{label}** "
-                f"(will revert to {'NSFW' if was_nsfw else 'SFW'} afterwards)"
+                f"NSFW {action} on {channel.mention} for **{label}**\n"
+                f"> -# **reverts to:** {'NSFW' if was_nsfw else 'SFW'}"
             )
             guild_id = ctx.guild.id
             channel_id = channel.id
@@ -2635,7 +2635,7 @@ class ModerationCommands(Package):
 
             self._naughty_tasks[channel_id] = asyncio.create_task(_revert())
         else:
-            await ctx.success(f"{action.title()} NSFW on {channel.mention} **indefinitely**")
+            await ctx.success(f"NSFW {action} on {channel.mention}\n> -# **duration:** indefinitely")
 
     @command(
         name="permissions",

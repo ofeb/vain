@@ -126,7 +126,7 @@ class InviteTracker(Package):
             ),
         )
         if not await view.prompt(embed=emb):
-            return await ctx.warn("Reset cancelled\n> -# **invite tracker clear was cancelled**")
+            return await ctx.warn("Reset was **cancelled**\n> -# **invite tracker:** no changes were made")
         await self.db.execute(
             "DELETE FROM invite_counts WHERE guild_id = $1", ctx.guild.id
         )

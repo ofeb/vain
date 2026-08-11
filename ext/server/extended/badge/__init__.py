@@ -70,7 +70,7 @@ class BadgeCommands(Package):
             [f"{p[0]}-{p[1]}" for p in pairs],
             ctx.guild.id,
         )
-        return await ctx.success(f"color set to `{color.value}`")
+        return await ctx.success(f"Color set\n> -# **{color.value}**")
 
     @colorme.command(
         name="enable",
@@ -84,7 +84,7 @@ class BadgeCommands(Package):
             """INSERT INTO config (guild_id, colorme) VALUES($1, $2) ON CONFLICT(guild_id) DO UPDATE SET colorme = excluded.colorme""",
             ctx.guild.id, True,
         )
-        return await ctx.success("colorme enabled")
+        return await ctx.success("Colorme enabled")
 
     @colorme.command(
         name="disable",
@@ -99,8 +99,7 @@ class BadgeCommands(Package):
             ctx.guild.id, False,
         )
         return await ctx.success(
-            f"colorme **disabled** - color roles kept. "
-            f"use `{ctx.clean_prefix}colorme reset` to delete everything"
+            f"Colorme disabled\n> -# **color roles kept**"
         )
 
     @colorme.command(
@@ -119,7 +118,7 @@ class BadgeCommands(Package):
             "This action **cannot be undone**."
         )
         if not ok:
-            return await ctx.warn("colorme reset **cancelled**")
+            return await ctx.warn("Cancelled\n> -# **colorme reset was cancelled**")
 
         await self.db.execute(
             """INSERT INTO config (guild_id, colorme) VALUES($1, $2) ON CONFLICT(guild_id) DO UPDATE SET colorme = excluded.colorme""",
@@ -139,7 +138,7 @@ class BadgeCommands(Package):
             """DELETE FROM color_roles WHERE guild_id = $1""", ctx.guild.id
         )
         return await ctx.success(
-            "colorme configuration and color roles **deleted**. this action cannot be undone"
+            "Colorme reset\n> -# **all color roles deleted**"
         )
 
     @colorme.command(name="cleanup", description="remove unused color roles")

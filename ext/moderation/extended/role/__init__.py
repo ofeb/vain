@@ -940,7 +940,7 @@ class Role(Package):
             - ``str`` for unicode emoji (Discord accepts these directly)
             - ``None`` to clear the icon
         """
-        if not source and ctx.message and ctx.message.attachments:
+        if ctx.message and ctx.message.attachments:
             attachment = ctx.message.attachments[0]
             content_type = (attachment.content_type or "").lower()
             filename = (attachment.filename or "").lower()
@@ -961,22 +961,29 @@ class Role(Package):
         if not raw:
             return None
 
-        
         try:
             partial = discord.PartialEmoji.from_str(raw)
         except Exception:
             partial = None
 
         if partial is not None and partial.is_custom_emoji() and partial.id:
+            ext = "gif" if partial.animated else "png"
+            cdn_url = f"https://cdn.discordapp.com/emojis/{partial.id}.{ext}?size=256&quality=lossless"
             try:
-                data = await partial.read()
+                timeout = aiohttp.ClientTimeout(total=15)
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.get(cdn_url) as resp:
+                        if resp.status != 200:
+                            raise CommandError("Could not download that **emoji**")
+                        data = await resp.read()
+            except CommandError:
+                raise
             except Exception as exc:
                 raise CommandError("Could not download that **emoji**") from exc
             if len(data) > 256 * 1024:
                 raise CommandError("Role icons must be **256 KB** or smaller")
             return data
 
-        
         if raw.startswith(("http://", "https://")):
             try:
                 timeout = aiohttp.ClientTimeout(total=15)
@@ -996,12 +1003,11 @@ class Role(Package):
                 raise CommandError("Role icons must be **256 KB** or smaller")
             return data
 
-        
         if raw.startswith(("<@", "<#")):
             raise CommandError(
                 "Provide a **custom emoji**, **unicode emoji**, **image URL**, or **attachment**"
             )
-        
+
         if len(raw) <= 16 and not raw.isascii():
             return raw
         if len(raw) <= 8 and all(

@@ -403,6 +403,30 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
                 await self.db.execute(
                     "ALTER TABLE leveling ADD COLUMN IF NOT EXISTS message_rolegain TEXT DEFAULT NULL"
                 )
+            with contextlib.suppress(Exception):
+                await self.db.execute(
+                    "ALTER TABLE leveling ADD COLUMN IF NOT EXISTS channel_id BIGINT"
+                )
+            with contextlib.suppress(Exception):
+                await self.db.execute(
+                    "ALTER TABLE leveling ADD COLUMN IF NOT EXISTS stack BOOLEAN DEFAULT FALSE"
+                )
+            with contextlib.suppress(Exception):
+                await self.db.execute(
+                    "ALTER TABLE leveling ADD COLUMN IF NOT EXISTS command BOOLEAN DEFAULT FALSE"
+                )
+            with contextlib.suppress(Exception):
+                await self.db.execute(
+                    "ALTER TABLE leveling ADD COLUMN IF NOT EXISTS roles TEXT DEFAULT '[]'"
+                )
+            with contextlib.suppress(Exception):
+                await self.db.execute(
+                    "ALTER TABLE leveling ADD COLUMN IF NOT EXISTS channels TEXT DEFAULT '[]'"
+                )
+            with contextlib.suppress(Exception):
+                await self.db.execute(
+                    "ALTER TABLE leveling ADD COLUMN IF NOT EXISTS users TEXT DEFAULT '[]'"
+                )
 
     def _calc_target(self, level: int) -> int:
         return max(int((100 * level + 1) ** 0.9), 50)
@@ -431,7 +455,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         cfg = await self._get_cfg(ctx.guild.id)
         if not cfg or not self._cfg_is_enabled(cfg):
             await ctx.warn(
-                f"Leveling is not enabled - use `{ctx.clean_prefix}leveling enable`"
+                f"Not enabled\n> -# **use:** `{ctx.clean_prefix}leveling enable`"
             )
             return None
         return cfg
@@ -483,7 +507,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
             "SELECT * FROM level_user WHERE guild_id = $1", ctx.guild.id
         )
         if not rows:
-            return await ctx.warn("No one has ranked up in this server yet")
+            return await ctx.warn("No rankings\n> -# **no one has ranked up yet**")
         sorted_rows = sorted(
             rows, key=lambda r: (r["level"], r["xp"]), reverse=True
         )
@@ -492,7 +516,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
             None,
         )
         if position is None:
-            return await ctx.warn(f"{member.mention} has no recorded level data")
+            return await ctx.warn(f"No data\n> -# **{member.mention}** has no recorded level data")
         data = next(r for r in sorted_rows if r["user_id"] == member.id)
         accent = int(getattr(self.bot, "color", None) or bot_color.base or 0xE1D2DE)
         card = await generate_rank_card(
@@ -531,14 +555,14 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
     async def leveling_enable(self, ctx):
         cfg = await self._get_cfg(ctx.guild.id)
         if cfg and self._cfg_is_enabled(cfg):
-            return await ctx.warn("Leveling is already **enabled**")
+            return await ctx.warn("Already enabled\n> -# **leveling is already active**")
         if cfg:
             await self.db.execute(
                 "UPDATE leveling SET enabled = TRUE WHERE guild_id = $1",
                 ctx.guild.id,
             )
             return await ctx.success(
-                "Leveling system is now **enabled** - previous configuration and XP kept"
+                "Leveling enabled\n> -# **status:** previous config and XP kept"
             )
         await self.db.execute(
             """INSERT INTO leveling
@@ -547,7 +571,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
             ctx.guild.id,
             "Nice work {user.mention} - you reached **Level {level}**!",
         )
-        return await ctx.success("Leveling system is now **enabled**")
+        return await ctx.success("Leveling enabled")
 
     @leveling.command(
         name="disable",
@@ -560,20 +584,19 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         cfg = await self._get_cfg(ctx.guild.id)
         if not cfg:
             return await ctx.warn(
-                f"Leveling is not configured - use `{ctx.clean_prefix}leveling enable`"
+                f"Leveling is not configured\n> -# **use:** `{ctx.clean_prefix}leveling enable`"
             )
         if not self._cfg_is_enabled(cfg):
             return await ctx.warn(
-                f"Leveling is already **disabled** - "
-                f"use `{ctx.clean_prefix}leveling enable` to turn it back on"
+                f"Already disabled\n> -# **use:** `{ctx.clean_prefix}leveling enable` to re-enable"
             )
         await self.db.execute(
             "UPDATE leveling SET enabled = FALSE WHERE guild_id = $1",
             ctx.guild.id,
         )
         return await ctx.success(
-            "Leveling **disabled** - configuration and XP kept. "
-            f"Use `{ctx.clean_prefix}leveling wipe` to delete everything"
+            "Leveling disabled\n"
+            f"> -# **use:** `{ctx.clean_prefix}leveling wipe` to delete everything"
         )
 
     @leveling.command(
@@ -594,7 +617,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
                 ctx.guild.id,
             )
             return await ctx.success(
-                "Level-ups will post in the **same channel** the member leveled in"
+                "Channel set\n> -# **destination:** same channel as message"
             )
         if raw in {"dm", "dms", "private"}:
             await self.db.execute(
@@ -602,7 +625,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
                 0,
                 ctx.guild.id,
             )
-            return await ctx.success("Level-ups will be sent in **DMs**")
+            return await ctx.success("Channel set\n> -# **destination:** DMs")
         ch = None
         for converter in (
             commands.TextChannelConverter(),
@@ -614,19 +637,19 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
             except Exception:
                 continue
         if ch is None:
-            return await ctx.warn("Use a channel mention/ID, `any`, or `dm`")
+            return await ctx.warn("Invalid input\n> -# **use:** channel mention/ID, `any`, or `dm`")
         me = ctx.guild.me
         perms = ch.permissions_for(me) if me is not None else None
         if perms is not None and not perms.send_messages:
             return await ctx.warn(
-                f"I can't send messages in {ch.mention} - fix my permissions first"
+                f"No permissions\n> -# **can't send messages in** {ch.mention}"
             )
         await self.db.execute(
             "UPDATE leveling SET channel_id = $1 WHERE guild_id = $2",
             ch.id,
             ctx.guild.id,
         )
-        return await ctx.success(f"Level-ups will post in {ch.mention}")
+        return await ctx.success(f"Channel set\n> -# **destination:** {ch.mention}")
 
     @leveling.command(
         name="message",
@@ -646,13 +669,18 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
             return await ctx.send_help(ctx.command)
         raw = str(message)
         rolegain = False
-        kept = []
-        for word in raw.split():
-            if word.lower() == "--rolegain":
-                rolegain = True
-            else:
-                kept.append(word)
-        script = " ".join(kept).strip()
+        lines = raw.split("\n")
+        kept_lines = []
+        for line in lines:
+            words = line.split()
+            filtered = []
+            for word in words:
+                if word.lower() == "--rolegain":
+                    rolegain = True
+                else:
+                    filtered.append(word)
+            kept_lines.append(" ".join(filtered))
+        script = "\n".join(kept_lines).strip()
         if not script:
             return await ctx.send_help(ctx.command)
         column = "message_rolegain" if rolegain else "message"
@@ -663,9 +691,9 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
                 ctx.guild.id,
             )
             return await ctx.success(
-                "Removed the level reward role message"
+                "Message removed\n> -# **type:** level reward role message"
                 if rolegain
-                else "Removed the level-up message"
+                else "Message removed\n> -# **type:** level-up message"
             )
         await self.db.execute(
             f"UPDATE leveling SET {column} = $1 WHERE guild_id = $2",
@@ -674,13 +702,13 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         )
         if rolegain:
             return await ctx.success(
-                "Level reward role message set - it only sends when a member "
-                f"gains a role from `{ctx.clean_prefix}leveling rewards`.\n"
+                f"Message set\n> -# **type:** role reward message\n"
+                f"> -# **sends when:** member gains a role from `{ctx.clean_prefix}leveling rewards`\n"
                 f"```\n{script[:500]}\n```"
             )
         return await ctx.success(
-            "Level-up message set - it will send to the configured "
-            f"`{ctx.clean_prefix}leveling channel` destination.\n```\n{script[:500]}\n```"
+            f"Message set\n> -# **sends to:** `{ctx.clean_prefix}leveling channel` destination\n"
+            f"```\n{script[:500]}\n```"
         )
 
     @leveling.command(
@@ -695,7 +723,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
             return
         script = cfg.get("message") or "none"
         if str(script).strip().lower() == "none":
-            return await ctx.warn("No level-up message configured")
+            return await ctx.warn("No message\n> -# **no level-up message configured**")
 
         row = await self.db.fetchrow(
             "SELECT xp, level, target_xp FROM level_user WHERE guild_id = $1 AND user_id = $2",
@@ -715,8 +743,8 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         if dest is None:
             ch_id = cfg.get("channel_id")
             return await ctx.warn(
-                f"Configured level channel `{ch_id}` is missing or not messageable. "
-                f"Set it again with `{ctx.clean_prefix}leveling channel #channel`"
+                f"Channel missing\n> -# **channel `{ch_id}` not found**\n"
+                f"> -# **use:** `{ctx.clean_prefix}leveling channel #channel`"
             )
 
         msg = await self._send_level_message(
@@ -731,14 +759,13 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         )
         if msg is None:
             return await ctx.warn(
-                "Failed to send the level-up preview - check bot permissions "
-                "in the configured channel (and DMs if channel is `dm`)"
+                "Failed to send\n> -# **check bot permissions in channel**"
             )
         jump = getattr(msg, "jump_url", None)
         if jump:
-            return await ctx.success(f"Sent preview → {jump}")
+            return await ctx.success(f"Preview sent\n> -# {jump}")
         where = getattr(dest, "mention", None) or "DMs"
-        return await ctx.success(f"Sent preview → {where}")
+        return await ctx.success(f"Preview sent\n> -# **destination:** {where}")
 
     def _check_multi(self, value: float) -> bool:
         return float(value) in _VALID_MULTIS
@@ -756,7 +783,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
             return
         if not self._check_multi(multiplier):
             return await ctx.warn(
-                "Multiplier must be one of: "
+                "Invalid multiplier\n> -# **must be one of:** "
                 + ", ".join(f"`{m:.2f}`" for m in _VALID_MULTIS)
             )
         await self.db.execute(
@@ -764,7 +791,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
             float(multiplier),
             ctx.guild.id,
         )
-        return await ctx.success(f"Global multiplier set to **{multiplier:.2f}**")
+        return await ctx.success(f"Multiplier set\n> -# **value:** {multiplier:.2f}")
 
     @leveling.command(
         name="booster",
@@ -778,7 +805,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
             return
         if not self._check_multi(multiplier):
             return await ctx.warn(
-                "Multiplier must be one of: "
+                "Invalid multiplier\n> -# **must be one of:** "
                 + ", ".join(f"`{m:.2f}`" for m in _VALID_MULTIS)
             )
         await self.db.execute(
@@ -786,7 +813,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
             float(multiplier),
             ctx.guild.id,
         )
-        return await ctx.success(f"Booster multiplier set to **{multiplier:.2f}**")
+        return await ctx.success(f"Booster multiplier set\n> -# **value:** {multiplier:.2f}")
 
     @leveling.command(
         name="set",
@@ -799,7 +826,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         if not await self._require_enabled(ctx):
             return
         if level < 1 or level > 1000:
-            return await ctx.warn("Level must be between **1** and **1000**")
+            return await ctx.warn("Invalid level\n> -# **must be between 1 and 1000**")
         target = self._calc_target(level)
         await self.db.execute(
             """INSERT INTO level_user (guild_id, user_id, xp, level, target_xp)
@@ -813,7 +840,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         )
         await self._sync_user_roles(ctx.guild, member, level)
         return await ctx.success(
-            f"Set {member.mention} to **Level {level}**"
+            f"Level set\n> -# **{member.mention}** → Level {level}"
         )
 
     @leveling.command(
@@ -826,7 +853,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
     async def leveling_reset(self, ctx, member: Member = None):
         if not await self._get_cfg(ctx.guild.id):
             return await ctx.warn(
-                f"Leveling is not configured - use `{ctx.clean_prefix}leveling enable`"
+                f"Not configured\n> -# **use:** `{ctx.clean_prefix}leveling enable`"
             )
         view = ConfirmView(ctx.author.id)
         target = member.mention if member else "**everyone**"
@@ -844,13 +871,13 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         with contextlib.suppress(Exception):
             await msg.edit(view=None)
         if not view.value:
-            return await ctx.warn("Reset **cancelled**")
+            return await ctx.warn("Cancelled\n> -# **reset was cancelled**")
         if member is None:
             await self.db.execute(
                 "DELETE FROM level_user WHERE guild_id = $1", ctx.guild.id
             )
             return await ctx.success(
-                "Reset level stats for **all** members. This action cannot be undone."
+                "Stats reset\n> -# **target:** all members\n> -# **note:** this cannot be undone"
             )
         await self.db.execute(
             "DELETE FROM level_user WHERE guild_id = $1 AND user_id = $2",
@@ -858,7 +885,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
             member.id,
         )
         return await ctx.success(
-            f"Reset level stats for {member.mention}. This action cannot be undone."
+            f"Stats reset\n> -# **target:** {member.mention}\n> -# **note:** this cannot be undone"
         )
 
     @leveling.command(
@@ -871,7 +898,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
     async def leveling_wipe(self, ctx):
         cfg = await self._get_cfg(ctx.guild.id)
         if not cfg:
-            return await ctx.warn("Leveling is not configured for this server")
+            return await ctx.warn("Not configured\n> -# **leveling is not set up for this server**")
         view = ConfirmView(ctx.author.id)
         msg = await ctx.send(
             embed=Embed(
@@ -887,7 +914,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         with contextlib.suppress(Exception):
             await msg.edit(view=None)
         if not view.value:
-            return await ctx.warn("Leveling wipe **cancelled**")
+            return await ctx.warn("Cancelled\n> -# **wipe was cancelled**")
         await self.db.execute(
             "DELETE FROM leveling WHERE guild_id = $1", ctx.guild.id
         )
@@ -907,7 +934,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
                 "DELETE FROM level_multiplier_voice WHERE guild_id = $1", ctx.guild.id
             )
         return await ctx.success(
-            "Leveling configuration and XP **deleted**. This action cannot be undone."
+            "Wiped\n> -# **config and XP deleted**\n> -# **note:** this cannot be undone"
         )
 
     @leveling.command(
@@ -923,7 +950,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         member_ids = {m.id for m in ctx.guild.members}
         filtered = [r for r in rows if r["user_id"] in member_ids]
         if not filtered:
-            return await ctx.warn("No ranked members yet")
+            return await ctx.warn("No rankings\n> -# **no ranked members yet**")
         sorted_rows = sorted(
             filtered, key=lambda r: (r["level"], r["xp"]), reverse=True
         )[:25]
@@ -1012,7 +1039,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         if not await self._require_enabled(ctx):
             return
         if level < 1:
-            return await ctx.warn("Level must be at least **1**")
+            return await ctx.warn("Invalid level\n> -# **must be at least 1**")
         existing = await self.db.fetchrow(
             "SELECT level FROM level_rewards WHERE guild_id = $1 AND role_id = $2",
             ctx.guild.id,
@@ -1020,7 +1047,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         )
         if existing:
             return await ctx.warn(
-                f"{role.mention} is already a reward for **Level {existing['level']}**"
+                f"Already exists\n> -# **{role.mention}** is already a reward for Level {existing['level']}"
             )
         await self.db.execute(
             "INSERT INTO level_rewards (guild_id, level, role_id) VALUES ($1, $2, $3)",
@@ -1029,7 +1056,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
             role.id,
         )
         return await ctx.success(
-            f"Added {role.mention} as a reward for **Level {level}**"
+            f"Reward added\n> -# **{role.mention}** → Level {level}"
         )
 
     @leveling_rewards.command(
@@ -1048,14 +1075,14 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
             role.id,
         )
         if not row:
-            return await ctx.warn(f"{role.mention} is not a level reward")
+            return await ctx.warn(f"Not a reward\n> -# **{role.mention}** is not a level reward")
         await self.db.execute(
             "DELETE FROM level_rewards WHERE guild_id = $1 AND role_id = $2",
             ctx.guild.id,
             role.id,
         )
         return await ctx.success(
-            f"Removed reward for **Level {row['level']}**"
+            f"Reward removed\n> -# **level:** {row['level']}"
         )
 
     @leveling_rewards.command(
@@ -1069,7 +1096,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
             ctx.guild.id,
         )
         if not rows:
-            return await ctx.warn("No level rewards configured")
+            return await ctx.warn("No rewards\n> -# **no level rewards configured**")
         lines = []
         for r in rows:
             role = ctx.guild.get_role(r["role_id"])
@@ -1089,7 +1116,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
             return
         opt = option.strip().lower()
         if opt not in {"on", "off", "true", "false", "yes", "no", "1", "0"}:
-            return await ctx.warn("Use **on** or **off**")
+            return await ctx.warn("Invalid option\n> -# **use:** `on` or `off`")
         enabled = opt in {"on", "true", "yes", "1"}
         await self.db.execute(
             "UPDATE leveling SET stack = $1 WHERE guild_id = $2",
@@ -1097,7 +1124,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
             ctx.guild.id,
         )
         return await ctx.success(
-            f"{'Enabled' if enabled else 'Disabled'} stacking rewards"
+            f"Stacking {'enabled' if enabled else 'disabled'}\n> -# **rewards:** {'all' if enabled else 'highest only'}"
         )
 
     
@@ -1121,14 +1148,14 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         current = self._parse_json_list(cfg.get(column))
         if add:
             if item_id in current:
-                return await ctx.warn(f"{mention} is already ignored")
+                return await ctx.warn(f"Already ignored\n> -# **{mention}** is already ignored")
             current.append(item_id)
-            msg = f"Added {mention} to the ignore list"
+            msg = f"Added\n> -# **{mention}** added to ignore list"
         else:
             if item_id not in current:
-                return await ctx.warn(f"{mention} is not ignored")
+                return await ctx.warn(f"Not ignored\n> -# **{mention}** is not ignored")
             current.remove(item_id)
-            msg = f"Removed {mention} from the ignore list"
+            msg = f"Removed\n> -# **{mention}** removed from ignore list"
         await self.db.execute(
             f"UPDATE leveling SET {column} = $1 WHERE guild_id = $2",
             json.dumps(current),
@@ -1198,7 +1225,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         for cid in self._parse_json_list(cfg.get("channels")):
             lines.append(f"<#{cid}>")
         if not lines:
-            return await ctx.warn("Nothing is ignored for XP")
+            return await ctx.warn("Nothing ignored\n> -# **nothing is ignored for XP**")
         return await ctx.paginate(Embed(title="Level Ignore List"), lines)
 
     

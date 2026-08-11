@@ -57,7 +57,7 @@ class Sticker(Package):
                 updated += 1
             except Exception:
                 continue
-        await ctx.success(f"Tagged **{updated}** sticker(s) with `{tag}`")
+        await ctx.success(f"Stickers tagged\n> -# **count:** {updated} updated with `{tag}`")
 
     @sticker.command(
         name="remove",
@@ -67,7 +67,7 @@ class Sticker(Package):
     async def sticker_remove(self, ctx, *, name: str):
         """remove sticker from server"""
         if ctx.guild is None:
-            return await ctx.warn("This command can only be used in a server")
+            return await ctx.warn("This command can only be used in a **server**\n> -# **usage:** this command requires a guild")
         needle = (name or "").strip().lower()
         sticker = next(
             (s for s in ctx.guild.stickers if s.name.lower() == needle),
@@ -79,15 +79,15 @@ class Sticker(Package):
                 None,
             )
         if not sticker:
-            return await ctx.warn(f"Sticker `{name}` not found")
+            return await ctx.warn(f"Could not find that sticker\n> -# **name:** `{name}`")
 
         try:
             await sticker.delete(reason=f"sticker remove by {ctx.author} ({ctx.author.id})")
         except discord.Forbidden:
-            return await ctx.warn("I don't have permission to delete stickers")
+            return await ctx.warn("Missing **Manage Expressions** permission\n> -# **required:** Manage Expressions")
         except discord.HTTPException as e:
-            return await ctx.fail(f"Failed to remove sticker: {getattr(e, 'text', e)}"[:150])
-        await ctx.success(f"Removed sticker `{sticker.name}`")
+            return await ctx.fail(f"Could not remove that sticker\n> -# **error:** {getattr(e, 'text', e)}"[:150])
+        await ctx.success(f"Sticker removed\n> -# **name:** `{sticker.name}`")
 
     @sticker.command(
         name="cleanup",
@@ -97,7 +97,7 @@ class Sticker(Package):
     async def sticker_cleanup(self, ctx):
         """clean up sticker names"""
         if ctx.guild is None:
-            return await ctx.warn("This command can only be used in a server")
+            return await ctx.warn("This command can only be used in a **server**\n> -# **usage:** this command requires a guild")
         count = 0
         for sticker in list(ctx.guild.stickers):
             new_name = _sanitize_sticker_name(sticker.name, fallback=sticker.name)
@@ -111,7 +111,7 @@ class Sticker(Package):
                 except Exception:
                     pass
 
-        await ctx.success(f"Cleaned up **{count}** sticker name(s)")
+        await ctx.success(f"Names cleaned\n> -# **count:** {count} updated")
 
     @sticker.command(
         name="rename",
@@ -121,9 +121,9 @@ class Sticker(Package):
     async def sticker_rename(self, ctx, *, new_name: str):
         """rename sticker"""
         if ctx.guild is None:
-            return await ctx.warn("This command can only be used in a server")
+            return await ctx.warn("This command can only be used in a **server**\n> -# **usage:** this command requires a guild")
         if not ctx.message.stickers:
-            return await ctx.warn("Attach a sticker to rename")
+            return await ctx.warn("Please **attach a sticker** to rename\n> -# **usage:** reply to a sticker or attach one")
 
         partial = ctx.message.stickers[0]
         
@@ -131,21 +131,21 @@ class Sticker(Package):
         if sticker is None:
             sticker = discord.utils.get(ctx.guild.stickers, name=partial.name)
         if sticker is None:
-            return await ctx.warn("That sticker isn't from this server")
+            return await ctx.warn("That sticker is not from this server\n> -# **reason:** it may have been deleted or is from another guild")
 
         clean = _sanitize_sticker_name(new_name, fallback=sticker.name)
         if not _NAME_RE.match(clean):
-            return await ctx.warn("Sticker names must be 2–30 letters, numbers, `_` or `-`")
+            return await ctx.warn("Please provide a **valid sticker name**\n> -# **format:** 2–30 chars, letters/numbers/`_`/`-`")
         try:
             await sticker.edit(
                 name=clean,
                 reason=f"sticker rename by {ctx.author} ({ctx.author.id})",
             )
-            await ctx.success(f"Renamed sticker to `{clean}`")
+            await ctx.success(f"Sticker renamed\n> -# **name:** `{clean}`")
         except discord.Forbidden:
-            await ctx.warn("I don't have permission to rename stickers")
+            await ctx.warn("Missing **Manage Expressions** permission\n> -# **required:** Manage Expressions")
         except Exception as e:
-            await ctx.fail(f"Failed to rename sticker: {str(e)[:150]}")
+            await ctx.fail(f"Could not rename that sticker\n> -# **error:** {str(e)[:100]}")
 
     @sticker.command(
         name="add",
@@ -156,10 +156,10 @@ class Sticker(Package):
     async def sticker_add(self, ctx, *, args: str | None = None):
         """add sticker from URL / attachment / message sticker"""
         if ctx.guild is None:
-            return await ctx.warn("This command can only be used in a server")
+            return await ctx.warn("This command can only be used in a **server**\n> -# **usage:** this command requires a guild")
         me = ctx.guild.me
         if me is None or not me.guild_permissions.manage_expressions:
-            return await ctx.warn("I need **Manage Expressions** to add stickers")
+            return await ctx.warn("Missing **Manage Expressions** permission\n> -# **required:** Manage Expressions")
 
         tokens = (args or "").strip().split()
         source_url: str | None = None
@@ -182,16 +182,15 @@ class Sticker(Package):
             name = " ".join(tokens) if tokens else getattr(st, "name", None)
         else:
             return await ctx.warn(
-                "Provide a sticker image URL, attachment, or sticker "
-                f"- e.g. `{ctx.clean_prefix}sticker add https://… name`"
+                "Please provide a **source** for the sticker\n> -# **usage:** provide a URL, attachment, or sticker"
             )
 
         if not source_url:
-            return await ctx.warn("Couldn't resolve a sticker image source")
+            return await ctx.warn("Could not resolve an image from your input\n> -# **reason:** check the URL or attachment")
 
         clean = _sanitize_sticker_name(name, fallback="sticker")
         if not _NAME_RE.match(clean):
-            return await ctx.warn("Sticker names must be 2–30 letters, numbers, `_` or `-`")
+            return await ctx.warn("Please provide a **valid sticker name**\n> -# **format:** 2–30 chars, letters/numbers/`_`/`-`")
 
         try:
             async with aiohttp.ClientSession() as session:
@@ -199,13 +198,13 @@ class Sticker(Package):
                     source_url, timeout=aiohttp.ClientTimeout(total=25)
                 ) as resp:
                     if resp.status != 200:
-                        return await ctx.fail("Failed to download sticker image")
+                        return await ctx.fail("Could not download that image\n> -# **reason:** HTTP error")
                     data = await resp.read()
         except Exception:
-            return await ctx.fail("Failed to download sticker image")
+            return await ctx.fail("Could not download that image\n> -# **reason:** network error")
 
         if not data or len(data) > 512 * 1024:
-            return await ctx.fail("Sticker image missing or larger than **512KB**")
+            return await ctx.fail("That image is too large\n> -# **limit:** 512KB")
 
         
         lower = source_url.lower()
@@ -225,8 +224,8 @@ class Sticker(Package):
                 reason=f"sticker add by {ctx.author} ({ctx.author.id})",
             )
         except discord.Forbidden:
-            return await ctx.warn("I don't have permission to create stickers")
+            return await ctx.warn("Missing **Manage Expressions** permission\n> -# **required:** Manage Expressions")
         except discord.HTTPException as e:
-            return await ctx.fail(f"Discord rejected the sticker: {getattr(e, 'text', e)}"[:180])
+            return await ctx.fail(f"Discord rejected that sticker\n> -# **error:** {getattr(e, 'text', e)}"[:180])
 
-        await ctx.success(f"Added sticker **{created.name}**")
+        await ctx.success(f"Sticker added\n> -# **name:** {created.name}")
