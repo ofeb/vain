@@ -1,14 +1,84 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 
 import discord
+from dateutil import relativedelta as rl
+from dateutil.parser import parse as parse_date
 from discord import Member
 from discord.ext.commands import group, has_permissions, command
 
 from core.discord.package import Package
 from core.discord.views.embed import c2
+
+
+MONTHS = [
+    "january", "february", "march", "april", "may", "june",
+    "july", "august", "september", "october", "november", "december",
+]
+
+
+def _coerce_date(value) -> date | None:
+    """Coerce a DB value (date, datetime, or str) into a date."""
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        try:
+            return parse_date(value, dayfirst=True).date()
+        except (ValueError, OverflowError):
+            return None
+    return None
+
+
+def _parse_birthday(raw: str) -> date | None:
+    """Parse any humanly readable birthday string into a date."""
+    s = raw.strip()
+    if not s:
+        return None
+    try:
+        parsed = parse_date(s, dayfirst=True)
+    except (ValueError, OverflowError):
+        return None
+    return parsed.date()
+
+
+def _ordinal(day: int) -> str:
+    if 10 <= day % 100 <= 20:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
+    return f"{day}{suffix}"
+
+
+def _format_date(bday: date) -> str:
+    return f"{MONTHS[bday.month - 1]} {_ordinal(bday.day)}"
+
+
+def _until_birthday(bday: date, today: date) -> tuple[int, int] | None:
+    """Return (months, days) until the next occurrence, or None if it's today."""
+    this_year = bday.replace(year=today.year)
+    if (this_year.month, this_year.day) == (today.month, today.day):
+        return None
+    if this_year < today:
+        next_bday = bday.replace(year=today.year + 1)
+    else:
+        next_bday = this_year
+    rd = rl.relativedelta(next_bday, today)
+    return rd.months, rd.days
+
+
+def _until_str(months: int, days: int) -> str:
+    parts = []
+    if months:
+        parts.append(f"**{months}** month{'s' if months != 1 else ''}")
+    if days:
+        parts.append(f"**{days}** day{'s' if days != 1 else ''}")
+    if not parts:
+        return ""
+    return " and ".join(parts)
 
 
 class Birthday(Package):
@@ -33,15 +103,24 @@ class Birthday(Package):
                 f"{target.mention} has not set their birthday"
             )
 
-        await ctx.send(
-            embed=c2(
-                message=(
-                    f"> **{target.display_name}'s** birthday\n"
-                    f"> -# **date:** {birthday_data}"
-                ),
-                timestamp=False,
+        bday = _coerce_date(birthday_data)
+        if not bday:
+            return await ctx.warn(
+                f"{target.mention}'s stored birthday is invalid"
             )
-        )
+
+        name = target.display_name
+        until = _until_birthday(bday, date.today())
+        if until is None:
+            message = f"> **{name}'s** birthday is **today**!"
+        else:
+            months, days = until
+            message = (
+                f"> **{name}'s** birthday is on **{_format_date(bday)}**, "
+                f"that's in {_until_str(months, days)}"
+            )
+
+        await ctx.send(embed=c2(message=message, timestamp=False))
 
     @birthday.command(
         name="set",
@@ -49,24 +128,23 @@ class Birthday(Package):
     )
     async def birthday_set(self, ctx, *, date: str):
         """set birthday"""
-        try:
-            parsed = datetime.strptime(date, "%Y-%m-%d")
-        except ValueError:
+        parsed = _parse_birthday(date)
+        if not parsed:
             return await ctx.fail(
                 "Please provide a **valid date**\n"
-                f"> -# **format:** `YYYY-MM-DD` (e.g. `1995-07-21`)"
+                f"> -# **examples:** `31/01/10`, `31-01-10`, `31st Jan`, `Jan 31`"
             )
 
         await self.bot.db.execute(
             "INSERT INTO birthday (user_id, guild_id, birthday_date) VALUES($1, $2, $3) "
             "ON CONFLICT(user_id, guild_id) DO UPDATE SET birthday_date = excluded.birthday_date",
-            ctx.author.id, ctx.guild.id, date
+            ctx.author.id, ctx.guild.id, parsed
         )
         await ctx.send(
             embed=c2(
                 message=(
                     f"> **{ctx.author.display_name}'s** birthday set\n"
-                    f"> -# **date:** {date}"
+                    f"> -# **date:** {_format_date(parsed)}"
                 ),
                 timestamp=False,
             )
@@ -107,49 +185,47 @@ class Birthday(Package):
                 f"> -# **usage:** `,birthday compare @user`"
             )
 
-        my_date = await self.bot.db.fetchval(
+        my_raw = await self.bot.db.fetchval(
             "SELECT birthday_date FROM birthday WHERE user_id = $1 AND guild_id = $2",
             ctx.author.id, ctx.guild.id
         )
-        their_date = await self.bot.db.fetchval(
+        their_raw = await self.bot.db.fetchval(
             "SELECT birthday_date FROM birthday WHERE user_id = $1 AND guild_id = $2",
             member.id, ctx.guild.id
         )
 
-        if not my_date:
+        if not my_raw:
             return await ctx.fail(
                 "You haven't set your birthday yet\n"
                 f"> -# **set one with:** `,birthday set`"
             )
-        if not their_date:
+        if not their_raw:
             return await ctx.fail(
                 f"{member.mention} hasn't set their birthday\n"
                 f"> -# **ask them to use:** `,birthday set`"
             )
 
-        today = datetime.now()
-        my_bday = datetime.strptime(my_date, "%Y-%m-%d").replace(year=today.year)
-        their_bday = datetime.strptime(their_date, "%Y-%m-%d").replace(year=today.year)
+        my_date = _coerce_date(my_raw)
+        their_date = _coerce_date(their_raw)
+        if not my_date or not their_date:
+            return await ctx.fail(
+                "One of the stored birthdays is invalid\n"
+                f"> -# **re-set with:** `,birthday set`"
+            )
 
-        my_days_until = (my_bday - today).days
-        their_days_until = (their_bday - today).days
+        today = date.today()
+        my_until = _until_birthday(my_date, today)
+        their_until = _until_birthday(their_date, today)
 
-        if my_days_until < 0:
-            my_bday = my_bday.replace(year=today.year + 1)
-            my_days_until = (my_bday - today).days
-        if their_days_until < 0:
-            their_bday = their_bday.replace(year=today.year + 1)
-            their_days_until = (their_bday - today).days
-
-        my_str = f"in **{my_days_until}** days" if my_days_until > 0 else "**today**"
-        their_str = f"in **{their_days_until}** days" if their_days_until > 0 else "**today**"
+        my_str = _until_str(*my_until) if my_until else "**today**"
+        their_str = _until_str(*their_until) if their_until else "**today**"
 
         await ctx.send(
             embed=c2(
                 message=(
                     f"> **{ctx.author.display_name}** ↔ **{member.display_name}**\n"
-                    f"> -# **you:** {my_date} ({my_str})\n"
-                    f"> -# **them:** {their_date} ({their_str})"
+                    f"> -# **you:** {_format_date(my_date)} ({my_str})\n"
+                    f"> -# **them:** {_format_date(their_date)} ({their_str})"
                 ),
                 timestamp=False,
             )
@@ -288,8 +364,9 @@ class Birthday(Package):
         lines = []
         for birthday in birthdays:
             member = ctx.guild.get_member(birthday['user_id'])
-            if member:
-                lines.append(f"> {member.mention} — {birthday['birthday_date']}")
+            bday = _coerce_date(birthday['birthday_date'])
+            if member and bday:
+                lines.append(f"> {member.mention} — {_format_date(bday)}")
 
         await ctx.send(
             embed=c2(
