@@ -141,7 +141,7 @@ class Birthday(Package):
             ctx.author.id, ctx.guild.id, parsed
         )
         await ctx.success(
-                    f"> **{ctx.author.display_name}'s** birthday set\n"
+                    f"your **birthday** has been set\n"
                     f"> -# **date:** {_format_date(parsed)}"
                 )
 
