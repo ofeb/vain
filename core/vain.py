@@ -126,6 +126,10 @@ def _discover_extensions(ext_dir: str = "ext") -> tuple[str, ...]:
                                 and _has_setup_entry(sub)
                             ):
                                 _add_package(sub)
+                    
+                    for py_file in sorted(child.rglob("*.py")):
+                        if py_file.name != "__init__.py" and py_file.parent != child:
+                            _add_module(py_file)
                     continue
                 
                 _scan_dir(child, depth=depth + 1)
@@ -410,7 +414,7 @@ class Vain(commands.AutoShardedBot):
         )
 
         loaded = sum(1 for r in results if r is True)
-        failed = sum(1 for r in results if isinstance(r, Exception))
+        failed = len(extensions) - loaded
         if failed:
             log.warning("%d/%d extensions failed to load", failed, len(extensions))
 
@@ -421,7 +425,8 @@ class Vain(commands.AutoShardedBot):
             log.info("(+) %s", ext_name)
             return True
         except Exception as e:
-            log.warning("(-) %s (%s)", ext_name, e)
+            log.warning("(-) %s: %s", ext_name, e)
+            log.debug("extension load traceback for %s", ext_name, exc_info=True)
             return False
 
     async def _sync_global_commands(self) -> None:
