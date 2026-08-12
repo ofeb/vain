@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import io
 import json
+import re
 from collections import defaultdict
 from typing import Optional, Union
 
@@ -672,14 +673,10 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         lines = raw.split("\n")
         kept_lines = []
         for line in lines:
-            words = line.split()
-            filtered = []
-            for word in words:
-                if word.lower() == "--rolegain":
-                    rolegain = True
-                else:
-                    filtered.append(word)
-            kept_lines.append(" ".join(filtered))
+            if re.search(r"(?i)--rolegain\b", line):
+                rolegain = True
+                line = re.sub(r"(?i)\s*--rolegain\b", "", line)
+            kept_lines.append(line)
         script = "\n".join(kept_lines).strip()
         if not script:
             return await ctx.send_help(ctx.command)

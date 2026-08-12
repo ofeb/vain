@@ -218,7 +218,7 @@ class Birthday(Package):
         await ctx.send(
             embed=c2(
                 message=(
-                    f"> **{ctx.author.display_name}** ↔ **{member.display_name}**\n"
+                    f" **{ctx.author.display_name}** ↔ **{member.display_name}**\n"
                     f"> -# **you:** {_format_date(my_date)} ({my_str})\n"
                     f"> -# **them:** {_format_date(their_date)} ({their_str})"
                 ),
@@ -278,7 +278,7 @@ class Birthday(Package):
         await ctx.send(
             embed=c2(
                 message=(
-                    f"> **{ctx.guild.name}** birthday channel set\n"
+                    f" **{ctx.guild.name}** birthday channel set\n"
                     f"> -# **channel:** {channel.mention}"
                 ),
                 timestamp=False,
@@ -300,7 +300,7 @@ class Birthday(Package):
         await ctx.send(
             embed=c2(
                 message=(
-                    f"> **{ctx.guild.name}** birthday role set\n"
+                    f" **{ctx.guild.name}** birthday role set\n"
                     f"> -# **role:** {role.mention}"
                 ),
                 timestamp=False,
@@ -330,7 +330,7 @@ class Birthday(Package):
         await ctx.send(
             embed=c2(
                 message=(
-                    f"> **{ctx.guild.name}** birthday config\n"
+                    f" **{ctx.guild.name}** birthday config\n"
                     f"> -# **channel:** {channel.mention if channel else 'not set'}\n"
                     f"> -# **role:** {role.mention if role else 'not set'}\n"
                     f"> -# **message:** {config['message']}"
