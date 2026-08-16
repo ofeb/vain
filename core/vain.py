@@ -15,8 +15,8 @@ import config
 from pathlib import Path
 from discord import app_commands
 from discord.ext import commands
-from typing import Awaitable, Callable, Iterable, Optional
-from discord.ext.commands import HybridCommand, HybridGroup
+from typing import Awaitable, Callable, Iterable, Literal, Optional
+from discord.ext.commands import BucketType, CooldownMapping, HybridCommand, HybridGroup
 
 from .patches import cmd as _command_patch  # noqa: F401
 
@@ -28,7 +28,6 @@ from .managers.redis import VainCache, FileVainCache, RedisClient
 from .managers.guard import Guard
 from .tools.embed import PreparedScript, Script, parse
 from .tools.errors import Ratelimited
-from .tools.ratelimit import global_ratelimit, is_setup_command, setup_ratelimit
 from .tools.snipe import Snipe
 from config import color, database, redis, emojis, music_enabled
 from .managers.filetypes import CACHE_REDIS_FILE, ensure_storage_files
@@ -207,6 +206,9 @@ class Vain(commands.AutoShardedBot):
         self._error_counter: int = 0
         self.started_at = datetime.datetime.now(datetime.timezone.utc)
         self._seen_message_ids: set[int] = set()
+        self.global_cooldown: CooldownMapping = CooldownMapping.from_cooldown(
+            2, 2.4, BucketType.user
+        )
         self.config = {
             "emojis": {
                 "success": emojis.approve,
@@ -618,20 +620,27 @@ class Vain(commands.AutoShardedBot):
                 raise commands.BotMissingPermissions(missing)
 
         if not owner and not is_help:
-            retry = global_ratelimit(ctx.author.id)
-            if retry:
-                raise Ratelimited(retry)
+            await self.cooldown_check(ctx)
 
-            
-            qname = getattr(ctx.command, "qualified_name", None) if ctx.command else None
-            if is_setup_command(qname):
-                setup_retry = setup_ratelimit(
-                    ctx.guild.id if ctx.guild else None,
-                    ctx.author.id,
-                    str(qname).lower(),
-                )
-                if setup_retry:
-                    raise Ratelimited(setup_retry)
+        return True
+
+    @staticmethod
+    async def cooldown_check(ctx: Context) -> Literal[True]:
+        """global cooldown: 2 commands / 2.4s per user."""
+        if await ctx.bot.is_owner(ctx.author):
+            return True
+
+        message = getattr(ctx, "message", None)
+        if message is None:
+            return True
+
+        bucket = ctx.bot.global_cooldown.get_bucket(message)
+        if not bucket:
+            return True
+
+        retry_after = bucket.update_rate_limit()
+        if retry_after:
+            raise commands.CommandOnCooldown(bucket, retry_after, BucketType.user)
 
         return True
 
@@ -643,8 +652,14 @@ class Vain(commands.AutoShardedBot):
             ctx.command = cmd
         try:
             await self._global_check(ctx)
-        except Ratelimited:
-            raise
+        except commands.CommandOnCooldown as e:
+            cd = getattr(e, "cooldown", None) or app_commands.Cooldown(rate=2, per=2.4)
+            raise app_commands.CommandOnCooldown(cd, float(e.retry_after)) from e
+        except Ratelimited as e:
+            raise app_commands.CommandOnCooldown(
+                app_commands.Cooldown(rate=2, per=2.4),
+                float(e.retry_after),
+            ) from e
         except commands.CheckFailure as e:
             raise app_commands.CheckFailure(str(e)) from e
         if cmd is None:
@@ -654,17 +669,42 @@ class Vain(commands.AutoShardedBot):
         except commands.CommandError as e:
             raise app_commands.CheckFailure(str(e)) from e
 
+    def _format_cooldown(self, retry_after: float) -> str:
+        seconds = max(float(retry_after), 0.01)
+        if seconds < 1:
+            return f"{seconds:.2f} seconds"
+        if seconds < 60:
+            whole = int(seconds) if seconds == int(seconds) else round(seconds, 1)
+            unit = "second" if float(whole) == 1 else "seconds"
+            return f"{whole} {unit}"
+        minutes, secs = divmod(int(seconds), 60)
+        if minutes < 60:
+            if secs == 0:
+                unit = "minute" if minutes == 1 else "minutes"
+                return f"{minutes} {unit}"
+            munit = "minute" if minutes == 1 else "minutes"
+            sunit = "second" if secs == 1 else "seconds"
+            return f"{minutes} {munit} and {secs} {sunit}"
+        hours, minutes = divmod(minutes, 60)
+        parts: list[str] = []
+        if hours:
+            parts.append(f"{hours} {'hour' if hours == 1 else 'hours'}")
+        if minutes:
+            parts.append(f"{minutes} {'minute' if minutes == 1 else 'minutes'}")
+        return " and ".join(parts) if parts else f"{int(seconds)} seconds"
+
     async def _cooldown_reply(
         self, inter: discord.Interaction, retry_after: float
     ) -> None:
         ctx = await self.get_context(inter, cls=Context)
         emoji = await ctx._get_emoji("cooldown")
         color_value = await ctx._get_color("cooldown")
+        wait = self._format_cooldown(retry_after)
         embed = reply_embed(
             color=color_value,
             message=(
-                f"{emoji} {inter.user.mention}: Please wait "
-                f"**{retry_after:.2f} seconds** before using any command again"
+                f"{emoji} {inter.user.mention}: This command is on cooldown, "
+                f"please wait **{wait}**"
             ),
         )
         send = (
@@ -788,16 +828,18 @@ class Vain(commands.AutoShardedBot):
             with contextlib.suppress(discord.HTTPException):
                 await ctx.send_help(ctx.command)
             return
-        if isinstance(err, Ratelimited):
+        if isinstance(err, (Ratelimited, commands.CommandOnCooldown)):
+            retry_after = float(getattr(err, "retry_after", 0) or 0)
+            if retry_after <= 30:
+                with contextlib.suppress(discord.HTTPException, AttributeError):
+                    if ctx.message is not None:
+                        await ctx.message.add_reaction("⏳")
+                return
+            wait = self._format_cooldown(retry_after)
             with contextlib.suppress(discord.HTTPException):
                 await ctx.cooldown(
-                    f"Please wait **{err.retry_after:.2f} seconds** before using any command again"
-                )
-            return
-        if isinstance(err, commands.CommandOnCooldown):
-            with contextlib.suppress(discord.HTTPException):
-                await ctx.cooldown(
-                    f"Please wait **{err.retry_after:.2f} seconds** before using this command again"
+                    f"This command is on cooldown, please wait **{wait}**",
+                    delete_after=5,
                 )
             return
 

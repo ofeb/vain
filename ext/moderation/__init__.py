@@ -1966,138 +1966,211 @@ class ModerationCommands(Package):
             f"Text in {channel.mention} **{state}** for {role.mention}"
         )
 
-    async def _parse_hide_args(
-        self,
-        ctx,
-        args: str | None,
-    ) -> tuple[list[discord.abc.GuildChannel], list[discord.Role | discord.Member], bool]:
-        """Parse hide/unhide args into (channels, targets, used_all)."""
-        all_channels = False
-        channels: list[discord.abc.GuildChannel] = []
-        targets: list[discord.Role | discord.Member] = []
-        seen_channels: set[int] = set()
-        seen_targets: set[int] = set()
+    async def _resolve_hide_target(
+        self, ctx, token: str | None
+    ) -> discord.Role | discord.Member:
+        """Resolve optional user/role; default to @everyone (members)."""
+        if not token:
+            return ctx.guild.default_role
 
         converters = (
-            commands.GuildChannelConverter(),
             commands.RoleConverter(),
             commands.MemberConverter(),
         )
-
-        for token in (args or "").split():
-            if token.lower() in {"all", "*", "everywhere"}:
-                all_channels = True
+        for converter in converters:
+            try:
+                return await converter.convert(ctx, token)
+            except CommandError:
                 continue
-            converted = None
-            for converter in converters:
-                try:
-                    converted = await converter.convert(ctx, token)
-                except CommandError:
-                    continue
-                break
-            if isinstance(converted, (discord.Role, discord.Member)):
-                if converted.id not in seen_targets:
-                    seen_targets.add(converted.id)
-                    targets.append(converted)
-            elif isinstance(converted, discord.abc.GuildChannel):
-                if converted.id not in seen_channels:
-                    seen_channels.add(converted.id)
-                    channels.append(converted)
+        raise CommandError(f"couldn't find a role or member matching `{token}`")
 
-        if all_channels:
-            channels = list(ctx.guild.channels)
-        if not channels:
-            channels = [ctx.channel]
-        return channels, targets, all_channels
-
-    def _default_hide_targets(self, guild: discord.Guild) -> list[discord.Role]:
-        """Everyone plus every role that lacks the administrator permission."""
-        targets: list[discord.Role] = [guild.default_role]
-        for role in guild.roles:
-            if role.is_default():
-                continue
-            if role.permissions.administrator:
-                continue
-            targets.append(role)
-        return targets
-
-    async def _apply_hide_state(
+    async def _hide_channel(
         self,
         ctx,
-        channels: list[discord.abc.GuildChannel],
-        targets: list[discord.Role | discord.Member],
-        *,
-        hidden: bool,
-    ) -> int:
-        action = "hide" if hidden else "unhide"
-        applied = 0
-        for channel in channels:
-            for target in targets:
-                overwrite = channel.overwrites_for(target)
-                overwrite.view_channel = not hidden
-                with contextlib.suppress(discord.HTTPException, discord.Forbidden):
-                    await channel.set_permissions(
-                        target,
-                        overwrite=overwrite,
-                        reason=f"{action} by {ctx.author}",
-                    )
-                    applied += 1
-        return applied
+        channel: discord.abc.GuildChannel,
+        target: discord.Role | discord.Member,
+    ) -> str | None:
+        """Hide channel from target. Returns warning text if already hidden, else None."""
+        if not isinstance(channel, discord.abc.GuildChannel):
+            raise CommandError("this command only works on guild channels")
 
-    async def _toggle_hide(
+        current = channel.overwrites_for(target).view_channel
+        if current is False:
+            who = (
+                "everyone"
+                if isinstance(target, discord.Role) and target.is_default()
+                else target.mention
+            )
+            return f"Channel is **already** hidden from {who}"
+
+        overwrites = channel.overwrites_for(target)
+        overwrites.view_channel = False
+        await channel.set_permissions(
+            target,
+            overwrite=overwrites,
+            reason=f"Channel hidden by {ctx.author}",
+        )
+        return None
+
+    async def _unhide_channel(
         self,
         ctx,
-        args: str | None,
-        *,
-        hidden: bool,
-    ):
-        channels, targets, used_all = await self._parse_hide_args(ctx, args)
-        defaulted = not targets
-        if not targets:
-            targets = self._default_hide_targets(ctx.guild)
+        channel: discord.abc.GuildChannel,
+        target: discord.Role | discord.Member,
+    ) -> str | None:
+        """Unhide channel for target. Returns warning text if not hidden, else None."""
+        if not isinstance(channel, discord.abc.GuildChannel):
+            raise CommandError("this command only works on guild channels")
 
-        applied = await self._apply_hide_state(ctx, channels, targets, hidden=hidden)
-        if not applied:
-            return await ctx.warn("No changes made\n> -# **no channel permissions could be updated**")
+        current = channel.overwrites_for(target).view_channel
+        
+        if current is None:
+            who = (
+                "everyone"
+                if isinstance(target, discord.Role) and target.is_default()
+                else target.mention
+            )
+            return f"Channel is **not** hidden from {who}"
 
-        action = "Hid" if hidden else "Unhid"
-        if used_all:
-            channel_label = "all channels"
-        elif len(channels) == 1:
-            channel_label = channels[0].mention
-        else:
-            channel_label = f"**{len(channels)}** channels"
+        overwrites = channel.overwrites_for(target)
+        overwrites.view_channel = None
+        await channel.set_permissions(
+            target,
+            overwrite=overwrites,
+            reason=f"Channel unhidden by {ctx.author}",
+        )
+        return None
 
-        if defaulted:
-            target_label = f"**all members**"
-        elif len(targets) == 1:
-            target_label = targets[0].mention
-        else:
-            target_label = ", ".join(target.mention for target in targets)
-
-        return await ctx.success(f"{action} {channel_label} from {target_label}")
-
-    @command(
-        name="unhide",
-        description="Unhide a channel (or all channels) from everyone or from specific roles/members",
-        usage="[channel or all] [role or user...]",
-        example=",unhide #general @role",
-    )
-    @has_permissions(manage_channels=True)
-    async def unhide(self, ctx, *, args: str = None):
-        """unhide channel(s) from everyone or specific roles/members"""
-        return await self._toggle_hide(ctx, args, hidden=False)
+    def _hide_target_label(self, target: discord.Role | discord.Member) -> str:
+        if isinstance(target, discord.Role) and target.is_default():
+            return "**members**"
+        return target.mention
 
     @command(
         name="hide",
-        description="Hide a channel (or all channels) from everyone or from specific roles/members",
-        usage="[channel or all] [role or user...]",
+        brief="manage channels",
+        description="Hide a channel from everyone or a specific user/role",
+        usage="hide [channel] [user or role]",
         example=",hide #general @role",
     )
     @has_permissions(manage_channels=True)
-    async def hide(self, ctx, *, args: str = None):
-        """hide channel(s) from everyone or specific roles/members"""
-        return await self._toggle_hide(ctx, args, hidden=True)
+    async def hide(
+        self,
+        ctx,
+        channel: discord.TextChannel = None,
+        *,
+        target: str = None,
+    ):
+        """Hide a channel from everyone"""
+        channel = channel or ctx.channel
+        resolved = await self._resolve_hide_target(ctx, target)
+        try:
+            already = await self._hide_channel(ctx, channel, resolved)
+        except discord.Forbidden:
+            raise CommandError("I don't have permission to edit this channel")
+        except discord.HTTPException as e:
+            raise CommandError(f"failed to hide channel: {e}")
+        if already:
+            return await ctx.warn(already)
+        return await ctx.success(
+            f"Hid {channel.mention} from {self._hide_target_label(resolved)}"
+        )
+
+    @command(
+        name="unhide",
+        brief="manage roles",
+        description="Unhide a channel from everyone or a specific user/role",
+        usage="unhide [channel] [user or role]",
+        example=",unhide #commands",
+    )
+    @has_permissions(manage_channels=True)
+    async def unhide(
+        self,
+        ctx,
+        channel: discord.TextChannel = None,
+        *,
+        target: str = None,
+    ):
+        """Unhide a channel from everyone"""
+        channel = channel or ctx.channel
+        resolved = await self._resolve_hide_target(ctx, target)
+        try:
+            not_hidden = await self._unhide_channel(ctx, channel, resolved)
+        except discord.Forbidden:
+            raise CommandError("I don't have permission to edit this channel")
+        except discord.HTTPException as e:
+            raise CommandError(f"failed to unhide channel: {e}")
+        if not_hidden:
+            return await ctx.warn(not_hidden)
+        return await ctx.success(
+            f"Unhid {channel.mention} from {self._hide_target_label(resolved)}"
+        )
+
+    @command(
+        name="hideall",
+        aliases=["hide-all"],
+        brief="manage channels",
+        description="Hide all channels from everyone or a specific user/role",
+        usage="hideall [user or role]",
+        example=",hideall @role",
+    )
+    @has_permissions(manage_channels=True)
+    async def hideall(self, ctx, *, target: str = None):
+        """Hide all channels from members (or a user/role)"""
+        resolved = await self._resolve_hide_target(ctx, target)
+        applied = 0
+        skipped = 0
+        for channel in list(ctx.guild.channels):
+            with contextlib.suppress(discord.HTTPException, discord.Forbidden):
+                already = await self._hide_channel(ctx, channel, resolved)
+                if already:
+                    skipped += 1
+                else:
+                    applied += 1
+        if not applied and not skipped:
+            return await ctx.warn(
+                "No changes made\n> -# **no channel permissions could be updated**"
+            )
+        if not applied:
+            return await ctx.warn(
+                f"All channels are **already** hidden from {self._hide_target_label(resolved)}"
+            )
+        return await ctx.success(
+            f"Hid **{applied}** channel(s) from {self._hide_target_label(resolved)}"
+        )
+
+    @command(
+        name="unhideall",
+        aliases=["unhide-all"],
+        brief="manage roles",
+        description="Unhide all channels from everyone or a specific user/role",
+        usage="unhideall [user or role]",
+        example=",unhideall @role",
+    )
+    @has_permissions(manage_channels=True)
+    async def unhideall(self, ctx, *, target: str = None):
+        """Unhide all channels for members (or a user/role)"""
+        resolved = await self._resolve_hide_target(ctx, target)
+        applied = 0
+        skipped = 0
+        for channel in list(ctx.guild.channels):
+            with contextlib.suppress(discord.HTTPException, discord.Forbidden):
+                not_hidden = await self._unhide_channel(ctx, channel, resolved)
+                if not_hidden:
+                    skipped += 1
+                else:
+                    applied += 1
+        if not applied and not skipped:
+            return await ctx.warn(
+                "No changes made\n> -# **no channel permissions could be updated**"
+            )
+        if not applied:
+            return await ctx.warn(
+                f"No channels are hidden from {self._hide_target_label(resolved)}"
+            )
+        return await ctx.success(
+            f"Unhid **{applied}** channel(s) from {self._hide_target_label(resolved)}"
+        )
 
     async def _ensure_category(self, ctx, name: str) -> discord.CategoryChannel:
         existing = discord.utils.get(ctx.guild.categories, name=name)
