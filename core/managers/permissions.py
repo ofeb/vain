@@ -51,6 +51,9 @@ def has_permissions(**permissions):
         if await ctx.bot.is_owner(ctx.author):
             return True
 
+        if ctx.author.id == ctx.guild.owner_id:
+            return True
+
         owner_required = any(required.get(name) for name in _SPECIAL_PERMISSIONS)
         missing = []
         if owner_required and ctx.author.id != ctx.guild.owner_id:

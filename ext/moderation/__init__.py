@@ -292,6 +292,8 @@ class ModerationCommands(Package):
         if member.id == ctx.guild.owner_id:
             await ctx.warn(f"you **can't** {ctx.command.name} the **guild owner**!")
             return False
+        if ctx.author.id == ctx.guild.owner_id:
+            return True
         try:
             await ensure_member_hierarchy(ctx, member, allow_self=False)
         except _CmdErr as e:

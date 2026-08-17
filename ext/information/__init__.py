@@ -360,38 +360,41 @@ class InformationCommands(Package):
 
         container = ui.Container()
 
-        
         container.add_item(ui.TextDisplay(f"-# **User Info — {user.display_name}**"))
         container.add_item(ui.Separator(visible=True))
 
-        
         info_lines = []
         info_lines.append(f"> -# **Username:** {user.name}")
         info_lines.append(f"> -# **Account:** {user.mention} (`{user.id}`)")
         info_lines.append("")
 
-        
         info_lines.append(f"> -# **Created:** <t:{int(user.created_at.timestamp())}:f> (<t:{int(user.created_at.timestamp())}:R>)")
 
-        
         if member and ctx.guild:
             if member.joined_at:
                 info_lines.append(f"> -# **Joined:** <t:{int(member.joined_at.timestamp())}:f> (<t:{int(member.joined_at.timestamp())}:R>)")
 
-            
             if hasattr(ctx.guild, 'members'):
                 sorted_members = sorted(ctx.guild.members, key=lambda m: m.joined_at or discord.utils.utcnow())
                 join_pos = next((i + 1 for i, m in enumerate(sorted_members) if m.id == member.id), None)
                 if join_pos:
                     info_lines.append(f"> -# **Join Position:** {join_pos}")
 
-            
+            if member.premium_since:
+                months_boosting = 0
+                now = discord.utils.utcnow()
+                delta = now - member.premium_since
+                months_boosting = delta.days // 30
+                if months_boosting >= 2:
+                    info_lines.append(f"> -# **Boosting:** Yes ({months_boosting}x)")
+                else:
+                    info_lines.append(f"> -# **Boosting:** Yes")
+
             roles = [role.mention for role in member.roles if role != ctx.guild.default_role]
             if roles:
                 info_lines.append(f"> -# **Roles ({len(roles)}):**")
                 info_lines.append(f"> -# {', '.join(roles[:20])}")
 
-        
         if user.display_avatar:
             container.add_item(
                 ui.Section(
@@ -402,7 +405,6 @@ class InformationCommands(Package):
         else:
             container.add_item(ui.TextDisplay("\n".join(info_lines)))
 
-        
         buttons = []
         if user.display_avatar:
             buttons.append(

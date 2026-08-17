@@ -4,6 +4,78 @@ CREATE SCHEMA IF NOT EXISTS pokemon;
 CREATE SCHEMA IF NOT EXISTS monitor;
 CREATE SCHEMA IF NOT EXISTS tickets;
 
+CREATE TABLE IF NOT EXISTS moderation.caps (
+    guild_id     BIGINT PRIMARY KEY,
+    channel_ids  BIGINT[] DEFAULT '{}',
+    threshold    INTEGER DEFAULT 70,
+    action       TEXT DEFAULT 'delete',
+    exempt_roles BIGINT[] DEFAULT '{}'
+);
+
+CREATE TABLE IF NOT EXISTS moderation.spam (
+    guild_id     BIGINT PRIMARY KEY,
+    channel_ids  BIGINT[] DEFAULT '{}',
+    threshold    INTEGER DEFAULT 5,
+    action       TEXT DEFAULT 'delete',
+    exempt_roles BIGINT[] DEFAULT '{}'
+);
+
+CREATE TABLE IF NOT EXISTS moderation.links (
+    guild_id     BIGINT PRIMARY KEY,
+    channel_ids  BIGINT[] DEFAULT '{}',
+    action       TEXT DEFAULT 'delete',
+    exempt_roles BIGINT[] DEFAULT '{}',
+    whitelist    TEXT[] DEFAULT '{}'
+);
+
+CREATE TABLE IF NOT EXISTS moderation.invites (
+    guild_id     BIGINT PRIMARY KEY,
+    channel_ids  BIGINT[] DEFAULT '{}',
+    action       TEXT DEFAULT 'delete',
+    exempt_roles BIGINT[] DEFAULT '{}',
+    whitelist    TEXT[] DEFAULT '{}'
+);
+
+CREATE TABLE IF NOT EXISTS moderation.spoilers (
+    guild_id     BIGINT PRIMARY KEY,
+    channel_ids  BIGINT[] DEFAULT '{}',
+    threshold    INTEGER DEFAULT 5,
+    action       TEXT DEFAULT 'delete',
+    exempt_roles BIGINT[] DEFAULT '{}'
+);
+
+CREATE TABLE IF NOT EXISTS moderation.music (
+    guild_id     BIGINT PRIMARY KEY,
+    channel_ids  BIGINT[] DEFAULT '{}',
+    action       TEXT DEFAULT 'delete',
+    exempt_roles BIGINT[] DEFAULT '{}'
+);
+
+CREATE TABLE IF NOT EXISTS moderation.mention (
+    guild_id     BIGINT PRIMARY KEY,
+    channel_ids  BIGINT[] DEFAULT '{}',
+    threshold    INTEGER DEFAULT 5,
+    action       TEXT DEFAULT 'delete',
+    exempt_roles BIGINT[] DEFAULT '{}'
+);
+
+CREATE TABLE IF NOT EXISTS moderation.emoji (
+    guild_id     BIGINT PRIMARY KEY,
+    channel_ids  BIGINT[] DEFAULT '{}',
+    threshold    INTEGER DEFAULT 5,
+    action       TEXT DEFAULT 'delete',
+    exempt_roles BIGINT[] DEFAULT '{}'
+);
+
+CREATE TABLE IF NOT EXISTS moderation.regex (
+    id           SERIAL PRIMARY KEY,
+    guild_id     BIGINT NOT NULL,
+    regex        TEXT NOT NULL,
+    action       TEXT DEFAULT 'delete',
+    exempt_roles BIGINT[] DEFAULT '{}',
+    UNIQUE (guild_id, regex)
+);
+
 CREATE TABLE IF NOT EXISTS guilds (
     guild_id           BIGINT PRIMARY KEY,
     prefix             TEXT DEFAULT ',',
@@ -542,6 +614,13 @@ CREATE TABLE IF NOT EXISTS image_only (
     guild_id   BIGINT NOT NULL,
     channel_id BIGINT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, channel_id)
+);
+
+CREATE TABLE IF NOT EXISTS image_only_messages (
+    guild_id   BIGINT NOT NULL,
+    channel_id BIGINT NOT NULL,
+    message    TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (guild_id, channel_id)
 );
 

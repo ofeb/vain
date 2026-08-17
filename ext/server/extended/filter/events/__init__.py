@@ -12,7 +12,7 @@ from core.discord.package import Package
 
 log = logging.getLogger("vain.server.extended.filter")
 
-LINK_REGEX = re.compile(r"https?://[^\s<]+")
+LINK_REGEX = re.compile(r"https?://[^\s]+")
 INVITE_REGEX = re.compile(
     r"(?:discord(?:app)?\.com/invite/|discord\.gg/)([a-zA-Z0-9-]+)"
 )
@@ -30,40 +30,32 @@ UNICODE_EMOJI_REGEX = re.compile(
     "\U0001f000-\U0001f0ff]"
 )
 MUSIC_EXTENSIONS = {
-    "mp3",
-    "wav",
-    "flac",
-    "ogg",
-    "m4a",
-    "aac",
-    "wma",
-    "opus",
-    "aiff",
-    "aif",
+    "mp3", "wav", "flac", "ogg", "m4a", "aac", "wma", "opus", "aiff", "aif",
 }
 CACHE_TTL = 30.0
 SPAM_WINDOW = 5.0
 
 
 class FilterEvents(Package):
-    """enforce the configured chat filters (caps, links, invites, spam, etc.)"""
+    """enforce the configured chat filters (caps, spoilers, music, emoji, regex, spam)"""
 
-    _cache: dict[tuple[int, str], tuple[float, list]] = {}
+    _cache: dict[tuple[int, str], tuple[float, object]] = {}
     _regex_cache: dict[int, tuple[float, list]] = {}
     _spam: dict[tuple[int, int], list[float]] = defaultdict(list)
-
-    
 
     async def _row(self, guild_id: int, table: str):
         key = (guild_id, table)
         cached = self._cache.get(key)
         if cached and time.monotonic() - cached[0] < CACHE_TTL:
-            return cached[1][0] if cached[1] else None
+            return cached[1]
         row = await self.db.fetchrow(
             f"SELECT * FROM moderation.{table} WHERE guild_id = $1", guild_id
         )
-        self._cache[key] = (time.monotonic(), [row] if row else [])
+        self._cache[key] = (time.monotonic(), row)
         return row
+
+    def _invalidate(self, guild_id: int, table: str):
+        self._cache.pop((guild_id, table), None)
 
     async def _regex_rows(self, guild_id: int) -> list:
         cached = self._regex_cache.get(guild_id)
@@ -84,13 +76,6 @@ class FilterEvents(Package):
             return False
         return any(r.id in exempt for r in getattr(message.author, "roles", ()))
 
-    def _in_scope(self, message: discord.Message, row) -> bool:
-        channels = row.get("channel_ids") or []
-        if not channels:
-            return True
-        scope = getattr(message.channel, "parent_id", None) or message.channel.id
-        return scope in channels
-
     async def _punish(self, message: discord.Message, action: str, reason: str) -> None:
         action = (action or "delete").lower()
         if action == "kick":
@@ -107,7 +92,7 @@ class FilterEvents(Package):
 
     async def _check_caps(self, message: discord.Message) -> bool:
         row = await self._row(message.guild.id, "caps")
-        if not row or not self._in_scope(message, row) or self._is_exempt(message, row):
+        if not row or self._is_exempt(message, row):
             return False
         threshold = row.get("threshold") or 70
         letters = [c for c in message.content if c.isalpha()]
@@ -119,39 +104,9 @@ class FilterEvents(Package):
         await self._punish(message, row.get("action"), f"caps filter ({threshold}%)")
         return True
 
-    async def _check_links(self, message: discord.Message) -> bool:
-        row = await self._row(message.guild.id, "links")
-        if not row or not self._in_scope(message, row) or self._is_exempt(message, row):
-            return False
-        links = LINK_REGEX.findall(message.content)
-        if not links:
-            return False
-        whitelist = row.get("whitelist") or []
-        if whitelist:
-            links = [l for l in links if not any(w in l for w in whitelist)]
-        if not links:
-            return False
-        await self._punish(message, row.get("action"), "link filter")
-        return True
-
-    async def _check_invites(self, message: discord.Message) -> bool:
-        row = await self._row(message.guild.id, "invites")
-        if not row or not self._in_scope(message, row) or self._is_exempt(message, row):
-            return False
-        codes = INVITE_REGEX.findall(message.content)
-        if not codes:
-            return False
-        whitelist = [c.lower() for c in (row.get("whitelist") or [])]
-        if whitelist:
-            remaining = [c for c in codes if c.lower() not in whitelist]
-            if not remaining:
-                return False
-        await self._punish(message, row.get("action"), "invite filter")
-        return True
-
     async def _check_spoilers(self, message: discord.Message) -> bool:
         row = await self._row(message.guild.id, "spoilers")
-        if not row or not self._in_scope(message, row) or self._is_exempt(message, row):
+        if not row or self._is_exempt(message, row):
             return False
         threshold = row.get("threshold") or 5
         if message.content.count("||") // 2 < threshold:
@@ -161,34 +116,23 @@ class FilterEvents(Package):
 
     async def _check_music(self, message: discord.Message) -> bool:
         row = await self._row(message.guild.id, "music")
-        if not row or not self._in_scope(message, row) or self._is_exempt(message, row):
+        if not row or self._is_exempt(message, row):
             return False
         for att in message.attachments:
-            ext = (
-                att.filename.rsplit(".", 1)[-1] if "." in att.filename else ""
-            ).lower()
+            ext = (att.filename.rsplit(".", 1)[-1] if "." in att.filename else "").lower()
             if ext in MUSIC_EXTENSIONS or (att.content_type or "").startswith("audio/"):
                 await self._punish(message, row.get("action"), "music file filter")
                 return True
         return False
 
-    async def _check_mention(self, message: discord.Message) -> bool:
-        row = await self._row(message.guild.id, "mention")
-        if not row or not self._in_scope(message, row) or self._is_exempt(message, row):
-            return False
-        threshold = row.get("threshold") or 5
-        if len(message.mentions) < threshold:
-            return False
-        await self._punish(message, row.get("action"), "mass mention filter")
-        return True
-
     async def _check_emoji(self, message: discord.Message) -> bool:
         row = await self._row(message.guild.id, "emoji")
-        if not row or not self._in_scope(message, row) or self._is_exempt(message, row):
+        if not row or self._is_exempt(message, row):
             return False
         threshold = row.get("threshold") or 5
-        count = len(CUSTOM_EMOJI_REGEX.findall(message.content)) + len(
-            UNICODE_EMOJI_REGEX.findall(message.content)
+        count = (
+            len(CUSTOM_EMOJI_REGEX.findall(message.content))
+            + len(UNICODE_EMOJI_REGEX.findall(message.content))
         )
         if count < threshold:
             return False
@@ -201,9 +145,7 @@ class FilterEvents(Package):
             return False
         for row in rows:
             exempt = set(row.get("exempt_roles") or [])
-            if exempt and any(
-                r.id in exempt for r in getattr(message.author, "roles", ())
-            ):
+            if exempt and any(r.id in exempt for r in getattr(message.author, "roles", ())):
                 continue
             try:
                 if re.search(row["regex"], message.content):
@@ -215,7 +157,7 @@ class FilterEvents(Package):
 
     async def _check_spam(self, message: discord.Message) -> bool:
         row = await self._row(message.guild.id, "spam")
-        if not row or not self._in_scope(message, row) or self._is_exempt(message, row):
+        if not row or self._is_exempt(message, row):
             return False
         threshold = row.get("threshold") or 5
         key = (message.guild.id, message.author.id)
@@ -231,16 +173,11 @@ class FilterEvents(Package):
         await self._punish(message, row.get("action"), "spam filter")
         return True
 
-    
-
     async def _check_content(self, message: discord.Message) -> bool:
         for check in (
             self._check_caps,
-            self._check_links,
-            self._check_invites,
             self._check_spoilers,
             self._check_music,
-            self._check_mention,
             self._check_emoji,
             self._check_regex,
         ):
@@ -260,9 +197,7 @@ class FilterEvents(Package):
             await self._check_spam(message)
 
     @Package.listener("on_message_edit")
-    async def on_filter_edit(
-        self, before: discord.Message, after: discord.Message
-    ) -> None:
+    async def on_filter_edit(self, before: discord.Message, after: discord.Message) -> None:
         if before.content == after.content:
             return
         if (

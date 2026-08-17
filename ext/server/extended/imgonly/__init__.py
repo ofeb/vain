@@ -18,6 +18,14 @@ class ImgonlyCommands(Package):
                 PRIMARY KEY (guild_id, channel_id)
             )"""
         )
+        await self.db.execute(
+            """CREATE TABLE IF NOT EXISTS image_only_messages (
+                guild_id BIGINT NOT NULL,
+                channel_id BIGINT NOT NULL,
+                message TEXT NOT NULL DEFAULT '',
+                PRIMARY KEY (guild_id, channel_id)
+            )"""
+        )
 
     @hybrid(
         name="imgonly",
@@ -48,6 +56,10 @@ class ImgonlyCommands(Package):
             """DELETE FROM image_only WHERE guild_id = $1 AND channel_id = $2""",
             ctx.guild.id, channel.id,
         )
+        await self.db.execute(
+            """DELETE FROM image_only_messages WHERE guild_id = $1 AND channel_id = $2""",
+            ctx.guild.id, channel.id,
+        )
         return await ctx.success(f"removed {channel.mention} from gallery channels")
 
     @imgonly.command(
@@ -70,6 +82,38 @@ class ImgonlyCommands(Package):
             ctx.guild.id, channel.id,
         )
         return await ctx.success(f"{channel.mention} is now a gallery channel")
+
+    @imgonly.command(
+        name="message",
+        aliases=["script", "msg", "template"],
+        description="Set the custom message for a gallery channel",
+        example=",imageonly message #img Only images allowed here!",
+        usage="[channel] <message>",
+    )
+    @has_permissions(manage_guild=True)
+    async def imgonly_message(self, ctx, channel: Optional[TextChannel] = None, *, message: str = None):
+        """set gallery channel message"""
+        channel = channel or (
+            ctx.channel if isinstance(ctx.channel, TextChannel) else None
+        )
+        if channel is None:
+            return await ctx.warn("Provide a **text channel** (or run this in one)")
+
+        if message is None:
+            row = await self.db.fetchrow(
+                """SELECT message FROM image_only_messages WHERE guild_id = $1 AND channel_id = $2""",
+                ctx.guild.id, channel.id,
+            )
+            if row and row.message:
+                return await ctx.send(f"Current message for {channel.mention}:\n> {row.message}")
+            return await ctx.warn(f"No custom message set for {channel.mention}")
+
+        await self.db.execute(
+            """INSERT INTO image_only_messages (guild_id, channel_id, message) VALUES ($1, $2, $3)
+               ON CONFLICT(guild_id, channel_id) DO UPDATE SET message = $3""",
+            ctx.guild.id, channel.id, message,
+        )
+        return await ctx.success(f"Set message for {channel.mention}\n> {message}")
 
     @imgonly.command(
         name="list",
