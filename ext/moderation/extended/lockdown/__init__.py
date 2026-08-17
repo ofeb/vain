@@ -85,17 +85,17 @@ class Lockdown(Package):
 
         if already_locked:
             msg = (
-                f"> **{len(already_locked)}** channel(s) were **already locked** before using **lockdown all**\n"
-                f"> -# **approve locks all channels** ; "
-                f"**deny locks only the channels that weren't locked** ; "
-                f"**cancel this using the cancel button**"
+                f"**{len(already_locked)}** channel(s) were **already locked** before using **lockdown all**\n"
+                f"> -# **approve locks all channels** ;\n"
+                f"> -# **deny locks only the channels that weren't locked** ;\n"
+                f"> -# **cancel this using the cancel button**"
             )
         else:
             msg = (
                 f"**{len(to_lock)}** channel(s) will be locked.\n"
-                f"> -# **approve locks all channels** ; "
-                f"**deny locks only the channels that weren't locked** ; "
-                f"**cancel this using the cancel button**"
+                f"> -# **approve locks all channels** ;\n"
+                f"> -# **deny locks only the channels that weren't locked** ;\n"
+                f"> -# **cancel this using the cancel button**"
             )
 
         view = ThreeButtonConfirmView(ctx, show_cancel=True)
@@ -332,17 +332,17 @@ class Lockdown(Package):
 
         if already_unlocked:
             msg = (
-                f"> **{len(already_locked)}** channel(s) were **already locked** before using **unlockdown all**\n"
-                f"> -# **approve unlocks all channels** ; "
-                f"**deny unlocks only the channels that were locked using lockdown** ; "
-                f"**cancel this using the cancel button**"
+                f"**{len(already_locked)}** channel(s) were **already locked** before using **unlockdown all**\n"
+                f"> -# **approve unlocks all channels** ;\n"
+                f"> -# **deny unlocks only the channels that were locked using lockdown** ;\n"
+                f"> -# **cancel this using the cancel button**"
             )
         else:
             msg = (
                 f"**{len(already_locked)}** channel(s) will be unlocked.\n"
-                f"> -# **approve unlocks all channels** ; "
-                f"**deny unlocks only the channels that were locked using lockdown** ; "
-                f"**cancel this using the cancel button**"
+                f"> -# **approve unlocks all channels** ;\n"
+                f"> -# **deny unlocks only the channels that were locked using lockdown** ;\n"
+                f"> -# **cancel this using the cancel button**"
             )
 
         view = ThreeButtonConfirmView(ctx, show_cancel=True)

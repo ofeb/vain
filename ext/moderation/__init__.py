@@ -3246,19 +3246,19 @@ class ModerationCommands(Package):
 
         if already_hidden:
             msg = (
-                f"> **{len(already_hidden)}** channel(s) were **already hidden** from "
+                f"**{len(already_hidden)}** channel(s) were **already hidden** from "
                 f"{self._hide_target_label(resolved)} before using **hideall**\n"
-                f"> -# **approve hides all channels** ; "
-                f"**deny hides only the channels that weren't hidden** ; "
-                f"**cancel this using the cancel button**"
+                f"> -# **approve hides all channels** ;\n"
+                f"> -# **deny hides only the channels that weren't hidden** ;\n"
+                f"> -# **cancel this using the cancel button**"
             )
         else:
             msg = (
                 f"**{len(to_hide)}** channel(s) will be hidden from "
                 f"{self._hide_target_label(resolved)}.\n"
-                f"> -# **approve hides all channels** ; "
-                f"**deny hides only the channels that weren't hidden** ; "
-                f"**cancel this using the cancel button**"
+                f"> -# **approve hides all channels** ;\n"
+                f"> -# **deny hides only the channels that weren't hidden** ;\n"
+                f"> -# **cancel this using the cancel button**"
             )
 
         view = ThreeButtonConfirmView(ctx, show_cancel=True)
@@ -3322,17 +3322,17 @@ class ModerationCommands(Package):
             msg = (
                 f"**{len(hidden_channels)}** channel(s) are **currently hidden** from "
                 f"{self._hide_target_label(resolved)}\n"
-                f"> -# **approve unhides all channels** ; "
-                f"**deny unhides only the channels that were hidden** ; "
-                f"**cancel this using the cancel button**"
+                f"> -# **approve unhides all channels** ;\n"
+                f"> -# **deny unhides only the channels that were hidden** ;\n"
+                f"> -# **cancel this using the cancel button**"
             )
         else:
             msg = (
                 f"**{len(hidden_channels)}** channel(s) will be unhidden from "
                 f"{self._hide_target_label(resolved)}.\n"
-                f"> -# **approve unhides all channels** ; "
-                f"**deny unhides only the channels that were hidden** ; "
-                f"**cancel this using the cancel button**"
+                f"> -# **approve unhides all channels** ;\n"
+                f"> -# **deny unhides only the channels that were hidden** ;\n"
+                f"> -# **cancel this using the cancel button**"
             )
 
         view = ThreeButtonConfirmView(ctx, show_cancel=True)
