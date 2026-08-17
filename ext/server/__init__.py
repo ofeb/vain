@@ -496,7 +496,7 @@ class ServerCommands(Package):
                     "{nuke.interval}": "Scheduled interval (autonuke)",
                     "{nuke.threshold}": "Same as interval (human duration)",
                     "{nuke.reconfigured}": "Systems re-pointed after clone (welcome, leave, boost, logs, …)",
-                    "{nuke.channel}": "New channel mention after nuke",
+                    "{nuke.channel}": "New channel mention after clone",
                     "{nuke.channel.name}": "New channel name",
                     "{nuke.channel.id}": "New channel id",
                     "{nuke.old}": "Old channel name before the nuke",
@@ -744,7 +744,7 @@ class ServerCommands(Package):
 
     @command(
         name="inrole",
-        aliases=["membersinrole", "withrole"],
+        aliases=["membersinrole", "withrole", "dump"],
         description="List every member with a role",
         usage="<role>",
         example=",inrole members",
