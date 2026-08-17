@@ -54,7 +54,7 @@ class History(Package):
             lines.append(f"-# **note**: {note}")
         else:
             lines.append(
-                f"-# **note**: unavailable *(add notes using notes add {case_id} he was being rude.)*"
+                f"-# **note**: unavailable *(add note using note add {case_id} <reason here>.)*"
             )
 
         if edited_at:
