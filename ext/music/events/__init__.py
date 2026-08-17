@@ -8,6 +8,12 @@ log = logging.getLogger("vain.music.events")
 
 
 class MusicEvents(Package):
+    async def cog_load(self) -> None:
+        """Strip `leave` from disconnect aliases (leave belongs to goodbye)."""
+        cmd = getattr(self, "disconnect", None)
+        if cmd is not None and getattr(cmd, "aliases", None):
+            cmd.aliases = [a for a in cmd.aliases if a != "leave"]
+
     @Package.listener("on_ready")
     async def _connect_nodelink_on_ready(self) -> None:
         try:
