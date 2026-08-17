@@ -20,7 +20,7 @@ _CASES_PER_PAGE = 3
 class History(Package):
     """history management"""
 
-    def _format_case_line(
+    def _format_history_case_line(
         self,
         row,
         user_cache: dict[int, str] | None = None,
@@ -82,7 +82,7 @@ class History(Package):
         for i in range(0, len(rows), _CASES_PER_PAGE):
             chunk = rows[i : i + _CASES_PER_PAGE]
             lines = [
-                self._format_case_line(
+                self._format_history_case_line(
                     row,
                     user_cache,
                     note=notes_by_case.get(row["case_id"]),

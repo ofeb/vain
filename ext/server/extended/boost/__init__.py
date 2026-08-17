@@ -23,7 +23,6 @@ class BoostCommands(Package):
     def __init__(self, bot):
         super().__init__(bot)
         self.boost_locks = defaultdict(Lock)
-        
         self._boost_counts: dict[int, dict[int, int]] = defaultdict(dict)
 
     async def cog_load(self) -> None:
@@ -32,7 +31,6 @@ class BoostCommands(Package):
                 "ALTER TABLE boost_messages ADD COLUMN IF NOT EXISTS is_second BOOLEAN NOT NULL DEFAULT FALSE"
             )
         with contextlib.suppress(Exception):
-            
             await self.db.execute(
                 """
                 DO $$ BEGIN
@@ -270,54 +268,47 @@ class BoostCommands(Package):
             emoji=":information_source:",
         )
 
-    async def on_member_update(self, before: Member, after: Member) -> None:
-        
-        if before.premium_since == after.premium_since:
+    async def on_member_boost(self, member: Member) -> None:
+        if member.premium_since is None:
+            self._boost_counts.get(member.guild.id, {}).pop(member.id, None)
             return
-        if after.premium_since is None:
-            
-            self._boost_counts.get(after.guild.id, {}).pop(after.id, None)
-            return
-        if await self.db.get_antiraid_state(after.guild.id):
+        if await self.db.get_antiraid_state(member.guild.id):
             return
 
-        
-        guild_counts = self._boost_counts[after.guild.id]
-        prev = guild_counts.get(after.id, 0)
-        
+        guild_counts = self._boost_counts[member.guild.id]
+        prev = guild_counts.get(member.id, 0)
         count = prev + 1
-        guild_counts[after.id] = count
+        guild_counts[member.id] = count
         is_second = count >= 2
 
         rate = await self.bot.object_cache.ratelimited(
-            f"boost_messages:{after.guild.id}", 3, 5
+            f"boost_messages:{member.guild.id}", 3, 5
         )
         if rate != 0:
             await sleep(rate)
 
-        async with self.boost_locks[f"boost_messages:{after.guild.id}"]:
+        async with self.boost_locks[f"boost_messages:{member.guild.id}"]:
             rows = await self.bot.db.fetch(
                 """SELECT * FROM boost_messages
                    WHERE guild_id = $1 AND is_second = $2""",
-                after.guild.id,
+                member.guild.id,
                 is_second,
             )
-            
             if not rows and is_second:
                 rows = await self.bot.db.fetch(
                     """SELECT * FROM boost_messages
                        WHERE guild_id = $1 AND is_second = FALSE""",
-                    after.guild.id,
+                    member.guild.id,
                 )
             for row in rows:
-                ch = after.guild.get_channel(row["channel_id"])
+                ch = member.guild.get_channel(row["channel_id"])
                 if not ch:
                     continue
                 try:
                     builder = await self.create_embed(
                         row["message"] if isinstance(row, dict) else row.message,
-                        member=after,
-                        user=after,
+                        member=member,
+                        user=member,
                     )
                 except Exception:
                     continue
