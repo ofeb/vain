@@ -78,14 +78,19 @@ class History(Package):
         pages = []
         for i in range(0, len(rows), _CASES_PER_PAGE):
             chunk = rows[i : i + _CASES_PER_PAGE]
-            lines = [
-                self._format_history_case_line(
-                    row,
-                    user_cache,
-                    note=notes_by_case.get(row["case_id"]),
+            lines: list[str] = []
+            for idx, row in enumerate(chunk):
+                lines.append(
+                    self._format_history_case_line(
+                        row,
+                        user_cache,
+                        note=notes_by_case.get(row["case_id"]),
+                    )
                 )
-                for row in chunk
-            ]
+                # blank spacer between cases so the note line is not jammed
+                # against the next Case header
+                if idx < len(chunk) - 1:
+                    lines.append("\u200b")
             page_num = (i // _CASES_PER_PAGE) + 1
             total_pages = -(-len(rows) // _CASES_PER_PAGE)
             embed = panel_embed(
