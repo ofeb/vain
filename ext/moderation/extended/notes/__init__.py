@@ -16,7 +16,8 @@ def label_line(label: str, value: str) -> str:
     return f"**{label}**: {value}"
 
 
-_ID_RE = re.compile(r"^\d{15,20}$")
+_ID_RE = re.compile(r"^\d{15,22}$")
+_MENTION_RE = re.compile(r"^<@!?(\d{15,22})>$")
 
 
 class Notes(Package):
@@ -25,12 +26,13 @@ class Notes(Package):
     async def _resolve_user(self, ctx, target: str) -> tuple[int, str]:
         """Resolve target to (user_id, display_label).
 
-        Order:
-          1. Mention <@id> / <@!id>
-          2. Raw snowflake (15-20 digits) -> guild member, else fetch_user
-          3. Exact name / global_name / nick / name#discrim match in guild
-          4. UserConverter fallback (bot cache)
-        Never fuzzy-match a snowflake to a different member.
+        Strict rules:
+          1. Mention <@id> / <@!id>  -> force that ID
+          2. Pure snowflake (15-22 digits) -> force that ID, never name-match
+          3. Exact name / global_name / nick / name#discrim in guild members
+          4. Exact name / global_name in bot.users cache
+          5. Fail cleanly — never fuzzy, never pick a different user
+        Offline users work when given by ID.
         """
         raw = (target or "").strip()
         if not raw:
@@ -38,7 +40,7 @@ class Notes(Package):
 
         uid: int | None = None
 
-        mention_match = re.match(r"^<@!?(\d{15,20})>$", raw)
+        mention_match = _MENTION_RE.match(raw)
         if mention_match:
             uid = int(mention_match.group(1))
         elif _ID_RE.match(raw):
@@ -49,27 +51,36 @@ class Notes(Package):
                 member = ctx.guild.get_member(uid)
                 if member is not None:
                     return member.id, str(member)
+                try:
+                    member = await ctx.guild.fetch_member(uid)
+                    return member.id, str(member)
+                except (discord.NotFound, discord.HTTPException):
+                    pass
+            cached = self.bot.get_user(uid)
+            if cached is not None:
+                return cached.id, f"{cached} (`{cached.id}`")
             try:
                 user = await self.bot.fetch_user(uid)
-                return user.id, f"{user} (`{user.id}`)"
+                return user.id, f"{user} (`{user.id}`")
             except (discord.NotFound, discord.HTTPException):
                 return uid, f"<@{uid}>"
 
+        lowered = raw.lower()
+
         if ctx.guild:
-            lowered = raw.lower()
             exact: list[discord.Member] = []
             for m in ctx.guild.members:
-                names = {
+                candidates = {
                     m.name.lower(),
                     str(m).lower(),
                 }
                 if m.global_name:
-                    names.add(m.global_name.lower())
+                    candidates.add(m.global_name.lower())
                 if m.nick:
-                    names.add(m.nick.lower())
+                    candidates.add(m.nick.lower())
                 if m.discriminator and m.discriminator != "0":
-                    names.add(f"{m.name.lower()}#{m.discriminator}")
-                if lowered in names:
+                    candidates.add(f"{m.name.lower()}#{m.discriminator}")
+                if lowered in candidates:
                     exact.append(m)
             if len(exact) == 1:
                 m = exact[0]
@@ -79,16 +90,24 @@ class Notes(Package):
                     f"multiple members match `{target}` - use an id or mention instead"
                 )
 
-        try:
-            user = await commands.UserConverter().convert(ctx, raw)
-            label = str(user)
-            if ctx.guild:
-                member = ctx.guild.get_member(user.id)
-                if member is not None:
-                    label = str(member)
-            return user.id, label
-        except CommandError:
-            raise CommandError(f"could not find a user matching `{target}`")
+        exact_users: list[discord.User] = []
+        for u in self.bot.users:
+            candidates = {u.name.lower(), str(u).lower()}
+            if u.global_name:
+                candidates.add(u.global_name.lower())
+            if u.discriminator and u.discriminator != "0":
+                candidates.add(f"{u.name.lower()}#{u.discriminator}")
+            if lowered in candidates:
+                exact_users.append(u)
+        if len(exact_users) == 1:
+            u = exact_users[0]
+            return u.id, f"{u} (`{u.id}`")
+        if len(exact_users) > 1:
+            raise CommandError(
+                f"multiple users match `{target}` - use an id or mention instead"
+            )
+
+        raise CommandError(f"could not find a user matching `{target}`")
 
     @group(
         name="notes",
