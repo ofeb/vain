@@ -453,7 +453,7 @@ class ModerationCommands(Package):
         reason = row.get("reason") or "no reason provided"
 
         lines = [
-            f"**Case #{row['case_id']}** - {row['action']}",
+            f"**Case #{row['case_id']}** - `{row['action']}`",
             f"-# **moderator**: {moderator}",
             f"-# **when**: {when}",
             f"-# **reason**: {reason}",

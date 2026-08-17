@@ -38,7 +38,7 @@ class History(Package):
         edited_by = row.get("edited_by")
 
         lines = [
-            f"**Case #{row['case_id']}** - {row['action']}",
+            f"**Case #{row['case_id']}** - `{row['action']}`",
             f"-# **moderator**: {moderator}",
             f"-# **when**: {when}",
             f"-# **reason**: {reason}",
