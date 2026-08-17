@@ -794,7 +794,7 @@ class BoosterroleCommands(Package):
         confirmed = await view.prompt(
             f"{member.mention}, {ctx.author} wants to **share** their booster role **with you**!\n"
             f"> -# to **receive** their **booster role** they want to share, **press accept**\n"
-            f"-# if you **don't want** to receive their role, **press deny**",
+            f"> -# if you **don't want** to receive their role, **press deny**",
             delete_after=False,
         )
         if not confirmed:
