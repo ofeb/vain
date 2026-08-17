@@ -38,23 +38,34 @@ class AutoroleEvents(Package):
                 return
             
             to_delete = []
-            role_ids = [r.role_id for r in roles]
-            valid_roles = member.roles
-            for role_id in role_ids:
+            roles_to_add = []
+            for r in roles:
+                role_id = r.role_id if hasattr(r, "role_id") else r["role_id"]
                 role = member.guild.get_role(role_id)
                 if not role:
                     to_delete.append(role_id)
                     continue
-                if role.is_dangerous:
+                # Skip managed / integration roles and roles the bot cannot assign
+                if role.managed or role.is_default():
                     continue
-                valid_roles.append(role)
+                if role >= member.guild.me.top_role:
+                    continue
+                if role in member.roles:
+                    continue
+                roles_to_add.append(role)
             
-            await member.edit(roles=valid_roles, reason="Auto Role")
-            await self.bot.db.execute(
-                "DELETE FROM auto_role WHERE guild_id = $1 AND role_id = ANY($2::BIGINT[])",
-                member.guild.id,
-                to_delete,
-            )
+            if roles_to_add:
+                try:
+                    await member.add_roles(*roles_to_add, reason="Auto Role")
+                except (discord.Forbidden, discord.HTTPException):
+                    pass
+            
+            if to_delete:
+                await self.bot.db.execute(
+                    "DELETE FROM auto_role WHERE guild_id = $1 AND role_id = ANY($2::BIGINT[])",
+                    member.guild.id,
+                    to_delete,
+                )
 
     @Package.listener("on_raw_reaction_add")
     async def on_reaction_role_assign(self, payload: discord.RawReactionActionEvent) -> None:

@@ -180,8 +180,16 @@ class WelcomeCommands(Package):
         )
 
     async def on_member_join(self, member: Member) -> None:
-        if await self.db.get_antiraid_state(member.guild.id):
-            return
+        # Safe antiraid guard — get_antiraid_state was never defined on the DB client.
+        try:
+            row = await self.db.fetchrow(
+                "SELECT raid_active FROM antiraid_config WHERE guild_id = $1",
+                member.guild.id,
+            )
+            if row and row.get("raid_active"):
+                return
+        except Exception:
+            pass
 
         rate = await self.bot.object_cache.ratelimited(
             f"welcome_messages:{member.guild.id}", 1, 5
