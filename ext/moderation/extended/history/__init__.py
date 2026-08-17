@@ -10,11 +10,12 @@ from core.discord.hybrid import hybrid, describe
 from core.managers.permissions import has_permissions
 
 from core.discord.views.embed import panel_embed
+from core.discord.views.paginate import send_pages
+from core.tools.human.time import human_date
 
 _ID_RE = re.compile(r"^\d{15,20}$")
+_CASES_PER_PAGE = 3
 
-def label_line(label: str, value: str) -> str:
-    return f"**{label}**: {value}"
 
 class History(Package):
     """history management"""
@@ -24,13 +25,6 @@ class History(Package):
         target_id = row.get("target_id")
         moderator_id = row.get("moderator_id")
 
-        if target_id and target_id in cache:
-            target = cache[target_id]
-        elif target_id:
-            target = f"`{target_id}`"
-        else:
-            target = "unknown"
-
         if moderator_id and moderator_id in cache:
             moderator = cache[moderator_id]
         elif moderator_id:
@@ -38,11 +32,49 @@ class History(Package):
         else:
             moderator = "unknown"
 
+        when = human_date(row.get("created_at"), fallback="unknown")
         reason = row.get("reason") or "no reason provided"
-        return label_line(
-            f"Case #{row['case_id']} · {row['action']}",
-            f"{target} · {moderator} · {reason}",
-        )
+        edited_at = row.get("edited_at")
+        edited_by = row.get("edited_by")
+
+        lines = [
+            f"**Case #{row['case_id']}** - {row['action']}",
+            f"-# **moderator**: {moderator}",
+            f"-# **when**: {when}",
+            f"-# **reason**: {reason}",
+        ]
+
+        if edited_at:
+            edited_when = human_date(edited_at, fallback="unknown")
+            if edited_by and edited_by in cache:
+                editor = cache[edited_by]
+            elif edited_by:
+                editor = f"`{edited_by}`"
+            else:
+                editor = "unknown"
+            lines.append(f"-# **edited**: {edited_when} by {editor}")
+
+        return "\n".join(lines)
+
+    def _build_case_pages(
+        self, rows: list, user_cache: dict[int, str], title: str
+    ) -> list[discord.Embed]:
+        """Build paginated embeds with 3 cases per page."""
+        pages = []
+        for i in range(0, len(rows), _CASES_PER_PAGE):
+            chunk = rows[i : i + _CASES_PER_PAGE]
+            lines = [self._format_case_line(row, user_cache) for row in chunk]
+            page_num = (i // _CASES_PER_PAGE) + 1
+            total_pages = -(-len(rows) // _CASES_PER_PAGE)
+            embed = panel_embed(
+                title=title,
+                color=None,
+                lines=lines,
+                footer=f"page {page_num}/{total_pages}",
+                timestamp=False,
+            )
+            pages.append(embed)
+        return pages
 
     async def _resolve_user_id(self, ctx, target: str) -> int:
         """Resolve a user ID from a mention, user object, or raw ID string."""
@@ -66,16 +98,17 @@ class History(Package):
                 ids.add(row["target_id"])
             if row.get("moderator_id"):
                 ids.add(row["moderator_id"])
+            if row.get("edited_by"):
+                ids.add(row["edited_by"])
 
         cache: dict[int, str] = {}
         for uid in ids:
-            
             if ctx.guild:
                 member = ctx.guild.get_member(uid)
                 if member:
                     cache[uid] = member.mention
                     continue
-            
+
             try:
                 user = await self.bot.fetch_user(uid)
                 cache[uid] = f"{user.name} (`{uid}`)"
@@ -99,7 +132,7 @@ class History(Package):
             ctx.guild.id,
             user_id,
             action=command.lower() if command else None,
-            limit=25,
+            limit=75,
         )
         if not rows:
             return await ctx.warn(f"<@{user_id}> has **no punishment history**")
@@ -110,13 +143,9 @@ class History(Package):
         title = f"History - {target_label}"
         if command:
             title += f" ({command})"
-        embed = panel_embed(
-            title=title,
-            color=None,
-            lines=[self._format_case_line(row, user_cache) for row in rows],
-            timestamp=False,
-        )
-        await ctx.send(embed=embed)
+
+        pages = self._build_case_pages(rows, user_cache, title)
+        await send_pages(ctx, pages)
 
     @history.command(
         name="view",
@@ -131,47 +160,62 @@ class History(Package):
         if not row:
             return await ctx.warn(f"Case **#{case_id}** was not found")
 
-        
-        target_label = f"`{row['target_id']}`"
-        moderator_label = f"`{row['moderator_id']}`"
+        user_cache = await self._build_user_cache(ctx, [row])
 
-        for uid, label_attr in [
-            (row.get("target_id"), "target"),
-            (row.get("moderator_id"), "moderator"),
-        ]:
-            if not uid:
-                continue
-            
-            if ctx.guild:
-                member = ctx.guild.get_member(uid)
-                if member:
-                    if label_attr == "target":
-                        target_label = member.mention
-                    else:
-                        moderator_label = member.mention
-                    continue
-            
-            try:
-                user = await self.bot.fetch_user(uid)
-                name = f"{user.name} (`{uid}`)"
-                if label_attr == "target":
-                    target_label = name
-                else:
-                    moderator_label = name
-            except (discord.NotFound, discord.HTTPException):
-                pass
+        target_id = row.get("target_id")
+        moderator_id = row.get("moderator_id")
+        target_label = user_cache.get(target_id, f"`{target_id}`") if target_id else "unknown"
+        moderator_label = user_cache.get(moderator_id, f"`{moderator_id}`") if moderator_id else "unknown"
 
-        from core.tools.moderation_logs import build_modlog_embed
+        when = human_date(row.get("created_at"), fallback="unknown")
+        reason = row.get("reason") or "no reason provided"
 
-        embed = build_modlog_embed(
+        lines = [
+            f"**Action**: `{row['action']}`",
+            f"**Target**: {target_label}",
+            f"**Moderator**: {moderator_label}",
+            f"**Reason**: {reason}",
+            f"-# **when**: {when}",
+        ]
+
+        edited_at = row.get("edited_at")
+        edited_by = row.get("edited_by")
+        if edited_at:
+            edited_when = human_date(edited_at, fallback="unknown")
+            editor = user_cache.get(edited_by, f"`{edited_by}`") if edited_by else "unknown"
+            lines.append(f"-# **edited**: {edited_when} by {editor}")
+
+        embed = panel_embed(
             color=None,
-            action=str(row["action"]),
-            target_label=target_label,
-            moderator_label=moderator_label,
-            reason=row.get("reason") or "no reason provided",
-            case_id=row["case_id"],
+            title=f"Case #{case_id}",
+            lines=lines,
+            timestamp=False,
         )
         await ctx.send(embed=embed)
+
+    @history.command(
+        name="edit",
+        description="Edit a case's reason",
+    )
+    @has_permissions(manage_messages=True)
+    @describe(case_id="Case number to edit", reason="New reason for the case")
+    async def history_edit(self, ctx, case_id: int, *, reason: str):
+        """edit case reason"""
+        if getattr(self.db, "pool", None) is None:
+            return await ctx.warn("Database is unavailable")
+        row = await self.db.fetch_modlog_case(ctx.guild.id, case_id)
+        if not row:
+            return await ctx.warn(f"Case **#{case_id}** was not found")
+
+        updated = await self.db.update_case_reason(
+            ctx.guild.id,
+            case_id,
+            reason.strip(),
+            ctx.author.id,
+        )
+        if not updated:
+            return await ctx.warn(f"Failed to update case **#{case_id}**")
+        return await ctx.success(f"Updated case **#{case_id}** reason")
 
     @history.command(
         name="remove",

@@ -29,6 +29,7 @@ from core.tools.moderation_logs import (
 from core.managers.permissions import has_permissions
 
 from core.discord.views.embed import panel_embed, reply_embed
+from core.tools.human.time import human_date
 from ext.server.extended.invoke import register_invoke_subgroup
 
 def label_line(label: str, value: str) -> str:
@@ -439,15 +440,7 @@ class ModerationCommands(Package):
 
     def _format_case_line(self, row, user_cache: dict | None = None) -> str:
         cache = user_cache or {}
-        target_id = row.get("target_id")
         moderator_id = row.get("moderator_id")
-
-        if target_id and target_id in cache:
-            target = cache[target_id]
-        elif target_id:
-            target = f"`{target_id}`"
-        else:
-            target = "unknown"
 
         if moderator_id and moderator_id in cache:
             moderator = cache[moderator_id]
@@ -456,15 +449,24 @@ class ModerationCommands(Package):
         else:
             moderator = "unknown"
 
+        when = human_date(row.get("created_at"), fallback="unknown")
         reason = row.get("reason") or "no reason provided"
-        created = row.get("created_at")
-        from core.tools.human import human_date
 
-        stamp = human_date(created, fallback="unknown")
-        return label_line(
-            f"Case #{row['case_id']} · {row['action']}",
-            f"{target} · {moderator} · {reason} · {stamp}",
-        )
+        lines = [
+            f"**Case #{row['case_id']}** - {row['action']}",
+            f"-# **moderator**: {moderator}",
+            f"-# **when**: {when}",
+            f"-# **reason**: {reason}",
+        ]
+
+        edited_at = row.get("edited_at")
+        edited_by = row.get("edited_by")
+        if edited_at:
+            edited_when = human_date(edited_at, fallback="unknown")
+            editor = cache.get(edited_by, f"`{edited_by}`") if edited_by else "unknown"
+            lines.append(f"-# **edited**: {edited_when} by {editor}")
+
+        return "\n".join(lines)
 
     async def _build_case_embed(self, ctx, case_id: int) -> discord.Embed | None:
         if getattr(self.db, "pool", None) is None:

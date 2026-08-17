@@ -169,6 +169,8 @@ CREATE TABLE IF NOT EXISTS modlog_cases (
     moderator_id BIGINT,
     reason       TEXT,
     created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    edited_at    TIMESTAMP,
+    edited_by    BIGINT,
     PRIMARY KEY (guild_id, case_id)
 );
 
