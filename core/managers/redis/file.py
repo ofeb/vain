@@ -89,8 +89,23 @@ class FileVainCache:
             self._keys = {}
             await self._save()
 
+    @staticmethod
+    def _to_jsonable(obj: Any) -> Any:
+        """Recursively convert bytes (and other non-JSON types) so orjson never fails."""
+        if isinstance(obj, bytes):
+            return obj.decode("utf-8", errors="replace")
+        if isinstance(obj, bytearray):
+            return bytes(obj).decode("utf-8", errors="replace")
+        if isinstance(obj, dict):
+            return {FileVainCache._to_jsonable(k): FileVainCache._to_jsonable(v) for k, v in obj.items()}
+        if isinstance(obj, (list, tuple)):
+            return [FileVainCache._to_jsonable(x) for x in obj]
+        if isinstance(obj, set):
+            return sorted(FileVainCache._to_jsonable(x) for x in obj)
+        return obj
+
     async def _save(self) -> None:
-        payload = orjson.dumps({"keys": self._keys})
+        payload = orjson.dumps({"keys": self._to_jsonable(self._keys)})
         tmp = self.path.with_suffix(self.path.suffix + ".tmp")
         tmp.write_bytes(payload)
         tmp.replace(self.path)
@@ -153,7 +168,9 @@ class FileVainCache:
 
     async def set(self, key: str, value: Any, ex: int | None = None, **_: Any) -> bool:
         async with self._lock:
-            entry = {"kind": "string", "value": value, "exp": None}
+            # Always store JSON-serializable values (bytes from real redis clients break orjson)
+            stored = self._normalize_member(value) if not isinstance(value, (int, float, bool, type(None))) else value
+            entry = {"kind": "string", "value": stored, "exp": None}
             if ex is not None:
                 entry["exp"] = time.time() + int(ex)
             self._keys[key] = entry
@@ -196,7 +213,9 @@ class FileVainCache:
     @staticmethod
     def _normalize_member(value: Any) -> str:
         if isinstance(value, bytes):
-            return value.decode("utf-8")
+            return value.decode("utf-8", errors="replace")
+        if isinstance(value, bytearray):
+            return bytes(value).decode("utf-8", errors="replace")
         return str(value)
 
     async def sismember(self, key: str, member: Any) -> int:
