@@ -180,7 +180,7 @@ class WelcomeCommands(Package):
         )
 
     async def on_member_join(self, member: Member) -> None:
-        # Safe antiraid guard — get_antiraid_state was never defined on the DB client.
+
         try:
             row = await self.db.fetchrow(
                 "SELECT raid_active FROM antiraid_config WHERE guild_id = $1",
