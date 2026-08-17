@@ -4,14 +4,15 @@ Accepts:
 - ``#txt`` / ``txt`` / ``TXT`` (name, case-insensitive)
 - ``<#id>`` mentions (and mangled pastes with zero-width chars)
 - raw snowflake IDs
-- smart partials (``gen`` → ``・general・``, ``boost`` in decorative names)
-- fuzzy closest match as last resort
+- smart partials (``gen`` → ``セgeneralセ``, ``boost`` in decorative names)
+- fuzzy closest match as last resort (channels only)
 
 Use ``ChannelConvert`` / ``TextChannelConvert`` in command signatures, or
 ``resolve_channel(ctx, token)`` from free-form parsers (giveaway start, etc.).
 
 Call ``patch_discord_channel_converters()`` once at bot import so every
 ``channel: discord.TextChannel`` annotation accepts bare names too.
+Also patches Member / Role / User converters onto the shared resolvers.
 """
 
 from __future__ import annotations
@@ -333,19 +334,26 @@ def patch_discord_channel_converters() -> None:
     mapping[discord.ForumChannel] = SoftForum
     mapping[discord.StageChannel] = SoftStage
 
-    
     try:
-        from .member import MemberConvert
+        from .member import MemberConvert, UserConvert
         from .role import RoleConvert
 
         SoftMember = MemberConvert
+        SoftUser = UserConvert
         SoftRole = RoleConvert
+
         conv.MemberConverter = SoftMember  # type: ignore
+        conv.UserConverter = SoftUser  # type: ignore
         conv.RoleConverter = SoftRole  # type: ignore
+
         cmds.MemberConverter = SoftMember  # type: ignore
+        cmds.UserConverter = SoftUser  # type: ignore
         cmds.RoleConverter = SoftRole  # type: ignore
+
         mapping[discord.Member] = SoftMember
+        mapping[discord.User] = SoftUser
         mapping[discord.Role] = SoftRole
+        mapping[discord.abc.User] = SoftUser
     except Exception:
         pass
 
