@@ -180,7 +180,7 @@ class WelcomeCommands(Package):
         )
 
     async def on_member_join(self, member: Member) -> None:
-
+        # Safe antiraid gate (never raise)
         try:
             row = await self.db.fetchrow(
                 "SELECT raid_active FROM antiraid_config WHERE guild_id = $1",
@@ -196,7 +196,17 @@ class WelcomeCommands(Package):
         )
         if rate != 0:
             await sleep(5)
-        async with self.welcome_locks[f"welcome_messages:{member.guild.id}"]:
+
+        # Prefer Server.join_locks (always present on the mixed Server cog);
+        # fall back to welcome_locks if this class was constructed standalone.
+        locks = getattr(self, "join_locks", None)
+        if locks is None:
+            locks = getattr(self, "welcome_locks", None)
+        if locks is None:
+            self.welcome_locks = defaultdict(Lock)
+            locks = self.welcome_locks
+
+        async with locks[f"welcome_messages:{member.guild.id}"]:
             for row in await self.bot.db.fetch(
                 """SELECT * FROM welcome_messages WHERE guild_id = $1;""",
                 member.guild.id,
