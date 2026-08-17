@@ -437,9 +437,25 @@ class ModerationCommands(Package):
             meta,
         )
 
-    def _format_case_line(self, row) -> str:
-        target = f"`{row['target_id']}`" if row.get("target_id") else "unknown"
-        moderator = f"`{row['moderator_id']}`" if row.get("moderator_id") else "unknown"
+    def _format_case_line(self, row, user_cache: dict | None = None) -> str:
+        cache = user_cache or {}
+        target_id = row.get("target_id")
+        moderator_id = row.get("moderator_id")
+
+        if target_id and target_id in cache:
+            target = cache[target_id]
+        elif target_id:
+            target = f"`{target_id}`"
+        else:
+            target = "unknown"
+
+        if moderator_id and moderator_id in cache:
+            moderator = cache[moderator_id]
+        elif moderator_id:
+            moderator = f"`{moderator_id}`"
+        else:
+            moderator = "unknown"
+
         reason = row.get("reason") or "no reason provided"
         created = row.get("created_at")
         from core.tools.human import human_date
