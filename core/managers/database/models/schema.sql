@@ -289,6 +289,7 @@ CREATE TABLE IF NOT EXISTS notes (
     user_id      BIGINT NOT NULL,
     moderator_id BIGINT NOT NULL,
     content      TEXT NOT NULL,
+    case_id      BIGINT,
     created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     id           SERIAL
 );
@@ -1325,3 +1326,4 @@ ALTER TABLE log_event_colors ADD COLUMN IF NOT EXISTS color TEXT;
 ALTER TABLE blacklist ADD COLUMN IF NOT EXISTS reason TEXT;
 ALTER TABLE pagination ADD COLUMN IF NOT EXISTS left_emoji TEXT;
 ALTER TABLE pagination ADD COLUMN IF NOT EXISTS right_emoji TEXT;
+ALTER TABLE notes ADD COLUMN IF NOT EXISTS case_id BIGINT;
