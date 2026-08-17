@@ -59,6 +59,10 @@ def _extract_user_id(text: str) -> int | None:
     return None
 
 
+def _user_label(user: discord.abc.User) -> str:
+    return f"{user} (`{user.id}`)"
+
+
 async def resolve_member(ctx: Context, arg: str) -> discord.Member:
     """Resolve *arg* to a guild Member. Raises CommandError on failure."""
     if ctx.guild is None:
@@ -146,10 +150,10 @@ async def resolve_user(
         if bot is not None:
             cached = bot.get_user(user_id)
             if cached is not None:
-                return cached.id, f"{cached} (`{cached.id}`")
+                return cached.id, _user_label(cached)
             try:
                 user = await bot.fetch_user(user_id)
-                return user.id, f"{user} (`{user.id}`")
+                return user.id, _user_label(user)
             except (discord.NotFound, discord.HTTPException):
                 pass
         return user_id, f"<@{user_id}>"
@@ -172,7 +176,7 @@ async def resolve_user(
             fuzzy=False,
         )
         if hit is not None:
-            return hit.id, f"{hit} (`{hit.id}`")
+            return hit.id, _user_label(hit)
 
     bot = getattr(ctx, "bot", None) or getattr(ctx, "_bot", None)
     if bot is not None and getattr(bot, "users", None):
