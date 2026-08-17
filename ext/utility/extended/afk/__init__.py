@@ -8,7 +8,7 @@ import discord
 from discord.ext import commands
 
 from core.discord.ctx import Context
-from core.discord.hybrid import describe, hybrid
+from core.discord.hybrid import describe, group
 from core.discord.package import Package
 from config import color
 
@@ -31,7 +31,7 @@ class Away(AFKEvents, Package):
             raise commands.CommandError("Redis is not connected - AFK is unavailable.")
         return AFK(self.bot.redis)
 
-    @hybrid(
+    @group(
         name="afk",
         description="Set yourself as away from keyboard",
         aliases=["away"],

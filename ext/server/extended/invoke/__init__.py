@@ -5,6 +5,7 @@ from typing import Literal
 from discord.ext.commands import CommandError, group
 
 from core.discord.package import Package
+from core.discord.hybrid import hybrid
 from core.managers.converters import EmbedConverter
 from core.managers.permissions import has_permissions
 from core.tools.moderation_logs import DEFAULT_INVOKE_DM, DEFAULT_INVOKE_RESPONSE
@@ -176,6 +177,106 @@ def _register_invoke_action(parent, action: str, *, has_dm: bool) -> None:
     message_view.__name__ = f"invoke_{action}_message_view"
 
 
+def register_invoke_subgroup(cmd_group, action: str, *, has_dm: bool = True) -> None:
+    """Add an ``invoke`` subgroup to an existing command group.
+
+    This allows ``<action> invoke dm <script>`` style usage.
+    ``cmd_group`` must be a ``commands.Group`` whose cog has
+    ``_set_invoke``, ``_set_invoke_enabled``, and ``_view_invoke`` methods.
+    """
+    label = ACTION_LABELS.get(action, action)
+
+    @cmd_group.group(
+        name="invoke",
+        description=f"Customize {label} punishment messages",
+        invoke_without_command=True,
+    )
+    @has_permissions(manage_guild=True)
+    async def invoke_subgroup(self, ctx):
+        return await ctx.send_help(ctx.command)
+
+    @invoke_subgroup.command(
+        name="on",
+        description=f"Enable {label} command response messages",
+    )
+    @has_permissions(manage_guild=True)
+    async def sub_on(self, ctx):
+        await self._set_invoke_enabled(ctx, action, "message", True)
+        return await ctx.success(f"{label} response **enabled**")
+
+    @invoke_subgroup.command(
+        name="off",
+        description=f"Disable {label} command response messages",
+    )
+    @has_permissions(manage_guild=True)
+    async def sub_off(self, ctx):
+        await self._set_invoke_enabled(ctx, action, "message", False)
+        return await ctx.success(f"{label} response **disabled**")
+
+    if has_dm:
+
+        @invoke_subgroup.group(
+            name="dm",
+            description=f"Customize {label} Direct Message",
+            invoke_without_command=True,
+            usage=INVOKE_USAGE,
+        )
+        @has_permissions(manage_guild=True)
+        async def sub_dm(self, ctx, *, message: EmbedConverter | None = None):
+            if message is None:
+                return await ctx.send_help(ctx.command)
+            await self._set_invoke(ctx, action, "dm", message.script)
+            return await ctx.success(f"{label} DM updated")
+
+        @sub_dm.command(
+            name="on",
+            description=f"Enable {label} DM notifications",
+        )
+        @has_permissions(manage_guild=True)
+        async def sub_dm_on(self, ctx):
+            await self._set_invoke_enabled(ctx, action, "dm", True)
+            return await ctx.success(f"{label} DM **enabled**")
+
+        @sub_dm.command(
+            name="off",
+            description=f"Disable {label} DM notifications",
+        )
+        @has_permissions(manage_guild=True)
+        async def sub_dm_off(self, ctx):
+            await self._set_invoke_enabled(ctx, action, "dm", False)
+            return await ctx.success(f"{label} DM **disabled**")
+
+        @sub_dm.command(
+            name="view",
+            description=f"View the {label} DM message",
+        )
+        @has_permissions(manage_guild=True)
+        async def sub_dm_view(self, ctx):
+            return await self._view_invoke(ctx, action, "dm")
+
+    @invoke_subgroup.group(
+        name="message",
+        aliases=["msg"],
+        description=f"Customize {label} command response",
+        invoke_without_command=True,
+        usage=INVOKE_USAGE,
+    )
+    @has_permissions(manage_guild=True)
+    async def sub_message(self, ctx, *, message: EmbedConverter | None = None):
+        if message is None:
+            return await ctx.send_help(ctx.command)
+        await self._set_invoke(ctx, action, "message", message.script)
+        return await ctx.success(f"{label} response updated")
+
+    @sub_message.command(
+        name="view",
+        description=f"View the {label} response message",
+    )
+    @has_permissions(manage_guild=True)
+    async def sub_message_view(self, ctx):
+        return await self._view_invoke(ctx, action, "message")
+
+
 class InvokeCommands(Package):
     """invoke message customization"""
 
@@ -225,14 +326,14 @@ class InvokeCommands(Package):
             enabled,
         )
 
-    async def _view_invoke(
+async def _view_invoke(
         self,
         ctx,
         action: str,
         target: Literal["dm", "message"],
     ):
         column = "dm_code" if target == "dm" else "message_code"
-        label = ACTION_LABELS[action]
+        label = ACTION_LABELS.get(action, action)
         kind = "DM" if target == "dm" else "response"
         msg = await self.db.fetchval(
             f"""SELECT {column} FROM invocation WHERE guild_id = $1 AND command = $2""",
@@ -250,10 +351,3 @@ class InvokeCommands(Package):
             user=ctx.author,
             moderator=ctx.author,
         )
-
-
-for _action in ACTIONS_WITH_DM:
-    _register_invoke_action(InvokeCommands.invoke, _action, has_dm=True)
-
-for _action in MESSAGE_ONLY_ACTIONS:
-    _register_invoke_action(InvokeCommands.invoke, _action, has_dm=False)

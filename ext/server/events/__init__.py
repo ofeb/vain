@@ -6,6 +6,7 @@ from ..extended.autoresponder.events import AutoresponderEvents
 from ..extended.boost.events import BoostEvents
 from ..extended.filter.events import FilterEvents
 from ..extended.goodbye.events import GoodbyeEvents
+from ..extended.imgonly.events import ImgonlyEvents
 from ..extended.settings.events import SettingsEvents
 from ..extended.stickymessage.events import StickymessageEvents
 from ..extended.suggest.events import SuggestEvents
@@ -21,6 +22,7 @@ class ServerEvents(
     SettingsEvents,
     BoostEvents,
     FilterEvents,
+    ImgonlyEvents,
     Package,
 ):
     """Server-wide event listeners."""

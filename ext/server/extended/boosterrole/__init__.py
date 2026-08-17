@@ -24,10 +24,7 @@ class BoosterroleCommands(Package):
     )
     async def boosterrole(self, ctx):
         """redirect to create"""
-        msg = ctx.message
-        msg.content = msg.content.replace("boosterrole", "boosterrole create")
-        ctx = await self.bot.get_context(msg)
-        await ctx.reinvoke(restart=True, call_hooks=True)
+        return await ctx.invoke(self.boosterrole_create)
 
     @boosterrole.command(
         name="create",

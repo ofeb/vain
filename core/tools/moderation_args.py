@@ -7,16 +7,15 @@ from dataclasses import dataclass
 import discord
 from discord.ext.commands import CommandError
 
-from core.tools.convert import MemberConvert
+from core.tools.convert.member import _ID_RE, _MENTION_RE
 
 _DURATION_RE = re.compile(r"^(\d+)([smhdwy])$", re.IGNORECASE)
-_MENTION_RE = re.compile(r"<@!?(\d+)>")
-_ID_RE = re.compile(r"^\d{15,20}$")
 
 
 @dataclass(slots=True)
 class ParsedModerationArgs:
-    member: discord.Member
+    member: discord.Member | None
+    user: discord.User | None
     duration_seconds: int | None = None
     delete_days: int | None = None
     reason: str | None = None
@@ -87,8 +86,64 @@ def _duration_implies_tempban(token: str, *, before_member: bool) -> bool:
     return False
 
 
-async def _resolve_member(ctx, token: str) -> discord.Member:
-    return await MemberConvert().convert(ctx, token)
+def _extract_user_id(token: str) -> int | None:
+    """Extract a user ID from a mention or raw ID string."""
+    text = token.strip()
+    m = _MENTION_RE.search(text)
+    if m:
+        return int(m.group(1))
+    stripped = text.strip("<@!>")
+    if _ID_RE.match(stripped):
+        return int(stripped)
+    if _ID_RE.match(text):
+        return int(text)
+    return None
+
+
+async def _resolve_member(ctx, token: str) -> tuple[discord.Member | None, discord.User | None]:
+    """Resolve a token to a Member (in-server) or User (anywhere).
+
+    Returns (member, user) - member is set if the user is in the guild,
+    user is always set if resolution succeeds.
+    """
+    user_id = _extract_user_id(token)
+
+    # If we have a user ID, ONLY try ID-based resolution (never name matching)
+    if user_id is not None:
+        # First try: resolve as a guild member (fast, cached)
+        if ctx.guild is not None:
+            member = ctx.guild.get_member(user_id)
+            if member is not None:
+                return member, member
+
+        # Second try: fetch from API as member
+        if ctx.guild is not None:
+            try:
+                member = await ctx.guild.fetch_member(user_id)
+                return member, member
+            except discord.HTTPException:
+                pass
+
+        # Third try: fetch as a User (works even if not in server)
+        try:
+            user = await ctx.bot.fetch_user(user_id)
+            return None, user
+        except discord.HTTPException:
+            pass
+
+        # ID was provided but couldn't resolve - error with the ID, don't fall through to name matching
+        raise CommandError(f"**can't** find user **{token}**")
+
+    # Fourth try: use MemberConverter for name/nickname matching (in-server only)
+    if ctx.guild is not None:
+        from core.tools.convert.member import MemberConvert
+        try:
+            member = await MemberConvert().convert(ctx, token)
+            return member, member
+        except CommandError:
+            pass
+
+    raise CommandError(f"**can't** find member **{token}**")
 
 
 async def parse_moderation_args(
@@ -111,24 +166,25 @@ async def parse_moderation_args(
         raise CommandError("you must specify a member")
 
     member: discord.Member | None = None
+    user: discord.User | None = None
     member_index: int | None = None
     for index, token in enumerate(tokens):
         if is_duration_token(token):
             continue
         try:
-            member = await _resolve_member(ctx, token)
+            member, user = await _resolve_member(ctx, token)
             member_index = index
             break
         except CommandError:
             continue
 
-    if member is None or member_index is None:
+    if member is None and user is None:
         raise CommandError("could not find that member")
 
     duration_seconds: int | None = None
     delete_days: int | None = None
     duration_before_member = False
-    consumed: set[int] = {member_index}
+    consumed: set[int] = {member_index} if member_index is not None else set()
 
     if allow_duration or allow_delete_days:
         for index, token in enumerate(tokens):
@@ -137,7 +193,7 @@ async def parse_moderation_args(
             seconds = parse_duration_seconds(token)
             if seconds is None:
                 continue
-            before_member = index < member_index
+            before_member = index < (member_index or 0)
             if allow_duration and _duration_implies_tempban(token, before_member=before_member):
                 duration_seconds = seconds
                 duration_before_member = before_member
@@ -151,6 +207,7 @@ async def parse_moderation_args(
 
     return ParsedModerationArgs(
         member=member,
+        user=user,
         duration_seconds=duration_seconds,
         delete_days=delete_days,
         reason=reason,

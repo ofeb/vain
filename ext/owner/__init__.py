@@ -580,33 +580,33 @@ class Owner(Package):
         description="Blacklist a user or guild from using the bot",
         invoke_without_command=True,
     )
-    @describe(target="User ID/mention or guild ID to blacklist")
-    async def blacklist(self, ctx: Context, *, target: str) -> None:
+    @describe(target="User ID/mention or guild ID to blacklist", reason="Reason for blacklisting")
+    async def blacklist(self, ctx: Context, target: str, *, reason: str = None) -> None:
         resolved = self.bot.get_guild(int(target)) if target.isdigit() else None
         if resolved:
             await self.bot.db.execute(
-                "INSERT INTO blacklist (user_id, guild_id) VALUES (NULL, $1)",
-                resolved.id,
+                "INSERT INTO blacklist (user_id, guild_id, reason) VALUES (NULL, $1, $2)",
+                resolved.id, reason,
             )
             await ctx.success(
                 f"Blacklisted guild **{resolved.name}** (`{resolved.id}`)"
             )
             await self._log_devlog(
-                f"**{ctx.author}** blacklisted guild **{resolved.name}** (`{resolved.id}`)"
+                f"**{ctx.author}** blacklisted guild **{resolved.name}** (`{resolved.id}`){f' — reason: {reason}' if reason else ''}"
             )
             return
 
         user = await self._resolve_user(target)
         await self.bot.db.execute(
-            "INSERT INTO blacklist (user_id, guild_id) VALUES ($1, NULL)",
-            user.id,
+            "INSERT INTO blacklist (user_id, guild_id, reason) VALUES ($1, NULL, $2)",
+            user.id, reason,
         )
         await self.bot.forget(
             f"blacklist:{ctx.guild.id if ctx.guild else 0}:{user.id}"
         )
         await ctx.success(f"Blacklisted **{user}**")
         await self._log_devlog(
-            f"**{ctx.author}** blacklisted **{user}** (`{user.id}`)"
+            f"**{ctx.author}** blacklisted **{user}** (`{user.id}`){f' — reason: {reason}' if reason else ''}"
         )
 
     @blacklist.command(
@@ -616,7 +616,7 @@ class Owner(Package):
     )
     async def blacklist_list(self, ctx: Context) -> None:
         rows = await self.bot.db.fetch(
-            "SELECT user_id, guild_id, created_at FROM blacklist ORDER BY created_at DESC"
+            "SELECT user_id, guild_id, reason, created_at FROM blacklist ORDER BY created_at DESC"
         )
         if not rows:
             raise CommandError("No blacklisted users or guilds")
@@ -624,9 +624,14 @@ class Owner(Package):
         values = []
         for row in rows:
             if row["user_id"]:
-                values.append(f"User: <@{row['user_id']}> (`{row['user_id']}`)")
+                entry = f"User: <@{row['user_id']}> (`{row['user_id']}`)"
             elif row["guild_id"]:
-                values.append(f"Guild: `{row['guild_id']}`")
+                entry = f"Guild: `{row['guild_id']}`"
+            else:
+                continue
+            if row["reason"]:
+                entry += f"\n> -# **reason**: {row['reason']}"
+            values.append(entry)
 
         embed = panel_embed(title="Blacklist", color=color.base, lines=[], timestamp=False)
         return await ctx.paginate(embed, values)

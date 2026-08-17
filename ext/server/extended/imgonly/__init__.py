@@ -3,17 +3,27 @@ from typing import Optional
 from discord.ext.commands import group
 from discord import Embed, TextChannel
 from core.discord.package import Package
-
+from core.discord.hybrid import hybrid, describe
 
 from core.managers.permissions import has_permissions
 class ImgonlyCommands(Package):
     """image-only channel management"""
 
-    @group(
+    async def cog_load(self) -> None:
+        await self.db.execute(
+            """CREATE TABLE IF NOT EXISTS image_only (
+                guild_id BIGINT NOT NULL,
+                channel_id BIGINT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (guild_id, channel_id)
+            )"""
+        )
+
+    @hybrid(
         name="imgonly",
         aliases=["gallery", "imageonly"],
         description="Set up image + caption only channels",
-        invoke_without_command=True,
+        group=True,
     )
     async def imgonly(self, ctx):
         """imgonly help"""

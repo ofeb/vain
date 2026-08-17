@@ -1,5 +1,5 @@
 from discord.ext.commands import group, CommandError, ColourConverter as ColorConverter
-from discord import Embed, Role
+from discord import Embed, Role, Color
 from core.discord.package import Package
 import humanize
 from discord.utils import utcnow
@@ -85,6 +85,75 @@ class BadgeCommands(Package):
             ctx.guild.id, True,
         )
         return await ctx.success("Colorme enabled")
+
+    @colorme.command(
+        name="setup",
+        description="create basic rainbow color roles and a hoisted separator",
+    )
+    @has_permissions(manage_guild=True)
+    async def colorme_setup(self, ctx):
+        """create rainbow color roles"""
+        cfg = await self.db.fetchrow(
+            """SELECT * FROM config WHERE guild_id = $1""", ctx.guild.id
+        )
+        if not cfg or not cfg.colorme:
+            raise CommandError("colorme isnt enabled here")
+
+        colors = [
+            ("Red", Color.red()),
+            ("Orange", Color.orange()),
+            ("Yellow", Color.yellow()),
+            ("Green", Color.green()),
+            ("Blue", Color.blue()),
+            ("Indigo", Color.from_rgb(75, 0, 130)),
+            ("Violet", Color.from_rgb(138, 43, 226)),
+            ("Pink", Color.from_rgb(255, 105, 180)),
+            ("Teal", Color.teal()),
+            ("Gold", Color.gold()),
+        ]
+
+        existing = (
+            await self.db.fetchval(
+                """SELECT roles FROM color_roles WHERE guild_id = $1""", ctx.guild.id
+            ) or []
+        )
+        pairs = [i.split("-", 1) for i in existing]
+
+        msg = await ctx.normal(f"creating **{len(colors)}** color roles...")
+
+        separator = await ctx.guild.create_role(
+            name="Color Roles",
+            color=Color.default(),
+            hoist=True,
+            reason="colorme setup",
+        )
+
+        created = 0
+        for name, color_val in colors:
+            if any(p[0] == str(color_val.value) for p in pairs):
+                continue
+            role = await ctx.guild.create_role(
+                name=name, color=color_val, reason="colorme setup"
+            )
+            if cfg.colorme_base and (base := ctx.guild.get_role(cfg.colorme_base)):
+                await role.edit(position=base.position, reason="colorme base")
+            else:
+                await role.edit(position=separator.position, reason="colorme setup")
+            pairs.append([str(color_val.value), str(role.id)])
+            created += 1
+
+        await self.db.execute(
+            """INSERT INTO color_roles (guild_id, roles) VALUES($1, $2) ON CONFLICT(guild_id) DO UPDATE SET roles = excluded.roles""",
+            ctx.guild.id,
+            [f"{p[0]}-{p[1]}" for p in pairs],
+        )
+        elapsed = humanize.precisedelta(utcnow() - msg.created_at, format="%0.0f")
+        return await msg.edit(
+            embed=Embed(
+                color=self.bot.color,
+                description=f"{ctx.author.mention}: created **{created}** color roles in **{elapsed}**",
+            )
+        )
 
     @colorme.command(
         name="disable",

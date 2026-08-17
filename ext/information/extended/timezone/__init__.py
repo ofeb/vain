@@ -5,9 +5,10 @@ from typing import Optional
 
 import pytz
 from discord import Member
-from discord.ext.commands import group, has_permissions, command
+from discord.ext.commands import has_permissions
 
 from core.discord.package import Package
+from core.discord.hybrid import hybrid, describe
 from core.discord.views.embed import c2
 
 
@@ -268,29 +269,47 @@ def _time_period(hour: int) -> str:
         return "night"
 
 
+def _get_guild_id(ctx) -> int:
+    """Get a suitable guild ID for database storage.
+    
+    In DMs, returns 0 (global storage).
+    In group chats, returns the channel ID.
+    In servers, returns the guild ID.
+    """
+    if ctx.guild is None:
+        # DM or group chat
+        return getattr(ctx, 'channel', None) and ctx.channel.id or 0
+    return ctx.guild.id
+
+
 class Timezone(Package):
     """timezone management"""
 
     def __init__(self, bot):
         self.bot = bot
 
-    @group(
+    @hybrid(
         name="timezone",
         aliases=["tz"],
         description="View your current time or somebody elses",
-        invoke_without_command=True,
+        group=True,
     )
+    @describe(member="The user to check timezone for")
     async def timezone(self, ctx, member: Optional[Member] = None):
         """view timezone"""
         target = member or ctx.author
+        guild_id = _get_guild_id(ctx)
+        
         tz = await self.bot.db.fetchval(
             "SELECT timezone FROM users WHERE user_id = $1 AND guild_id = $2",
-            target.id, ctx.guild.id
+            target.id, guild_id
         )
 
         if not tz:
+            if target.id == ctx.author.id:
+                return await ctx.warn("You have not set your timezone\n> -# **set one with:** `,timezone set`")
             return await ctx.warn(
-                f"{target.mention} has not set their timezone"
+                f"**{target.display_name}** has not set their timezone"
             )
 
         try:
@@ -300,12 +319,13 @@ class Timezone(Package):
             period = _time_period(hour)
             time_str = current_time.strftime("%I:%M").lstrip("0")
             day_str = current_time.strftime("%A").lower()
+            if target.id == ctx.author.id:
+                msg = f"Your time is **{time_str}** **{day_str}** **{period}**"
+            else:
+                msg = f"**{target.display_name}'s** time is **{time_str}** **{day_str}** **{period}**"
             await ctx.send(
                 embed=c2(
-                    message=(
-                        f"**{target.display_name}'s** time is "
-                        f"**{time_str}** **{day_str}** **{period}**"
-                    ),
+                    message=msg,
                     timestamp=False,
                 )
             )
@@ -328,13 +348,14 @@ class Timezone(Package):
                 f"> -# **example:** `Europe/Dublin` or a country like `Ireland`"
             )
 
+        guild_id = _get_guild_id(ctx)
         await self.bot.db.execute(
             "INSERT INTO users (user_id, guild_id, timezone) VALUES($1, $2, $3) "
             "ON CONFLICT(user_id, guild_id) DO UPDATE SET timezone = excluded.timezone",
-            ctx.author.id, ctx.guild.id, resolved
+            ctx.author.id, guild_id, resolved
         )
         await ctx.success(
-            f"**{ctx.author.display_name}'s** timezone set\n"
+            f"**your** timezone has been set\n"
             f"> -# **location:** {resolved}"
         )
 
@@ -345,9 +366,10 @@ class Timezone(Package):
     )
     async def timezone_remove(self, ctx):
         """remove timezone"""
+        guild_id = _get_guild_id(ctx)
         result = await self.bot.db.execute(
             "UPDATE users SET timezone = NULL WHERE user_id = $1 AND guild_id = $2",
-            ctx.author.id, ctx.guild.id
+            ctx.author.id, guild_id
         )
         if result == "UPDATE 0":
             return await ctx.warn(
@@ -373,13 +395,15 @@ class Timezone(Package):
                 f"> -# **usage:** `,timezone compare @user`"
             )
 
+        guild_id = _get_guild_id(ctx)
+        
         my_tz_name = await self.bot.db.fetchval(
             "SELECT timezone FROM users WHERE user_id = $1 AND guild_id = $2",
-            ctx.author.id, ctx.guild.id
+            ctx.author.id, guild_id
         )
         their_tz_name = await self.bot.db.fetchval(
             "SELECT timezone FROM users WHERE user_id = $1 AND guild_id = $2",
-            member.id, ctx.guild.id
+            member.id, guild_id
         )
 
         if not my_tz_name:
@@ -436,9 +460,11 @@ class Timezone(Package):
     )
     async def timezone_list(self, ctx):
         """list all timezones"""
+        guild_id = _get_guild_id(ctx)
+        
         timezones = await self.bot.db.fetch(
             "SELECT user_id, timezone FROM users WHERE guild_id = $1 AND timezone IS NOT NULL",
-            ctx.guild.id
+            guild_id
         )
 
         if not timezones:
@@ -449,7 +475,10 @@ class Timezone(Package):
 
         lines = []
         for tz in timezones:
-            member = ctx.guild.get_member(tz['user_id'])
+            # Try to get member from guild if in server, otherwise skip
+            member = None
+            if ctx.guild:
+                member = ctx.guild.get_member(tz['user_id'])
             if member:
                 try:
                     user_tz = pytz.timezone(tz['timezone'])

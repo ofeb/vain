@@ -29,6 +29,7 @@ from core.tools.moderation_logs import (
 from core.managers.permissions import has_permissions
 
 from core.discord.views.embed import panel_embed, reply_embed
+from ext.server.extended.invoke import register_invoke_subgroup
 
 def label_line(label: str, value: str) -> str:
     return f"**{label}**: {value}"
@@ -85,6 +86,43 @@ class ModerationCommands(Package):
         super().__init__(bot)
         self._unbanall_tasks: dict[int, asyncio.Task] = {}
         self._naughty_tasks: dict[int, asyncio.Task] = {}
+
+    async def _set_invoke(self, ctx, action: str, target: str, code: str) -> None:
+        column = "dm_code" if target == "dm" else "message_code"
+        await self.db.execute(
+            f"""INSERT INTO invocation (guild_id, command, {column})
+                VALUES ($1, $2, $3)
+                ON CONFLICT (guild_id, command)
+                DO UPDATE SET {column} = excluded.{column}""",
+            ctx.guild.id, action, code,
+        )
+
+    async def _set_invoke_enabled(self, ctx, action: str, target: str, enabled: bool) -> None:
+        column = "dm_enabled" if target == "dm" else "message_enabled"
+        await self.db.execute(
+            f"""INSERT INTO invocation (guild_id, command, {column})
+                VALUES ($1, $2, $3)
+                ON CONFLICT (guild_id, command)
+                DO UPDATE SET {column} = excluded.{column}""",
+            ctx.guild.id, action, enabled,
+        )
+
+    async def _view_invoke(self, ctx, action: str, target: str):
+        column = "dm_code" if target == "dm" else "message_code"
+        from core.tools.moderation_logs import DEFAULT_INVOKE_DM, DEFAULT_INVOKE_RESPONSE
+        msg = await self.db.fetchval(
+            f"""SELECT {column} FROM invocation WHERE guild_id = $1 AND command = $2""",
+            ctx.guild.id, action,
+        )
+        if not msg:
+            defaults = DEFAULT_INVOKE_DM if target == "dm" else DEFAULT_INVOKE_RESPONSE
+            msg = defaults.get(action)
+        if not msg:
+            from discord.ext.commands import CommandError
+            raise CommandError(f"no {action} {('DM' if target == 'dm' else 'response')} set")
+        return await self.bot.send_embed(
+            ctx.channel, msg, user=ctx.author, moderator=ctx.author,
+        )
 
     async def cog_load(self) -> None:
         if self.db.pool is not None:
@@ -241,18 +279,32 @@ class ModerationCommands(Package):
             elif isinstance(channel, discord.VoiceChannel):
                 await channel.set_permissions(jail_role, connect=False, speak=False)
 
-    async def _ensure_targetable(self, ctx, member: discord.Member) -> bool:
-        """Check if a member can be moderated. Returns True if OK, False if blocked (sends warning)."""
+    async def _ensure_targetable(self, ctx, member: discord.Member | None, user: discord.User | None = None) -> bool:
+        """Check if a target can be moderated. Returns True if OK, False if blocked."""
         from core.tools.hierarchy import ensure_member_hierarchy
         from discord.ext.commands import CommandError as _CmdErr
 
         if ctx.guild is None:
             await ctx.warn("Server only\n> -# **this command can only be used in a server**")
             return False
+        if member is None:
+            return True
+        if member.id == ctx.guild.owner_id:
+            await ctx.warn(f"you **can't** {ctx.command.name} the **guild owner**!")
+            return False
         try:
             await ensure_member_hierarchy(ctx, member, allow_self=False)
         except _CmdErr as e:
             await ctx.warn(f"{e}")
+            return False
+        return True
+
+    async def _check_not_owner(self, ctx, member: discord.Member) -> bool:
+        """Check if target is the guild owner. Returns True if OK, False if blocked."""
+        if ctx.guild is None:
+            return True
+        if member.id == ctx.guild.owner_id:
+            await ctx.warn(f"you **can't** {ctx.command.name} the **guild owner**!")
             return False
         return True
 
@@ -582,11 +634,12 @@ class ModerationCommands(Package):
             f"Tempbanned **{target_display}** for {duration_label}\n> -# **reason:** {self._default_reason(reason)}"
         )
 
-    @command(
+    @group(
         name="tempban",
         usage="(duration) (member) <reason>",
         example="3h @member spamming",
         description="Temporarily ban a member",
+        invoke_without_command=True,
     )
     @has_permissions(ban_members=True)
     async def tempban(self, ctx):
@@ -596,9 +649,79 @@ class ModerationCommands(Package):
             raise CommandError("you must provide a duration like `3h`, `2d`, `1w`, or `1y`")
         await self._run_tempban(ctx, parsed)
 
-    @command(
+    @tempban.group(
+        name="invoke",
+        description="Customize tempban punishment messages",
+        invoke_without_command=True,
+    )
+    @has_permissions(manage_guild=True)
+    async def tempban_invoke(self, ctx):
+        return await ctx.send_help(ctx.command)
+
+    @tempban_invoke.command(name="on", description="Enable tempban response")
+    @has_permissions(manage_guild=True)
+    async def tempban_invoke_on(self, ctx):
+        await self._set_invoke_enabled(ctx, "tempban", "message", True)
+        return await ctx.success("tempban response **enabled**")
+
+    @tempban_invoke.command(name="off", description="Disable tempban response")
+    @has_permissions(manage_guild=True)
+    async def tempban_invoke_off(self, ctx):
+        await self._set_invoke_enabled(ctx, "tempban", "message", False)
+        return await ctx.success("tempban response **disabled**")
+
+    @tempban_invoke.group(name="dm", description="Customize tempban DM", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def tempban_invoke_dm(self, ctx, *, message=None):
+        if message is None:
+            return await ctx.send_help(ctx.command)
+        from core.managers.converters import EmbedConverter
+        try:
+            result = await EmbedConverter().convert(ctx, message)
+            await self._set_invoke(ctx, "tempban", "dm", result.script)
+        except Exception:
+            await self._set_invoke(ctx, "tempban", "dm", message)
+        return await ctx.success("tempban DM updated")
+
+    @tempban_invoke_dm.command(name="on", description="Enable tempban DM")
+    @has_permissions(manage_guild=True)
+    async def tempban_invoke_dm_on(self, ctx):
+        await self._set_invoke_enabled(ctx, "tempban", "dm", True)
+        return await ctx.success("tempban DM **enabled**")
+
+    @tempban_invoke_dm.command(name="off", description="Disable tempban DM")
+    @has_permissions(manage_guild=True)
+    async def tempban_invoke_dm_off(self, ctx):
+        await self._set_invoke_enabled(ctx, "tempban", "dm", False)
+        return await ctx.success("tempban DM **disabled**")
+
+    @tempban_invoke_dm.command(name="view", description="View tempban DM")
+    @has_permissions(manage_guild=True)
+    async def tempban_invoke_dm_view(self, ctx):
+        return await self._view_invoke(ctx, "tempban", "dm")
+
+    @tempban_invoke.group(name="message", aliases=["msg"], description="Customize tempban response", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def tempban_invoke_message(self, ctx, *, message=None):
+        if message is None:
+            return await ctx.send_help(ctx.command)
+        from core.managers.converters import EmbedConverter
+        try:
+            result = await EmbedConverter().convert(ctx, message)
+            await self._set_invoke(ctx, "tempban", "message", result.script)
+        except Exception:
+            await self._set_invoke(ctx, "tempban", "message", message)
+        return await ctx.success("tempban response updated")
+
+    @tempban_invoke_message.command(name="view", description="View tempban response")
+    @has_permissions(manage_guild=True)
+    async def tempban_invoke_message_view(self, ctx):
+        return await self._view_invoke(ctx, "tempban", "message")
+
+    @group(
         name="warn",
         description="Warns the mentioned user and private messages them the warning",
+        invoke_without_command=True,
     )
     @has_permissions(manage_messages=True)
     async def warn(self, ctx, member: discord.Member, *, reason=None):
@@ -625,6 +748,75 @@ class ModerationCommands(Package):
         return await ctx.success(
             f"Warned **{member}**\n> -# **reason:** {self._default_reason(reason)}"
         )
+
+    @warn.group(
+        name="invoke",
+        description="Customize warn punishment messages",
+        invoke_without_command=True,
+    )
+    @has_permissions(manage_guild=True)
+    async def warn_invoke(self, ctx):
+        return await ctx.send_help(ctx.command)
+
+    @warn_invoke.command(name="on", description="Enable warn response")
+    @has_permissions(manage_guild=True)
+    async def warn_invoke_on(self, ctx):
+        await self._set_invoke_enabled(ctx, "warn", "message", True)
+        return await ctx.success("warn response **enabled**")
+
+    @warn_invoke.command(name="off", description="Disable warn response")
+    @has_permissions(manage_guild=True)
+    async def warn_invoke_off(self, ctx):
+        await self._set_invoke_enabled(ctx, "warn", "message", False)
+        return await ctx.success("warn response **disabled**")
+
+    @warn_invoke.group(name="dm", description="Customize warn DM", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def warn_invoke_dm(self, ctx, *, message=None):
+        if message is None:
+            return await ctx.send_help(ctx.command)
+        from core.managers.converters import EmbedConverter
+        try:
+            result = await EmbedConverter().convert(ctx, message)
+            await self._set_invoke(ctx, "warn", "dm", result.script)
+        except Exception:
+            await self._set_invoke(ctx, "warn", "dm", message)
+        return await ctx.success("warn DM updated")
+
+    @warn_invoke_dm.command(name="on", description="Enable warn DM")
+    @has_permissions(manage_guild=True)
+    async def warn_invoke_dm_on(self, ctx):
+        await self._set_invoke_enabled(ctx, "warn", "dm", True)
+        return await ctx.success("warn DM **enabled**")
+
+    @warn_invoke_dm.command(name="off", description="Disable warn DM")
+    @has_permissions(manage_guild=True)
+    async def warn_invoke_dm_off(self, ctx):
+        await self._set_invoke_enabled(ctx, "warn", "dm", False)
+        return await ctx.success("warn DM **disabled**")
+
+    @warn_invoke_dm.command(name="view", description="View warn DM")
+    @has_permissions(manage_guild=True)
+    async def warn_invoke_dm_view(self, ctx):
+        return await self._view_invoke(ctx, "warn", "dm")
+
+    @warn_invoke.group(name="message", aliases=["msg"], description="Customize warn response", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def warn_invoke_message(self, ctx, *, message=None):
+        if message is None:
+            return await ctx.send_help(ctx.command)
+        from core.managers.converters import EmbedConverter
+        try:
+            result = await EmbedConverter().convert(ctx, message)
+            await self._set_invoke(ctx, "warn", "message", result.script)
+        except Exception:
+            await self._set_invoke(ctx, "warn", "message", message)
+        return await ctx.success("warn response updated")
+
+    @warn_invoke_message.command(name="view", description="View warn response")
+    @has_permissions(manage_guild=True)
+    async def warn_invoke_message_view(self, ctx):
+        return await self._view_invoke(ctx, "warn", "message")
 
     @command(
         name="moveall",
@@ -702,11 +894,12 @@ class ModerationCommands(Package):
             f"Stripped **{len(removed)}** dangerous roles from {member.mention}\n> -# **{', '.join(removed)}**"
         )
 
-    @command(
+    @group(
         name="jail",
         usage="[duration] (member) <reason>",
         example="2d @member spamming",
         description="Jails the mentioned user",
+        invoke_without_command=True,
     )
     @has_permissions(manage_messages=True)
     async def jail(self, ctx):
@@ -799,13 +992,85 @@ class ModerationCommands(Package):
             f"Jailed **{member}** in {jail_channel.mention}\n> -# **reason:** {self._default_reason(reason)}"
         )
 
-    @command(
+    @jail.group(
+        name="invoke",
+        description="Customize jail punishment messages",
+        invoke_without_command=True,
+    )
+    @has_permissions(manage_guild=True)
+    async def jail_invoke(self, ctx):
+        return await ctx.send_help(ctx.command)
+
+    @jail_invoke.command(name="on", description="Enable jail response")
+    @has_permissions(manage_guild=True)
+    async def jail_invoke_on(self, ctx):
+        await self._set_invoke_enabled(ctx, "jail", "message", True)
+        return await ctx.success("jail response **enabled**")
+
+    @jail_invoke.command(name="off", description="Disable jail response")
+    @has_permissions(manage_guild=True)
+    async def jail_invoke_off(self, ctx):
+        await self._set_invoke_enabled(ctx, "jail", "message", False)
+        return await ctx.success("jail response **disabled**")
+
+    @jail_invoke.group(name="dm", description="Customize jail DM", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def jail_invoke_dm(self, ctx, *, message=None):
+        if message is None:
+            return await ctx.send_help(ctx.command)
+        from core.managers.converters import EmbedConverter
+        try:
+            result = await EmbedConverter().convert(ctx, message)
+            await self._set_invoke(ctx, "jail", "dm", result.script)
+        except Exception:
+            await self._set_invoke(ctx, "jail", "dm", message)
+        return await ctx.success("jail DM updated")
+
+    @jail_invoke_dm.command(name="on", description="Enable jail DM")
+    @has_permissions(manage_guild=True)
+    async def jail_invoke_dm_on(self, ctx):
+        await self._set_invoke_enabled(ctx, "jail", "dm", True)
+        return await ctx.success("jail DM **enabled**")
+
+    @jail_invoke_dm.command(name="off", description="Disable jail DM")
+    @has_permissions(manage_guild=True)
+    async def jail_invoke_dm_off(self, ctx):
+        await self._set_invoke_enabled(ctx, "jail", "dm", False)
+        return await ctx.success("jail DM **disabled**")
+
+    @jail_invoke_dm.command(name="view", description="View jail DM")
+    @has_permissions(manage_guild=True)
+    async def jail_invoke_dm_view(self, ctx):
+        return await self._view_invoke(ctx, "jail", "dm")
+
+    @jail_invoke.group(name="message", aliases=["msg"], description="Customize jail response", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def jail_invoke_message(self, ctx, *, message=None):
+        if message is None:
+            return await ctx.send_help(ctx.command)
+        from core.managers.converters import EmbedConverter
+        try:
+            result = await EmbedConverter().convert(ctx, message)
+            await self._set_invoke(ctx, "jail", "message", result.script)
+        except Exception:
+            await self._set_invoke(ctx, "jail", "message", message)
+        return await ctx.success("jail response updated")
+
+    @jail_invoke_message.command(name="view", description="View jail response")
+    @has_permissions(manage_guild=True)
+    async def jail_invoke_message_view(self, ctx):
+        return await self._view_invoke(ctx, "jail", "message")
+
+    @group(
         name="unjail",
         description="Unjails the mentioned user",
+        invoke_without_command=True,
     )
     @has_permissions(manage_messages=True)
     async def unjail(self, ctx, member: discord.Member, *, reason=None):
         """unjail a member"""
+        if not await self._check_not_owner(ctx, member):
+            return
         row = await self.db.fetchrow(
             "SELECT * FROM jailed WHERE guild_id = $1 AND user_id = $2",
             ctx.guild.id, member.id,
@@ -851,6 +1116,71 @@ class ModerationCommands(Package):
         if await self._invoke_response(ctx, "unjail", user=member, reason=reason, case_id=case_id):
             return
         return await ctx.success(f"Unjailed **{member}**\n> -# **reason:** {self._default_reason(reason)}")
+
+    @unjail.group(name="invoke", description="Customize unjail messages", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def unjail_invoke(self, ctx):
+        return await ctx.send_help(ctx.command)
+
+    @unjail_invoke.command(name="on", description="Enable unjail response")
+    @has_permissions(manage_guild=True)
+    async def unjail_invoke_on(self, ctx):
+        await self._set_invoke_enabled(ctx, "unjail", "message", True)
+        return await ctx.success("unjail response **enabled**")
+
+    @unjail_invoke.command(name="off", description="Disable unjail response")
+    @has_permissions(manage_guild=True)
+    async def unjail_invoke_off(self, ctx):
+        await self._set_invoke_enabled(ctx, "unjail", "message", False)
+        return await ctx.success("unjail response **disabled**")
+
+    @unjail_invoke.group(name="dm", description="Customize unjail DM", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def unjail_invoke_dm(self, ctx, *, message=None):
+        if message is None:
+            return await ctx.send_help(ctx.command)
+        from core.managers.converters import EmbedConverter
+        try:
+            result = await EmbedConverter().convert(ctx, message)
+            await self._set_invoke(ctx, "unjail", "dm", result.script)
+        except Exception:
+            await self._set_invoke(ctx, "unjail", "dm", message)
+        return await ctx.success("unjail DM updated")
+
+    @unjail_invoke_dm.command(name="on", description="Enable unjail DM")
+    @has_permissions(manage_guild=True)
+    async def unjail_invoke_dm_on(self, ctx):
+        await self._set_invoke_enabled(ctx, "unjail", "dm", True)
+        return await ctx.success("unjail DM **enabled**")
+
+    @unjail_invoke_dm.command(name="off", description="Disable unjail DM")
+    @has_permissions(manage_guild=True)
+    async def unjail_invoke_dm_off(self, ctx):
+        await self._set_invoke_enabled(ctx, "unjail", "dm", False)
+        return await ctx.success("unjail DM **disabled**")
+
+    @unjail_invoke_dm.command(name="view", description="View unjail DM")
+    @has_permissions(manage_guild=True)
+    async def unjail_invoke_dm_view(self, ctx):
+        return await self._view_invoke(ctx, "unjail", "dm")
+
+    @unjail_invoke.group(name="message", aliases=["msg"], description="Customize unjail response", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def unjail_invoke_message(self, ctx, *, message=None):
+        if message is None:
+            return await ctx.send_help(ctx.command)
+        from core.managers.converters import EmbedConverter
+        try:
+            result = await EmbedConverter().convert(ctx, message)
+            await self._set_invoke(ctx, "unjail", "message", result.script)
+        except Exception:
+            await self._set_invoke(ctx, "unjail", "message", message)
+        return await ctx.success("unjail response updated")
+
+    @unjail_invoke_message.command(name="view", description="View unjail response")
+    @has_permissions(manage_guild=True)
+    async def unjail_invoke_message_view(self, ctx):
+        return await self._view_invoke(ctx, "unjail", "message")
 
     @command(
         name="modstats",
@@ -1058,15 +1388,116 @@ class ModerationCommands(Package):
         )
         await ctx.send(embed=embed)
 
-    @command(
+    @timeout.group(
+        name="invoke",
+        description="Customize timeout punishment messages",
+        invoke_without_command=True,
+    )
+    @has_permissions(manage_guild=True)
+    async def timeout_invoke(self, ctx):
+        return await ctx.send_help(ctx.command)
+
+    @timeout_invoke.command(
+        name="on",
+        description="Enable timeout command response messages",
+    )
+    @has_permissions(manage_guild=True)
+    async def timeout_invoke_on(self, ctx):
+        await self._set_invoke_enabled(ctx, "timeout", "message", True)
+        return await ctx.success("timeout response **enabled**")
+
+    @timeout_invoke.command(
+        name="off",
+        description="Disable timeout command response messages",
+    )
+    @has_permissions(manage_guild=True)
+    async def timeout_invoke_off(self, ctx):
+        await self._set_invoke_enabled(ctx, "timeout", "message", False)
+        return await ctx.success("timeout response **disabled**")
+
+    @timeout_invoke.group(
+        name="dm",
+        description="Customize timeout Direct Message",
+        invoke_without_command=True,
+    )
+    @has_permissions(manage_guild=True)
+    async def timeout_invoke_dm(self, ctx, *, message=None):
+        if message is None:
+            return await ctx.send_help(ctx.command)
+        from core.managers.converters import EmbedConverter
+        try:
+            converter = EmbedConverter()
+            result = await converter.convert(ctx, message)
+            await self._set_invoke(ctx, "timeout", "dm", result.script)
+        except Exception:
+            await self._set_invoke(ctx, "timeout", "dm", message)
+        return await ctx.success("timeout DM updated")
+
+    @timeout_invoke_dm.command(
+        name="on",
+        description="Enable timeout DM notifications",
+    )
+    @has_permissions(manage_guild=True)
+    async def timeout_invoke_dm_on(self, ctx):
+        await self._set_invoke_enabled(ctx, "timeout", "dm", True)
+        return await ctx.success("timeout DM **enabled**")
+
+    @timeout_invoke_dm.command(
+        name="off",
+        description="Disable timeout DM notifications",
+    )
+    @has_permissions(manage_guild=True)
+    async def timeout_invoke_dm_off(self, ctx):
+        await self._set_invoke_enabled(ctx, "timeout", "dm", False)
+        return await ctx.success("timeout DM **disabled**")
+
+    @timeout_invoke_dm.command(
+        name="view",
+        description="View the timeout DM message",
+    )
+    @has_permissions(manage_guild=True)
+    async def timeout_invoke_dm_view(self, ctx):
+        return await self._view_invoke(ctx, "timeout", "dm")
+
+    @timeout_invoke.group(
+        name="message",
+        aliases=["msg"],
+        description="Customize timeout command response",
+        invoke_without_command=True,
+    )
+    @has_permissions(manage_guild=True)
+    async def timeout_invoke_message(self, ctx, *, message=None):
+        if message is None:
+            return await ctx.send_help(ctx.command)
+        from core.managers.converters import EmbedConverter
+        try:
+            converter = EmbedConverter()
+            result = await converter.convert(ctx, message)
+            await self._set_invoke(ctx, "timeout", "message", result.script)
+        except Exception:
+            await self._set_invoke(ctx, "timeout", "message", message)
+        return await ctx.success("timeout response updated")
+
+    @timeout_invoke_message.command(
+        name="view",
+        description="View the timeout response message",
+    )
+    @has_permissions(manage_guild=True)
+    async def timeout_invoke_message_view(self, ctx):
+        return await self._view_invoke(ctx, "timeout", "message")
+
+    @group(
         name="untimeout",
         aliases=["unmute"],
         description="Removes a timeout for a member",
         example=",untimeout @member",
+        invoke_without_command=True,
     )
     @has_permissions(moderate_members=True)
     async def untimeout(self, ctx, member: discord.Member, *, reason=None):
         """remove timeout from a member"""
+        if not await self._check_not_owner(ctx, member):
+            return
         if not member.timed_out_until or member.timed_out_until <= discord.utils.utcnow():
             return await ctx.warn(f"Not timed out\n> -# **{member.mention}** is not timed out")
         case_id = await self._create_case(
@@ -1087,6 +1518,71 @@ class ModerationCommands(Package):
         return await ctx.success(
             f"Removed timeout for **{member}**\n> -# **reason:** {self._default_reason(reason)}"
         )
+
+    @untimeout.group(name="invoke", description="Customize untimeout messages", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def untimeout_invoke(self, ctx):
+        return await ctx.send_help(ctx.command)
+
+    @untimeout_invoke.command(name="on", description="Enable untimeout response")
+    @has_permissions(manage_guild=True)
+    async def untimeout_invoke_on(self, ctx):
+        await self._set_invoke_enabled(ctx, "untimeout", "message", True)
+        return await ctx.success("untimeout response **enabled**")
+
+    @untimeout_invoke.command(name="off", description="Disable untimeout response")
+    @has_permissions(manage_guild=True)
+    async def untimeout_invoke_off(self, ctx):
+        await self._set_invoke_enabled(ctx, "untimeout", "message", False)
+        return await ctx.success("untimeout response **disabled**")
+
+    @untimeout_invoke.group(name="dm", description="Customize untimeout DM", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def untimeout_invoke_dm(self, ctx, *, message=None):
+        if message is None:
+            return await ctx.send_help(ctx.command)
+        from core.managers.converters import EmbedConverter
+        try:
+            result = await EmbedConverter().convert(ctx, message)
+            await self._set_invoke(ctx, "untimeout", "dm", result.script)
+        except Exception:
+            await self._set_invoke(ctx, "untimeout", "dm", message)
+        return await ctx.success("untimeout DM updated")
+
+    @untimeout_invoke_dm.command(name="on", description="Enable untimeout DM")
+    @has_permissions(manage_guild=True)
+    async def untimeout_invoke_dm_on(self, ctx):
+        await self._set_invoke_enabled(ctx, "untimeout", "dm", True)
+        return await ctx.success("untimeout DM **enabled**")
+
+    @untimeout_invoke_dm.command(name="off", description="Disable untimeout DM")
+    @has_permissions(manage_guild=True)
+    async def untimeout_invoke_dm_off(self, ctx):
+        await self._set_invoke_enabled(ctx, "untimeout", "dm", False)
+        return await ctx.success("untimeout DM **disabled**")
+
+    @untimeout_invoke_dm.command(name="view", description="View untimeout DM")
+    @has_permissions(manage_guild=True)
+    async def untimeout_invoke_dm_view(self, ctx):
+        return await self._view_invoke(ctx, "untimeout", "dm")
+
+    @untimeout_invoke.group(name="message", aliases=["msg"], description="Customize untimeout response", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def untimeout_invoke_message(self, ctx, *, message=None):
+        if message is None:
+            return await ctx.send_help(ctx.command)
+        from core.managers.converters import EmbedConverter
+        try:
+            result = await EmbedConverter().convert(ctx, message)
+            await self._set_invoke(ctx, "untimeout", "message", result.script)
+        except Exception:
+            await self._set_invoke(ctx, "untimeout", "message", message)
+        return await ctx.success("untimeout response updated")
+
+    @untimeout_invoke_message.command(name="view", description="View untimeout response")
+    @has_permissions(manage_guild=True)
+    async def untimeout_invoke_message_view(self, ctx):
+        return await self._view_invoke(ctx, "untimeout", "message")
 
     async def _mute_member(
         self,
@@ -1185,6 +1681,8 @@ class ModerationCommands(Package):
         *,
         reason: str | None = None,
     ):
+        if not await self._check_not_owner(ctx, member):
+            return
         role_key = f"{mute_type}muted_role_id"
         if mute_type == "":
             role_key = "muted_role_id"
@@ -1232,6 +1730,9 @@ class ModerationCommands(Package):
         remove: bool = False,
     ):
         """Image/reaction mute a single member, or every member with a role."""
+        if isinstance(target, discord.Member):
+            if not await self._check_not_owner(ctx, target):
+                return
         if isinstance(target, discord.Role):
             members = [m for m in target.members if not m.bot]
             if not members:
@@ -1256,11 +1757,12 @@ class ModerationCommands(Package):
             return await self._unmute_member(ctx, target, mute_type, reason=reason)
         return await self._mute_member(ctx, target, mute_type, reason=reason)
 
-    @command(
+    @group(
         name="imagemute",
         aliases=["imute", "imgmute"],
         description="Image mute a member or role",
         example=",imagemute @member",
+        invoke_without_command=True,
     )
     @has_permissions(moderate_members=True, manage_roles=True)
     async def imagemute(self, ctx, target: str, *, reason: str | None = None):
@@ -1270,11 +1772,77 @@ class ModerationCommands(Package):
             return await ctx.warn(f"Not found\n> -# **no member or role matching** {target}")
         return await self._apply_special_mute(ctx, resolved, "i", reason=reason)
 
-    @command(
+    @imagemute.group(name="invoke", description="Customize imagemute messages", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def imagemute_invoke(self, ctx):
+        return await ctx.send_help(ctx.command)
+
+    @imagemute_invoke.command(name="on", description="Enable imagemute response")
+    @has_permissions(manage_guild=True)
+    async def imagemute_invoke_on(self, ctx):
+        await self._set_invoke_enabled(ctx, "imagemute", "message", True)
+        return await ctx.success("imagemute response **enabled**")
+
+    @imagemute_invoke.command(name="off", description="Disable imagemute response")
+    @has_permissions(manage_guild=True)
+    async def imagemute_invoke_off(self, ctx):
+        await self._set_invoke_enabled(ctx, "imagemute", "message", False)
+        return await ctx.success("imagemute response **disabled**")
+
+    @imagemute_invoke.group(name="dm", description="Customize imagemute DM", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def imagemute_invoke_dm(self, ctx, *, message=None):
+        if message is None:
+            return await ctx.send_help(ctx.command)
+        from core.managers.converters import EmbedConverter
+        try:
+            result = await EmbedConverter().convert(ctx, message)
+            await self._set_invoke(ctx, "imagemute", "dm", result.script)
+        except Exception:
+            await self._set_invoke(ctx, "imagemute", "dm", message)
+        return await ctx.success("imagemute DM updated")
+
+    @imagemute_invoke_dm.command(name="on", description="Enable imagemute DM")
+    @has_permissions(manage_guild=True)
+    async def imagemute_invoke_dm_on(self, ctx):
+        await self._set_invoke_enabled(ctx, "imagemute", "dm", True)
+        return await ctx.success("imagemute DM **enabled**")
+
+    @imagemute_invoke_dm.command(name="off", description="Disable imagemute DM")
+    @has_permissions(manage_guild=True)
+    async def imagemute_invoke_dm_off(self, ctx):
+        await self._set_invoke_enabled(ctx, "imagemute", "dm", False)
+        return await ctx.success("imagemute DM **disabled**")
+
+    @imagemute_invoke_dm.command(name="view", description="View imagemute DM")
+    @has_permissions(manage_guild=True)
+    async def imagemute_invoke_dm_view(self, ctx):
+        return await self._view_invoke(ctx, "imagemute", "dm")
+
+    @imagemute_invoke.group(name="message", aliases=["msg"], description="Customize imagemute response", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def imagemute_invoke_message(self, ctx, *, message=None):
+        if message is None:
+            return await ctx.send_help(ctx.command)
+        from core.managers.converters import EmbedConverter
+        try:
+            result = await EmbedConverter().convert(ctx, message)
+            await self._set_invoke(ctx, "imagemute", "message", result.script)
+        except Exception:
+            await self._set_invoke(ctx, "imagemute", "message", message)
+        return await ctx.success("imagemute response updated")
+
+    @imagemute_invoke_message.command(name="view", description="View imagemute response")
+    @has_permissions(manage_guild=True)
+    async def imagemute_invoke_message_view(self, ctx):
+        return await self._view_invoke(ctx, "imagemute", "message")
+
+    @group(
         name="imageunmute",
         aliases=["iunmute", "unimagemute"],
         description="Remove image mute from a member or role",
         example=",imageunmute @member",
+        invoke_without_command=True,
     )
     @has_permissions(moderate_members=True, manage_roles=True)
     async def imageunmute(self, ctx, target: str, *, reason: str | None = None):
@@ -1286,11 +1854,77 @@ class ModerationCommands(Package):
             ctx, resolved, "i", reason=reason, remove=True
         )
 
-    @command(
+    @imageunmute.group(name="invoke", description="Customize imageunmute messages", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def imageunmute_invoke(self, ctx):
+        return await ctx.send_help(ctx.command)
+
+    @imageunmute_invoke.command(name="on", description="Enable imageunmute response")
+    @has_permissions(manage_guild=True)
+    async def imageunmute_invoke_on(self, ctx):
+        await self._set_invoke_enabled(ctx, "imageunmute", "message", True)
+        return await ctx.success("imageunmute response **enabled**")
+
+    @imageunmute_invoke.command(name="off", description="Disable imageunmute response")
+    @has_permissions(manage_guild=True)
+    async def imageunmute_invoke_off(self, ctx):
+        await self._set_invoke_enabled(ctx, "imageunmute", "message", False)
+        return await ctx.success("imageunmute response **disabled**")
+
+    @imageunmute_invoke.group(name="dm", description="Customize imageunmute DM", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def imageunmute_invoke_dm(self, ctx, *, message=None):
+        if message is None:
+            return await ctx.send_help(ctx.command)
+        from core.managers.converters import EmbedConverter
+        try:
+            result = await EmbedConverter().convert(ctx, message)
+            await self._set_invoke(ctx, "imageunmute", "dm", result.script)
+        except Exception:
+            await self._set_invoke(ctx, "imageunmute", "dm", message)
+        return await ctx.success("imageunmute DM updated")
+
+    @imageunmute_invoke_dm.command(name="on", description="Enable imageunmute DM")
+    @has_permissions(manage_guild=True)
+    async def imageunmute_invoke_dm_on(self, ctx):
+        await self._set_invoke_enabled(ctx, "imageunmute", "dm", True)
+        return await ctx.success("imageunmute DM **enabled**")
+
+    @imageunmute_invoke_dm.command(name="off", description="Disable imageunmute DM")
+    @has_permissions(manage_guild=True)
+    async def imageunmute_invoke_dm_off(self, ctx):
+        await self._set_invoke_enabled(ctx, "imageunmute", "dm", False)
+        return await ctx.success("imageunmute DM **disabled**")
+
+    @imageunmute_invoke_dm.command(name="view", description="View imageunmute DM")
+    @has_permissions(manage_guild=True)
+    async def imageunmute_invoke_dm_view(self, ctx):
+        return await self._view_invoke(ctx, "imageunmute", "dm")
+
+    @imageunmute_invoke.group(name="message", aliases=["msg"], description="Customize imageunmute response", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def imageunmute_invoke_message(self, ctx, *, message=None):
+        if message is None:
+            return await ctx.send_help(ctx.command)
+        from core.managers.converters import EmbedConverter
+        try:
+            result = await EmbedConverter().convert(ctx, message)
+            await self._set_invoke(ctx, "imageunmute", "message", result.script)
+        except Exception:
+            await self._set_invoke(ctx, "imageunmute", "message", message)
+        return await ctx.success("imageunmute response updated")
+
+    @imageunmute_invoke_message.command(name="view", description="View imageunmute response")
+    @has_permissions(manage_guild=True)
+    async def imageunmute_invoke_message_view(self, ctx):
+        return await self._view_invoke(ctx, "imageunmute", "message")
+
+    @group(
         name="reactionmute",
         aliases=["rmute", "reactmute"],
         description="Reaction mute a member or role",
         example=",reactionmute @member",
+        invoke_without_command=True,
     )
     @has_permissions(moderate_members=True, manage_roles=True)
     async def reactionmute(self, ctx, target: str, *, reason: str | None = None):
@@ -1300,11 +1934,77 @@ class ModerationCommands(Package):
             return await ctx.warn(f"Not found\n> -# **no member or role matching** {target}")
         return await self._apply_special_mute(ctx, resolved, "r", reason=reason)
 
-    @command(
+    @reactionmute.group(name="invoke", description="Customize reactionmute messages", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def reactionmute_invoke(self, ctx):
+        return await ctx.send_help(ctx.command)
+
+    @reactionmute_invoke.command(name="on", description="Enable reactionmute response")
+    @has_permissions(manage_guild=True)
+    async def reactionmute_invoke_on(self, ctx):
+        await self._set_invoke_enabled(ctx, "reactionmute", "message", True)
+        return await ctx.success("reactionmute response **enabled**")
+
+    @reactionmute_invoke.command(name="off", description="Disable reactionmute response")
+    @has_permissions(manage_guild=True)
+    async def reactionmute_invoke_off(self, ctx):
+        await self._set_invoke_enabled(ctx, "reactionmute", "message", False)
+        return await ctx.success("reactionmute response **disabled**")
+
+    @reactionmute_invoke.group(name="dm", description="Customize reactionmute DM", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def reactionmute_invoke_dm(self, ctx, *, message=None):
+        if message is None:
+            return await ctx.send_help(ctx.command)
+        from core.managers.converters import EmbedConverter
+        try:
+            result = await EmbedConverter().convert(ctx, message)
+            await self._set_invoke(ctx, "reactionmute", "dm", result.script)
+        except Exception:
+            await self._set_invoke(ctx, "reactionmute", "dm", message)
+        return await ctx.success("reactionmute DM updated")
+
+    @reactionmute_invoke_dm.command(name="on", description="Enable reactionmute DM")
+    @has_permissions(manage_guild=True)
+    async def reactionmute_invoke_dm_on(self, ctx):
+        await self._set_invoke_enabled(ctx, "reactionmute", "dm", True)
+        return await ctx.success("reactionmute DM **enabled**")
+
+    @reactionmute_invoke_dm.command(name="off", description="Disable reactionmute DM")
+    @has_permissions(manage_guild=True)
+    async def reactionmute_invoke_dm_off(self, ctx):
+        await self._set_invoke_enabled(ctx, "reactionmute", "dm", False)
+        return await ctx.success("reactionmute DM **disabled**")
+
+    @reactionmute_invoke_dm.command(name="view", description="View reactionmute DM")
+    @has_permissions(manage_guild=True)
+    async def reactionmute_invoke_dm_view(self, ctx):
+        return await self._view_invoke(ctx, "reactionmute", "dm")
+
+    @reactionmute_invoke.group(name="message", aliases=["msg"], description="Customize reactionmute response", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def reactionmute_invoke_message(self, ctx, *, message=None):
+        if message is None:
+            return await ctx.send_help(ctx.command)
+        from core.managers.converters import EmbedConverter
+        try:
+            result = await EmbedConverter().convert(ctx, message)
+            await self._set_invoke(ctx, "reactionmute", "message", result.script)
+        except Exception:
+            await self._set_invoke(ctx, "reactionmute", "message", message)
+        return await ctx.success("reactionmute response updated")
+
+    @reactionmute_invoke_message.command(name="view", description="View reactionmute response")
+    @has_permissions(manage_guild=True)
+    async def reactionmute_invoke_message_view(self, ctx):
+        return await self._view_invoke(ctx, "reactionmute", "message")
+
+    @group(
         name="reactionunmute",
         aliases=["runmute", "unreactionmute"],
         description="Remove reaction mute from a member or role",
         example=",reactionunmute @member",
+        invoke_without_command=True,
     )
     @has_permissions(moderate_members=True, manage_roles=True)
     async def reactionunmute(self, ctx, target: str, *, reason: str | None = None):
@@ -1316,23 +2016,97 @@ class ModerationCommands(Package):
             ctx, resolved, "r", reason=reason, remove=True
         )
 
-    @command(
+    @reactionunmute.group(name="invoke", description="Customize reactionunmute messages", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def reactionunmute_invoke(self, ctx):
+        return await ctx.send_help(ctx.command)
+
+    @reactionunmute_invoke.command(name="on", description="Enable reactionunmute response")
+    @has_permissions(manage_guild=True)
+    async def reactionunmute_invoke_on(self, ctx):
+        await self._set_invoke_enabled(ctx, "reactionunmute", "message", True)
+        return await ctx.success("reactionunmute response **enabled**")
+
+    @reactionunmute_invoke.command(name="off", description="Disable reactionunmute response")
+    @has_permissions(manage_guild=True)
+    async def reactionunmute_invoke_off(self, ctx):
+        await self._set_invoke_enabled(ctx, "reactionunmute", "message", False)
+        return await ctx.success("reactionunmute response **disabled**")
+
+    @reactionunmute_invoke.group(name="dm", description="Customize reactionunmute DM", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def reactionunmute_invoke_dm(self, ctx, *, message=None):
+        if message is None:
+            return await ctx.send_help(ctx.command)
+        from core.managers.converters import EmbedConverter
+        try:
+            result = await EmbedConverter().convert(ctx, message)
+            await self._set_invoke(ctx, "reactionunmute", "dm", result.script)
+        except Exception:
+            await self._set_invoke(ctx, "reactionunmute", "dm", message)
+        return await ctx.success("reactionunmute DM updated")
+
+    @reactionunmute_invoke_dm.command(name="on", description="Enable reactionunmute DM")
+    @has_permissions(manage_guild=True)
+    async def reactionunmute_invoke_dm_on(self, ctx):
+        await self._set_invoke_enabled(ctx, "reactionunmute", "dm", True)
+        return await ctx.success("reactionunmute DM **enabled**")
+
+    @reactionunmute_invoke_dm.command(name="off", description="Disable reactionunmute DM")
+    @has_permissions(manage_guild=True)
+    async def reactionunmute_invoke_dm_off(self, ctx):
+        await self._set_invoke_enabled(ctx, "reactionunmute", "dm", False)
+        return await ctx.success("reactionunmute DM **disabled**")
+
+    @reactionunmute_invoke_dm.command(name="view", description="View reactionunmute DM")
+    @has_permissions(manage_guild=True)
+    async def reactionunmute_invoke_dm_view(self, ctx):
+        return await self._view_invoke(ctx, "reactionunmute", "dm")
+
+    @reactionunmute_invoke.group(name="message", aliases=["msg"], description="Customize reactionunmute response", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def reactionunmute_invoke_message(self, ctx, *, message=None):
+        if message is None:
+            return await ctx.send_help(ctx.command)
+        from core.managers.converters import EmbedConverter
+        try:
+            result = await EmbedConverter().convert(ctx, message)
+            await self._set_invoke(ctx, "reactionunmute", "message", result.script)
+        except Exception:
+            await self._set_invoke(ctx, "reactionunmute", "message", message)
+        return await ctx.success("reactionunmute response updated")
+
+    @reactionunmute_invoke_message.command(name="view", description="View reactionunmute response")
+    @has_permissions(manage_guild=True)
+    async def reactionunmute_invoke_message_view(self, ctx):
+        return await self._view_invoke(ctx, "reactionunmute", "message")
+
+    @group(
         name="hardban",
         description="Keep a member banned",
+        invoke_without_command=True,
     )
     @has_permissions(ban_members=True)
-    async def hardban(self, ctx, member: discord.Member, *, reason=None):
+    async def hardban(self, ctx):
         """hardban a member"""
-        if not await self._ensure_targetable(ctx, member):
+        parsed = await parse_moderation_args(ctx, command_names=("hardban",), allow_duration=False)
+        member = parsed.member
+        user = parsed.user
+        reason = parsed.reason
+        target = member or user
+        if target is None:
+            return await ctx.warn("Could not find that user")
+        if not await self._ensure_targetable(ctx, member, user):
             return
-        if not await self._confirm_if_booster(ctx, member, "hardban"):
+        if member and not await self._confirm_if_booster(ctx, member, "hardban"):
             return await ctx.warn("Action cancelled\n> -# **booster confirmation declined**")
 
         case_id = await self._create_case(
-            ctx, action="hardban", target_id=member.id, reason=reason,
+            ctx, action="hardban", target_id=target.id, reason=reason,
         )
         try:
-            await member.ban(
+            await ctx.guild.ban(
+                discord.Object(id=target.id),
                 delete_message_seconds=0,
                 reason=self._audit_reason(ctx, reason),
             )
@@ -1344,19 +2118,58 @@ class ModerationCommands(Package):
         if getattr(self.db, "pool", None) is not None:
             await self.db.add_hardban(
                 ctx.guild.id,
-                member.id,
+                target.id,
                 ctx.author.id,
                 self._default_reason(reason),
             )
 
         await self._send_modlog(
-            ctx, action="hardban", target=member, case_id=case_id, reason=reason,
+            ctx, action="hardban", target=target, case_id=case_id, reason=reason,
         )
-        if await self._invoke_response(ctx, "hardban", user=member, reason=reason, case_id=case_id):
+        if await self._invoke_response(ctx, "hardban", user=target, reason=reason, case_id=case_id):
             return
         return await ctx.success(
-            f"Hardbanned **{member}**\n> -# **reason:** {self._default_reason(reason)}"
+            f"Hardbanned **{target}**\n> -# **reason:** {self._default_reason(reason)}"
         )
+
+    @hardban.group(
+        name="invoke",
+        description="Customize hardban punishment messages",
+        invoke_without_command=True,
+    )
+    @has_permissions(manage_guild=True)
+    async def hardban_invoke(self, ctx):
+        return await ctx.send_help(ctx.command)
+
+    @hardban_invoke.command(name="on", description="Enable hardban response")
+    @has_permissions(manage_guild=True)
+    async def hardban_invoke_on(self, ctx):
+        await self._set_invoke_enabled(ctx, "hardban", "message", True)
+        return await ctx.success("hardban response **enabled**")
+
+    @hardban_invoke.command(name="off", description="Disable hardban response")
+    @has_permissions(manage_guild=True)
+    async def hardban_invoke_off(self, ctx):
+        await self._set_invoke_enabled(ctx, "hardban", "message", False)
+        return await ctx.success("hardban response **disabled**")
+
+    @hardban_invoke.group(name="message", aliases=["msg"], description="Customize hardban response", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def hardban_invoke_message(self, ctx, *, message=None):
+        if message is None:
+            return await ctx.send_help(ctx.command)
+        from core.managers.converters import EmbedConverter
+        try:
+            result = await EmbedConverter().convert(ctx, message)
+            await self._set_invoke(ctx, "hardban", "message", result.script)
+        except Exception:
+            await self._set_invoke(ctx, "hardban", "message", message)
+        return await ctx.success("hardban response updated")
+
+    @hardban_invoke_message.command(name="view", description="View hardban response")
+    @has_permissions(manage_guild=True)
+    async def hardban_invoke_message_view(self, ctx):
+        return await self._view_invoke(ctx, "hardban", "message")
 
     @command(
         name="hardban list",
@@ -1493,11 +2306,12 @@ class ModerationCommands(Package):
         self._unbanall_tasks.pop(ctx.guild.id, None)
         return await ctx.success("Task cancelled\n> -# **unban all**")
 
-    @command(
+    @group(
         name="unban",
         usage="(user id or mention) <reason>",
         example="1269433308945711135 appealed",
         description="Unbans the mentioned user",
+        invoke_without_command=True,
     )
     @has_permissions(ban_members=True)
     async def unban(self, ctx, user: discord.User, *, reason=None):
@@ -1544,9 +2358,75 @@ class ModerationCommands(Package):
             f"Unbanned **{user}** - {self._default_reason(reason)}"
         )
 
-    @command(
+    @unban.group(name="invoke", description="Customize unban messages", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def unban_invoke(self, ctx):
+        return await ctx.send_help(ctx.command)
+
+    @unban_invoke.command(name="on", description="Enable unban response")
+    @has_permissions(manage_guild=True)
+    async def unban_invoke_on(self, ctx):
+        await self._set_invoke_enabled(ctx, "unban", "message", True)
+        return await ctx.success("unban response **enabled**")
+
+    @unban_invoke.command(name="off", description="Disable unban response")
+    @has_permissions(manage_guild=True)
+    async def unban_invoke_off(self, ctx):
+        await self._set_invoke_enabled(ctx, "unban", "message", False)
+        return await ctx.success("unban response **disabled**")
+
+    @unban_invoke.group(name="dm", description="Customize unban DM", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def unban_invoke_dm(self, ctx, *, message=None):
+        if message is None:
+            return await ctx.send_help(ctx.command)
+        from core.managers.converters import EmbedConverter
+        try:
+            result = await EmbedConverter().convert(ctx, message)
+            await self._set_invoke(ctx, "unban", "dm", result.script)
+        except Exception:
+            await self._set_invoke(ctx, "unban", "dm", message)
+        return await ctx.success("unban DM updated")
+
+    @unban_invoke_dm.command(name="on", description="Enable unban DM")
+    @has_permissions(manage_guild=True)
+    async def unban_invoke_dm_on(self, ctx):
+        await self._set_invoke_enabled(ctx, "unban", "dm", True)
+        return await ctx.success("unban DM **enabled**")
+
+    @unban_invoke_dm.command(name="off", description="Disable unban DM")
+    @has_permissions(manage_guild=True)
+    async def unban_invoke_dm_off(self, ctx):
+        await self._set_invoke_enabled(ctx, "unban", "dm", False)
+        return await ctx.success("unban DM **disabled**")
+
+    @unban_invoke_dm.command(name="view", description="View unban DM")
+    @has_permissions(manage_guild=True)
+    async def unban_invoke_dm_view(self, ctx):
+        return await self._view_invoke(ctx, "unban", "dm")
+
+    @unban_invoke.group(name="message", aliases=["msg"], description="Customize unban response", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def unban_invoke_message(self, ctx, *, message=None):
+        if message is None:
+            return await ctx.send_help(ctx.command)
+        from core.managers.converters import EmbedConverter
+        try:
+            result = await EmbedConverter().convert(ctx, message)
+            await self._set_invoke(ctx, "unban", "message", result.script)
+        except Exception:
+            await self._set_invoke(ctx, "unban", "message", message)
+        return await ctx.success("unban response updated")
+
+    @unban_invoke_message.command(name="view", description="View unban response")
+    @has_permissions(manage_guild=True)
+    async def unban_invoke_message_view(self, ctx):
+        return await self._view_invoke(ctx, "unban", "message")
+
+    @group(
         name="softban",
         description="Softbans the mentioned user and deleting 1 day of messages",
+        invoke_without_command=True,
     )
     @has_permissions(ban_members=True)
     async def softban(
@@ -1611,11 +2491,81 @@ class ModerationCommands(Package):
             f"Softbanned **{target_display}** - {self._default_reason(reason)}"
         )
 
-    @command(
+    @softban.group(
+        name="invoke",
+        description="Customize softban punishment messages",
+        invoke_without_command=True,
+    )
+    @has_permissions(manage_guild=True)
+    async def softban_invoke(self, ctx):
+        return await ctx.send_help(ctx.command)
+
+    @softban_invoke.command(name="on", description="Enable softban response")
+    @has_permissions(manage_guild=True)
+    async def softban_invoke_on(self, ctx):
+        await self._set_invoke_enabled(ctx, "softban", "message", True)
+        return await ctx.success("softban response **enabled**")
+
+    @softban_invoke.command(name="off", description="Disable softban response")
+    @has_permissions(manage_guild=True)
+    async def softban_invoke_off(self, ctx):
+        await self._set_invoke_enabled(ctx, "softban", "message", False)
+        return await ctx.success("softban response **disabled**")
+
+    @softban_invoke.group(name="dm", description="Customize softban DM", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def softban_invoke_dm(self, ctx, *, message=None):
+        if message is None:
+            return await ctx.send_help(ctx.command)
+        from core.managers.converters import EmbedConverter
+        try:
+            result = await EmbedConverter().convert(ctx, message)
+            await self._set_invoke(ctx, "softban", "dm", result.script)
+        except Exception:
+            await self._set_invoke(ctx, "softban", "dm", message)
+        return await ctx.success("softban DM updated")
+
+    @softban_invoke_dm.command(name="on", description="Enable softban DM")
+    @has_permissions(manage_guild=True)
+    async def softban_invoke_dm_on(self, ctx):
+        await self._set_invoke_enabled(ctx, "softban", "dm", True)
+        return await ctx.success("softban DM **enabled**")
+
+    @softban_invoke_dm.command(name="off", description="Disable softban DM")
+    @has_permissions(manage_guild=True)
+    async def softban_invoke_dm_off(self, ctx):
+        await self._set_invoke_enabled(ctx, "softban", "dm", False)
+        return await ctx.success("softban DM **disabled**")
+
+    @softban_invoke_dm.command(name="view", description="View softban DM")
+    @has_permissions(manage_guild=True)
+    async def softban_invoke_dm_view(self, ctx):
+        return await self._view_invoke(ctx, "softban", "dm")
+
+    @softban_invoke.group(name="message", aliases=["msg"], description="Customize softban response", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def softban_invoke_message(self, ctx, *, message=None):
+        if message is None:
+            return await ctx.send_help(ctx.command)
+        from core.managers.converters import EmbedConverter
+        try:
+            result = await EmbedConverter().convert(ctx, message)
+            await self._set_invoke(ctx, "softban", "message", result.script)
+        except Exception:
+            await self._set_invoke(ctx, "softban", "message", message)
+        return await ctx.success("softban response updated")
+
+    @softban_invoke_message.command(name="view", description="View softban response")
+    @has_permissions(manage_guild=True)
+    async def softban_invoke_message_view(self, ctx):
+        return await self._view_invoke(ctx, "softban", "message")
+
+    @group(
         name="ban",
         usage="[duration] (member) [delete history] <reason>",
         example="2d @member Threatening members",
         description="Bans the mentioned user",
+        invoke_without_command=True,
     )
     @has_permissions(ban_members=True)
     async def ban(self, ctx):
@@ -1630,16 +2580,20 @@ class ModerationCommands(Package):
             return await self._run_tempban(ctx, parsed)
 
         member = parsed.member
+        user = parsed.user
         reason = parsed.reason
-        if not await self._ensure_targetable(ctx, member):
+        target = member or user
+        if target is None:
+            return await ctx.warn("Could not find that user")
+        if not await self._ensure_targetable(ctx, member, user):
             return
-        if not await self._confirm_if_booster(ctx, member, "ban"):
+        if member and not await self._confirm_if_booster(ctx, member, "ban"):
             return await ctx.warn("Action cancelled\n> -# **booster confirmation declined**")
 
         delete_days = parsed.delete_days or 0
-        role_ids = [role.id for role in member.roles if role != ctx.guild.default_role]
-        target_display = str(member)
-        target_id = member.id
+        role_ids = [role.id for role in member.roles if role != ctx.guild.default_role] if member else []
+        target_display = str(target)
+        target_id = target.id
 
         case_id = await self._create_case(
             ctx,
@@ -1647,16 +2601,23 @@ class ModerationCommands(Package):
             target_id=target_id,
             reason=reason,
         )
-        await self._invoke_dm(ctx, member, "ban", reason=reason, case_id=case_id)
+        await self._invoke_dm(ctx, target, "ban", reason=reason, case_id=case_id)
 
-        await member.ban(
-            delete_message_seconds=delete_days * 86400,
-            reason=self._audit_reason(ctx, reason),
-        )
+        try:
+            await ctx.guild.ban(
+                discord.Object(id=target_id),
+                delete_message_seconds=delete_days * 86400,
+                reason=self._audit_reason(ctx, reason),
+            )
+        except discord.Forbidden:
+            return await ctx.fail("Missing permissions\n> -# **cannot ban this member**")
+        except discord.HTTPException as e:
+            return await ctx.fail(f"Ban failed\n> -# **{e}**")
+
         await self._send_modlog(
             ctx,
             action="ban",
-            target=member,
+            target=target,
             case_id=case_id,
             reason=reason,
             extra=f"**Message purge** : {delete_days} day(s)" if delete_days else None,
@@ -1671,29 +2632,106 @@ class ModerationCommands(Package):
                 "role_ids": role_ids,
             },
         )
-        if await self._invoke_response(ctx, "ban", user=member, reason=reason, case_id=case_id):
+        if await self._invoke_response(ctx, "ban", user=target, reason=reason, case_id=case_id):
             return
         purge = f" (purged **{delete_days}d**)" if delete_days else ""
         return await ctx.success(
             f"Banned **{target_display}**{purge} - {self._default_reason(reason)}"
         )
 
-    @command(
+    @ban.group(
+        name="invoke",
+        description="Customize ban punishment messages",
+        invoke_without_command=True,
+    )
+    @has_permissions(manage_guild=True)
+    async def ban_invoke(self, ctx):
+        return await ctx.send_help(ctx.command)
+
+    @ban_invoke.command(name="on", description="Enable ban response")
+    @has_permissions(manage_guild=True)
+    async def ban_invoke_on(self, ctx):
+        await self._set_invoke_enabled(ctx, "ban", "message", True)
+        return await ctx.success("ban response **enabled**")
+
+    @ban_invoke.command(name="off", description="Disable ban response")
+    @has_permissions(manage_guild=True)
+    async def ban_invoke_off(self, ctx):
+        await self._set_invoke_enabled(ctx, "ban", "message", False)
+        return await ctx.success("ban response **disabled**")
+
+    @ban_invoke.group(name="dm", description="Customize ban DM", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def ban_invoke_dm(self, ctx, *, message=None):
+        if message is None:
+            return await ctx.send_help(ctx.command)
+        from core.managers.converters import EmbedConverter
+        try:
+            result = await EmbedConverter().convert(ctx, message)
+            await self._set_invoke(ctx, "ban", "dm", result.script)
+        except Exception:
+            await self._set_invoke(ctx, "ban", "dm", message)
+        return await ctx.success("ban DM updated")
+
+    @ban_invoke_dm.command(name="on", description="Enable ban DM")
+    @has_permissions(manage_guild=True)
+    async def ban_invoke_dm_on(self, ctx):
+        await self._set_invoke_enabled(ctx, "ban", "dm", True)
+        return await ctx.success("ban DM **enabled**")
+
+    @ban_invoke_dm.command(name="off", description="Disable ban DM")
+    @has_permissions(manage_guild=True)
+    async def ban_invoke_dm_off(self, ctx):
+        await self._set_invoke_enabled(ctx, "ban", "dm", False)
+        return await ctx.success("ban DM **disabled**")
+
+    @ban_invoke_dm.command(name="view", description="View ban DM")
+    @has_permissions(manage_guild=True)
+    async def ban_invoke_dm_view(self, ctx):
+        return await self._view_invoke(ctx, "ban", "dm")
+
+    @ban_invoke.group(name="message", aliases=["msg"], description="Customize ban response", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def ban_invoke_message(self, ctx, *, message=None):
+        if message is None:
+            return await ctx.send_help(ctx.command)
+        from core.managers.converters import EmbedConverter
+        try:
+            result = await EmbedConverter().convert(ctx, message)
+            await self._set_invoke(ctx, "ban", "message", result.script)
+        except Exception:
+            await self._set_invoke(ctx, "ban", "message", message)
+        return await ctx.success("ban response updated")
+
+    @ban_invoke_message.command(name="view", description="View ban response")
+    @has_permissions(manage_guild=True)
+    async def ban_invoke_message_view(self, ctx):
+        return await self._view_invoke(ctx, "ban", "message")
+
+    @group(
         name="kick",
         usage="(member) <reason>",
         example="@member spamming",
         description="Kick the mentioned user",
+        invoke_without_command=True,
     )
     @has_permissions(kick_members=True)
     async def kick(self, ctx):
         """kick a member"""
         parsed = await parse_moderation_args(ctx, command_names=("kick",), allow_duration=False)
         member = parsed.member
+        user = parsed.user
         reason = parsed.reason
-        if not await self._ensure_targetable(ctx, member):
+        target = member or user
+        if target is None:
+            return await ctx.warn("Could not find that user")
+        if not await self._ensure_targetable(ctx, member, user):
             return
-        if not await self._confirm_if_booster(ctx, member, "kick"):
+        if member and not await self._confirm_if_booster(ctx, member, "kick"):
             return await ctx.warn("Action cancelled\n> -# **booster confirmation declined**")
+
+        if member is None:
+            return await ctx.warn("User is not in this server\n> -# **cannot kick a user who isn't a member**")
 
         role_ids = [role.id for role in member.roles if role != ctx.guild.default_role]
         target_display = str(member)
@@ -1730,6 +2768,75 @@ class ModerationCommands(Package):
         return await ctx.success(
             f"Kicked **{target_display}** - {self._default_reason(reason)}"
         )
+
+    @kick.group(
+        name="invoke",
+        description="Customize kick punishment messages",
+        invoke_without_command=True,
+    )
+    @has_permissions(manage_guild=True)
+    async def kick_invoke(self, ctx):
+        return await ctx.send_help(ctx.command)
+
+    @kick_invoke.command(name="on", description="Enable kick response")
+    @has_permissions(manage_guild=True)
+    async def kick_invoke_on(self, ctx):
+        await self._set_invoke_enabled(ctx, "kick", "message", True)
+        return await ctx.success("kick response **enabled**")
+
+    @kick_invoke.command(name="off", description="Disable kick response")
+    @has_permissions(manage_guild=True)
+    async def kick_invoke_off(self, ctx):
+        await self._set_invoke_enabled(ctx, "kick", "message", False)
+        return await ctx.success("kick response **disabled**")
+
+    @kick_invoke.group(name="dm", description="Customize kick DM", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def kick_invoke_dm(self, ctx, *, message=None):
+        if message is None:
+            return await ctx.send_help(ctx.command)
+        from core.managers.converters import EmbedConverter
+        try:
+            result = await EmbedConverter().convert(ctx, message)
+            await self._set_invoke(ctx, "kick", "dm", result.script)
+        except Exception:
+            await self._set_invoke(ctx, "kick", "dm", message)
+        return await ctx.success("kick DM updated")
+
+    @kick_invoke_dm.command(name="on", description="Enable kick DM")
+    @has_permissions(manage_guild=True)
+    async def kick_invoke_dm_on(self, ctx):
+        await self._set_invoke_enabled(ctx, "kick", "dm", True)
+        return await ctx.success("kick DM **enabled**")
+
+    @kick_invoke_dm.command(name="off", description="Disable kick DM")
+    @has_permissions(manage_guild=True)
+    async def kick_invoke_dm_off(self, ctx):
+        await self._set_invoke_enabled(ctx, "kick", "dm", False)
+        return await ctx.success("kick DM **disabled**")
+
+    @kick_invoke_dm.command(name="view", description="View kick DM")
+    @has_permissions(manage_guild=True)
+    async def kick_invoke_dm_view(self, ctx):
+        return await self._view_invoke(ctx, "kick", "dm")
+
+    @kick_invoke.group(name="message", aliases=["msg"], description="Customize kick response", invoke_without_command=True)
+    @has_permissions(manage_guild=True)
+    async def kick_invoke_message(self, ctx, *, message=None):
+        if message is None:
+            return await ctx.send_help(ctx.command)
+        from core.managers.converters import EmbedConverter
+        try:
+            result = await EmbedConverter().convert(ctx, message)
+            await self._set_invoke(ctx, "kick", "message", result.script)
+        except Exception:
+            await self._set_invoke(ctx, "kick", "message", message)
+        return await ctx.success("kick response updated")
+
+    @kick_invoke_message.command(name="view", description="View kick response")
+    @has_permissions(manage_guild=True)
+    async def kick_invoke_message_view(self, ctx):
+        return await self._view_invoke(ctx, "kick", "message")
 
     @tasks.loop(seconds=30)
     async def tempban_watcher(self) -> None:
@@ -2117,24 +3224,51 @@ class ModerationCommands(Package):
     @has_permissions(manage_channels=True)
     async def hideall(self, ctx, *, target: str = None):
         """Hide all channels from members (or a user/role)"""
+        from core.discord.views.confirm import ConfirmView
+
         resolved = await self._resolve_hide_target(ctx, target)
-        applied = 0
-        skipped = 0
+        already_hidden = []
+        to_hide = []
+
         for channel in list(ctx.guild.channels):
-            with contextlib.suppress(discord.HTTPException, discord.Forbidden):
-                already = await self._hide_channel(ctx, channel, resolved)
-                if already:
-                    skipped += 1
-                else:
-                    applied += 1
-        if not applied and not skipped:
-            return await ctx.warn(
-                "No changes made\n> -# **no channel permissions could be updated**"
-            )
-        if not applied:
+            if not isinstance(channel, discord.abc.GuildChannel):
+                continue
+            current = channel.overwrites_for(resolved).view_channel
+            if current is False:
+                already_hidden.append(channel.mention)
+            else:
+                to_hide.append(channel.mention)
+
+        if not to_hide:
             return await ctx.warn(
                 f"All channels are **already** hidden from {self._hide_target_label(resolved)}"
             )
+
+        view = ConfirmView(ctx)
+        if already_hidden:
+            msg = (
+                f"**{len(already_hidden)}** channel(s) are already hidden from "
+                f"{self._hide_target_label(resolved)}.\n"
+                f"**{len(to_hide)}** channel(s) will be hidden.\n"
+                f"Do you want to proceed?"
+            )
+        else:
+            msg = (
+                f"**{len(to_hide)}** channel(s) will be hidden from "
+                f"{self._hide_target_label(resolved)}.\n"
+                f"Do you want to proceed?"
+            )
+        ok = await view.prompt(msg)
+        if not ok:
+            return await ctx.warn("Cancelled\n> -# **hideall was cancelled**")
+
+        applied = 0
+        for channel in list(ctx.guild.channels):
+            with contextlib.suppress(discord.HTTPException, discord.Forbidden):
+                already = await self._hide_channel(ctx, channel, resolved)
+                if not already:
+                    applied += 1
+
         return await ctx.success(
             f"Hid **{applied}** channel(s) from {self._hide_target_label(resolved)}"
         )
@@ -2150,24 +3284,51 @@ class ModerationCommands(Package):
     @has_permissions(manage_channels=True)
     async def unhideall(self, ctx, *, target: str = None):
         """Unhide all channels for members (or a user/role)"""
+        from core.discord.views.confirm import ConfirmView
+
         resolved = await self._resolve_hide_target(ctx, target)
-        applied = 0
-        skipped = 0
+        hidden_channels = []
+        already_unhidden = []
+
         for channel in list(ctx.guild.channels):
-            with contextlib.suppress(discord.HTTPException, discord.Forbidden):
-                not_hidden = await self._unhide_channel(ctx, channel, resolved)
-                if not_hidden:
-                    skipped += 1
-                else:
-                    applied += 1
-        if not applied and not skipped:
-            return await ctx.warn(
-                "No changes made\n> -# **no channel permissions could be updated**"
-            )
-        if not applied:
+            if not isinstance(channel, discord.abc.GuildChannel):
+                continue
+            current = channel.overwrites_for(resolved).view_channel
+            if current is False:
+                hidden_channels.append(channel.mention)
+            else:
+                already_unhidden.append(channel.mention)
+
+        if not hidden_channels:
             return await ctx.warn(
                 f"No channels are hidden from {self._hide_target_label(resolved)}"
             )
+
+        view = ConfirmView(ctx)
+        if already_unhidden:
+            msg = (
+                f"**{len(hidden_channels)}** channel(s) are hidden from "
+                f"{self._hide_target_label(resolved)}.\n"
+                f"**{len(already_unhidden)}** channel(s) are already visible.\n"
+                f"Do you want to unhide the hidden channels?"
+            )
+        else:
+            msg = (
+                f"**{len(hidden_channels)}** channel(s) will be unhidden from "
+                f"{self._hide_target_label(resolved)}.\n"
+                f"Do you want to proceed?"
+            )
+        ok = await view.prompt(msg)
+        if not ok:
+            return await ctx.warn("Cancelled\n> -# **unhideall was cancelled**")
+
+        applied = 0
+        for channel in list(ctx.guild.channels):
+            with contextlib.suppress(discord.HTTPException, discord.Forbidden):
+                not_hidden = await self._unhide_channel(ctx, channel, resolved)
+                if not not_hidden:
+                    applied += 1
+
         return await ctx.success(
             f"Unhid **{applied}** channel(s) from {self._hide_target_label(resolved)}"
         )

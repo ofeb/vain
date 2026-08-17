@@ -341,7 +341,7 @@ class Miscellaneous(MiscellaneousEvents, Package):
         embed.set_image(url=url)
         await ctx.send(embed=embed)
 
-    @hybrid(
+    @group(
         name="addemote",
         description="Downloads emote and adds to server",
         aliases=["adde"],

@@ -155,7 +155,7 @@ def _discover_extensions(ext_dir: str = "ext") -> tuple[str, ...]:
 
 
 _BLACKLIST_SQL = """
-    SELECT 1 FROM blacklist
+    SELECT reason FROM blacklist
     WHERE user_id = $1 OR guild_id = $2
     LIMIT 1
 """
@@ -491,8 +491,11 @@ class Vain(commands.AutoShardedBot):
                 _ACCESS_TTL,
                 lambda: self.db.fetchval(_BLACKLIST_SQL, ctx.author.id, ctx.guild.id),
             )
-            if bool(blacklisted):
-                raise commands.CheckFailure("youre **blacklisted** from using this bot")
+            if blacklisted:
+                reason = blacklisted if isinstance(blacklisted, str) else None
+                if reason:
+                    raise commands.CheckFailure(f"you have been **blacklisted**\n> -# **reason**: {reason}")
+                raise commands.CheckFailure("you have been **blacklisted**")
 
         if (
             ctx.command is not None

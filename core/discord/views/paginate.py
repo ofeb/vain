@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from contextlib import suppress
 from typing import Any, Callable, Iterable, List, Sequence, Union
 
@@ -500,8 +501,8 @@ class PaginateView(discord.ui.LayoutView):
         
         
         if isinstance(raw, ui.Container):
-            
-            container = _strip_trailing_pager(raw)
+            container = copy.deepcopy(raw)
+            _strip_trailing_pager(container)
         elif isinstance(raw, discord.Embed):
             container = embed_to_container(raw)
         else:

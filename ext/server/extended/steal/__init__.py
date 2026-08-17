@@ -167,14 +167,16 @@ class StealPaginateView(PaginateView):
 
     def _build_embed(self, data: dict, index: int, total: int) -> discord.Embed:
         name = data.get("name") or ("sticker" if self.kind == "sticker" else "emoji")
+        animated = data.get("animated", False)
+        animated_tag = " *(animated)*" if animated else ""
         if self.kind == "sticker":
             lines = (
-                f"**Sticker:** `{name}`",
+                f"**Sticker:** `{name}`{animated_tag}",
                 f"**ID:** {data.get('id') or '-'}",
             )
         else:
             lines = (
-                f"**Emoji:** `:{name}:`",
+                f"**Emoji:** `:{name}:`{animated_tag}",
                 f"**ID:** {data.get('id') or '-'}",
             )
         embed = discord.Embed(
@@ -185,7 +187,7 @@ class StealPaginateView(PaginateView):
             ),
         )
         if data.get("url"):
-            embed.set_thumbnail(url=data["url"])
+            embed.set_image(url=data["url"])
         return embed
 
     def _refresh_page(self, index: int) -> None:
@@ -205,7 +207,9 @@ class StealPaginateView(PaginateView):
             return
         name = str(self.items[index].get("name") or "")
         sid = str(self.items[index].get("id") or "-")
-        label = (f":{name}:" if self.kind != "sticker" else name)[:100]
+        animated = self.items[index].get("animated", False)
+        animated_tag = " *(a)*" if animated else ""
+        label = (f":{name}:{animated_tag}" if self.kind != "sticker" else name)[:100]
         value = str(index)
         for opt in self.search_options:
             if str(opt.value) == value:
@@ -321,6 +325,16 @@ class StealPaginateView(PaginateView):
         name = re.sub(r"[^a-zA-Z0-9_]", "", name)[:32] or "emoji"
         async with aiohttp.ClientSession() as session:
             async with session.get(emoji_data["url"]) as resp:
+                content_type = resp.headers.get("Content-Type", "image/png")
+                if not content_type.startswith("image/"):
+                    await interaction.response.send_message(
+                        embed=reply_embed(
+                            color=color.warn,
+                            message=f"{emojis.warn} Cannot steal: unsupported image type.",
+                        ),
+                        ephemeral=True,
+                    )
+                    return
                 image_data = await resp.read()
         emoji = await guild.create_custom_emoji(
             name=name,
@@ -481,6 +495,9 @@ class Steal(Package):
                 )[:32] or "emoji"
                 async with aiohttp.ClientSession() as session:
                     async with session.get(emoji_data["url"]) as resp:
+                        content_type = resp.headers.get("Content-Type", "image/png")
+                        if not content_type.startswith("image/"):
+                            continue
                         image_data = await resp.read()
                 emoji = await ctx.guild.create_custom_emoji(
                     name=name,
@@ -531,7 +548,7 @@ class Steal(Package):
                     caption(f"{_STEAL_FOOTER_HINT} · {i}/{total}"),
                 ),
             )
-            embed.set_thumbnail(url=emoji_data["url"])
+            embed.set_image(url=emoji_data["url"])
             pages.append(embed)
             search_options.append(
                 discord.SelectOption(
@@ -659,7 +676,7 @@ class Steal(Package):
                 ),
             )
             if data.get("url"):
-                embed.set_thumbnail(url=data["url"])
+                embed.set_image(url=data["url"])
             pages.append(embed)
             search_options.append(
                 discord.SelectOption(

@@ -58,12 +58,47 @@ class Lockdown(Package):
     @has_permissions(manage_guild=True)
     async def lock_all(self, ctx, *, reason: str = "No reason provided"):
         """lockdown all channels"""
+        from core.discord.views.confirm import ConfirmView
+
         ignored_rows = await self.db.fetch(
             """SELECT channel_id FROM lockdown_ignore WHERE guild_id = $1""",
             ctx.guild.id,
         )
         ignored_ids = {row[0] for row in ignored_rows}
         everyone = ctx.guild.default_role
+        already_locked = []
+        to_lock = []
+
+        for channel in ctx.guild.channels:
+            if channel.id in ignored_ids:
+                continue
+            if not isinstance(channel, TextChannel):
+                continue
+            overwrite = channel.overwrites_for(everyone)
+            if overwrite.send_messages is False:
+                already_locked.append(channel.mention)
+            else:
+                to_lock.append(channel.mention)
+
+        if not to_lock:
+            return await ctx.warn("All channels are **already** locked")
+
+        view = ConfirmView(ctx)
+        if already_locked:
+            msg = (
+                f"**{len(already_locked)}** channel(s) are already locked.\n"
+                f"**{len(to_lock)}** channel(s) will be locked.\n"
+                f"Do you want to proceed?"
+            )
+        else:
+            msg = (
+                f"**{len(to_lock)}** channel(s) will be locked.\n"
+                f"Do you want to proceed?"
+            )
+        ok = await view.prompt(msg)
+        if not ok:
+            return await ctx.warn("Cancelled\n> -# **lockdown all was cancelled**")
+
         locked = []
 
         for channel in ctx.guild.channels:
@@ -90,9 +125,6 @@ class Lockdown(Package):
                     ctx.author.id,
                     reason,
                 )
-
-        if not locked:
-            return await ctx.warn("no channels were locked")
 
         return await ctx.success(f"**{len(locked)}** channels locked - {reason}")
 
@@ -256,7 +288,40 @@ class Lockdown(Package):
     @has_permissions(manage_guild=True)
     async def unlock_all(self, ctx, *, reason: str = "No reason provided"):
         """unlock all channels"""
+        from core.discord.views.confirm import ConfirmView
+
         everyone = ctx.guild.default_role
+        already_locked = []
+        already_unlocked = []
+
+        for channel in ctx.guild.channels:
+            if not isinstance(channel, TextChannel):
+                continue
+            overwrite = channel.overwrites_for(everyone)
+            if overwrite.send_messages is False:
+                already_locked.append(channel.mention)
+            else:
+                already_unlocked.append(channel.mention)
+
+        if not already_locked:
+            return await ctx.warn("No channels are currently **locked**")
+
+        view = ConfirmView(ctx)
+        if already_unlocked:
+            msg = (
+                f"**{len(already_locked)}** channel(s) are locked.\n"
+                f"**{len(already_unlocked)}** channel(s) are already unlocked.\n"
+                f"Do you want to unlock the locked channels?"
+            )
+        else:
+            msg = (
+                f"**{len(already_locked)}** channel(s) will be unlocked.\n"
+                f"Do you want to proceed?"
+            )
+        ok = await view.prompt(msg)
+        if not ok:
+            return await ctx.warn("Cancelled\n> -# **unlock all was cancelled**")
+
         unlocked = []
 
         for channel in ctx.guild.channels:
@@ -276,8 +341,5 @@ class Lockdown(Package):
             """DELETE FROM lockdowns WHERE guild_id = $1""",
             ctx.guild.id,
         )
-
-        if not unlocked:
-            return await ctx.warn("no channels are currently **locked**")
 
         return await ctx.success(f"**{len(unlocked)}** channels unlocked - {reason}")

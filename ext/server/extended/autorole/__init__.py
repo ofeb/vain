@@ -104,7 +104,7 @@ class Autorole(commands.Cog):
         if not await view.prompt(embed=emb):
             return await ctx.warn("Cancelled\n> -# **no autoroles were removed**")
         settings = await AutoroleSettings.fetch(self.bot, ctx.guild)
-        await settings.delete_all()
+        await settings.clear()
         await ctx.success(
             "Auto roles cleared\n> -# **this action cannot be undone**"
         )

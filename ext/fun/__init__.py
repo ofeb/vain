@@ -311,22 +311,46 @@ class Fun(Package):
     )
     async def fact(self, ctx: Context) -> None:
         """Get a random fun fact."""
-        facts = [
-            "Honey never spoils. Archaeologists have found pots of honey in ancient Egyptian tombs that are over 3,000 years old and still perfectly good to eat.",
-            "The shortest war in history was between Britain and Zanzibar in 1896. Zanzibar surrendered after 38 minutes.",
-            "A day on Venus is longer than a year on Venus.",
-            "Octopuses have three hearts and blue blood.",
-            "Bananas are berries, but strawberries aren't.",
-            "The Hawaiian alphabet has only 12 letters.",
-            "A group of flamingos is called a 'flamboyance'.",
-            "The human brain uses 20% of the body's total oxygen and energy.",
-            "Cows have best friends and get stressed when separated.",
-            "The first oranges weren't orange - they were green.",
+        fact = None
+        apis = [
+            "https://uselessfacts.jsph.pl/api/v2/facts/random?language=en",
+            "https://api.aaronstevens.com/funfacts",
+            "https://factsapi.io/api/facts/random",
         ]
+        for api_url in apis:
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(api_url, timeout=aiohttp.ClientTimeout(total=5)) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            if api_url.startswith("https://uselessfacts"):
+                                fact = data.get("text")
+                            elif api_url.startswith("https://api.aaronstevens"):
+                                fact = data.get("fact")
+                            elif api_url.startswith("https://factsapi"):
+                                fact = data.get("fact", {}).get("fact") or data.get("fact")
+                            if fact:
+                                break
+            except Exception:
+                continue
+        if not fact:
+            fallback = [
+                "Honey never spoils. Archaeologists have found pots of honey in ancient Egyptian tombs that are over 3,000 years old and still perfectly good to eat.",
+                "The shortest war in history was between Britain and Zanzibar in 1896. Zanzibar surrendered after 38 minutes.",
+                "A day on Venus is longer than a year on Venus.",
+                "Octopuses have three hearts and blue blood.",
+                "Bananas are berries, but strawberries aren't.",
+                "The Hawaiian alphabet has only 12 letters.",
+                "A group of flamingos is called a 'flamboyance'.",
+                "The human brain uses 20% of the body's total oxygen and energy.",
+                "Cows have best friends and get stressed when separated.",
+                "The first oranges weren't orange - they were green.",
+            ]
+            fact = random.choice(fallback)
         embed = c2(
-            title="🎉 Fun Fact",
+            title="Fun Fact",
             color=color.base,
-            message=random.choice(facts),
+            message=fact,
             timestamp=False,
         )
         await ctx.send(embed=embed)

@@ -7,9 +7,10 @@ import discord
 from dateutil import relativedelta as rl
 from dateutil.parser import parse as parse_date
 from discord import Member
-from discord.ext.commands import group, has_permissions, command
+from discord.ext.commands import has_permissions
 
 from core.discord.package import Package
+from core.discord.hybrid import hybrid, describe
 from core.discord.views.embed import c2
 
 
@@ -17,6 +18,18 @@ MONTHS = [
     "january", "february", "march", "april", "may", "june",
     "july", "august", "september", "october", "november", "december",
 ]
+
+
+def _get_guild_id(ctx) -> int:
+    """Get a suitable guild ID for database storage.
+    
+    In DMs, returns 0 (global storage).
+    In group chats, returns the channel ID.
+    In servers, returns the guild ID.
+    """
+    if ctx.guild is None:
+        return getattr(ctx, 'channel', None) and ctx.channel.id or 0
+    return ctx.guild.id
 
 
 def _coerce_date(value) -> date | None:
@@ -84,41 +97,58 @@ def _until_str(months: int, days: int) -> str:
 class Birthday(Package):
     """birthday management"""
 
-    @group(
+    @hybrid(
         name="birthday",
         aliases=["bday"],
         description="View your birthday or somebody elses",
-        invoke_without_command=True,
+        group=True,
     )
+    @describe(member="The user to check birthday for")
     async def birthday(self, ctx, member: Optional[Member] = None):
         """view birthday"""
         target = member or ctx.author
+        guild_id = _get_guild_id(ctx)
+        
         birthday_data = await self.bot.db.fetchval(
             "SELECT birthday_date FROM birthday WHERE user_id = $1 AND guild_id = $2",
-            target.id, ctx.guild.id
+            target.id, guild_id
         )
 
         if not birthday_data:
+            if target.id == ctx.author.id:
+                return await ctx.warn("You have not set your birthday\n> -# **set one with:** `,birthday set`")
             return await ctx.warn(
-                f"{target.mention} has not set their birthday"
+                f"**{target.display_name}** has not set their birthday"
             )
 
         bday = _coerce_date(birthday_data)
         if not bday:
+            if target.id == ctx.author.id:
+                return await ctx.warn("Your stored birthday is invalid\n> -# **re-set with:** `,birthday set`")
             return await ctx.warn(
-                f"{target.mention}'s stored birthday is invalid"
+                f"**{target.display_name}'s** stored birthday is invalid"
             )
 
-        name = target.display_name
         until = _until_birthday(bday, date.today())
-        if until is None:
-            message = f"**{name}'s** birthday is **today**!"
+        if target.id == ctx.author.id:
+            if until is None:
+                message = "Your birthday is **today**!"
+            else:
+                months, days = until
+                message = (
+                    f"Your birthday is on **{_format_date(bday)}**, "
+                    f"that's in {_until_str(months, days)}"
+                )
         else:
-            months, days = until
-            message = (
-                f"**{name}'s** birthday is on **{_format_date(bday)}**, "
-                f"that's in {_until_str(months, days)}"
-            )
+            name = target.display_name
+            if until is None:
+                message = f"**{name}'s** birthday is **today**!"
+            else:
+                months, days = until
+                message = (
+                    f"**{name}'s** birthday is on **{_format_date(bday)}**, "
+                    f"that's in {_until_str(months, days)}"
+                )
 
         await ctx.send(embed=c2(message=message, timestamp=False))
 
@@ -135,10 +165,11 @@ class Birthday(Package):
                 f"> -# **examples:** `31/01/10`, `31-01-10`, `31st Jan`, `Jan 31`"
             )
 
+        guild_id = _get_guild_id(ctx)
         await self.bot.db.execute(
             "INSERT INTO birthday (user_id, guild_id, birthday_date) VALUES($1, $2, $3) "
             "ON CONFLICT(user_id, guild_id) DO UPDATE SET birthday_date = excluded.birthday_date",
-            ctx.author.id, ctx.guild.id, parsed
+            ctx.author.id, guild_id, parsed
         )
         await ctx.success(
                     f"your **birthday** has been set\n"
@@ -152,9 +183,10 @@ class Birthday(Package):
     )
     async def birthday_remove(self, ctx):
         """remove birthday"""
+        guild_id = _get_guild_id(ctx)
         result = await self.bot.db.execute(
             "DELETE FROM birthday WHERE user_id = $1 AND guild_id = $2",
-            ctx.author.id, ctx.guild.id
+            ctx.author.id, guild_id
         )
         if result == "DELETE 0":
             return await ctx.warn(
@@ -180,13 +212,15 @@ class Birthday(Package):
                 f"> -# **usage:** `,birthday compare @user`"
             )
 
+        guild_id = _get_guild_id(ctx)
+        
         my_raw = await self.bot.db.fetchval(
             "SELECT birthday_date FROM birthday WHERE user_id = $1 AND guild_id = $2",
-            ctx.author.id, ctx.guild.id
+            ctx.author.id, guild_id
         )
         their_raw = await self.bot.db.fetchval(
             "SELECT birthday_date FROM birthday WHERE user_id = $1 AND guild_id = $2",
-            member.id, ctx.guild.id
+            member.id, guild_id
         )
 
         if not my_raw:
@@ -345,9 +379,11 @@ class Birthday(Package):
     )
     async def birthday_list(self, ctx):
         """list all birthdays"""
+        guild_id = _get_guild_id(ctx)
+        
         birthdays = await self.bot.db.fetch(
             "SELECT user_id, birthday_date FROM birthday WHERE guild_id = $1 ORDER BY birthday_date",
-            ctx.guild.id
+            guild_id
         )
 
         if not birthdays:
@@ -358,7 +394,9 @@ class Birthday(Package):
 
         lines = []
         for birthday in birthdays:
-            member = ctx.guild.get_member(birthday['user_id'])
+            member = None
+            if ctx.guild:
+                member = ctx.guild.get_member(birthday['user_id'])
             bday = _coerce_date(birthday['birthday_date'])
             if member and bday:
                 lines.append(f"> {member.mention} — {_format_date(bday)}")
