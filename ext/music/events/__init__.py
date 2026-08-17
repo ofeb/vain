@@ -9,10 +9,17 @@ log = logging.getLogger("vain.music.events")
 
 class MusicEvents(Package):
     async def cog_load(self) -> None:
-        """Strip `leave` from disconnect aliases (leave belongs to goodbye)."""
+        """Strip `leave` from disconnect (leave belongs to the goodbye group)."""
         cmd = getattr(self, "disconnect", None)
-        if cmd is not None and getattr(cmd, "aliases", None):
-            cmd.aliases = [a for a in cmd.aliases if a != "leave"]
+        if cmd is None:
+            return
+        aliases = list(getattr(cmd, "aliases", None) or [])
+        if "leave" in aliases:
+            cmd.aliases = [a for a in aliases if a != "leave"]
+        # discord.py already registered the alias in all_commands at add_cog time
+        bot = getattr(self, "bot", None)
+        if bot is not None and bot.all_commands.get("leave") is cmd:
+            bot.all_commands.pop("leave", None)
 
     @Package.listener("on_ready")
     async def _connect_nodelink_on_ready(self) -> None:
