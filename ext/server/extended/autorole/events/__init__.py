@@ -14,29 +14,39 @@ if TYPE_CHECKING:
 
 
 class AutoroleEvents(Package):
-    """Autorole event handlers."""
+    """Autorole event handlers (mixed into Server via ServerEvents)."""
 
     def __init__(self, bot: Vain):
         super().__init__(bot)
         self.locks = defaultdict(asyncio.Lock)
+
+    def _join_locks(self):
+        """Prefer Server.join_locks when mixed in; else local locks."""
+        locks = getattr(self, "join_locks", None)
+        if locks is None:
+            locks = getattr(self, "locks", None)
+        if locks is None:
+            self.locks = defaultdict(asyncio.Lock)
+            locks = self.locks
+        return locks
 
     @Package.listener("on_member_join")
     async def on_autorole(self, member: discord.Member) -> None:
         """Handle automatic role assignment on member join."""
         if await self.bot.object_cache.ratelimited(f"member_joins:{member.guild.id}", 1, 5) != 0:
             await asyncio.sleep(5)
-        
+
         if member.bot:
             return
-        
-        async with self.locks[f"member_joins:{member.guild.id}"]:
+
+        async with self._join_locks()[f"member_joins:{member.guild.id}"]:
             roles = await self.bot.db.fetch(
                 "SELECT role_id FROM auto_role WHERE guild_id = $1",
                 member.guild.id,
             )
             if not roles:
                 return
-            
+
             to_delete = []
             roles_to_add = []
             for r in roles:
@@ -53,13 +63,13 @@ class AutoroleEvents(Package):
                 if role in member.roles:
                     continue
                 roles_to_add.append(role)
-            
+
             if roles_to_add:
                 try:
                     await member.add_roles(*roles_to_add, reason="Auto Role")
                 except (discord.Forbidden, discord.HTTPException):
                     pass
-            
+
             if to_delete:
                 await self.bot.db.execute(
                     "DELETE FROM auto_role WHERE guild_id = $1 AND role_id = ANY($2::BIGINT[])",
@@ -73,7 +83,7 @@ class AutoroleEvents(Package):
         guild = self.bot.get_guild(payload.guild_id)
         if not guild:
             return
-        
+
         role_id = await self.bot.db.fetchval(
             "SELECT role_id FROM reaction_role WHERE guild_id = $1 AND channel_id = $2 AND message_id = $3 AND emoji = $4",
             guild.id,
@@ -83,22 +93,22 @@ class AutoroleEvents(Package):
         )
         if not role_id:
             return
-        
+
         role = guild.get_role(role_id)
         if not role:
             return
-        
+
         member = guild.get_member(payload.user_id)
         if not member:
             return
-        
+
         if member.bot:
             return
-        
+
         if await self.bot.object_cache.ratelimited(f"reaction_roles:{member.guild.id}", 1, 5) != 0:
             await asyncio.sleep(5)
-        
-        async with self.locks[f"reaction_roles:{member.guild.id}"]:
+
+        async with self._join_locks()[f"reaction_roles:{member.guild.id}"]:
             await member.add_roles(role, reason="Reaction Role")
 
     @Package.listener("on_raw_reaction_remove")
@@ -107,7 +117,7 @@ class AutoroleEvents(Package):
         guild = self.bot.get_guild(payload.guild_id)
         if not guild:
             return
-        
+
         role_id = await self.bot.db.fetchval(
             "SELECT role_id FROM reaction_role WHERE guild_id = $1 AND channel_id = $2 AND message_id = $3 AND emoji = $4",
             guild.id,
@@ -117,25 +127,20 @@ class AutoroleEvents(Package):
         )
         if not role_id:
             return
-        
+
         role = guild.get_role(role_id)
         if not role:
             return
-        
+
         member = guild.get_member(payload.user_id)
         if not member:
             return
-        
+
         if member.bot:
             return
-        
+
         if await self.bot.object_cache.ratelimited(f"reaction_roles:{member.guild.id}", 1, 5) != 0:
             await asyncio.sleep(5)
-        
-        async with self.locks[f"reaction_roles:{member.guild.id}"]:
+
+        async with self._join_locks()[f"reaction_roles:{member.guild.id}"]:
             await member.remove_roles(role, reason="Reaction Role")
-
-
-async def setup(bot: Vain):
-    """Load the AutoroleEvents cog."""
-    await bot.add_cog(AutoroleEvents(bot))
