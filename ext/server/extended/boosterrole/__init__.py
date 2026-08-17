@@ -94,6 +94,7 @@ class BoosterroleCommands(Package):
                 ctx.author.id,
                 role.id,
             )
+            await ctx.author.add_roles(role, reason="booster role assigned")
             return await ctx.success(
                 f"Created and assigned {role.mention}\n"
                 f"> -# **color:** `{color}`"

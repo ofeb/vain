@@ -44,7 +44,6 @@ class ImgonlyEvents(Package):
 
         last_sent = self._imgonly_last_sent.get(key, 0)
         if now - last_sent < 60:
-            self._queue_deletion(message)
             return
 
         self._imgonly_last_sent[key] = now
@@ -59,15 +58,9 @@ class ImgonlyEvents(Package):
         else:
             text = f"{message.author.mention} only **attachments** are allowed in {message.channel.mention}"
 
-        sent = await message.channel.send(text)
-        self._queue_for_deletion(sent, 180)
-
-    def _queue_deletion(self, message: discord.Message) -> None:
-        channel_id = message.channel.id
-        if channel_id not in self._imgonly_delete_queue:
-            self._imgonly_delete_queue[channel_id] = []
-        self._imgonly_delete_queue[channel_id].append(message)
-        self._process_queue(channel_id)
+        with contextlib.suppress(discord.HTTPException, discord.Forbidden):
+            sent = await message.channel.send(text)
+            self._queue_for_deletion(sent, 180)
 
     def _queue_for_deletion(self, message: discord.Message, delay: float) -> None:
         channel_id = message.channel.id
