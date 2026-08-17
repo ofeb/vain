@@ -94,15 +94,14 @@ class Notes(Package):
         name="add",
         aliases=["create", "new"],
         description="Add a note. Pass a user (mention/id/name) or a case id, then the note text.",
-        example=",notes add @member warned for spam\n,notes add 14 he was being rude",
+        example=",notes add @member warned for spam"
     )
     @has_permissions(manage_messages=True)
     async def notes_add(self, ctx, target: str, *, note: str):
         """Add a note for a member or attach one to a case.
 
         Syntax:
-          ,notes add <user> <note>          — plain note on the user
-          ,notes add <case.id> <note>        — note linked to that case (and its target)
+          ,notes add <user> <note> or ,notes add <case.id> <note>  
         """
         with contextlib.suppress(Exception):
             await self.db.execute(
