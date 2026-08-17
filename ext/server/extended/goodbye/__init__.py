@@ -21,7 +21,7 @@ class GoodbyeCommands(Package):
 
     @group(
         name="goodbye",
-        aliases=["bye", "gb"],
+        aliases=["bye", "gb", "leave"],
         invoke_without_command=True,
         description="Manage messages sent when a member leaves the server",
         example=",goodbye add #bye See ya {user}!",
@@ -180,8 +180,16 @@ class GoodbyeCommands(Package):
         )
 
     async def on_member_remove(self, member: Member) -> None:
-        if await self.db.get_antiraid_state(member.guild.id):
-            return
+        # Safe antiraid gate (get_antiraid_state does not exist on db)
+        try:
+            row = await self.db.fetchrow(
+                "SELECT raid_active FROM antiraid_config WHERE guild_id = $1",
+                member.guild.id,
+            )
+            if row and row.get("raid_active"):
+                return
+        except Exception:
+            pass
 
         invite_info = {}
         try:
