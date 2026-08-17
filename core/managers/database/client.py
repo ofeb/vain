@@ -1582,6 +1582,27 @@ class Database:
             or 0
         )
 
+    async def update_case_reason(
+        self,
+        guild_id: int,
+        case_id: int,
+        reason: str,
+        edited_by: int,
+    ) -> bool:
+        """Update a case's reason and record who edited it. Returns True if a row was updated."""
+        result = await self.execute(
+            """
+            UPDATE modlog_cases
+            SET reason = $3, edited_at = CURRENT_TIMESTAMP, edited_by = $4
+            WHERE guild_id = $1 AND case_id = $2
+            """,
+            guild_id,
+            case_id,
+            reason,
+            edited_by,
+        )
+        return result == "UPDATE 1"
+
     async def add_hardban(
         self,
         guild_id: int,
