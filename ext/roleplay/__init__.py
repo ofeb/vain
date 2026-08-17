@@ -377,15 +377,24 @@ class RoleplayCommands(Package):
             view.message = msg
 
         if target.id == ctx.bot.user.id:
-            await self._bot_roleplay_back(ctx, action)
+            await self._bot_roleplay_back(ctx, action, msg)
 
         return msg
 
-    async def _bot_roleplay_back(self, ctx: Context, action: str):
-        """bot performs the same action back on the user after a short delay"""
+    async def _bot_roleplay_back(self, ctx: Context, action: str, original_msg: discord.Message):
+        """bot performs the same action back as if an actual person did it"""
         import asyncio
         await asyncio.sleep(1.5)
 
+        
+        view = RoleplayBackView(action, ctx.author.id, ctx.bot.user.id)
+        for item in view.children:
+            item.disabled = True
+            item.label = f"{PAST_TENSE.get(action, action.title())} back"
+        with contextlib.suppress(discord.HTTPException):
+            await original_msg.edit(view=view)
+
+        
         try:
             gif_bytes = await fetch_action_gif(action)
         except Exception:
@@ -406,8 +415,9 @@ class RoleplayCommands(Package):
         embed.color = embed_color
         embed.set_image(url="attachment://action.gif")
 
+        
         with contextlib.suppress(discord.HTTPException):
-            await ctx.send(file=attachment, embed=embed)
+            await original_msg.reply(file=attachment, embed=embed, mention_author=False)
 
     @hybrid(
         name="roleplay",

@@ -68,13 +68,13 @@ class History(Package):
 
         cache: dict[int, str] = {}
         for uid in ids:
-            # Check server members first
+            
             if ctx.guild:
                 member = ctx.guild.get_member(uid)
                 if member:
                     cache[uid] = member.mention
                     continue
-            # Fetch from API (works for non-members too)
+            
             try:
                 user = await self.bot.fetch_user(uid)
                 cache[uid] = f"{user.name} (`{uid}`)"
@@ -130,7 +130,7 @@ class History(Package):
         if not row:
             return await ctx.warn(f"Case **#{case_id}** was not found")
 
-        # Try to fetch usernames for better display
+        
         target_label = f"`{row['target_id']}`"
         moderator_label = f"`{row['moderator_id']}`"
 
@@ -140,7 +140,7 @@ class History(Package):
         ]:
             if not uid:
                 continue
-            # Check server first
+            
             if ctx.guild:
                 member = ctx.guild.get_member(uid)
                 if member:
@@ -149,7 +149,7 @@ class History(Package):
                     else:
                         moderator_label = member.mention
                     continue
-            # Fetch from API
+            
             try:
                 user = await self.bot.fetch_user(uid)
                 name = f"{user.name} (`{uid}`)"
