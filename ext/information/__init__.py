@@ -360,38 +360,38 @@ class InformationCommands(Package):
 
         container = ui.Container()
 
-        # Header matching the JSON format: "-# **User Info — name**"
+        
         container.add_item(ui.TextDisplay(f"-# **User Info — {user.display_name}**"))
         container.add_item(ui.Separator(visible=True))
 
-        # Build info text in the section
+        
         info_lines = []
         info_lines.append(f"> -# **Username:** {user.name}")
         info_lines.append(f"> -# **Account:** {user.mention} (`{user.id}`)")
         info_lines.append("")
 
-        # Created timestamp
+        
         info_lines.append(f"> -# **Created:** <t:{int(user.created_at.timestamp())}:f> (<t:{int(user.created_at.timestamp())}:R>)")
 
-        # Only show server-specific info if member is in the server
+        
         if member and ctx.guild:
             if member.joined_at:
                 info_lines.append(f"> -# **Joined:** <t:{int(member.joined_at.timestamp())}:f> (<t:{int(member.joined_at.timestamp())}:R>)")
 
-            # Join position
+            
             if hasattr(ctx.guild, 'members'):
                 sorted_members = sorted(ctx.guild.members, key=lambda m: m.joined_at or discord.utils.utcnow())
                 join_pos = next((i + 1 for i, m in enumerate(sorted_members) if m.id == member.id), None)
                 if join_pos:
                     info_lines.append(f"> -# **Join Position:** {join_pos}")
 
-            # Roles
+            
             roles = [role.mention for role in member.roles if role != ctx.guild.default_role]
             if roles:
                 info_lines.append(f"> -# **Roles ({len(roles)}):**")
                 info_lines.append(f"> -# {', '.join(roles[:20])}")
 
-        # Section with text and avatar accessory
+        
         if user.display_avatar:
             container.add_item(
                 ui.Section(
@@ -402,7 +402,7 @@ class InformationCommands(Package):
         else:
             container.add_item(ui.TextDisplay("\n".join(info_lines)))
 
-        # External buttons for avatar and banner
+        
         buttons = []
         if user.display_avatar:
             buttons.append(

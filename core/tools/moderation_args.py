@@ -108,15 +108,15 @@ async def _resolve_member(ctx, token: str) -> tuple[discord.Member | None, disco
     """
     user_id = _extract_user_id(token)
 
-    # If we have a user ID, ONLY try ID-based resolution (never name matching)
+    
     if user_id is not None:
-        # First try: resolve as a guild member (fast, cached)
+        
         if ctx.guild is not None:
             member = ctx.guild.get_member(user_id)
             if member is not None:
                 return member, member
 
-        # Second try: fetch from API as member
+        
         if ctx.guild is not None:
             try:
                 member = await ctx.guild.fetch_member(user_id)
@@ -124,17 +124,17 @@ async def _resolve_member(ctx, token: str) -> tuple[discord.Member | None, disco
             except discord.HTTPException:
                 pass
 
-        # Third try: fetch as a User (works even if not in server)
+        
         try:
             user = await ctx.bot.fetch_user(user_id)
             return None, user
         except discord.HTTPException:
             pass
 
-        # ID was provided but couldn't resolve - error with the ID, don't fall through to name matching
+        
         raise CommandError(f"**can't** find user **{token}**")
 
-    # Fourth try: use MemberConverter for name/nickname matching (in-server only)
+    
     if ctx.guild is not None:
         from core.tools.convert.member import MemberConvert
         try:

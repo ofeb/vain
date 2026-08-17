@@ -277,7 +277,7 @@ def _get_guild_id(ctx) -> int:
     In servers, returns the guild ID.
     """
     if ctx.guild is None:
-        # DM or group chat
+        
         return getattr(ctx, 'channel', None) and ctx.channel.id or 0
     return ctx.guild.id
 
@@ -475,7 +475,7 @@ class Timezone(Package):
 
         lines = []
         for tz in timezones:
-            # Try to get member from guild if in server, otherwise skip
+            
             member = None
             if ctx.guild:
                 member = ctx.guild.get_member(tz['user_id'])
