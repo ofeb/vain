@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import discord
 from discord.ext.commands import group
 
@@ -25,8 +26,14 @@ class Notes(Package):
     @has_permissions(manage_messages=True)
     async def notes(self, ctx, member: discord.Member):
         """View notes for a member."""
+        # Ensure case_id column exists (idempotent)
+        with contextlib.suppress(Exception):
+            await self.db.execute(
+                "ALTER TABLE notes ADD COLUMN IF NOT EXISTS case_id BIGINT"
+            )
+
         rows = await self.db.fetch(
-            """SELECT id, moderator_id, content, created_at
+            """SELECT id, moderator_id, content, created_at, case_id
                FROM notes
                WHERE guild_id = $1 AND user_id = $2
                ORDER BY created_at DESC""",
@@ -42,7 +49,14 @@ class Notes(Package):
             mod_label = mod.mention if mod else f"`{row['moderator_id']}`"
             when = discord.utils.format_dt(row["created_at"], style="R") if row["created_at"] else ""
             content = (row["content"] or "")[:200]
-            lines.append(label_line(f"#{row['id']} · {mod_label}", f"{content} {when}".strip()))
+            case_id = row.get("case_id")
+            case_suffix = f" · case #{case_id}" if case_id is not None else ""
+            lines.append(
+                label_line(
+                    f"#{row['id']} · {mod_label}{case_suffix}",
+                    f"{content} {when}".strip(),
+                )
+            )
 
         embed = panel_embed(
             title=f"Notes - {member}",
@@ -56,27 +70,49 @@ class Notes(Package):
     @notes.command(
         name="add",
         aliases=["create", "new"],
-        description="Add a note for a member",
-        example=",notes add @member warned for spam",
+        description="Add a note for a member. Optional case id attaches the note to a moderation case.",
+        example=",notes add @member 12 warned for spam",
     )
     @has_permissions(manage_messages=True)
-    async def notes_add(self, ctx, member: discord.Member, *, note: str):
-        """Add a note for a member."""
-        content = note.strip()
-        if not content:
+    async def notes_add(self, ctx, member: discord.Member, *, content: str):
+        """Add a note for a member.
+
+        Syntax:
+          ,notes add <user> <note>
+          ,notes add <user> <case.id> <note>
+        """
+        with contextlib.suppress(Exception):
+            await self.db.execute(
+                "ALTER TABLE notes ADD COLUMN IF NOT EXISTS case_id BIGINT"
+            )
+
+        raw = (content or "").strip()
+        if not raw:
             return await ctx.warn("Provide note content")
 
+        case_id: int | None = None
+        note_body = raw
+        parts = raw.split(None, 1)
+        if parts and parts[0].isdigit():
+            # First token is case id
+            case_id = int(parts[0])
+            note_body = parts[1].strip() if len(parts) > 1 else ""
+            if not note_body:
+                return await ctx.warn("Provide note content after the case id")
+
         row = await self.db.fetchrow(
-            """INSERT INTO notes (guild_id, user_id, moderator_id, content)
-               VALUES ($1, $2, $3, $4)
+            """INSERT INTO notes (guild_id, user_id, moderator_id, content, case_id)
+               VALUES ($1, $2, $3, $4, $5)
                RETURNING id""",
             ctx.guild.id,
             member.id,
             ctx.author.id,
-            content[:2000],
+            note_body[:2000],
+            case_id,
         )
         note_id = row["id"] if row else "?"
-        return await ctx.success(f"Added note **#{note_id}** on **{member}**")
+        extra = f" (case **#{case_id}**)" if case_id is not None else ""
+        return await ctx.success(f"Added note **#{note_id}** on **{member}**{extra}")
 
     @notes.command(
         name="remove",
@@ -117,6 +153,3 @@ class Notes(Package):
         if count == 0 and result == "DELETE 0":
             return await ctx.warn(f"**{member}** has no notes")
         return await ctx.success(f"Cleared notes for **{member}**")
-
-
-import contextlib  # noqa: E402  used by notes_clear

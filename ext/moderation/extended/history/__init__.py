@@ -20,7 +20,12 @@ _CASES_PER_PAGE = 3
 class History(Package):
     """history management"""
 
-    def _format_case_line(self, row, user_cache: dict[int, str] | None = None) -> str:
+    def _format_case_line(
+        self,
+        row,
+        user_cache: dict[int, str] | None = None,
+        note: str | None = None,
+    ) -> str:
         cache = user_cache or {}
         target_id = row.get("target_id")
         moderator_id = row.get("moderator_id")
@@ -44,6 +49,9 @@ class History(Package):
             f"-# **reason**: {reason}",
         ]
 
+        if note:
+            lines.append(f"-# **note**: {note}")
+
         if edited_at:
             edited_when = human_date(edited_at, fallback="unknown")
             if edited_by and edited_by in cache:
@@ -57,13 +65,25 @@ class History(Package):
         return "\n".join(lines)
 
     def _build_case_pages(
-        self, rows: list, user_cache: dict[int, str], title: str
+        self,
+        rows: list,
+        user_cache: dict[int, str],
+        title: str,
+        notes_by_case: dict[int, str] | None = None,
     ) -> list[discord.Embed]:
         """Build paginated embeds with 3 cases per page."""
+        notes_by_case = notes_by_case or {}
         pages = []
         for i in range(0, len(rows), _CASES_PER_PAGE):
             chunk = rows[i : i + _CASES_PER_PAGE]
-            lines = [self._format_case_line(row, user_cache) for row in chunk]
+            lines = [
+                self._format_case_line(
+                    row,
+                    user_cache,
+                    note=notes_by_case.get(row["case_id"]),
+                )
+                for row in chunk
+            ]
             page_num = (i // _CASES_PER_PAGE) + 1
             total_pages = -(-len(rows) // _CASES_PER_PAGE)
             embed = panel_embed(
@@ -116,6 +136,32 @@ class History(Package):
                 cache[uid] = f"`{uid}`"
         return cache
 
+    async def _fetch_notes_for_cases(
+        self, guild_id: int, user_id: int, case_ids: list[int]
+    ) -> dict[int, str]:
+        """Return mapping case_id -> note content for the given cases."""
+        if not case_ids:
+            return {}
+        try:
+            rows = await self.db.fetch(
+                """SELECT case_id, content
+                   FROM notes
+                   WHERE guild_id = $1 AND user_id = $2 AND case_id = ANY($3::BIGINT[])
+                   ORDER BY created_at DESC""",
+                guild_id,
+                user_id,
+                case_ids,
+            )
+        except Exception:
+            return {}
+        # Keep the most recent note per case
+        out: dict[int, str] = {}
+        for row in rows:
+            cid = row["case_id"]
+            if cid is not None and cid not in out:
+                out[cid] = (row["content"] or "")[:500]
+        return out
+
     @hybrid(
         name="history",
         description="View moderation history for a user",
@@ -138,13 +184,15 @@ class History(Package):
             return await ctx.warn(f"<@{user_id}> has **no punishment history**")
 
         user_cache = await self._build_user_cache(ctx, rows)
+        case_ids = [r["case_id"] for r in rows if r.get("case_id") is not None]
+        notes_by_case = await self._fetch_notes_for_cases(ctx.guild.id, user_id, case_ids)
 
         target_label = user_cache.get(user_id, f"<@{user_id}>")
         title = f"History - {target_label}"
         if command:
             title += f" ({command})"
 
-        pages = self._build_case_pages(rows, user_cache, title)
+        pages = self._build_case_pages(rows, user_cache, title, notes_by_case=notes_by_case)
         await send_pages(ctx, pages)
 
     @history.command(
@@ -177,6 +225,12 @@ class History(Package):
             f"**Reason**: {reason}",
             f"-# **when**: {when}",
         ]
+
+        # Attach note linked to this case if any
+        if target_id:
+            notes = await self._fetch_notes_for_cases(ctx.guild.id, target_id, [case_id])
+            if notes.get(case_id):
+                lines.append(f"-# **note**: {notes[case_id]}")
 
         edited_at = row.get("edited_at")
         edited_by = row.get("edited_by")
