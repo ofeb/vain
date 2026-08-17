@@ -58,7 +58,7 @@ class Lockdown(Package):
     @has_permissions(manage_guild=True)
     async def lock_all(self, ctx, *, reason: str = "No reason provided"):
         """lockdown all channels"""
-        from core.discord.views.confirm import ConfirmView
+        from core.discord.views.confirm import ThreeButtonConfirmView, ConfirmChoice
 
         ignored_rows = await self.db.fetch(
             """SELECT channel_id FROM lockdown_ignore WHERE guild_id = $1""",
@@ -76,38 +76,39 @@ class Lockdown(Package):
                 continue
             overwrite = channel.overwrites_for(everyone)
             if overwrite.send_messages is False:
-                already_locked.append(channel.mention)
+                already_locked.append(channel)
             else:
-                to_lock.append(channel.mention)
+                to_lock.append(channel)
 
         if not to_lock:
             return await ctx.warn("All channels are **already** locked")
 
-        view = ConfirmView(ctx)
         if already_locked:
             msg = (
-                f"**{len(already_locked)}** channel(s) are already locked.\n"
-                f"**{len(to_lock)}** channel(s) will be locked.\n"
-                f"Do you want to proceed?"
+                f"> **{len(already_locked)}** channel(s) were **already locked** before using **lockdown all**\n"
+                f"> -# **approve locks all channels** ; "
+                f"**deny locks only the channels that weren't locked** ; "
+                f"**cancel this using the cancel button**"
             )
         else:
             msg = (
                 f"**{len(to_lock)}** channel(s) will be locked.\n"
-                f"Do you want to proceed?"
+                f"> -# **approve locks all channels** ; "
+                f"**deny locks only the channels that weren't locked** ; "
+                f"**cancel this using the cancel button**"
             )
-        ok = await view.prompt(msg)
-        if not ok:
+
+        view = ThreeButtonConfirmView(ctx, show_cancel=True)
+        choice = await view.prompt(msg)
+
+        if choice == ConfirmChoice.CANCEL:
             return await ctx.warn("Cancelled\n> -# **lockdown all was cancelled**")
 
         locked = []
 
-        for channel in ctx.guild.channels:
-            if channel.id in ignored_ids:
-                continue
-            if not isinstance(channel, TextChannel):
-                continue
-            overwrite = channel.overwrites_for(everyone)
-            if overwrite.send_messages is not False:
+        if choice == ConfirmChoice.DENY:
+            for channel in to_lock:
+                overwrite = channel.overwrites_for(everyone)
                 overwrite.send_messages = False
                 await channel.set_permissions(
                     everyone,
@@ -115,7 +116,6 @@ class Lockdown(Package):
                     reason=f"Lockdown all by {ctx.author}: {reason}",
                 )
                 locked.append(channel.mention)
-
                 await self.db.execute(
                     """INSERT INTO lockdowns (guild_id, channel_id, locked_by, reason)
                        VALUES ($1, $2, $3, $4)
@@ -125,6 +125,30 @@ class Lockdown(Package):
                     ctx.author.id,
                     reason,
                 )
+        else:
+            for channel in ctx.guild.channels:
+                if channel.id in ignored_ids:
+                    continue
+                if not isinstance(channel, TextChannel):
+                    continue
+                overwrite = channel.overwrites_for(everyone)
+                if overwrite.send_messages is not False:
+                    overwrite.send_messages = False
+                    await channel.set_permissions(
+                        everyone,
+                        overwrite=overwrite,
+                        reason=f"Lockdown all by {ctx.author}: {reason}",
+                    )
+                    locked.append(channel.mention)
+                    await self.db.execute(
+                        """INSERT INTO lockdowns (guild_id, channel_id, locked_by, reason)
+                           VALUES ($1, $2, $3, $4)
+                           ON CONFLICT (guild_id, channel_id) DO UPDATE SET locked_by = $3, reason = $4""",
+                        ctx.guild.id,
+                        channel.id,
+                        ctx.author.id,
+                        reason,
+                    )
 
         return await ctx.success(f"**{len(locked)}** channels locked - {reason}")
 
@@ -288,7 +312,7 @@ class Lockdown(Package):
     @has_permissions(manage_guild=True)
     async def unlock_all(self, ctx, *, reason: str = "No reason provided"):
         """unlock all channels"""
-        from core.discord.views.confirm import ConfirmView
+        from core.discord.views.confirm import ThreeButtonConfirmView, ConfirmChoice
 
         everyone = ctx.guild.default_role
         already_locked = []
@@ -299,36 +323,39 @@ class Lockdown(Package):
                 continue
             overwrite = channel.overwrites_for(everyone)
             if overwrite.send_messages is False:
-                already_locked.append(channel.mention)
+                already_locked.append(channel)
             else:
-                already_unlocked.append(channel.mention)
+                already_unlocked.append(channel)
 
         if not already_locked:
             return await ctx.warn("No channels are currently **locked**")
 
-        view = ConfirmView(ctx)
         if already_unlocked:
             msg = (
-                f"**{len(already_locked)}** channel(s) are locked.\n"
-                f"**{len(already_unlocked)}** channel(s) are already unlocked.\n"
-                f"Do you want to unlock the locked channels?"
+                f"> **{len(already_locked)}** channel(s) were **already locked** before using **unlockdown all**\n"
+                f"> -# **approve unlocks all channels** ; "
+                f"**deny unlocks only the channels that were locked using lockdown** ; "
+                f"**cancel this using the cancel button**"
             )
         else:
             msg = (
                 f"**{len(already_locked)}** channel(s) will be unlocked.\n"
-                f"Do you want to proceed?"
+                f"> -# **approve unlocks all channels** ; "
+                f"**deny unlocks only the channels that were locked using lockdown** ; "
+                f"**cancel this using the cancel button**"
             )
-        ok = await view.prompt(msg)
-        if not ok:
-            return await ctx.warn("Cancelled\n> -# **unlock all was cancelled**")
+
+        view = ThreeButtonConfirmView(ctx, show_cancel=True)
+        choice = await view.prompt(msg)
+
+        if choice == ConfirmChoice.CANCEL:
+            return await ctx.warn("Cancelled\n> -# **unlockdown all was cancelled**")
 
         unlocked = []
 
-        for channel in ctx.guild.channels:
-            if not isinstance(channel, TextChannel):
-                continue
-            overwrite = channel.overwrites_for(everyone)
-            if overwrite.send_messages is False:
+        if choice == ConfirmChoice.DENY:
+            for channel in already_locked:
+                overwrite = channel.overwrites_for(everyone)
                 overwrite.send_messages = None
                 await channel.set_permissions(
                     everyone,
@@ -336,10 +363,26 @@ class Lockdown(Package):
                     reason=f"Unlock all channels by {ctx.author}: {reason}",
                 )
                 unlocked.append(channel.mention)
-
-        await self.db.execute(
-            """DELETE FROM lockdowns WHERE guild_id = $1""",
-            ctx.guild.id,
-        )
+            await self.db.execute(
+                """DELETE FROM lockdowns WHERE guild_id = $1""",
+                ctx.guild.id,
+            )
+        else:
+            for channel in ctx.guild.channels:
+                if not isinstance(channel, TextChannel):
+                    continue
+                overwrite = channel.overwrites_for(everyone)
+                if overwrite.send_messages is False:
+                    overwrite.send_messages = None
+                    await channel.set_permissions(
+                        everyone,
+                        overwrite=overwrite,
+                        reason=f"Unlock all channels by {ctx.author}: {reason}",
+                    )
+                    unlocked.append(channel.mention)
+            await self.db.execute(
+                """DELETE FROM lockdowns WHERE guild_id = $1""",
+                ctx.guild.id,
+            )
 
         return await ctx.success(f"**{len(unlocked)}** channels unlocked - {reason}")

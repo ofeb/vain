@@ -390,7 +390,7 @@ class StealPaginateView(PaginateView):
         await interaction.response.send_message(
             embed=reply_embed(
                 color=color.base,
-                message=f"{emojis.approve} Stole sticker **{sticker.name}**",
+                message=f"{emojis.approve} Stole sticker: `{sticker.name}`",
             ),
             ephemeral=True,
         )

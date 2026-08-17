@@ -3224,7 +3224,7 @@ class ModerationCommands(Package):
     @has_permissions(manage_channels=True)
     async def hideall(self, ctx, *, target: str = None):
         """Hide all channels from members (or a user/role)"""
-        from core.discord.views.confirm import ConfirmView
+        from core.discord.views.confirm import ThreeButtonConfirmView, ConfirmChoice
 
         resolved = await self._resolve_hide_target(ctx, target)
         already_hidden = []
@@ -3235,39 +3235,53 @@ class ModerationCommands(Package):
                 continue
             current = channel.overwrites_for(resolved).view_channel
             if current is False:
-                already_hidden.append(channel.mention)
+                already_hidden.append(channel)
             else:
-                to_hide.append(channel.mention)
+                to_hide.append(channel)
 
         if not to_hide:
             return await ctx.warn(
                 f"All channels are **already** hidden from {self._hide_target_label(resolved)}"
             )
 
-        view = ConfirmView(ctx)
         if already_hidden:
             msg = (
-                f"**{len(already_hidden)}** channel(s) are already hidden from "
-                f"{self._hide_target_label(resolved)}.\n"
-                f"**{len(to_hide)}** channel(s) will be hidden.\n"
-                f"Do you want to proceed?"
+                f"> **{len(already_hidden)}** channel(s) were **already hidden** from "
+                f"{self._hide_target_label(resolved)} before using **hideall**\n"
+                f"> -# **approve hides all channels** ; "
+                f"**deny hides only the channels that weren't hidden** ; "
+                f"**cancel this using the cancel button**"
             )
         else:
             msg = (
                 f"**{len(to_hide)}** channel(s) will be hidden from "
                 f"{self._hide_target_label(resolved)}.\n"
-                f"Do you want to proceed?"
+                f"> -# **approve hides all channels** ; "
+                f"**deny hides only the channels that weren't hidden** ; "
+                f"**cancel this using the cancel button**"
             )
-        ok = await view.prompt(msg)
-        if not ok:
+
+        view = ThreeButtonConfirmView(ctx, show_cancel=True)
+        choice = await view.prompt(msg)
+
+        if choice == ConfirmChoice.CANCEL:
             return await ctx.warn("Cancelled\n> -# **hideall was cancelled**")
+
+        if choice == ConfirmChoice.DENY:
+            applied = 0
+            for channel in to_hide:
+                with contextlib.suppress(discord.HTTPException, discord.Forbidden):
+                    await self._hide_channel(ctx, channel, resolved)
+                    applied += 1
+            return await ctx.success(
+                f"Hid **{applied}** channel(s) from {self._hide_target_label(resolved)}"
+            )
 
         applied = 0
         for channel in list(ctx.guild.channels):
             with contextlib.suppress(discord.HTTPException, discord.Forbidden):
-                already = await self._hide_channel(ctx, channel, resolved)
-                if not already:
-                    applied += 1
+                await self._hide_channel(ctx, channel, resolved)
+                applied += 1
 
         return await ctx.success(
             f"Hid **{applied}** channel(s) from {self._hide_target_label(resolved)}"
@@ -3284,7 +3298,7 @@ class ModerationCommands(Package):
     @has_permissions(manage_channels=True)
     async def unhideall(self, ctx, *, target: str = None):
         """Unhide all channels for members (or a user/role)"""
-        from core.discord.views.confirm import ConfirmView
+        from core.discord.views.confirm import ThreeButtonConfirmView, ConfirmChoice
 
         resolved = await self._resolve_hide_target(ctx, target)
         hidden_channels = []
@@ -3295,39 +3309,53 @@ class ModerationCommands(Package):
                 continue
             current = channel.overwrites_for(resolved).view_channel
             if current is False:
-                hidden_channels.append(channel.mention)
+                hidden_channels.append(channel)
             else:
-                already_unhidden.append(channel.mention)
+                already_unhidden.append(channel)
 
         if not hidden_channels:
             return await ctx.warn(
                 f"No channels are hidden from {self._hide_target_label(resolved)}"
             )
 
-        view = ConfirmView(ctx)
         if already_unhidden:
             msg = (
-                f"**{len(hidden_channels)}** channel(s) are hidden from "
-                f"{self._hide_target_label(resolved)}.\n"
-                f"**{len(already_unhidden)}** channel(s) are already visible.\n"
-                f"Do you want to unhide the hidden channels?"
+                f"**{len(hidden_channels)}** channel(s) are **currently hidden** from "
+                f"{self._hide_target_label(resolved)}\n"
+                f"> -# **approve unhides all channels** ; "
+                f"**deny unhides only the channels that were hidden** ; "
+                f"**cancel this using the cancel button**"
             )
         else:
             msg = (
                 f"**{len(hidden_channels)}** channel(s) will be unhidden from "
                 f"{self._hide_target_label(resolved)}.\n"
-                f"Do you want to proceed?"
+                f"> -# **approve unhides all channels** ; "
+                f"**deny unhides only the channels that were hidden** ; "
+                f"**cancel this using the cancel button**"
             )
-        ok = await view.prompt(msg)
-        if not ok:
+
+        view = ThreeButtonConfirmView(ctx, show_cancel=True)
+        choice = await view.prompt(msg)
+
+        if choice == ConfirmChoice.CANCEL:
             return await ctx.warn("Cancelled\n> -# **unhideall was cancelled**")
+
+        if choice == ConfirmChoice.DENY:
+            applied = 0
+            for channel in hidden_channels:
+                with contextlib.suppress(discord.HTTPException, discord.Forbidden):
+                    await self._unhide_channel(ctx, channel, resolved)
+                    applied += 1
+            return await ctx.success(
+                f"Unhid **{applied}** channel(s) from {self._hide_target_label(resolved)}"
+            )
 
         applied = 0
         for channel in list(ctx.guild.channels):
             with contextlib.suppress(discord.HTTPException, discord.Forbidden):
-                not_hidden = await self._unhide_channel(ctx, channel, resolved)
-                if not not_hidden:
-                    applied += 1
+                await self._unhide_channel(ctx, channel, resolved)
+                applied += 1
 
         return await ctx.success(
             f"Unhid **{applied}** channel(s) from {self._hide_target_label(resolved)}"
