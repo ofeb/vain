@@ -2,7 +2,7 @@
 each file handles one discord object type.
 from core.tools.convert import MemberConvert RoleConvert"""
 
-from .member import MemberConvert
+from .member import MemberConvert, UserConvert, resolve_member, resolve_user
 from .role import RoleConvert
 from .channel import (
     ChannelConvert,
@@ -17,11 +17,14 @@ from .regex import clean_query, regex_find, regex_findall, score_name
 
 __all__ = [
     "MemberConvert",
+    "UserConvert",
     "RoleConvert",
     "ChannelConvert",
     "TextChannelConvert",
     "ColorConvert",
     "StatusConvert",
+    "resolve_member",
+    "resolve_user",
     "resolve_channel",
     "clean_channel_token",
     "patch_discord_channel_converters",

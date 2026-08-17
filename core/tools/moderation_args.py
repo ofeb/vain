@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import discord
 from discord.ext.commands import CommandError
 
-from core.tools.convert.member import _ID_RE, _MENTION_RE
+from core.tools.convert.member import _ID_RE, _MENTION_RE, resolve_member, resolve_user
 
 _DURATION_RE = re.compile(r"^(\d+)([smhdwy])$", re.IGNORECASE)
 
@@ -108,15 +108,12 @@ async def _resolve_member(ctx, token: str) -> tuple[discord.Member | None, disco
     """
     user_id = _extract_user_id(token)
 
-    
     if user_id is not None:
-        
         if ctx.guild is not None:
             member = ctx.guild.get_member(user_id)
             if member is not None:
                 return member, member
 
-        
         if ctx.guild is not None:
             try:
                 member = await ctx.guild.fetch_member(user_id)
@@ -124,22 +121,34 @@ async def _resolve_member(ctx, token: str) -> tuple[discord.Member | None, disco
             except discord.HTTPException:
                 pass
 
-        
         try:
             user = await ctx.bot.fetch_user(user_id)
             return None, user
         except discord.HTTPException:
             pass
 
-        
         raise CommandError(f"**can't** find user **{token}**")
 
-    
     if ctx.guild is not None:
-        from core.tools.convert.member import MemberConvert
         try:
-            member = await MemberConvert().convert(ctx, token)
+            member = await resolve_member(ctx, token)
             return member, member
+        except CommandError:
+            pass
+
+        try:
+            uid, _label = await resolve_user(ctx, token)
+            member = ctx.guild.get_member(uid)
+            if member is not None:
+                return member, member
+            user = ctx.bot.get_user(uid)
+            if user is not None:
+                return None, user
+            try:
+                user = await ctx.bot.fetch_user(uid)
+                return None, user
+            except discord.HTTPException:
+                pass
         except CommandError:
             pass
 

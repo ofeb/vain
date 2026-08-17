@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import re
 import discord
-from discord.ext import commands
 from discord.ext.commands import CommandError
 
 from core.discord.package import Package
@@ -12,8 +10,8 @@ from core.managers.permissions import has_permissions
 from core.discord.views.embed import panel_embed
 from core.discord.views.paginate import send_pages
 from core.tools.human.time import human_date
+from core.tools.convert.member import resolve_user
 
-_ID_RE = re.compile(r"^\d{15,20}$")
 _CASES_PER_PAGE = 3
 
 
@@ -27,7 +25,6 @@ class History(Package):
         note: str | None = None,
     ) -> str:
         cache = user_cache or {}
-        target_id = row.get("target_id")
         moderator_id = row.get("moderator_id")
 
         if moderator_id and moderator_id in cache:
@@ -102,18 +99,9 @@ class History(Package):
         return pages
 
     async def _resolve_user_id(self, ctx, target: str) -> int:
-        """Resolve a user ID from a mention, user object, or raw ID string."""
-        raw = target.strip()
-        mention_match = re.match(r"<@!?(\d+)>", raw)
-        if mention_match:
-            return int(mention_match.group(1))
-        if _ID_RE.match(raw):
-            return int(raw)
-        try:
-            user = await commands.UserConverter().convert(ctx, raw)
-            return user.id
-        except CommandError:
-            raise CommandError(f"could not find a user matching `{target}`")
+        """Resolve a user ID from mention, id, username, or display name."""
+        uid, _label = await resolve_user(ctx, target)
+        return uid
 
     async def _build_user_cache(self, ctx, rows) -> dict[int, str]:
         """Fetch usernames for all IDs in the case rows."""
@@ -177,7 +165,10 @@ class History(Package):
         """view history"""
         if getattr(self.db, "pool", None) is None:
             return await ctx.warn("Database is unavailable")
-        user_id = await self._resolve_user_id(ctx, target)
+        try:
+            user_id = await self._resolve_user_id(ctx, target)
+        except CommandError as e:
+            return await ctx.warn(str(e))
         rows = await self.db.fetch_modlog_cases_for_user(
             ctx.guild.id,
             user_id,
@@ -290,7 +281,10 @@ class History(Package):
         """remove punishment"""
         if getattr(self.db, "pool", None) is None:
             return await ctx.warn("Database is unavailable")
-        user_id = await self._resolve_user_id(ctx, target)
+        try:
+            user_id = await self._resolve_user_id(ctx, target)
+        except CommandError as e:
+            return await ctx.warn(str(e))
         row = await self.db.fetch_modlog_case(ctx.guild.id, case_id)
         if not row or row["target_id"] != user_id:
             raise CommandError(f"case **#{case_id}** was not found for <@{user_id}>")
@@ -310,7 +304,10 @@ class History(Package):
         """remove all punishments"""
         if getattr(self.db, "pool", None) is None:
             return await ctx.warn("Database is unavailable")
-        user_id = await self._resolve_user_id(ctx, target)
+        try:
+            user_id = await self._resolve_user_id(ctx, target)
+        except CommandError as e:
+            return await ctx.warn(str(e))
         result = await self.db.execute(
             "DELETE FROM modlog_cases WHERE guild_id = $1 AND target_id = $2",
             ctx.guild.id,

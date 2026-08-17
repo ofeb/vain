@@ -1,113 +1,57 @@
 from __future__ import annotations
 
 import contextlib
-import re
 
 import discord
-from discord.ext import commands
 from discord.ext.commands import group, CommandError
 
 from core.discord.package import Package
 from core.managers.permissions import has_permissions
 from core.discord.views.embed import panel_embed
+from core.tools.convert.member import resolve_user
 
 
 def label_line(label: str, value: str) -> str:
     return f"**{label}**: {value}"
 
 
-_ID_RE = re.compile(r"^\d{15,22}$")
-_MENTION_RE = re.compile(r"^<@!?(\d{15,22})>$")
-
-
 class Notes(Package):
     """Staff notes on members."""
+
+    async def _noted_users(self, guild_id: int) -> list[discord.User]:
+        """Users who already have notes in this guild (for offline name lookup)."""
+        try:
+            rows = await self.db.fetch(
+                "SELECT DISTINCT user_id FROM notes WHERE guild_id = $1",
+                guild_id,
+            )
+        except Exception:
+            return []
+        users: list[discord.User] = []
+        for row in rows:
+            uid = int(row["user_id"])
+            cached = self.bot.get_user(uid)
+            if cached is not None:
+                users.append(cached)
+                continue
+            try:
+                user = await self.bot.fetch_user(uid)
+                users.append(user)
+            except (discord.NotFound, discord.HTTPException):
+                continue
+        return users
 
     async def _resolve_user(self, ctx, target: str) -> tuple[int, str]:
         """Resolve target to (user_id, display_label).
 
-        Strict rules:
-          1. Mention <@id> / <@!id>  -> force that ID
-          2. Pure snowflake (15-22 digits) -> force that ID, never name-match
-          3. Exact name / global_name / nick / name#discrim in guild members
-          4. Exact name / global_name in bot.users cache
-          5. Fail cleanly — never fuzzy, never pick a different user
-        Offline users work when given by ID.
+        Uses shared resolver: ID/mention, guild regex name match, then
+        users who previously had notes in this guild (so left members still
+        resolve by username), then bot cache.
         """
-        raw = (target or "").strip()
-        if not raw:
-            raise CommandError("provide a user mention, id, or name")
-
-        uid: int | None = None
-
-        mention_match = _MENTION_RE.match(raw)
-        if mention_match:
-            uid = int(mention_match.group(1))
-        elif _ID_RE.match(raw):
-            uid = int(raw)
-
-        if uid is not None:
-            if ctx.guild:
-                member = ctx.guild.get_member(uid)
-                if member is not None:
-                    return member.id, str(member)
-                try:
-                    member = await ctx.guild.fetch_member(uid)
-                    return member.id, str(member)
-                except (discord.NotFound, discord.HTTPException):
-                    pass
-            cached = self.bot.get_user(uid)
-            if cached is not None:
-                return cached.id, f"{cached} (`{cached.id}`)"
-            try:
-                user = await self.bot.fetch_user(uid)
-                return user.id, f"{user} (`{user.id}`)"
-            except (discord.NotFound, discord.HTTPException):
-                return uid, f"<@{uid}>"
-
-        lowered = raw.lower()
-
-        if ctx.guild:
-            exact: list[discord.Member] = []
-            for m in ctx.guild.members:
-                candidates = {
-                    m.name.lower(),
-                    str(m).lower(),
-                }
-                if m.global_name:
-                    candidates.add(m.global_name.lower())
-                if m.nick:
-                    candidates.add(m.nick.lower())
-                if m.discriminator and m.discriminator != "0":
-                    candidates.add(f"{m.name.lower()}#{m.discriminator}")
-                if lowered in candidates:
-                    exact.append(m)
-            if len(exact) == 1:
-                m = exact[0]
-                return m.id, str(m)
-            if len(exact) > 1:
-                raise CommandError(
-                    f"multiple members match `{target}` - use an id or mention instead"
-                )
-
-        exact_users: list[discord.User] = []
-        for u in self.bot.users:
-            candidates = {u.name.lower(), str(u).lower()}
-            if u.global_name:
-                candidates.add(u.global_name.lower())
-            if u.discriminator and u.discriminator != "0":
-                candidates.add(f"{u.name.lower()}#{u.discriminator}")
-            if lowered in candidates:
-                exact_users.append(u)
-        if len(exact_users) == 1:
-            u = exact_users[0]
-            return u.id, f"{u} (`{u.id}`)"
-        if len(exact_users) > 1:
-            raise CommandError(
-                f"multiple users match `{target}` - use an id or mention instead"
-            )
-
-        raise CommandError(f"could not find a user matching `{target}`")
+        extra: list[discord.User] = []
+        if ctx.guild is not None:
+            extra = await self._noted_users(ctx.guild.id)
+        return await resolve_user(ctx, target, extra_users=extra)
 
     @group(
         name="notes",
