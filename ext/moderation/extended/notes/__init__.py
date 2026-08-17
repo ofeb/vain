@@ -58,10 +58,10 @@ class Notes(Package):
                     pass
             cached = self.bot.get_user(uid)
             if cached is not None:
-                return cached.id, f"{cached} (`{cached.id}`")
+                return cached.id, f"{cached} (`{cached.id}`)"
             try:
                 user = await self.bot.fetch_user(uid)
-                return user.id, f"{user} (`{user.id}`")
+                return user.id, f"{user} (`{user.id}`)"
             except (discord.NotFound, discord.HTTPException):
                 return uid, f"<@{uid}>"
 
@@ -101,7 +101,7 @@ class Notes(Package):
                 exact_users.append(u)
         if len(exact_users) == 1:
             u = exact_users[0]
-            return u.id, f"{u} (`{u.id}`")
+            return u.id, f"{u} (`{u.id}`)"
         if len(exact_users) > 1:
             raise CommandError(
                 f"multiple users match `{target}` - use an id or mention instead"
