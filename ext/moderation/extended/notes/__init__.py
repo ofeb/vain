@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import contextlib
+import re
+
 import discord
-from discord.ext.commands import group
+from discord.ext import commands
+from discord.ext.commands import group, CommandError
 
 from core.discord.package import Package
 from core.managers.permissions import has_permissions
@@ -11,6 +14,9 @@ from core.discord.views.embed import panel_embed
 
 def label_line(label: str, value: str) -> str:
     return f"**{label}**: {value}"
+
+
+_ID_RE = re.compile(r"^\d{15,20}$")
 
 
 class Notes(Package):
@@ -26,7 +32,6 @@ class Notes(Package):
     @has_permissions(manage_messages=True)
     async def notes(self, ctx, member: discord.Member):
         """View notes for a member."""
-        # Ensure case_id column exists (idempotent)
         with contextlib.suppress(Exception):
             await self.db.execute(
                 "ALTER TABLE notes ADD COLUMN IF NOT EXISTS case_id BIGINT"
@@ -67,52 +72,87 @@ class Notes(Package):
         )
         await ctx.send(embed=embed)
 
+    async def _resolve_user_id(self, ctx, target: str) -> int:
+        raw = target.strip()
+        mention_match = re.match(r"<@!?(\d+)>", raw)
+        if mention_match:
+            return int(mention_match.group(1))
+        if _ID_RE.match(raw):
+            return int(raw)
+        try:
+            member = await commands.MemberConverter().convert(ctx, raw)
+            return member.id
+        except CommandError:
+            pass
+        try:
+            user = await commands.UserConverter().convert(ctx, raw)
+            return user.id
+        except CommandError:
+            raise CommandError(f"could not find a user matching `{target}`")
+
     @notes.command(
         name="add",
         aliases=["create", "new"],
-        description="Add a note for a member. Optional case id attaches the note to a moderation case.",
-        example=",notes add @member 12 warned for spam",
+        description="Add a note. Pass a user (mention/id/name) or a case id, then the note text.",
+        example=",notes add @member warned for spam\n,notes add 14 he was being rude",
     )
     @has_permissions(manage_messages=True)
-    async def notes_add(self, ctx, member: discord.Member, *, content: str):
-        """Add a note for a member.
+    async def notes_add(self, ctx, target: str, *, note: str):
+        """Add a note for a member or attach one to a case.
 
         Syntax:
-          ,notes add <user> <note>
-          ,notes add <user> <case.id> <note>
+          ,notes add <user> <note>          — plain note on the user
+          ,notes add <case.id> <note>        — note linked to that case (and its target)
         """
         with contextlib.suppress(Exception):
             await self.db.execute(
                 "ALTER TABLE notes ADD COLUMN IF NOT EXISTS case_id BIGINT"
             )
 
-        raw = (content or "").strip()
-        if not raw:
+        note_body = (note or "").strip()
+        if not note_body:
             return await ctx.warn("Provide note content")
 
         case_id: int | None = None
-        note_body = raw
-        parts = raw.split(None, 1)
-        if parts and parts[0].isdigit():
-            # First token is case id
-            case_id = int(parts[0])
-            note_body = parts[1].strip() if len(parts) > 1 else ""
-            if not note_body:
-                return await ctx.warn("Provide note content after the case id")
+        user_id: int | None = None
+        member_label: str = target
+
+        # Short numeric token → try as case id first (snowflakes are 15+ digits)
+        if target.isdigit() and len(target) < 15:
+            cid = int(target)
+            case_row = await self.db.fetchrow(
+                """SELECT target_id FROM modlog_cases
+                   WHERE guild_id = $1 AND case_id = $2""",
+                ctx.guild.id,
+                cid,
+            )
+            if case_row and case_row.get("target_id"):
+                case_id = cid
+                user_id = int(case_row["target_id"])
+                member = ctx.guild.get_member(user_id)
+                member_label = member.mention if member else f"<@{user_id}>"
+
+        if user_id is None:
+            try:
+                user_id = await self._resolve_user_id(ctx, target)
+            except CommandError as e:
+                return await ctx.warn(str(e))
+            member = ctx.guild.get_member(user_id)
+            member_label = member.mention if member else f"<@{user_id}>"
 
         row = await self.db.fetchrow(
             """INSERT INTO notes (guild_id, user_id, moderator_id, content, case_id)
                VALUES ($1, $2, $3, $4, $5)
                RETURNING id""",
             ctx.guild.id,
-            member.id,
+            user_id,
             ctx.author.id,
             note_body[:2000],
             case_id,
         )
         note_id = row["id"] if row else "?"
         extra = f" (case **#{case_id}**)" if case_id is not None else ""
-        return await ctx.success(f"Added note **#{note_id}** on **{member}**{extra}")
+        return await ctx.success(f"Added note **#{note_id}** on **{member_label}**{extra}")
 
     @notes.command(
         name="remove",

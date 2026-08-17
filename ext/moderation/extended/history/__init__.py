@@ -41,9 +41,10 @@ class History(Package):
         reason = row.get("reason") or "no reason provided"
         edited_at = row.get("edited_at")
         edited_by = row.get("edited_by")
+        case_id = row.get("case_id")
 
         lines = [
-            f"**Case #{row['case_id']}** - `{row['action']}`",
+            f"**Case #{case_id}** - `{row['action']}`",
             f"-# **moderator**: {moderator}",
             f"-# **when**: {when}",
             f"-# **reason**: {reason}",
@@ -51,6 +52,10 @@ class History(Package):
 
         if note:
             lines.append(f"-# **note**: {note}")
+        else:
+            lines.append(
+                f"-# **note**: unavailable *(add notes using notes add {case_id} he was being rude.)*"
+            )
 
         if edited_at:
             edited_when = human_date(edited_at, fallback="unknown")
@@ -154,7 +159,6 @@ class History(Package):
             )
         except Exception:
             return {}
-        # Keep the most recent note per case
         out: dict[int, str] = {}
         for row in rows:
             cid = row["case_id"]
@@ -226,11 +230,17 @@ class History(Package):
             f"-# **when**: {when}",
         ]
 
-        # Attach note linked to this case if any
+        note_text = None
         if target_id:
             notes = await self._fetch_notes_for_cases(ctx.guild.id, target_id, [case_id])
-            if notes.get(case_id):
-                lines.append(f"-# **note**: {notes[case_id]}")
+            note_text = notes.get(case_id)
+
+        if note_text:
+            lines.append(f"-# **note**: {note_text}")
+        else:
+            lines.append(
+                f"-# **note**: unavailable *(add notes using notes add {case_id} he was being rude.)*"
+            )
 
         edited_at = row.get("edited_at")
         edited_by = row.get("edited_by")
