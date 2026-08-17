@@ -3,6 +3,7 @@ from __future__ import annotations
 from core.discord.package import Package
 
 from ..extended.autoresponder.events import AutoresponderEvents
+from ..extended.autorole.events import AutoroleEvents
 from ..extended.boost.events import BoostEvents
 from ..extended.filter.events import FilterEvents
 from ..extended.goodbye.events import GoodbyeEvents
@@ -16,6 +17,7 @@ from ..extended.welcome.events import WelcomeEvents
 class ServerEvents(
     WelcomeEvents,
     GoodbyeEvents,
+    AutoroleEvents,
     AutoresponderEvents,
     StickymessageEvents,
     SuggestEvents,
