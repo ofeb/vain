@@ -414,7 +414,7 @@ class Crypto(commands.Cog):
                 name=name,
                 data=data,
                 thumbnail=COIN_LABELS.get(coin_id, (None, None, None))[2],
-                footer="Feed armed · updates on meaningful market moves",
+                footer="Feeds added · sends updates on the cryptocurrency you set",
             )
             with contextlib.suppress(Exception):
                 await channel.send(embed=embed)
@@ -878,7 +878,7 @@ class Crypto(commands.Cog):
                         name=name,
                         data=data,
                         thumbnail=thumb,
-                        footer=f"Crypto feed · {move}",
+                        footer=f"Crypto feed {move}",
                     )
                     try:
                         await channel.send(embed=embed)
