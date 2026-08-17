@@ -367,7 +367,6 @@ class RoleplayCommands(Package):
         if action in BACK_ACTIONS and target != ctx.author:
             view = RoleplayBackView(action, ctx.author.id, target.id)
 
-        
         msg = await ctx.send(
             file=attachment,
             embed=embed,
@@ -376,7 +375,39 @@ class RoleplayCommands(Package):
         )
         if view is not None:
             view.message = msg
+
+        if target.id == ctx.bot.user.id:
+            await self._bot_roleplay_back(ctx, action)
+
         return msg
+
+    async def _bot_roleplay_back(self, ctx: Context, action: str):
+        """bot performs the same action back on the user after a short delay"""
+        import asyncio
+        await asyncio.sleep(1.5)
+
+        try:
+            gif_bytes = await fetch_action_gif(action)
+        except Exception:
+            return
+
+        attachment = discord.File(BytesIO(gif_bytes), filename="action.gif")
+        total = await self._record(action, ctx.bot.user.id, ctx.author.id)
+        mention = ctx.author.mention
+
+        embed_color = _extract_dominant_color(gif_bytes) or self.bot.color
+        embed = reply_embed(
+            color=embed_color,
+            message=(
+                f"{ctx.bot.user.mention} {ACTION_MAP[action].format(mention)} "
+                f"for the **{ordinal(total)}** time!"
+            ),
+        )
+        embed.color = embed_color
+        embed.set_image(url="attachment://action.gif")
+
+        with contextlib.suppress(discord.HTTPException):
+            await ctx.send(file=attachment, embed=embed)
 
     @hybrid(
         name="roleplay",

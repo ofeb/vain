@@ -3075,6 +3075,23 @@ class ModerationCommands(Package):
             f"Text in {channel.mention} **{state}** for {role.mention}"
         )
 
+    async def _parse_channel_and_target(
+        self, ctx, first: str | None, second: str | None
+    ):
+        """Parse optional channel + user/role target in any order.
+
+        Returns (channel, target_or_none).
+        Handles: ,hide @user | ,hide #chan @user | ,hide #chan | ,hide
+        """
+        if first is None:
+            return ctx.channel, None
+
+        try:
+            ch = await commands.TextChannelConverter().convert(ctx, first)
+            return ch, second
+        except CommandError:
+            return ctx.channel, first
+
     async def _resolve_hide_target(
         self, ctx, token: str | None
     ) -> discord.Role | discord.Member:
@@ -3166,13 +3183,12 @@ class ModerationCommands(Package):
     async def hide(
         self,
         ctx,
-        channel: discord.TextChannel = None,
-        *,
-        target: str = None,
+        first: str = None,
+        second: str = None,
     ):
         """Hide a channel from everyone"""
-        channel = channel or ctx.channel
-        resolved = await self._resolve_hide_target(ctx, target)
+        channel, target_str = await self._parse_channel_and_target(ctx, first, second)
+        resolved = await self._resolve_hide_target(ctx, target_str)
         try:
             already = await self._hide_channel(ctx, channel, resolved)
         except discord.Forbidden:
@@ -3196,13 +3212,12 @@ class ModerationCommands(Package):
     async def unhide(
         self,
         ctx,
-        channel: discord.TextChannel = None,
-        *,
-        target: str = None,
+        first: str = None,
+        second: str = None,
     ):
         """Unhide a channel from everyone"""
-        channel = channel or ctx.channel
-        resolved = await self._resolve_hide_target(ctx, target)
+        channel, target_str = await self._parse_channel_and_target(ctx, first, second)
+        resolved = await self._resolve_hide_target(ctx, target_str)
         try:
             not_hidden = await self._unhide_channel(ctx, channel, resolved)
         except discord.Forbidden:

@@ -263,6 +263,7 @@ class Birthday(Package):
     @birthday.command(
         name="unlock",
         description="Unlock birthday feature for this server",
+        guild_only=True,
     )
     @has_permissions(manage_guild=True)
     async def birthday_unlock(self, ctx):
@@ -282,6 +283,7 @@ class Birthday(Package):
     @birthday.command(
         name="lock",
         description="Lock birthday feature for this server",
+        guild_only=True,
     )
     @has_permissions(manage_guild=True)
     async def birthday_lock(self, ctx):
@@ -300,6 +302,7 @@ class Birthday(Package):
     @birthday.command(
         name="channel",
         description="Set the birthday announcement channel",
+        guild_only=True,
     )
     @has_permissions(manage_guild=True)
     async def birthday_channel(self, ctx, channel: discord.TextChannel):
@@ -322,6 +325,7 @@ class Birthday(Package):
     @birthday.command(
         name="role",
         description="Set the birthday role",
+        guild_only=True,
     )
     @has_permissions(manage_guild=True)
     async def birthday_role(self, ctx, role: discord.Role):
@@ -344,6 +348,7 @@ class Birthday(Package):
     @birthday.command(
         name="config",
         description="View birthday configuration",
+        guild_only=True,
     )
     async def birthday_config(self, ctx):
         """view birthday config"""
@@ -376,6 +381,7 @@ class Birthday(Package):
     @birthday.command(
         name="list",
         description="View a list of every member's birthday",
+        guild_only=True,
     )
     async def birthday_list(self, ctx):
         """list all birthdays"""

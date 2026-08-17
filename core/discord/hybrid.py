@@ -166,7 +166,11 @@ class BotGroup(commands.Group, BotCommand):
     def command(self, *args: Any, **kw: Any):
         def deco(fn):
             kw.setdefault("parent", self)
-            result = command(*args, **kw)(fn)
+            hybrid_cmd = getattr(self, "_hybrid_command_override", None)
+            if hybrid_cmd is not None:
+                result = hybrid_cmd(*args, **kw)(fn)
+            else:
+                result = command(*args, **kw)(fn)
             self.add_command(result)
             return result
         return deco
@@ -174,7 +178,11 @@ class BotGroup(commands.Group, BotCommand):
     def group(self, *args: Any, **kw: Any):
         def deco(fn):
             kw.setdefault("parent", self)
-            result = group(*args, **kw)(fn)
+            hybrid_grp = getattr(self, "_hybrid_group_override", None)
+            if hybrid_grp is not None:
+                result = hybrid_grp(*args, **kw)(fn)
+            else:
+                result = group(*args, **kw)(fn)
             self.add_command(result)
             return result
         return deco
@@ -347,6 +355,7 @@ def _hybrid_group(name: str | None = None, **attrs: Any):
             return sub_deco
 
         grp.command = sub_command
+        grp._hybrid_command_override = sub_command
 
         _orig_group = getattr(grp, "group", None)
         if callable(_orig_group):
@@ -448,6 +457,7 @@ def _hybrid_group(name: str | None = None, **attrs: Any):
                 return sub_deco
 
             grp.group = sub_group  # type: ignore[method-assign]
+            grp._hybrid_group_override = sub_group
 
         return grp
 

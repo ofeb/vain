@@ -9,33 +9,54 @@ from core.managers.permissions import has_permissions
 class Lockdown(Package):
     """lockdown management"""
 
+    async def _parse_channel_and_target(self, ctx, first: str | None, second: str | None):
+        if first is None:
+            return ctx.channel, None
+        try:
+            ch = await discord.ext.commands.TextChannelConverter().convert(ctx, first)
+            return ch, second
+        except CommandError:
+            return ctx.channel, first
+
+    async def _resolve_target(self, ctx, token: str | None):
+        if not token:
+            return ctx.guild.default_role
+        for converter in (
+            discord.ext.commands.RoleConverter(),
+            discord.ext.commands.MemberConverter(),
+        ):
+            try:
+                return await converter.convert(ctx, token)
+            except CommandError:
+                continue
+        raise CommandError(f"couldn't find a role or member matching `{token}`")
+
     @group(
         name="lock",
         aliases=["ld", "lockdown"],
-        description="Lockdown a channel",
+        description="Lockdown a channel for everyone or a specific user/role",
         invoke_without_command=True,
-        example=",lock #general spam raid",
+        example=",lock #general raid",
     )
     @has_permissions(manage_channels=True)
     async def lock(
         self,
         ctx,
-        channel: TextChannel = None,
-        *,
-        reason: str = "No reason provided",
+        first: str = None,
+        second: str = None,
     ):
         """lockdown a channel (defaults to current channel)"""
-        channel = channel or ctx.channel
+        channel, target_str = await self._parse_channel_and_target(ctx, first, second)
         if not isinstance(channel, TextChannel):
             raise CommandError("this command only works on **text channels**")
 
-        everyone = ctx.guild.default_role
-        overwrite = channel.overwrites_for(everyone)
+        target = await self._resolve_target(ctx, target_str)
+        overwrite = channel.overwrites_for(target)
         overwrite.send_messages = False
         await channel.set_permissions(
-            everyone,
+            target,
             overwrite=overwrite,
-            reason=f"Lockdown by {ctx.author}: {reason}",
+            reason=f"Lockdown by {ctx.author}",
         )
 
         await self.db.execute(
@@ -45,10 +66,11 @@ class Lockdown(Package):
             ctx.guild.id,
             channel.id,
             ctx.author.id,
-            reason,
+            "lockdown",
         )
 
-        return await ctx.success(f"{channel.mention} has been **locked** - {reason}")
+        who = "**everyone**" if target == ctx.guild.default_role else target.mention
+        return await ctx.success(f"{channel.mention} has been **locked** for {who}")
 
     @lock.command(
         name="all",
@@ -278,22 +300,21 @@ class Lockdown(Package):
     async def unlock(
         self,
         ctx,
-        channel: TextChannel = None,
-        *,
-        reason: str = "No reason provided",
+        first: str = None,
+        second: str = None,
     ):
         """unlock a channel (defaults to current channel)"""
-        channel = channel or ctx.channel
+        channel, target_str = await self._parse_channel_and_target(ctx, first, second)
         if not isinstance(channel, TextChannel):
             raise CommandError("this command only works on **text channels**")
 
-        everyone = ctx.guild.default_role
-        overwrite = channel.overwrites_for(everyone)
+        target = await self._resolve_target(ctx, target_str)
+        overwrite = channel.overwrites_for(target)
         overwrite.send_messages = None
         await channel.set_permissions(
-            everyone,
+            target,
             overwrite=overwrite,
-            reason=f"Unlocked by {ctx.author}: {reason}",
+            reason=f"Unlocked by {ctx.author}",
         )
 
         await self.db.execute(
@@ -302,7 +323,8 @@ class Lockdown(Package):
             channel.id,
         )
 
-        return await ctx.success(f"{channel.mention} has been **unlocked** - {reason}")
+        who = "**everyone**" if target == ctx.guild.default_role else target.mention
+        return await ctx.success(f"{channel.mention} has been **unlocked** for {who}")
 
     @unlock.command(
         name="all",

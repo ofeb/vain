@@ -336,6 +336,51 @@ class Timezone(Package):
             )
 
     @timezone.command(
+        name="view",
+        description="View a user's timezone",
+    )
+    @describe(member="The user to check timezone for")
+    async def timezone_view(self, ctx, member: Optional[Member] = None):
+        """view timezone"""
+        target = member or ctx.author
+        guild_id = _get_guild_id(ctx)
+
+        tz = await self.bot.db.fetchval(
+            "SELECT timezone FROM users WHERE user_id = $1 AND guild_id = $2",
+            target.id, guild_id
+        )
+
+        if not tz:
+            if target.id == ctx.author.id:
+                return await ctx.warn("You have not set your timezone\n> -# **set one with:** `,timezone set`")
+            return await ctx.warn(
+                f"**{target.display_name}** has not set their timezone"
+            )
+
+        try:
+            user_tz = pytz.timezone(tz)
+            current_time = datetime.now(user_tz)
+            hour = current_time.hour
+            period = _time_period(hour)
+            time_str = current_time.strftime("%I:%M").lstrip("0")
+            day_str = current_time.strftime("%A").lower()
+            if target.id == ctx.author.id:
+                msg = f"Your time is **{time_str}** **{day_str}** **{period}**"
+            else:
+                msg = f"**{target.display_name}'s** time is **{time_str}** **{day_str}** **{period}**"
+            await ctx.send(
+                embed=c2(
+                    message=msg,
+                    timestamp=False,
+                )
+            )
+        except pytz.exceptions.UnknownTimeZoneError:
+            return await ctx.fail(
+                f"Invalid timezone stored for {target.mention}\n"
+                f"> -# **zone:** `{tz}` · ask them to reset with `,timezone set`"
+            )
+
+    @timezone.command(
         name="set",
         description="Set your timezone",
     )
@@ -457,6 +502,7 @@ class Timezone(Package):
     @timezone.command(
         name="list",
         description="View a list of every member's timezone",
+        guild_only=True,
     )
     async def timezone_list(self, ctx):
         """list all timezones"""

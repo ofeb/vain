@@ -18,9 +18,25 @@ def label_line(label: str, value: str) -> str:
 class History(Package):
     """history management"""
 
-    def _format_case_line(self, row) -> str:
-        target = f"`{row['target_id']}`" if row.get("target_id") else "unknown"
-        moderator = f"`{row['moderator_id']}`" if row.get("moderator_id") else "unknown"
+    def _format_case_line(self, row, user_cache: dict[int, str] | None = None) -> str:
+        cache = user_cache or {}
+        target_id = row.get("target_id")
+        moderator_id = row.get("moderator_id")
+
+        if target_id and target_id in cache:
+            target = cache[target_id]
+        elif target_id:
+            target = f"`{target_id}`"
+        else:
+            target = "unknown"
+
+        if moderator_id and moderator_id in cache:
+            moderator = cache[moderator_id]
+        elif moderator_id:
+            moderator = f"`{moderator_id}`"
+        else:
+            moderator = "unknown"
+
         reason = row.get("reason") or "no reason provided"
         return label_line(
             f"Case #{row['case_id']} · {row['action']}",
@@ -41,9 +57,34 @@ class History(Package):
         except CommandError:
             raise CommandError(f"could not find a user matching `{target}`")
 
+    async def _build_user_cache(self, ctx, rows) -> dict[int, str]:
+        """Fetch usernames for all IDs in the case rows."""
+        ids = set()
+        for row in rows:
+            if row.get("target_id"):
+                ids.add(row["target_id"])
+            if row.get("moderator_id"):
+                ids.add(row["moderator_id"])
+
+        cache: dict[int, str] = {}
+        for uid in ids:
+            # Check server members first
+            if ctx.guild:
+                member = ctx.guild.get_member(uid)
+                if member:
+                    cache[uid] = member.mention
+                    continue
+            # Fetch from API (works for non-members too)
+            try:
+                user = await self.bot.fetch_user(uid)
+                cache[uid] = f"{user.name} (`{uid}`)"
+            except (discord.NotFound, discord.HTTPException):
+                cache[uid] = f"`{uid}`"
+        return cache
+
     @hybrid(
         name="history",
-        description="View a list of every punishment recorded",
+        description="View moderation history for a user",
         group=True,
     )
     @has_permissions(manage_messages=True)
@@ -61,20 +102,24 @@ class History(Package):
         )
         if not rows:
             return await ctx.warn(f"<@{user_id}> has **no punishment history**")
-        title = f"History - <@{user_id}>"
+
+        user_cache = await self._build_user_cache(ctx, rows)
+
+        target_label = user_cache.get(user_id, f"<@{user_id}>")
+        title = f"History - {target_label}"
         if command:
             title += f" ({command})"
         embed = panel_embed(
             title=title,
             color=None,
-            lines=[self._format_case_line(row) for row in rows],
+            lines=[self._format_case_line(row, user_cache) for row in rows],
             timestamp=False,
         )
         await ctx.send(embed=embed)
 
     @history.command(
         name="view",
-        description="View an ID's case log",
+        description="View a case log",
     )
     @has_permissions(manage_messages=True)
     async def history_view(self, ctx, case_id: int):
@@ -84,8 +129,37 @@ class History(Package):
         row = await self.db.fetch_modlog_case(ctx.guild.id, case_id)
         if not row:
             return await ctx.warn(f"Case **#{case_id}** was not found")
+
+        # Try to fetch usernames for better display
         target_label = f"`{row['target_id']}`"
         moderator_label = f"`{row['moderator_id']}`"
+
+        for uid, label_attr in [
+            (row.get("target_id"), "target"),
+            (row.get("moderator_id"), "moderator"),
+        ]:
+            if not uid:
+                continue
+            # Check server first
+            if ctx.guild:
+                member = ctx.guild.get_member(uid)
+                if member:
+                    if label_attr == "target":
+                        target_label = member.mention
+                    else:
+                        moderator_label = member.mention
+                    continue
+            # Fetch from API
+            try:
+                user = await self.bot.fetch_user(uid)
+                name = f"{user.name} (`{uid}`)"
+                if label_attr == "target":
+                    target_label = name
+                else:
+                    moderator_label = name
+            except (discord.NotFound, discord.HTTPException):
+                pass
+
         from core.tools.moderation_logs import build_modlog_embed
 
         embed = build_modlog_embed(
