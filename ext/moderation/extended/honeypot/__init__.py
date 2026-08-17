@@ -427,12 +427,12 @@ class Honeypot(Package):
     @honeypot.command(
         name="reset",
         aliases=["remove", "delete", "unset", "clear"],
-        description="Delete honeypot configuration and remove its channel. This cannot be undone.",
+        description="Delete honeypot configuration and remove its channel. This **can't** be undone.",
     )
     @has_permissions(manage_guild=True)
     @cooldown(1, 10, BucketType.guild)
     async def honeypot_reset(self, ctx):
-        """Delete honeypot configuration and remove its channel. This cannot be undone."""
+        """Delete honeypot configuration and remove its channel. This **can't** be undone."""
         if ctx.guild is None:
             return await ctx.warn("This command can only be used in a server")
         if getattr(self.db, "pool", None) is None:
@@ -447,7 +447,7 @@ class Honeypot(Package):
         view = ConfirmView(ctx)
         ok = await view.prompt(
             "Reset **all** honeypot settings and delete the trap channel? "
-            "This action **cannot be undone**."
+            "This action **can't be undone**."
         )
         if not ok:
             return await ctx.warn("Honeypot reset **cancelled**")
@@ -462,7 +462,7 @@ class Honeypot(Package):
 
         await remove(self.bot, ctx.guild.id)
         return await ctx.success(
-            "Honeypot configuration **deleted**. This action cannot be undone."
+            "Honeypot configuration **deleted**. This action **can't** be undone."
         )
 
     @honeypot.command(

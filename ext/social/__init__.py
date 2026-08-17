@@ -2051,7 +2051,7 @@ class Socials(Package):
         if not message:
             return await ctx.warn("Please reply to a message to quote it.")
         if not message.content:
-            return await ctx.warn("You cannot quote this message (no text content).")
+            return await ctx.warn("You can't quote this message (no text content).")
 
         async with ctx.typing():
             avatar_url = str(message.author.display_avatar.url)

@@ -154,7 +154,7 @@ class PaginationCommands(Package):
     @pagination.command(
         name="reset",
         aliases=["clear"],
-        description="Remove every existing pagination in guild. This cannot be undone.",
+        description="Remove every existing pagination in guild. This can't be undone.",
     )
     @has_permissions(administrator=True)
     async def pagination_reset(self, ctx):
@@ -164,7 +164,7 @@ class PaginationCommands(Package):
         view = ConfirmView(ctx)
         ok = await view.prompt(
             "Clear **all** paginators for this server? "
-            "This action **cannot be undone**."
+            "This action **can't be undone**."
         )
         if not ok:
             return await ctx.warn("Pagination reset **cancelled**")
@@ -173,7 +173,7 @@ class PaginationCommands(Package):
             ctx.guild.id,
         )
         return await ctx.success(
-            "All paginators cleared. This action cannot be undone."
+            "All paginators cleared. This action can't be undone."
         )
 
     @pagination.command(name="list", aliases=["ls", "show", "view"], description="View all existing pagination embeds")

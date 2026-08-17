@@ -363,13 +363,13 @@ class BumpReminder(BumpReminderEvents, Package):
     @bumpreminder.command(
         name="reset",
         aliases=["remove", "clear", "delete"],
-        description="Delete this guild's bump reminder configuration. This cannot be undone.",
+        description="Delete this guild's bump reminder configuration. This can't be undone.",
         guild_only=True,
     )
     @has_permissions(manage_guild=True)
     @cooldown(1, 5, BucketType.guild)
     async def bumpreminder_reset(self, ctx: Context):
-        """Delete this guild's bump reminder configuration. This cannot be undone."""
+        """Delete this guild's bump reminder configuration. This can't be undone."""
         if ctx.guild is None:
             return await ctx.warn("Guild only")
         if getattr(self.bot.db, "pool", None) is None:
@@ -383,7 +383,7 @@ class BumpReminder(BumpReminderEvents, Package):
         view = ConfirmView(ctx)
         ok = await view.prompt(
             "Reset **all** bump reminder settings for this guild? "
-            "This action **cannot be undone**."
+            "This action **can't be undone**."
         )
         if not ok:
             return await ctx.warn("Bump reminder reset **cancelled**")
@@ -392,7 +392,7 @@ class BumpReminder(BumpReminderEvents, Package):
         await settings.delete()
         self._reminder_sent.discard(ctx.guild.id)
         return await ctx.success(
-            "Bump reminder configuration **deleted**. This action cannot be undone."
+            "Bump reminder configuration **deleted**. This action can't be undone."
         )
 
     @bumpreminder.command(

@@ -116,7 +116,7 @@ class Birthday(Package):
 
         if not birthday_data:
             if target.id == ctx.author.id:
-                return await ctx.warn("You have not set your birthday\n> -# **set one with:** `,birthday set`")
+                return await ctx.warn("You **haven't** set your birthday\n> -# **set one with:** `,birthday set`")
             return await ctx.warn(
                 f"**{target.display_name}** has not set their birthday"
             )
@@ -208,7 +208,7 @@ class Birthday(Package):
         """compare birthdays"""
         if member.id == ctx.author.id:
             return await ctx.warn(
-                "You cannot compare with yourself\n"
+                "You **can't** compare with yourself\n"
                 f"> -# **usage:** `,birthday compare @user`"
             )
 
@@ -225,7 +225,7 @@ class Birthday(Package):
 
         if not my_raw:
             return await ctx.fail(
-                "You haven't set your birthday yet\n"
+                "You **haven't** set your birthday yet\n"
                 f"> -# **set one with:** `,birthday set`"
             )
         if not their_raw:

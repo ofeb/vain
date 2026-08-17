@@ -72,7 +72,7 @@ class SetCommands(Package):
 
     @fakepermissions.command(
         name="reset",
-        description="clear all fake permissions. this cannot be undone",
+        description="clear all fake permissions. this can't be undone",
     )
     @has_permissions(server_owner=True)
     async def fakepermissions_reset(self, ctx):
@@ -81,7 +81,7 @@ class SetCommands(Package):
 
         view = ConfirmView(ctx)
         ok = await view.prompt(
-            "Clear **all** fake permissions? This action **cannot be undone**."
+            "Clear **all** fake permissions? This action **can't be undone**."
         )
         if not ok:
             return await ctx.warn("Fake permissions reset **cancelled**")
@@ -89,7 +89,7 @@ class SetCommands(Package):
             """DELETE FROM fake_permissions WHERE guild_id = $1""", ctx.guild.id
         )
         return await ctx.success(
-            "Fake permissions cleared. This action cannot be undone."
+            "Fake permissions cleared. This action can't be undone."
         )
 
     @fakepermissions.command(

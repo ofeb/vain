@@ -833,7 +833,7 @@ class ModerationCommands(Package):
         source = ctx.author.voice.channel
 
         if source.id == channel.id:
-            return await ctx.warn("Invalid target\n> -# **source and destination cannot be the same**")
+            return await ctx.warn("Invalid target\n> -# **source and destination can't be the same**")
 
         if not ctx.guild.me.guild_permissions.move_members:
             return await ctx.warn("Missing permissions\n> -# **need Move Members permission**")
@@ -863,10 +863,10 @@ class ModerationCommands(Package):
     async def stripstaff(self, ctx, *, member: discord.Member):
         """strip dangerous/staff roles from member"""
         if member.id == ctx.author.id:
-            return await ctx.warn("Invalid target\n> -# **cannot strip yourself**")
+            return await ctx.warn("Invalid target\n> -# **can't strip yourself**")
 
         if member.id == ctx.guild.owner_id:
-            return await ctx.warn("Invalid target\n> -# **cannot strip server owner**")
+            return await ctx.warn("Invalid target\n> -# **can't strip server owner**")
 
         if ctx.author.top_role <= member.top_role and ctx.author.id != ctx.guild.owner_id:
             return await ctx.warn("Role hierarchy\n> -# **your top role must be higher**")
@@ -941,7 +941,7 @@ class ModerationCommands(Package):
                 reason=f"Jailed by {ctx.author}: {self._default_reason(reason)}",
             )
         except discord.Forbidden:
-            return await ctx.warn("Missing permissions\n> -# **cannot manage member roles**")
+            return await ctx.warn("Missing permissions\n> -# **can't manage member roles**")
         except discord.HTTPException as e:
             return await ctx.warn(f"Role update failed\n> -# **{e}**")
 
@@ -1098,7 +1098,7 @@ class ModerationCommands(Package):
             if roles_to_add:
                 await member.add_roles(*roles_to_add, reason=f"Unjailed by {ctx.author}")
         except discord.Forbidden:
-            return await ctx.warn("Missing permissions\n> -# **cannot manage member roles**")
+            return await ctx.warn("Missing permissions\n> -# **can't manage member roles**")
         except discord.HTTPException as e:
             return await ctx.warn(f"Role restore failed\n> -# **{e}**")
 
@@ -1342,7 +1342,7 @@ class ModerationCommands(Package):
         try:
             await member.timeout(until, reason=self._audit_reason(ctx, reason))
         except discord.Forbidden:
-            return await ctx.fail("Missing permissions\n> -# **cannot timeout this member**")
+            return await ctx.fail("Missing permissions\n> -# **can't timeout this member**")
         except discord.HTTPException as e:
             return await ctx.fail(f"Timeout failed\n> -# **{e}**")
 
@@ -1509,7 +1509,7 @@ class ModerationCommands(Package):
         try:
             await member.timeout(None, reason=self._audit_reason(ctx, reason))
         except discord.Forbidden:
-            return await ctx.fail("Missing permissions\n> -# **cannot remove timeout**")
+            return await ctx.fail("Missing permissions\n> -# **can't remove timeout**")
         except discord.HTTPException as e:
             return await ctx.fail(f"Timeout removal failed\n> -# **{e}**")
         await self._send_modlog(
@@ -2113,7 +2113,7 @@ class ModerationCommands(Package):
                 reason=self._audit_reason(ctx, reason),
             )
         except discord.Forbidden:
-            return await ctx.fail("Missing permissions\n> -# **cannot ban this member**")
+            return await ctx.fail("Missing permissions\n> -# **can't ban this member**")
         except discord.HTTPException as e:
             return await ctx.fail(f"Ban failed\n> -# **{e}**")
 
@@ -2612,7 +2612,7 @@ class ModerationCommands(Package):
                 reason=self._audit_reason(ctx, reason),
             )
         except discord.Forbidden:
-            return await ctx.fail("Missing permissions\n> -# **cannot ban this member**")
+            return await ctx.fail("Missing permissions\n> -# **can't ban this member**")
         except discord.HTTPException as e:
             return await ctx.fail(f"Ban failed\n> -# **{e}**")
 
@@ -2733,7 +2733,7 @@ class ModerationCommands(Package):
             return await ctx.warn("Action cancelled\n> -# **booster confirmation declined**")
 
         if member is None:
-            return await ctx.warn("User is not in this server\n> -# **cannot kick a user who isn't a member**")
+            return await ctx.warn("User is not in this server\n> -# **can't kick a user who isn't a member**")
 
         role_ids = [role.id for role in member.roles if role != ctx.guild.default_role]
         target_display = str(member)
@@ -3489,7 +3489,7 @@ class ModerationCommands(Package):
         ok = await view.prompt(
             "Remove the **moderation system** setup? "
             "This **deletes** the `logs` and `jail` categories and their channels "
-            "and clears the modlog configuration. **This cannot be undone.**"
+            "and clears the modlog configuration. **This can't be undone.**"
         )
         if not ok:
             return await ctx.warn("Cancelled\n> -# **moderation unsetup was cancelled**")
@@ -3555,7 +3555,7 @@ class ModerationCommands(Package):
         ok = await view.prompt(
             "Remove the **jail system**? "
             "This **deletes** the jail channel/category and the `Jailed` role. "
-            "**This cannot be undone.**"
+            "**This can't be undone.**"
         )
         if not ok:
             return await ctx.warn("Cancelled\n> -# **jail unsetup was cancelled**")
@@ -3698,7 +3698,7 @@ class ModerationCommands(Package):
         ok = await view.prompt(
             "Remove the **mute system**? "
             "This **deletes** the `Muted`, `Image Muted` and `Reaction Muted` roles "
-            "and clears the mute configuration. **This cannot be undone.**"
+            "and clears the mute configuration. **This can't be undone.**"
         )
         if not ok:
             return await ctx.warn("Cancelled\n> -# **mute unsetup was cancelled**")
@@ -3881,7 +3881,7 @@ class ModerationCommands(Package):
         try:
             await channel.edit(nsfw=target, reason=reason)
         except discord.Forbidden:
-            return await ctx.fail("Missing permissions\n> -# **cannot edit this channel**")
+            return await ctx.fail("Missing permissions\n> -# **can't edit this channel**")
         except discord.HTTPException as e:
             return await ctx.fail(f"Channel update failed\n> -# **{e}**")
 

@@ -345,37 +345,37 @@ class SettingsCommands(Package):
     @settings.command(name="reset", aliases=["clear"])
     @has_permissions(administrator=True)
     async def settings_reset(self, ctx):
-        """Reset server data. This cannot be undone."""
+        """Reset server data. This can't be undone."""
         from core.discord.views.confirm import ConfirmView
 
         view = ConfirmView(ctx)
         ok = await view.prompt(
             "Reset **all** server data for this guild? "
-            "This action **cannot be undone**."
+            "This action **can't be undone**."
         )
         if not ok:
             return await ctx.warn("Server data reset **cancelled**")
         await self.db.purge_guild_data(ctx.guild.id)
         return await ctx.success(
-            "Successfully **reset** server data. This action cannot be undone."
+            "Successfully **reset** server data. This action can't be undone."
         )
 
     @settings.command(name="resetcases")
     @has_permissions(administrator=True)
     async def settings_resetcases(self, ctx):
-        """Reset modlog cases. This cannot be undone."""
+        """Reset modlog cases. This can't be undone."""
         from core.discord.views.confirm import ConfirmView
 
         view = ConfirmView(ctx)
         ok = await view.prompt(
             "Reset **all** modlog cases for this server? "
-            "This action **cannot be undone**."
+            "This action **can't be undone**."
         )
         if not ok:
             return await ctx.warn("Cases reset **cancelled**")
         await self.db.reset_modlog_cases(ctx.guild.id)
         return await ctx.success(
-            "Successfully **reset** server cases. This action cannot be undone."
+            "Successfully **reset** server cases. This action can't be undone."
         )
 
     @settings.command(name="config", aliases=["list", "configuration"])

@@ -174,7 +174,7 @@ class BadgeCommands(Package):
     @colorme.command(
         name="reset",
         aliases=["remove", "clear", "delete"],
-        description="delete colorme color roles and turn it off. this cannot be undone",
+        description="delete colorme color roles and turn it off. this **can't** be undone",
     )
     @has_permissions(manage_guild=True)
     async def colorme_reset(self, ctx):
@@ -184,7 +184,7 @@ class BadgeCommands(Package):
         view = ConfirmView(ctx)
         ok = await view.prompt(
             "Reset **all** colorme settings and delete color roles? "
-            "This action **cannot be undone**."
+            "This action ****can't** be undone**."
         )
         if not ok:
             return await ctx.warn("Cancelled\n> -# **colorme reset was cancelled**")

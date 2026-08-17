@@ -68,14 +68,14 @@ class FilterCommands(Package):
 
     @filter_.command(
         name="reset",
-        description="Reset all word filtered words. This cannot be undone.",
+        description="Reset all word filtered words. This can't be undone.",
     )
     @has_permissions(manage_guild=True)
     async def filter_reset(self, ctx):
         from core.discord.views.confirm import ConfirmView
         view = ConfirmView(ctx)
         ok = await view.prompt(
-            "Clear **all** filtered words? This action **cannot be undone**."
+            "Clear **all** filtered words? This action **can't be undone**."
         )
         if not ok:
             return await ctx.warn("Cancelled\n> -# **no changes were made**")

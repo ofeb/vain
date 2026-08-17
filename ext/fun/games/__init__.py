@@ -55,9 +55,9 @@ async def _resolve_user(
 
 async def _validate_opponent(ctx: "Context", opponent: discord.User) -> str | None:
     if opponent.id == ctx.author.id:
-        return "You can't play against yourself."
+        return "You **can't** play against yourself."
     if opponent.bot and opponent.id != ctx.bot.user.id:
-        return "You can't play against a bot."
+        return "You **can't** play against a bot."
 
     
     if ctx.interaction is not None and ctx.guild is None:

@@ -260,7 +260,10 @@ class Vain(commands.AutoShardedBot):
         cached = await self.object_cache.get(key)
         if cached is not None:
             return cached["value"]
-        value = await loader()
+        try:
+            value = await loader()
+        except Exception:
+            return None
         await self.object_cache.set(key, {"value": value}, ttl=ttl)
         return value
 
@@ -511,7 +514,8 @@ class Vain(commands.AutoShardedBot):
             )
             if rows:
                 allowed = {r.role_id for r in rows}
-                if not (allowed & {r.id for r in ctx.author.roles}):
+                member_roles = {r.id for r in getattr(ctx.author, "roles", []) or []}
+                if not (allowed & member_roles):
                     raise commands.CheckFailure(
                         f"**you are not allowed** to use the `{cmd_name}`\n\ncommand"
                     )
@@ -649,6 +653,8 @@ class Vain(commands.AutoShardedBot):
 
     async def _slash_check(self, inter: discord.Interaction) -> bool:
         """global check for slash commands"""
+        if inter.type != discord.InteractionType.application_command:
+            return True
         ctx = await self.get_context(inter, cls=Context)
         cmd = self._resolve_slash_command(inter)
         if cmd is not None and ctx.command is None:
@@ -665,12 +671,47 @@ class Vain(commands.AutoShardedBot):
             ) from e
         except commands.CheckFailure as e:
             raise app_commands.CheckFailure(str(e)) from e
+        except Exception as e:
+            log.warning("_slash_check: _global_check error: %s", e)
+            raise app_commands.CheckFailure(str(e)) from e
         if cmd is None:
             return True
         try:
-            return await cmd.can_run(ctx)
+            await self._run_command_checks(cmd, ctx)
         except commands.CommandError as e:
             raise app_commands.CheckFailure(str(e)) from e
+        except Exception as e:
+            raise app_commands.CheckFailure(str(e)) from e
+        return True
+
+    @staticmethod
+    async def _run_command_checks(
+        cmd: commands.Command, ctx: Context
+    ) -> None:
+        """Run command- and cog-level checks only.
+
+        Unlike ``cmd.can_run(ctx)`` this intentionally **skips** the
+        bot-level checks (``Bot._checks``) because the caller
+        (``_slash_check``) already executes them once via
+        ``_global_check``. Running them a second time through
+        ``Bot.can_run`` was causing double-execution and, when the
+        second run raised a non-``CommandError``, uncaught exceptions
+        that silently broke slash commands for non-owners.
+        """
+        if not cmd.enabled:
+            raise commands.DisabledCommand(cmd.name)
+
+        cog = cmd.cog
+        if cog is not None:
+            check = getattr(cog.__cog_settings__, "check", None)
+            if check is not None and not await check(ctx):
+                raise commands.CheckFailure(
+                    f"the cog check for {cog.qualified_name!r} failed"
+                )
+
+        for check in cmd.checks:
+            if not await check(ctx):
+                raise commands.CheckFailure("the command checks failed")
 
     def _format_cooldown(self, retry_after: float) -> str:
         seconds = max(float(retry_after), 0.01)

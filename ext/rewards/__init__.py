@@ -643,7 +643,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         perms = ch.permissions_for(me) if me is not None else None
         if perms is not None and not perms.send_messages:
             return await ctx.warn(
-                f"No permissions\n> -# **can't send messages in** {ch.mention}"
+                f"No permissions\n> -# ****can't** send messages in** {ch.mention}"
             )
         await self.db.execute(
             "UPDATE leveling SET channel_id = $1 WHERE guild_id = $2",
@@ -842,7 +842,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
 
     @leveling.command(
         name="reset",
-        description="Reset a member's XP (or everyone with no member). This cannot be undone.",
+        description="Reset a member's XP (or everyone with no member). This **can't** be undone.",
         example=",leveling reset @user",
         usage="[member]",
     )
@@ -859,7 +859,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
                 color=0xED4245,
                 description=(
                     f"{ctx.author.mention}: Reset level stats for {target}? "
-                    "This action **cannot be undone**."
+                    "This action **can't be undone**."
                 ),
             ),
             view=view,
@@ -874,7 +874,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
                 "DELETE FROM level_user WHERE guild_id = $1", ctx.guild.id
             )
             return await ctx.success(
-                "Stats reset\n> -# **target:** all members\n> -# **note:** this cannot be undone"
+                "Stats reset\n> -# **target:** all members\n> -# **note:** this **can't** be undone"
             )
         await self.db.execute(
             "DELETE FROM level_user WHERE guild_id = $1 AND user_id = $2",
@@ -882,13 +882,13 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
             member.id,
         )
         return await ctx.success(
-            f"Stats reset\n> -# **target:** {member.mention}\n> -# **note:** this cannot be undone"
+            f"Stats reset\n> -# **target:** {member.mention}\n> -# **note:** this **can't** be undone"
         )
 
     @leveling.command(
         name="wipe",
         aliases=["deleteconfig", "purge"],
-        description="Delete leveling configuration and all XP. This cannot be undone.",
+        description="Delete leveling configuration and all XP. This **can't** be undone.",
         example=",leveling wipe",
     )
     @has_permissions(manage_guild=True)
@@ -902,7 +902,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
                 color=0xED4245,
                 description=(
                     f"{ctx.author.mention}: Delete **all** leveling configuration and XP? "
-                    "This action **cannot be undone**."
+                    "This action ****can't** be undone**."
                 ),
             ),
             view=view,
@@ -931,7 +931,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
                 "DELETE FROM level_multiplier_voice WHERE guild_id = $1", ctx.guild.id
             )
         return await ctx.success(
-            "Wiped\n> -# **config and XP deleted**\n> -# **note:** this cannot be undone"
+            "Wiped\n> -# **config and XP deleted**\n> -# **note:** this **can't** be undone"
         )
 
     @leveling.command(

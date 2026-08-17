@@ -95,7 +95,7 @@ class LevelingEvents:
         target_xp: Any = None,
         role: Optional[discord.Role] = None,
     ) -> str:
-        """Apply level-specific placeholders. Longer keys first so {user} cannot
+        """Apply level-specific placeholders. Longer keys first so {user} can't
         clobber {user.mention} / {user.name}.
 
         ``{role.mention or role.name}`` style expressions pick the first

@@ -79,7 +79,7 @@ class Remind(Package):
             )
         if seconds > 30 * 86400:
             return await ctx.warn(
-                "Reminders cannot exceed **30 days**\n"
+                "Reminders can't exceed **30 days**\n"
                 f"> -# **maximum:** 30 days"
             )
 

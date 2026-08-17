@@ -267,10 +267,10 @@ class Role(Package):
             await ctx.warn("This command can only be used in a server")
             return False
         if role == ctx.guild.default_role:
-            await ctx.warn(f"You cannot {action} the default role")
+            await ctx.warn(f"You **can't** {action} the default role")
             return False
         if check_integrated and role.managed:
-            await ctx.warn(f"You cannot {action} an integration role")
+            await ctx.warn(f"You **can't** {action} an integration role")
             return False
 
         author = ctx.author if isinstance(ctx.author, discord.Member) else None

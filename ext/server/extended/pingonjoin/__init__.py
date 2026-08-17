@@ -129,7 +129,7 @@ class PingOnJoinCommands(PingOnJoinEvents, Package):
     @pingonjoin.command(
         name="clear",
         aliases=["reset"],
-        description="Clear all ping on join channels. This cannot be undone.",
+        description="Clear all ping on join channels. This **can't be undone**.",
     )
     @has_permissions(manage_guild=True)
     async def pingonjoin_clear(self, ctx) -> Message:
@@ -142,14 +142,14 @@ class PingOnJoinCommands(PingOnJoinEvents, Package):
 
         view = ConfirmView(ctx)
         ok = await view.prompt(
-            "Clear **all** ping on join channels? This action **cannot be undone**."
+            "Clear **all** ping on join channels? This action **can't be undone**."
         )
         if not ok:
             return await ctx.warn("Ping on join clear **cancelled**")
 
         await self._set_channels(ctx.guild.id, [])
         return await ctx.success(
-            "Cleared all **ping on join** channels. This action cannot be undone."
+            "Cleared all **ping on join** channels. This action can't be undone."
         )
 
     @pingonjoin.group(

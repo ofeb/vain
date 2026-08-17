@@ -67,7 +67,7 @@ class PrefixCommands(Package):
     @prefix.command(
         name="reset",
         aliases=["rs"],
-        description="reset guild prefixes to default. this cannot be undone",
+        description="reset guild prefixes to default. this **can't be undone**.",
     )
     @has_permissions(manage_guild=True)
     async def prefix_reset(self, ctx):
@@ -77,7 +77,7 @@ class PrefixCommands(Package):
         view = ConfirmView(ctx)
         ok = await view.prompt(
             f"Reset server prefixes to `{bot_config.prefix}`? "
-            "This action **cannot be undone**."
+            "This action **can't be undone**."
         )
         if not ok:
             return await ctx.warn("Prefix reset **cancelled**")
@@ -89,7 +89,7 @@ class PrefixCommands(Package):
         await ctx.bot.invalidate_prefix_cache(guild_id=ctx.guild.id)
         return await ctx.success(
             f"Server prefixes reset to `{bot_config.prefix}`. "
-            "This action cannot be undone."
+            "This action **can't be undone**."
         )
 
     @prefix.command(

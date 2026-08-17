@@ -99,7 +99,7 @@ class Timers(Package):
             return
 
         if seconds > 7 * 86400:
-            await ctx.warn("Timer cannot exceed 7 days.")
+            await ctx.warn("Timer can't exceed 7 days.")
             return
 
         timer_id = uuid.uuid4().hex[:8]

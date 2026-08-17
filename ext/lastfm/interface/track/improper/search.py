@@ -75,7 +75,7 @@ class TrackSearch(BaseModel):
         )
         if not username:
             raise CommandError(
-                "You haven't set your Last.fm account yet!",
+                "You **haven't** set your Last.fm account yet!",
                 f"Use [`{ctx.clean_prefix}lastfm login <username>`](https://last.fm/join) to connect it",
             )
 

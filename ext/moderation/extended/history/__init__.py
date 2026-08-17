@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import discord
+from discord.ext import commands
 from discord.ext.commands import CommandError
 
 from core.discord.package import Package

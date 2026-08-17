@@ -917,7 +917,7 @@ class Antinuke(AntinukeEvents, Package):
     async def antinuke_admin(self, ctx, *, member: MemberConvert):
         """Give a member permissions to edit antinuke settings."""
         if getattr(member, "bot", False):
-            return await ctx.warn("Bots cannot be **antinuke admins**\n> -# **reason:** only server members can hold this role")
+            return await ctx.warn("Bots can't be **antinuke admins**\n> -# **reason:** only server members can hold this role")
         if member.id == ctx.guild.owner_id:
             return await ctx.warn(
                 "The **server owner** already has admin access by default\n> -# **reason:** no need to add them again"
@@ -1253,13 +1253,13 @@ class Antinuke(AntinukeEvents, Package):
         usage="",
     )
     async def antinuke_reset(self, ctx):
-        """Reset all antinuke configuration for this server. This cannot be undone."""
+        """Reset all antinuke configuration for this server. This can't be undone."""
         from core.discord.views.confirm import ConfirmView
 
         view = ConfirmView(ctx)
         ok = await view.prompt(
             "Reset **all** antinuke configuration for this server? "
-            "This action **cannot be undone**."
+            "This action **can't be undone**."
         )
         if not ok:
             return await ctx.warn("Reset was **cancelled**\n> -# **antinuke:** no changes were made")
@@ -1277,7 +1277,7 @@ class Antinuke(AntinukeEvents, Package):
             if key[0] == ctx.guild.id:
                 self._stale_cmd_actions.pop(key, None)
         return await ctx.success(
-            "Antinuke configuration **reset**\n> -# This action cannot be undone"
+            "Antinuke configuration **reset**\n> -# This action can't be undone"
         )
 
 

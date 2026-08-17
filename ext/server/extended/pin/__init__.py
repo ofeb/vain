@@ -124,7 +124,7 @@ class PinCommands(Package):
 
     @pins.command(
         name="reset",
-        description="Reset the pin archival config. This cannot be undone.",
+        description="Reset the pin archival config. This can't be undone.",
     )
     @has_permissions(manage_guild=True)
     async def pins_reset(self, ctx):
@@ -133,7 +133,7 @@ class PinCommands(Package):
 
         view = ConfirmView(ctx)
         ok = await view.prompt(
-            "Clear the pin archive config? This action **cannot be undone**."
+            "Clear the pin archive config? This action **can't be undone**."
         )
         if not ok:
             return await ctx.warn("Pin archive reset **cancelled**")
@@ -141,5 +141,5 @@ class PinCommands(Package):
             """DELETE FROM pin_config WHERE guild_id = $1""", ctx.guild.id
         )
         return await ctx.success(
-            "Pin archive config cleared. This action cannot be undone."
+            "Pin archive config cleared. This action can't be undone."
         )

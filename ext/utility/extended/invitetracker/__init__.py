@@ -121,7 +121,7 @@ class InviteTracker(Package):
             color=color_values.base,
             description=(
                 "This will **wipe all invite stats** for this server.\n"
-                "This action **cannot be undone**.\n"
+                "This action **can't be undone**.\n"
                 "Are you sure you want to do this?\n"
             ),
         )
@@ -137,7 +137,7 @@ class InviteTracker(Package):
             "DELETE FROM member_invites WHERE guild_id = $1", ctx.guild.id
         )
         return await ctx.success(
-            "Wiped all invite stats for this server. This action cannot be undone."
+            "Wiped all invite stats for this server. This action **can't** be undone."
         )
 
     @invites.command(

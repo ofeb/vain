@@ -393,7 +393,7 @@ class VoiceInterface(ui.View):
         if limit == 99:
             await _reply(
                 interaction,
-                _warn(interaction, "Channel member limit cannot be more than **99 members**!"),
+                _warn(interaction, "Channel member limit can't be more than **99 members**!"),
             )
             return
         await channel.edit(

@@ -236,33 +236,6 @@ class Miscellaneous(MiscellaneousEvents, Package):
             await ctx.fail(f"Translation failed: {str(e)[:100]}")
 
     @hybrid(
-        name="userinfo",
-        description="View information about a user",
-        aliases=["ui", "whois"],
-    )
-    @describe(user="User to get info about")
-    async def userinfo(self, ctx: Context, *, user: discord.Member = None) -> None:
-        user = user or ctx.author
-        roles = [r.mention for r in user.roles if r != ctx.guild.default_role] if ctx.guild else []
-        lines = [
-            f"**ID:** `{user.id}`",
-            f"**Created:** {discord.utils.format_dt(user.created_at, style='D')} ({discord.utils.format_dt(user.created_at, style='R')})",
-        ]
-        joined = getattr(user, "joined_at", None)
-        if joined:
-            lines.append(
-                f"**Joined:** {discord.utils.format_dt(joined, style='D')} ({discord.utils.format_dt(joined, style='R')})"
-            )
-        lines.append(f"**Roles ({len(roles)}):** {' '.join(roles[:20]) if roles else 'None'}")
-        embed = c2(
-            title=f"{user.display_name} ({user})",
-            message="\n".join(lines),
-            timestamp=False,
-        )
-        embed.set_thumbnail(url=user.display_avatar.url)
-        await ctx.send(embed=embed)
-
-    @hybrid(
         name="color",
         description="Show a hex codes color in an embed",
         aliases=["colour"],

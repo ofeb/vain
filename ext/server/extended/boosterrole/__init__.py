@@ -47,7 +47,7 @@ class BoosterroleCommands(Package):
         if name:
             if len(name) > 32:
                 raise CommandError(
-                    "Name cannot exceed **32** characters\n"
+                    "Name **can't** exceed **32** characters\n"
                     f"> -# **provided:** {len(name)} characters"
                 )
             if len(name) < 2:
@@ -213,8 +213,14 @@ class BoosterroleCommands(Package):
             reason=f"icon changed by {ctx.author}",
         )
         if resolved is not None:
-            return await ctx.success("Icon updated")
-        return await ctx.success("Icon removed")
+            return await ctx.success(
+                "Icon **updated**\n"
+                f"> -# run `{ctx.clean_prefix}br icon remove` to **remove** it"
+            )
+        return await ctx.success(
+            "Icon **removed**\n"
+            f"> -# run `{ctx.clean_prefix}br icon <emoji/url>` to **set** a new one"
+        )
 
     @boosterrole_icon.command(
         name="remove",
@@ -247,7 +253,10 @@ class BoosterroleCommands(Package):
             )
 
         await role.edit(display_icon=None, reason=f"icon removed by {ctx.author}")
-        return await ctx.success("Icon removed")
+        return await ctx.success(
+            "Icon **removed**\n"
+            f"> -# run `{ctx.clean_prefix}br icon <emoji/url>` to **set** a new one"
+        )
 
     async def _resolve_boosterrole_icon(
         self,
@@ -374,7 +383,7 @@ class BoosterroleCommands(Package):
         """rename booster role"""
         if len(name) > 32:
             raise CommandError(
-                "Name cannot exceed **32** characters\n"
+                "Name **can't** exceed **32** characters\n"
                 f"> -# **provided:** {len(name)} characters"
             )
         if len(name) < 2:
@@ -501,7 +510,10 @@ class BoosterroleCommands(Package):
                 "No award role is set\n"
                 f"> -# **set one with:** `,boosterrole award <role>`"
             )
-        return await ctx.success("Award role removed")
+        return await ctx.success(
+            "Award role **removed**\n"
+            f"> -# run `{ctx.clean_prefix}br award <role>` to **set** a new one"
+        )
 
     @boosterrole.command(
         name="base",
@@ -565,10 +577,13 @@ class BoosterroleCommands(Package):
         )
         if limit:
             return await ctx.success(
-                f"Role cap set\n"
+                f"Role cap **set**\n"
                 f"> -# **limit:** {limit}"
             )
-        return await ctx.success("Role cap removed")
+        return await ctx.success(
+            "Role cap **removed**\n"
+            f"> -# run `{ctx.clean_prefix}br limit <number>` to **set** a new one"
+        )
 
     @boosterrole.command(
         name="cleanup",
@@ -665,12 +680,12 @@ class BoosterroleCommands(Package):
 
         if member.id == ctx.author.id:
             raise CommandError(
-                "You cannot share with yourself\n"
+                "You **can't** share with yourself\n"
                 f"> -# **usage:** `,boosterrole share @user`"
             )
         if member.bot:
             raise CommandError(
-                "You cannot share with a bot\n"
+                "You **can't** share with a bot\n"
                 f"> -# **usage:** `,boosterrole share @user`"
             )
 
@@ -796,7 +811,7 @@ class BoosterroleCommands(Package):
             limit,
         )
         return await ctx.success(
-            f"Share limit set\n"
+            f"Share limit **set**\n"
             f"> -# **limit:** {limit}"
         )
 
@@ -818,4 +833,8 @@ class BoosterroleCommands(Package):
             new_state,
         )
         state_str = "enabled" if new_state else "disabled"
-        return await ctx.success(f"Booster roles {state_str}")
+        action = "disable" if new_state else "enable"
+        return await ctx.success(
+            f"Booster roles **{state_str}**\n"
+            f"> -# run `{ctx.clean_prefix}br toggle` to **{action}** it"
+        )

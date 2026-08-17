@@ -878,7 +878,7 @@ class Crypto(commands.Cog):
                         name=name,
                         data=data,
                         thumbnail=thumb,
-                        footer=f"Crypto feed · CoinGecko{move}",
+                        footer=f"Crypto feed · {move}",
                     )
                     try:
                         await channel.send(embed=embed)

@@ -40,7 +40,7 @@ def is_booster():
     async def predicate(ctx: Context) -> bool:
         if ctx.author.premium_since or ctx.author.id in ctx.bot.owners:
             return True
-        raise CommandError("you havent boosted the server")
+        raise CommandError("you **haven't** boosted the server")
     return check(predicate)
 
 

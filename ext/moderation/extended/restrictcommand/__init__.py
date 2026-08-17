@@ -167,7 +167,7 @@ class Restrictcommand(Package):
     @restrictcommand.command(
         name="reset",
         aliases=["clear", "wipe"],
-        description="Removes every restricted command. This cannot be undone.",
+        description="Removes every restricted command. This **can't** be undone.",
     )
     @has_permissions(manage_guild=True)
     async def restrictcommand_reset(self, ctx):
@@ -177,7 +177,7 @@ class Restrictcommand(Package):
         view = ConfirmView(ctx)
         ok = await view.prompt(
             "Clear **all** command restrictions for this server? "
-            "This action **cannot be undone**."
+            "This action **can't be undone**."
         )
         if not ok:
             return await ctx.warn("Command restrictions reset **cancelled**")
@@ -187,5 +187,5 @@ class Restrictcommand(Package):
         )
         return await ctx.success(
             f"Cleared all command restrictions ({result}). "
-            "This action cannot be undone."
+            "This action **can't** be undone."
         )

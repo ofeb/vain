@@ -58,7 +58,7 @@ class TagCommands(TagEvents, Package):
         ]
         if unassignable:
             lines.append(
-                f"> -# cannot assign (hierarchy): {', '.join(unassignable)}"
+                f"> -# can't assign (hierarchy): {', '.join(unassignable)}"
             )
         embed.description = "\n".join(lines)
         template = settings.template or settings._default_template
@@ -86,7 +86,7 @@ class TagCommands(TagEvents, Package):
             msg = f"Tag role set to {role.mention}"
         if not role.is_assignable():
             await ctx.warn(
-                f"{msg}\n> -# I **cannot assign** it - move my role **above** "
+                f"{msg}\n> -# I **can't assign** it - move my role **above** "
                 f"{role.mention} in Server Settings → Roles."
             )
         else:
@@ -197,13 +197,13 @@ class TagCommands(TagEvents, Package):
         assert ctx.guild is not None
         view = ConfirmView(ctx)
         if not await view.prompt(
-            "Reset **all** server tag settings? This action **cannot be undone**."
+            "Reset **all** server tag settings? This action **can't be undone**."
         ):
             return await ctx.warn("Tag reset **cancelled**")
         settings = await Settings.fetch(self.bot, ctx.guild)
         await settings.upsert(role_ids=[], channel_id=None, template=None)
         await ctx.success(
-            "Cleared server tag rewards. This action cannot be undone."
+            "Cleared server tag rewards. This action can't be undone."
         )
 
 

@@ -116,7 +116,7 @@ class AliasCommands(Package):
     @alias.command(
         name="reset",
         aliases=["clear"],
-        description="Reset every alias for all commands. This cannot be undone.",
+        description="Reset every alias for all commands. This can't be undone.",
     )
     @has_permissions(manage_guild=True)
     async def alias_reset(self, ctx):
@@ -126,7 +126,7 @@ class AliasCommands(Package):
         view = ConfirmView(ctx)
         ok = await view.prompt(
             "Clear **all** command aliases for this server? "
-            "This action **cannot be undone**."
+            "This action **can't be undone**."
         )
         if not ok:
             return await ctx.warn("Cancelled\n> -# **alias reset was cancelled**")
@@ -134,5 +134,5 @@ class AliasCommands(Package):
             """DELETE FROM aliases WHERE guild_id = $1""", ctx.guild.id
         )
         return await ctx.success(
-            "All aliases cleared\n> -# **this action cannot be undone**"
+            "All aliases cleared\n> -# **this action can't be undone**"
         )

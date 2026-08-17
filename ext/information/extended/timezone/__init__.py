@@ -307,7 +307,7 @@ class Timezone(Package):
 
         if not tz:
             if target.id == ctx.author.id:
-                return await ctx.warn("You have not set your timezone\n> -# **set one with:** `,timezone set`")
+                return await ctx.warn("You **haven't** set your timezone\n> -# **set one with:** `,timezone set`")
             return await ctx.warn(
                 f"**{target.display_name}** has not set their timezone"
             )
@@ -352,7 +352,7 @@ class Timezone(Package):
 
         if not tz:
             if target.id == ctx.author.id:
-                return await ctx.warn("You have not set your timezone\n> -# **set one with:** `,timezone set`")
+                return await ctx.warn("You **haven't** set your timezone\n> -# **set one with:** `,timezone set`")
             return await ctx.warn(
                 f"**{target.display_name}** has not set their timezone"
             )
@@ -436,7 +436,7 @@ class Timezone(Package):
         """compare timezones"""
         if member.id == ctx.author.id:
             return await ctx.warn(
-                "You cannot compare with yourself\n"
+                "You **can't** compare with yourself\n"
                 f"> -# **usage:** `,timezone compare @user`"
             )
 
@@ -453,7 +453,7 @@ class Timezone(Package):
 
         if not my_tz_name:
             return await ctx.fail(
-                "You haven't set your timezone yet\n"
+                "You **haven't** set your timezone yet\n"
                 f"> -# **set one with:** `,timezone set`"
             )
         if not their_tz_name:

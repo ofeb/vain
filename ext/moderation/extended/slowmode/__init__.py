@@ -55,7 +55,7 @@ class Slowmode(Package):
         seconds = self._parse_delay(time)
         max_duration = 6 * 60 * 60
         if seconds > max_duration:
-            return await ctx.warn("You can't set a slowmode for more than **6 hours**")
+            return await ctx.warn("You **can't** set a slowmode for more than **6 hours**")
 
         try:
             await channel.edit(
@@ -124,7 +124,7 @@ class Slowmode(Package):
                 "delay must be at least **1 second** (use `,slowmode off` to disable)"
             )
         if seconds > 6 * 60 * 60:
-            return await ctx.warn("You can't set a slowmode for more than **6 hours**")
+            return await ctx.warn("You **can't** set a slowmode for more than **6 hours**")
 
         try:
             await channel.edit(

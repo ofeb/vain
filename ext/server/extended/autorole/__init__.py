@@ -97,7 +97,7 @@ class Autorole(commands.Cog):
             color=color.base,
             description=(
                 "This will **clear every autorole** for this server.\n"
-                "This action **cannot be undone**.\n"
+                "This action **can't be undone**.\n"
                 "Are you sure you want to do this?\n"
             ),
         )
@@ -106,7 +106,7 @@ class Autorole(commands.Cog):
         settings = await AutoroleSettings.fetch(self.bot, ctx.guild)
         await settings.clear()
         await ctx.success(
-            "Auto roles cleared\n> -# **this action cannot be undone**"
+            "Auto roles cleared\n> -# **this action can't be undone**"
         )
 
     @autorole.command(
@@ -176,7 +176,7 @@ class Autorole(commands.Cog):
             color=color.base,
             description=(
                 "This will **clear every button role** for this server.\n"
-                "This action **cannot be undone**.\n"
+                "This action **can't be undone**.\n"
                 "Are you sure you want to do this?\n"
             ),
         )
@@ -200,7 +200,7 @@ class Autorole(commands.Cog):
             ctx.guild.id,
         )
         await ctx.success(
-            "Button roles cleared\n> -# **this action cannot be undone**"
+            "Button roles cleared\n> -# **this action can't be undone**"
         )
 
     @buttonrole.command(
@@ -367,7 +367,7 @@ class Autorole(commands.Cog):
             color=color.base,
             description=(
                 "This will **clear every reaction role** for this server.\n"
-                "This action **cannot be undone**.\n"
+                "This action **can't be undone**.\n"
                 "Are you sure you want to do this?\n"
             ),
         )
@@ -378,7 +378,7 @@ class Autorole(commands.Cog):
             ctx.guild.id,
         )
         await ctx.success(
-            "Reaction roles cleared\n> -# **this action cannot be undone**"
+            "Reaction roles cleared\n> -# **this action can't be undone**"
         )
 
     @reactionrole.command(

@@ -515,13 +515,13 @@ class Antiraid(AntiraidEvents, Package):
     )
     @has_permissions(manage_guild=True)
     async def antiraid_reset(self, ctx):
-        """Reset all antiraid configuration for this server. This cannot be undone."""
+        """Reset all antiraid configuration for this server. This can't be undone."""
         from core.discord.views.confirm import ConfirmView
 
         view = ConfirmView(ctx)
         ok = await view.prompt(
             "Reset **all** antiraid configuration for this server? "
-            "This action **cannot be undone**."
+            "This action **can't be undone**."
         )
         if not ok:
             return await ctx.warn("Reset was **cancelled**\n> -# **antiraid:** no changes were made")
@@ -549,7 +549,7 @@ class Antiraid(AntiraidEvents, Package):
         if unlocked:
             suffix = f"\n> -# **{unlocked}** channel{'s' if unlocked != 1 else ''} unlocked"
         await ctx.success(
-            f"Antiraid configuration **reset**{suffix}\n> -# This action cannot be undone"
+            f"Antiraid configuration **reset**{suffix}\n> -# This action can't be undone"
         )
 async def setup(bot: Vain) -> None:
     await bot.add_cog(Antiraid(bot))
