@@ -4,6 +4,8 @@ _CONTEXTS = dict(guilds=True, dms=True, groupchats=True)
 
 import datetime
 import re
+
+_LANG = re.compile(r"^[a-zA-Z]{2}(?:-[a-zA-Z]{2})?$")
 import io
 import contextlib
 import asyncio
