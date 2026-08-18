@@ -617,10 +617,11 @@ class Utility(commands.Cog):
             return
         pages = _chunk_text(answer, 1800)
         embeds = []
+        qshow = text if len(text) <= 80 else text[:77] + "..."
         for i, chunk in enumerate(pages):
             embeds.append(
                 panel_embed(
-                    title="Answer",
+                    title=f"Answer · {qshow}",
                     lines=[chunk],
                     footer=f"Gemini · {i + 1}/{len(pages)}" if len(pages) > 1 else "Gemini",
                     timestamp=False,
@@ -631,7 +632,7 @@ class Utility(commands.Cog):
         else:
             await interaction.followup.send(embeds=embeds[:10])
 
-        async def ctx_translate(self, interaction: discord.Interaction, message: discord.Message) -> None:
+    async def ctx_translate(self, interaction: discord.Interaction, message: discord.Message) -> None:
         await interaction.response.defer(thinking=True)
         text = (message.content or "").strip()
         if not text:
@@ -686,42 +687,36 @@ class Utility(commands.Cog):
 
     async def ctx_ocr(self, interaction: discord.Interaction, message: discord.Message) -> None:
         await interaction.response.defer(thinking=True)
-        image = None
+        data = None
+        filename = "image.png"
         for att in message.attachments:
             ctype = (att.content_type or "").lower()
             name = (att.filename or "").lower()
             if ctype.startswith("image/") or name.endswith((".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp")):
-                image = att
+                try:
+                    data = await att.read()
+                    filename = att.filename or filename
+                except Exception:
+                    data = None
                 break
-        if image is None:
+        if data is None:
             for emb in message.embeds:
                 u = getattr(getattr(emb, "image", None), "url", None) or getattr(
                     getattr(emb, "thumbnail", None), "url", None
                 )
-                if u:
-                    try:
-                        timeout = aiohttp.ClientTimeout(total=20)
-                        async with aiohttp.ClientSession(timeout=timeout) as session:
-                            async with session.get(u) as resp:
-                                if resp.status == 200:
-                                    data = await resp.read()
-                                    text = await ocr_net.ocr_image(data, filename="embed.png")
-                                    embed = panel_embed(
-            title="Extracted text",
-            lines=[text[:3500] or "*no text found*"],
-                                        footer="OCR",
-                                        timestamp=False,
-                                    )
-                                    await interaction.followup.send(embed=embed)
-                                    return
-                    except Exception as exc:
-                        await interaction.followup.send(f"OCR failed: {exc}", ephemeral=True)
-                        return
+                if not u:
+                    continue
+                try:
+                    data = await _fetch_bytes(u)
+                    if data:
+                        break
+                except Exception:
+                    data = None
+        if not data:
             await interaction.followup.send("No image found on that message.", ephemeral=True)
             return
         try:
-            data = await image.read()
-            text = await ocr_net.ocr_image(data, filename=image.filename or "image.png")
+            text = await ocr_net.ocr_image(data, filename=filename)
         except Exception as exc:
             await interaction.followup.send(f"OCR failed: {exc}", ephemeral=True)
             return
@@ -759,13 +754,14 @@ class Utility(commands.Cog):
         pages = _chunk_text(answer, 1800)
         embeds = []
         for i, chunk in enumerate(pages):
-            emb = panel_embed(
-                title=f"Answer · {qshow}",
-                lines=[chunk],
-                footer=f"Gemini · {i + 1}/{len(pages)}" if len(pages) > 1 else "Gemini",
-                timestamp=False,
+            embeds.append(
+                panel_embed(
+                    title=f"Answer · {qshow}",
+                    lines=[chunk],
+                    footer=f"Gemini · {i + 1}/{len(pages)}" if len(pages) > 1 else "Gemini",
+                    timestamp=False,
+                )
             )
-            embeds.append(emb)
         if len(embeds) == 1:
             return await ctx.send(embed=embeds[0])
         return await ctx.paginate(embeds)
@@ -831,9 +827,15 @@ class Utility(commands.Cog):
             "ko": "Korean", "zh": "Chinese", "ar": "Arabic", "hi": "Hindi",
             "tr": "Turkish", "nl": "Dutch", "pl": "Polish", "sv": "Swedish",
         }
-        to_name = LANG_NAMES.get(to_label, to_lang.upper() if to_lang and len(to_lang) <= 3 else str(to_lang).title())
+        to_name = LANG_NAMES.get(
+            to_label,
+            to_lang.upper() if to_lang and len(to_lang) <= 3 else str(to_lang).title(),
+        )
         if from_lang:
-            from_name = LANG_NAMES.get(from_lang.lower(), from_lang.upper() if len(from_lang) <= 3 else from_lang.title())
+            from_name = LANG_NAMES.get(
+                from_lang.lower(),
+                from_lang.upper() if len(from_lang) <= 3 else from_lang.title(),
+            )
             head = f"> **{from_name}**"
         else:
             head = f"> **Detected Language**: (`{detected}`)"
@@ -846,10 +848,7 @@ class Utility(commands.Cog):
             f"> **Translated to**: `{to_name}`",
             f"> -# `{trans}`",
         ]
-        embed = panel_embed(
-            lines=lines,
-            timestamp=False,
-        )
+        embed = panel_embed(lines=lines, timestamp=False)
         return await ctx.send(embed=embed)
 
     @hybrid(
@@ -979,11 +978,6 @@ class Utility(commands.Cog):
                 f"You need to add an attachment or provide a url\n"
                 f"> -# **usage:** {ctx.cmd('ocr')} with an image"
             )
-            if slash:
-                try:
-                    return await ctx.warn(msg, ephemeral=True)
-                except TypeError:
-                    return await ctx.warn(msg)
             return await ctx.warn(msg)
 
         async with ctx.typing():
