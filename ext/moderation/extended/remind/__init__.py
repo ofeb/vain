@@ -406,19 +406,27 @@ class Remind(Package):
                         "> **oi wake up**, I'm here to **remind** you to start your **chore**\n\n"
                         f"> -# **chore:** {msg}"
                     )
-                    embed = c2(message=body)
-                    embed.color = None
-                    view = None
+                    from discord import ui as _ui
+                    from core.discord.ctx import layout_from_items
+                    container = _ui.Container()
+                    for _attr in ("accent_color", "accent_colour"):
+                        if hasattr(container, _attr):
+                            with contextlib.suppress(Exception):
+                                setattr(container, _attr, None)
+                    container.add_item(_ui.TextDisplay(body))
+                    items: list = [container]
                     if jump:
-                        view = discord.ui.View(timeout=None)
-                        view.add_item(
-                            discord.ui.Button(
-                                label="When did I say this?",
-                                style=discord.ButtonStyle.link,
-                                url=jump,
+                        items.append(
+                            _ui.ActionRow(
+                                _ui.Button(
+                                    label="When did I say this?",
+                                    style=discord.ButtonStyle.link,
+                                    url=jump,
+                                )
                             )
                         )
-                    await user.send(content=user.mention, embed=embed, view=view)
+                    layout = layout_from_items(items, timeout=None)
+                    await user.send(content=user.mention, view=layout)
             except Exception:
                 continue
 
