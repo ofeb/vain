@@ -8,6 +8,7 @@ from typing import List, Optional, Callable, Awaitable
 
 import discord
 from discord import Member, Message
+from discord.ext import commands
 from discord.ext.commands import (
     group,
     command,
@@ -15,6 +16,7 @@ from discord.ext.commands import (
     MaxConcurrencyReached,
     BucketType,
     Context,
+    MemberConverter,
 )
 from core.discord.package import Package
 from core.managers.permissions import has_permissions
@@ -78,7 +80,8 @@ class Purge(Package):
 
     def _with_invoke(self, ctx: Context, messages: List[Message]) -> List[Message]:
         out = list(messages)
-        if ctx.message not in out:
+        invoke_id = ctx.message.id
+        if not any(getattr(m, "id", None) == invoke_id for m in out):
             out.append(ctx.message)
         return out
 
@@ -122,12 +125,29 @@ class Purge(Package):
         invoke_without_command=True,
     )
     @has_permissions(manage_messages=True)
-    async def purge(
-        self,
-        ctx: Context,
-        member: Optional[Member] = None,
-        search: Optional[int] = None,
-    ):
+    async def purge(self, ctx: Context, *args: str):
+        member: Optional[Member] = None
+        search: Optional[int] = None
+
+        if len(args) == 1:
+            token = args[0]
+            try:
+                search = int(token)
+            except ValueError:
+                try:
+                    member = await MemberConverter().convert(ctx, token)
+                except Exception as exc:
+                    raise CommandError(f"Member `{token}` not found") from exc
+        elif len(args) >= 2:
+            try:
+                member = await MemberConverter().convert(ctx, args[0])
+            except Exception as exc:
+                raise CommandError(f"Member `{args[0]}` not found") from exc
+            try:
+                search = int(args[1])
+            except ValueError as exc:
+                raise CommandError(f"Invalid amount `{args[1]}`") from exc
+
         amount = self._clamp_amount(search)
 
         if member is not None:
