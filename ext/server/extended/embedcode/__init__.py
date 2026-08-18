@@ -22,7 +22,7 @@ class _ModifyCodeView(discord.ui.View):
     def __init__(self, *, owner_id: int, kind: str, code: str):
         super().__init__(timeout=300)
         self.owner_id = owner_id
-        self.kind = kind  # "embed" | "container"
+        self.kind = kind  
         self.code = code
         label = "Modify container" if kind == "container" else "Modify embed"
         btn = discord.ui.Button(label=label, style=discord.ButtonStyle.primary)
@@ -51,7 +51,7 @@ class _ModifyCodeView(discord.ui.View):
         else:
             builder = EmbedBuilderView(interaction.user.id, accent=int(accent))
 
-        # Best-effort apply simple $v fields into builder data
+        
         try:
             _apply_script_to_builder(builder, self.code)
         except Exception:
@@ -70,7 +70,7 @@ class _ModifyCodeView(discord.ui.View):
                 except Exception:
                     builder.preview_message = None
             else:
-                # embed builder path
+                
                 if hasattr(builder, "start"):
                     await builder.start(interaction)
                 else:
@@ -99,7 +99,7 @@ def _apply_script_to_builder(builder: Any, code: str) -> None:
             data["title"] = val
         elif key == "footer":
             if "text:" in val:
-                # text: x && icon: y
+                
                 parts = [p.strip() for p in val.split("&&")]
                 for part in parts:
                     if part.lower().startswith("text:"):
@@ -208,7 +208,7 @@ class Embedcode(Package):
             await ctx.author.send(content=self._code_dm_embed(code))
             await ctx.success(f"{title} sent to your DMs!", view=view)
         except discord.Forbidden:
-            # fall back: send code in channel truncated + modify button
+            
             preview = code if len(code) <= 1800 else code[:1800] + "…"
             await ctx.success(
                 f"{title} (couldn't DM you — check privacy settings)\n```\n{preview}\n```",
@@ -216,7 +216,7 @@ class Embedcode(Package):
             )
 
     async def _resolve_message(self, ctx, raw: str | None) -> discord.Message | None:
-        # Reply first
+        
         if ctx.message and ctx.message.reference:
             ref = ctx.message.reference.resolved
             if isinstance(ref, discord.Message):
@@ -230,11 +230,11 @@ class Embedcode(Package):
             return None
 
         text = str(raw).strip()
-        # message link
+        
         msg = await self._fetch_message(ctx, text)
         if msg is not None:
             return msg
-        # bare snowflake id in current channel
+        
         if text.isdigit():
             with contextlib.suppress(Exception):
                 return await ctx.channel.fetch_message(int(text))

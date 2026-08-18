@@ -78,7 +78,7 @@ class AFKEvents:
             data = await store.get(user.id)
             if not data:
                 continue
-            # track mention for the AFK user
+            
             try:
                 await store.add_mention(
                     user.id,

@@ -22,13 +22,13 @@ class ManipulationEvents(Package):
         if not self.bot.user or self.bot.user not in message.mentions:
             return
 
-        # strip bot mentions to see if anything else remains
+        
         content = message.content or ""
         for m in message.mentions:
             content = content.replace(f"<@{m.id}>", "").replace(f"<@!{m.id}>", "")
         content = content.strip()
 
-        # reply + mention => quote referenced message
+        
         if message.reference and not content:
             ref = message.reference.resolved
             if not isinstance(ref, discord.Message):
@@ -42,7 +42,7 @@ class ManipulationEvents(Package):
             cog = self.bot.get_cog("Manipulation")
             if cog is None:
                 return
-            # Build a minimal context and invoke quote
+            
             try:
                 from core.discord.ctx import Context
 
@@ -56,7 +56,7 @@ class ManipulationEvents(Package):
                     )
             return
 
-        # bare mention (or mention-only) => prefix card
+        
         if content:
             return
 

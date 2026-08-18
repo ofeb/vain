@@ -34,7 +34,7 @@ class WhisperTranscribeClient:
         if not key:
             raise RuntimeError("no free transcribe key configured")
 
-        # Groq OpenAI-compatible whisper
+        
         form = aiohttp.FormData()
         ext = "ogg"
         if "mpeg" in (mime_type or "") or "mp3" in (mime_type or ""):

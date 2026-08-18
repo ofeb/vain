@@ -473,10 +473,10 @@ class Manipulation(Package):
             o = ord(ch)
             if o < 128:
                 continue
-            # Latin-1 / Latin Extended still use latin font
+            
             if o <= 0x024F or 0x1E00 <= o <= 0x1EFF:
                 continue
-            # emoji
+            
             if 0x1F300 <= o <= 0x1FAFF or 0x2600 <= o <= 0x27BF:
                 continue
             needs_complex = True
@@ -807,13 +807,13 @@ class Manipulation(Package):
                         if dest is None:
                             with contextlib.suppress(Exception):
                                 dest = await ctx.guild.fetch_channel(dest_id)
-                    # Always mirror to quote dest (even if same channel)
+                    
                     if dest is not None and hasattr(dest, "send"):
                         view = _QuoteChannelView(
                             jump_url=message.jump_url,
                             author_id=ctx.author.id,
                         )
-                        # Prefer not double-posting the full quote image in-channel when dest is here
+                        
                         if dest.id == getattr(ctx.channel, "id", None):
                             pass
                         else:
@@ -842,7 +842,7 @@ class Manipulation(Package):
     @has_permissions(manage_guild=True)
     async def quote_channel(self, ctx: Context, *, target: str = None) -> None:
         await self._ensure_quote_schema()
-        # No arg -> set to the channel/thread this was run in
+        
         if target is None or not str(target).strip():
             dest = ctx.channel
             if dest is None:
@@ -860,7 +860,7 @@ class Manipulation(Package):
 
         raw = str(target).strip()
         channel = None
-        # Resolve <#id> via get_channel_or_thread (threads won't resolve via TextChannelConverter alone)
+        
         m = re.search(r"<#(\d+)>", raw)
         if m:
             cid = int(m.group(1))

@@ -54,7 +54,7 @@ class GoogleTranslateClient:
             if own and session is not self._session:
                 await session.close()
 
-        # data[0] is list of [translated, original, ...] segments
+        
         parts: list[str] = []
         try:
             for seg in data[0] or []:

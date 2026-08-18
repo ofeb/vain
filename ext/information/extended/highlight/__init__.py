@@ -227,7 +227,7 @@ class Highlight(Package):
 
         tokens = args.split()
         delete_after = None
-        # parse --delete / -delete flag
+        
         cleaned = []
         i = 0
         while i < len(tokens):
@@ -238,7 +238,7 @@ class Highlight(Package):
                     delete_after = parse_duration_seconds(tokens[i + 1])
                     i += 2
                     continue
-                # bare --delete means immediate (0)
+                
                 delete_after = 0
                 i += 1
                 continue
@@ -274,7 +274,7 @@ class Highlight(Package):
             if not timeout_seconds or timeout_seconds < 1:
                 return await ctx.warn("Invalid timeout duration")
         else:
-            # maybe "timeout10m" style not used; reject
+            
             return await ctx.warn(
                 f"Unknown punishment `{action}`\n"
                 f"> -# **options:** `none` `ban` `softban` `hardban` `warn` `timeout <amount>`"
@@ -404,7 +404,7 @@ class Highlight(Package):
         content = (message.content or "").strip() or "*no text*"
         if len(content) > 900:
             content = content[:897] + "..."
-        # highlight the keyword visually
+        
         pattern = re.compile(re.escape(keyword), re.IGNORECASE)
         shown = pattern.sub(lambda m: f"**{m.group(0)}**", content)
         lines = [
@@ -438,7 +438,7 @@ class Highlight(Package):
 
         try:
             if action == "warn":
-                # best-effort: just note in channel logs; no formal warn table required
+                
                 with contextlib.suppress(Exception):
                     await message.channel.send(
                         f"{member.mention} was **warned** for using a highlighted keyword.",
@@ -474,7 +474,7 @@ class Highlight(Package):
     async def on_message(self, message: discord.Message) -> None:
         if message.author.bot or not message.guild or not message.content:
             return
-        # gather all keywords for this guild
+        
         rows = await self.bot.db.fetch(
             "SELECT user_id, keyword FROM highlights WHERE guild_id = $1",
             message.guild.id,
@@ -483,7 +483,7 @@ class Highlight(Package):
             return
 
         content_lower = message.content.lower()
-        # map keyword -> set of user_ids watching it
+        
         hits: dict[str, set[int]] = {}
         for row in rows:
             kw = row["keyword"]
@@ -494,7 +494,7 @@ class Highlight(Package):
 
         cfg = await self._get_config(message.guild.id)
 
-        # notify each watcher once per message (first matching keyword)
+        
         notified: set[int] = set()
         for keyword, user_ids in hits.items():
             for uid in user_ids:
@@ -510,7 +510,7 @@ class Highlight(Package):
                         with contextlib.suppress(Exception):
                             await ch.send(content=f"<@{uid}>", embed=embed)
                         continue
-                # DM fallback
+                
                 user = self.bot.get_user(uid)
                 if user is None:
                     with contextlib.suppress(Exception):
@@ -519,5 +519,5 @@ class Highlight(Package):
                     with contextlib.suppress(Exception):
                         await user.send(embed=embed)
 
-        # guild punishment once per triggering message
+        
         await self._apply_punishment(message, cfg)

@@ -222,12 +222,12 @@ class Log(LogEvents, Package):
             channel = self.bot.get_channel(channel_id)
             custom_color = await self._get_event_color(guild_id, channel_id, event_type)
 
-            # Normalize payload → LayoutView
+            
             view = payload
             if isinstance(payload, discord.Embed):
                 view = embed_to_log_container(payload, accent=custom_color)
             else:
-                # existing layout: apply accent if configured
+                
                 if custom_color is not None:
                     try:
                         from discord.ui import LayoutView as _LV
@@ -257,7 +257,7 @@ class Log(LogEvents, Package):
             if sent:
                 continue
 
-            # Fallback: webhook with classic embed only if container send failed
+            
             embed = payload if isinstance(payload, discord.Embed) else None
             if embed is None:
                 continue

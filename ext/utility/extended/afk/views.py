@@ -46,7 +46,7 @@ def build_afk_mention_pages(
         container.add_item(ui.TextDisplay("-# no mentions recorded for this session"))
         return [layout_from_items([container], timeout=None)]
 
-    # newest first
+    
     ordered = list(reversed(mentions))
     total_pages = max(1, math.ceil(len(ordered) / page_size))
     pages = []
@@ -98,11 +98,11 @@ class AFKMentionsButton(ui.View):
             owner_mention=interaction.user.mention,
         )
         await interaction.response.defer(ephemeral=True)
-        # send first page ephemeral-style via followup; paginator needs context-like
-        # Fallback: send pages as ephemeral followups with a simple paginator message
+        
+        
         try:
             from core.discord.views.paginate import send_pages
-            # build a minimal context shim is hard; send first layout and note
+            
             await interaction.followup.send(view=pages[0], ephemeral=True)
             if len(pages) > 1:
                 await interaction.followup.send(

@@ -38,7 +38,7 @@ def _prepare_image(data: bytes, filename: str) -> tuple[bytes, str, str]:
         im = Image.open(io.BytesIO(data))
         im = im.convert("RGB")
         w, h = im.size
-        # shrink until under ~850KB
+        
         for scale in (1.0, 0.75, 0.5, 0.35, 0.25):
             if scale < 1.0:
                 nw, nh = max(32, int(w * scale)), max(32, int(h * scale))
@@ -106,7 +106,7 @@ async def ocr_image(
         form.add_field("OCREngine", "2")
         form.add_field("scale", "true")
         form.add_field("detectOrientation", "true")
-        # Engine 2 works best without forcing eng — keeps Arabic/CJK etc.
+        
         if language and language.lower() not in {"auto", "none", "detect"}:
             form.add_field("language", language)
         form.add_field(
@@ -134,7 +134,7 @@ async def ocr_image(
             last_err = "OCR failed: invalid response"
             continue
 
-        # Throttle / overload
+        
         err_blob = str(payload.get("error") or payload.get("ErrorMessage") or "")
         if status in (429, 503) or "E571" in err_blob or "throttled" in err_blob.lower() or "overloaded" in err_blob.lower():
             last_err = "OCR is busy right now — try again in a minute"

@@ -103,14 +103,14 @@ def discord_footer_date(value, *, fallback: str = "Unknown") -> str:
         if isinstance(value, str) and value.strip() and not _ISO_RE.match(value.strip()):
             return value.strip()
         return fallback
-    # Aware UTC instant for Discord unix stamp
+    
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=datetime.timezone.utc)
     else:
         dt = dt.astimezone(datetime.timezone.utc)
     unix = int(dt.timestamp())
-    # Today/Yesterday labels use local-ish day: compare in UTC is imperfect for labels
-    # but the clock itself is always client-localized via <t:...:t>
+    
+    
     now = datetime.datetime.now(tz=datetime.timezone.utc)
     day = dt.date()
     today = now.date()

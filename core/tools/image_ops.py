@@ -133,7 +133,7 @@ def _build_caption_strip(text: str, width: int, size: int, text_width: int, emoj
         bb_h = max(emoji_size, size)
         try:
             from PIL import ImageDraw as _ID, Image as _I
-            # measure only the text parts for height
+            
             plain = "".join(v if k == "text" else " " for k, v in tokenize_emojis(ln))
             sample = plain.strip() or "Hg"
             bb = _ID.Draw(_I.new("RGBA", (1, 1))).textbbox((0, 0), sample, font=font)
@@ -219,10 +219,10 @@ def pil_to_gif(data: bytes) -> bytes:
 import re as _re
 
 _CUSTOM_EMOJI_RE = _re.compile(r"<(a?):([A-Za-z0-9_~]+):(\d+)>")
-# Broad unicode emoji coverage (Discord/Twemoji style)
+
 _UNICODE_EMOJI_RE = _re.compile(
     r"(?:"
-    r"[🇦-🇿]{2}"  # flags
+    r"[🇦-🇿]{2}"  
     r"|[🌀-🫿]️?"
     r"|[😀-🙏]️?"
     r"|[🚀-🛿]️?"
@@ -251,12 +251,12 @@ def tokenize_emojis(text: str) -> list[tuple[str, str]]:
         m = _UNICODE_EMOJI_RE.match(raw, i)
         if m:
             seq = m.group(0)
-            # collapse pure joiners
+            
             if seq.strip("\u200d\ufe0f"):
                 tokens.append(("unicode", seq))
             i = m.end()
             continue
-        # accumulate plain text until next emoji
+        
         j = i + 1
         while j < len(raw):
             if _CUSTOM_EMOJI_RE.match(raw, j) or _UNICODE_EMOJI_RE.match(raw, j):
@@ -271,7 +271,7 @@ def twemoji_codepoint(seq: str) -> str:
     parts = []
     for ch in seq:
         o = ord(ch)
-        if o in (0xFE0F,):  # variation selector often omitted in twemoji filenames
+        if o in (0xFE0F,):  
             continue
         parts.append(f"{o:x}")
     return "-".join(parts)
@@ -297,7 +297,7 @@ def twemoji_urls(seq: str) -> list[str]:
             continue
         urls.append(f"https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/{cp}.png")
         urls.append(f"https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/{cp}.png")
-    # dedupe
+    
     seen = set()
     out = []
     for u in urls:
@@ -408,7 +408,7 @@ def measure_draw_emoji_line(
             tw = max(1, bb[2] - bb[0])
             th = max(1, bb[3] - bb[1])
             if draw_it:
-                # center glyph box in the line, compensate bbox top offset
+                
                 ty = y + (line_h - th) // 2 - bb[1]
                 draw.text((x, ty), val, fill=fill, font=font)
             x += tw
@@ -452,7 +452,7 @@ def wrap_text_with_emojis(
     emoji_bytes: dict[str, bytes] | None,
     emoji_size: int,
 ) -> list[str]:
-    # wrap on spaces but keep emoji tokens intact
+    
     tokens: list[str] = []
     for kind, val in tokenize_emojis(text.replace("\n", " \n ")):
         if kind == "text":

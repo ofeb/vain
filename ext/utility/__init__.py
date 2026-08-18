@@ -170,7 +170,7 @@ def _lang_autocomplete_choices(current: str, *, include_auto: bool = False) -> l
             out.append(app_commands.Choice(name=label, value=code))
         if len(out) >= 25:
             break
-    # If user typed an exact valid-looking code not in the filtered list, surface it
+    
     if needle and _LANG.match(needle) and not any(c.value.lower() == needle for c in out):
         for name, code in _LANG_CHOICES:
             if code.lower() == needle:
@@ -178,7 +178,7 @@ def _lang_autocomplete_choices(current: str, *, include_auto: bool = False) -> l
                 out = out[:25]
                 break
         else:
-            # unknown but valid-looking code — still offer it
+            
             out = [app_commands.Choice(name=f"{needle} ({needle})", value=needle)] + out
             out = out[:25]
     return out[:25]
@@ -577,24 +577,24 @@ def _chunk_text(text: str, size: int = 1800) -> list[str]:
             break
         window = remaining[: size + 1]
         cut = -1
-        # Prefer paragraph break
+        
         para = window.rfind("\n\n")
         if para >= int(size * 0.45):
             cut = para
         else:
-            # Prefer end of line
+            
             line = window.rfind("\n")
             if line >= int(size * 0.55):
                 cut = line
             else:
-                # Prefer sentence end
+                
                 for sep in (". ", "! ", "? ", "。", "…"):
                     idx = window.rfind(sep)
                     if idx >= int(size * 0.55):
                         cut = idx + len(sep) - 1
                         break
                 if cut < 0:
-                    # Prefer word boundary
+                    
                     sp = window.rfind(" ")
                     if sp >= int(size * 0.4):
                         cut = sp
@@ -924,7 +924,7 @@ class Utility(commands.Cog):
             if name == "translate":
                 try:
                     params = list(getattr(cmd, "parameters", []) or [])
-                    # also walk HybridCommand.app_command if present
+                    
                     hybrid_cmd = self.bot.get_command("translate")
                     app = getattr(hybrid_cmd, "app_command", None) if hybrid_cmd else None
                     if app is not None:
@@ -1163,10 +1163,10 @@ class Utility(commands.Cog):
         from_lang = (source or "").strip().lower() or None
         if from_lang in {"auto", "detect", "none"}:
             from_lang = None
-        body_text = (text or "").strip() or None  # required on slash; prefix may still pass langs in text
+        body_text = (text or "").strip() or None  
 
-        # Prefix-style: ,tr es hello  /  ,tr es en hola  /  ,tr hello world
-        # (rest of message lands in text)
+        
+        
         if body_text and not to and not source:
             tokens = body_text.split()
             if tokens and _LANG.match(tokens[0]):
@@ -1457,8 +1457,8 @@ class Utility(commands.Cog):
             i += 1
         rest = " ".join(cleaned_tokens).strip()
 
-        # Collect sources: attachments, urls, users
-        sources: list[tuple[str, str]] = []  # (kind_label_template, url)
+        
+        sources: list[tuple[str, str]] = []  
 
         if ctx.message and ctx.message.attachments:
             for n, att in enumerate(ctx.message.attachments, 1):
@@ -1475,7 +1475,7 @@ class Utility(commands.Cog):
                     continue
                 sources.append((label, str(media_url)))
 
-        # split by comma for multi
+        
         parts = [p.strip() for p in rest.split(",") if p.strip()] if rest else []
         if not parts and rest:
             parts = [rest]
@@ -1484,18 +1484,18 @@ class Utility(commands.Cog):
         url_re = _re.compile(r"https?://\\S+", _re.I)
 
         for part in parts:
-            # strip trailing punctuation from urls
+            
             m = url_re.search(part)
             if m:
                 url = m.group(0).rstrip(")>.,'\"")
                 sources.append(("url", url))
                 continue
-            # try user
+            
             try:
                 member = await user_converter.convert(ctx, part)
                 sources.append((f"avatar:{member.id}", str(member.display_avatar.url)))
             except Exception:
-                # bare snowflake
+                
                 if part.isdigit():
                     try:
                         user = self.bot.get_user(int(part)) or await self.bot.fetch_user(int(part))
@@ -1503,7 +1503,7 @@ class Utility(commands.Cog):
                     except Exception:
                         pass
 
-        # default: author avatar
+        
         if not sources and not rest:
             sources.append(
                 (f"avatar:{ctx.author.id}", str(ctx.author.display_avatar.url))
@@ -1567,7 +1567,7 @@ class Utility(commands.Cog):
                 if len(sources) == 1:
                     title = f"[**dominant colors for this url**]({url})"
                 else:
-                    # count only url kinds for numbering
+                    
                     url_n = sum(1 for k, _ in sources[:idx] if k == "url")
                     title = f"[**dominant colors for URL #{url_n}**]({url})"
             elif kind == "this attachment":

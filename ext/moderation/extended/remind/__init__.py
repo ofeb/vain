@@ -120,7 +120,7 @@ class Remind(Package):
         ):
             with contextlib.suppress(Exception):
                 await self.db.execute(stmt)
-        # Backfill number for old rows missing it
+        
         with contextlib.suppress(Exception):
             await self.db.execute(
                 """
