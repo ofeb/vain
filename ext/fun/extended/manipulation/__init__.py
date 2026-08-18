@@ -5,6 +5,7 @@ import contextlib
 import re
 import os
 import tempfile
+import io
 from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Awaitable

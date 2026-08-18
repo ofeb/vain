@@ -292,6 +292,56 @@ def _is_voice_attachment(att: discord.Attachment) -> bool:
     return False
 
 
+
+async def _fetch_bytes(url: str) -> bytes | None:
+    try:
+        timeout = aiohttp.ClientTimeout(total=20)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(url) as resp:
+                if resp.status == 200:
+                    return await resp.read()
+    except Exception:
+        return None
+    return None
+
+
+def _attachment_is_image(att: discord.Attachment) -> bool:
+    ctype = (att.content_type or "").lower()
+    name = (att.filename or "").lower()
+    return ctype.startswith("image/") or name.endswith((".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"))
+
+
+async def _image_from_message(msg: discord.Message) -> tuple[bytes | None, str]:
+    for att in msg.attachments:
+        if _attachment_is_image(att):
+            try:
+                return await att.read(), att.filename or "image.png"
+            except Exception:
+                continue
+    for emb in msg.embeds:
+        u = getattr(getattr(emb, "image", None), "url", None) or getattr(
+            getattr(emb, "thumbnail", None), "url", None
+        )
+        if u:
+            data = await _fetch_bytes(u)
+            if data:
+                return data, "image.png"
+    return None, "image.png"
+
+
+async def _last_channel_image(channel) -> tuple[bytes | None, str]:
+    if channel is None:
+        return None, "image.png"
+    try:
+        async for past in channel.history(limit=50):
+            data, name = await _image_from_message(past)
+            if data:
+                return data, name
+    except Exception:
+        return None, "image.png"
+    return None, "image.png"
+
+
 class Snipe(commands.Cog):
     """Message sniping system."""
 
@@ -823,37 +873,54 @@ class Utility(commands.Cog):
         example=",ocr",
         **_CONTEXTS,
     )
-    async def ocr(self, ctx: Context) -> None:
+    @describe(attachment="Image to extract text from", url="Image URL")
+    async def ocr(
+        self,
+        ctx: Context,
+        attachment: discord.Attachment = None,
+        url: str = None,
+    ) -> None:
         data = None
         filename = "image.png"
-        if ctx.message and ctx.message.attachments:
-            att = ctx.message.attachments[0]
-            data = await att.read()
-            filename = att.filename or filename
-        elif ctx.message and ctx.message.reference:
+        slash = bool(getattr(ctx, "interaction", None))
+
+        if attachment is not None:
+            try:
+                data = await attachment.read()
+                filename = attachment.filename or filename
+            except Exception:
+                data = None
+        if data is None and url:
+            data = await _fetch_bytes(str(url).strip())
+        if data is None and ctx.message and ctx.message.attachments:
+            for att in ctx.message.attachments:
+                if _attachment_is_image(att):
+                    data = await att.read()
+                    filename = att.filename or filename
+                    break
+        if data is None and ctx.message and ctx.message.reference:
             try:
                 ref = ctx.message.reference.resolved
                 if not isinstance(ref, discord.Message):
                     ref = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-                if ref.attachments:
-                    att = ref.attachments[0]
-                    data = await att.read()
-                    filename = att.filename or filename
-                else:
-                    for emb in ref.embeds:
-                        u = getattr(getattr(emb, "image", None), "url", None)
-                        if u:
-                            timeout = aiohttp.ClientTimeout(total=20)
-                            async with aiohttp.ClientSession(timeout=timeout) as session:
-                                async with session.get(u) as resp:
-                                    if resp.status == 200:
-                                        data = await resp.read()
-                            break
+                if isinstance(ref, discord.Message):
+                    data, filename = await _image_from_message(ref)
             except Exception:
                 data = None
+        if data is None and not slash:
+            data, filename = await _last_channel_image(ctx.channel)
 
-        if data is None:
-            return await ctx.warn("Attach or reply to an image")
+        if not data:
+            msg = (
+                f"You need to add an attachment or provide a url\n"
+                f"> -# **usage:** {ctx.cmd('ocr')} with an image"
+            )
+            if slash:
+                try:
+                    return await ctx.warn(msg, ephemeral=True)
+                except TypeError:
+                    return await ctx.warn(msg)
+            return await ctx.warn(msg)
 
         async with ctx.typing():
             try:
