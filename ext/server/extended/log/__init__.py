@@ -83,18 +83,8 @@ PERMISSION_NAMES = {
 }
 
 def log_container(title: str, lines: list | None = None, *, accent: int | None = None):
-    """Colorless C2 log card by default. Optional accent only when log color is set."""
+    """Colorless C2 log card: title, separator, then body rows."""
     from core.discord.ctx import layout_from_items
-    body = f"**{title}**"
-    if lines:
-        cleaned = []
-        for ln in lines:
-            s = (ln or "").strip()
-            if not s:
-                continue
-            cleaned.append(s)
-        if cleaned:
-            body = body + "\n" + "\n".join(cleaned)
     container = ui.Container()
     for attr in ("accent_color", "accent_colour"):
         if hasattr(container, attr):
@@ -102,6 +92,17 @@ def log_container(title: str, lines: list | None = None, *, accent: int | None =
                 setattr(container, attr, accent)
             except Exception:
                 pass
+    container.add_item(ui.TextDisplay(f"**{title}**"))
+    container.add_item(ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small))
+    cleaned = []
+    for ln in lines or []:
+        s = (ln or "").strip()
+        if not s:
+            continue
+        if s == f"**{title}**" or s == title:
+            continue
+        cleaned.append(s)
+    body = "\n".join(cleaned) if cleaned else "-# *no details*"
     container.add_item(ui.TextDisplay(body))
     return layout_from_items([container], timeout=None)
 
@@ -246,7 +247,12 @@ class Log(LogEvents, Package):
             sent = False
             if channel is not None and hasattr(channel, "send"):
                 with contextlib.suppress(discord.HTTPException, discord.Forbidden, Exception):
-                    await channel.send(view=view, silent=True, **file_kw)
+                    await channel.send(
+                        view=view,
+                        silent=True,
+                        allowed_mentions=discord.AllowedMentions.none(),
+                        **file_kw,
+                    )
                     sent = True
             if sent:
                 continue
@@ -259,7 +265,12 @@ class Log(LogEvents, Package):
             wh = await self._get_webhook(channel_id)
             if wh:
                 with contextlib.suppress(discord.HTTPException):
-                    sk = {"embed": embed, "username": "vain logs", "silent": True}
+                    sk = {
+                        "embed": embed,
+                        "username": "vain logs",
+                        "silent": True,
+                        "allowed_mentions": discord.AllowedMentions.none(),
+                    }
                     sk.update(file_kw)
                     await wh.send(**sk)
 

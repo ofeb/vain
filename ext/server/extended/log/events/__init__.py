@@ -112,12 +112,9 @@ PERMISSION_NAMES = {
 
 
 def _log_container(title: str, lines: list[str]) -> "discord.ui.LayoutView":
-    """Colorless C2 log card — title + history-style -# rows."""
+    """Colorless C2 log card — title, separator, history-style rows."""
     from discord import ui as _ui
     from core.discord.ctx import layout_from_items
-    body = f"**{title}**"
-    if lines:
-        body = body + "\n" + "\n".join(lines)
     container = _ui.Container()
     for _attr in ("accent_color", "accent_colour"):
         if hasattr(container, _attr):
@@ -125,6 +122,10 @@ def _log_container(title: str, lines: list[str]) -> "discord.ui.LayoutView":
                 setattr(container, _attr, None)
             except Exception:
                 pass
+    container.add_item(_ui.TextDisplay(f"**{title}**"))
+    container.add_item(_ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small))
+    cleaned = [ln.strip() for ln in (lines or []) if (ln or "").strip()]
+    body = "\n".join(cleaned) if cleaned else "-# *no details*"
     container.add_item(_ui.TextDisplay(body))
     return layout_from_items([container], timeout=None)
 
@@ -213,8 +214,7 @@ class LogEvents:
                 text = f"[{len(msg.attachments)} attachment(s)]"
             ts = msg.created_at.strftime("%Y-%m-%d %H:%M:%S") if msg.created_at else "?"
             transcript.append(f"[{ts}] {author}: {text}")
-            if not getattr(author, "bot", False):
-                authors[author.id] = author
+            authors[author.id] = author
         now = int(discord.utils.utcnow().timestamp())
         lines = [
             _when_line(now),
@@ -228,7 +228,7 @@ class LogEvents:
             lines.append("-# **ids**: `" + ", ".join(str(i) for i in authors) + "`")
         else:
             lines.append("-# **people**: *none resolved*")
-        view = _log_container("Bulk message delete", lines)
+        view = _log_container("Multiple messages deleted", lines)
         file_content = ("\n".join(transcript)).encode("utf-8", errors="replace") if transcript else None
         await self._log(
             guild.id, "messages", view,
