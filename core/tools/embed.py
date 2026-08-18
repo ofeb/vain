@@ -1540,6 +1540,15 @@ def to_code(
     return code.replace("```", "`​`​`")
 
 
+def _is_layout_view(view: Any) -> bool:
+    if view is None:
+        return False
+    try:
+        return isinstance(view, discord.ui.LayoutView)
+    except Exception:
+        return type(view).__name__ == "LayoutView"
+
+
 async def send_script_payload(
     destination,
     payload: dict[str, Any],
@@ -1547,9 +1556,11 @@ async def send_script_payload(
 ) -> discord.Message | None:
     """Send a parsed embed/container payload to ``destination``.
 
-    Container payloads (a ``LayoutView``) with message content send the content
-    as its own message first and then the container message, so the container
-    never has to carry plain text above it. Embed payloads are untouched.
+    Order:
+    - plain text only -> one message
+    - classic embed (+ optional content) -> one message
+    - LayoutView/container + content -> content message first, container second
+    - LayoutView only -> one message
     """
     merged = {**payload, **kwargs}
     if isinstance(destination, discord.Message):
@@ -1559,21 +1570,28 @@ async def send_script_payload(
 
     content = merged.get("content")
     view = merged.get("view")
-    if content and view is not None and not isinstance(view, discord.ui.View):
+    if content and _is_layout_view(view):
         text = content if isinstance(content, str) else str(content)
         if text.strip():
-            content_kw = dict(merged)
-            content_kw.pop("content", None)
-            content_kw.pop("view", None)
-            content_kw.pop("file", None)
-            content_kw.pop("files", None)
-            content_kw.pop("raw_embed", None)
+            content_kw: dict[str, Any] = {}
+            for key in (
+                "tts",
+                "nonce",
+                "allowed_mentions",
+                "reference",
+                "mention_author",
+                "silent",
+                "stickers",
+            ):
+                if key in merged and merged[key] is not None:
+                    content_kw[key] = merged[key]
             try:
                 await destination.send(content=text, **content_kw)
             except Exception:
                 pass
         merged["content"] = None
         merged.pop("reference", None)
+        merged.pop("mention_author", None)
     return await destination.send(**merged)
 
 
