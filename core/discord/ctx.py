@@ -64,10 +64,13 @@ def embed_to_container(
     Title, author, description, fields, image, and footer are preserved.
     No accent strip / embed colour - C2 cards stay neutral.
     """
-    _ = _accent_from_embed(embed)  
+    _ = _accent_from_embed(embed)
     container = ui.Container()
+    for _attr in ("accent_color", "accent_colour"):
+        if hasattr(container, _attr):
+            with contextlib.suppress(Exception):
+                setattr(container, _attr, None)
 
-    
     author_name = embed.author.name if embed.author else None
     author_icon = embed.author.icon_url if embed.author else None
     thumb = embed.thumbnail.url if embed.thumbnail else None
@@ -688,6 +691,9 @@ class Context(commands.Context):
                         attachment_files=file_list or None,
                     )
                 else:
+                    for _e in list(embeds or []):
+                        with contextlib.suppress(Exception):
+                            _e.color = None
                     layout = embeds_to_layout(list(embeds or []))
                 send_kw = dict(base_kw)
                 send_kw.pop("suppress_embeds", None)

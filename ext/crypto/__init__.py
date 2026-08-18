@@ -415,7 +415,9 @@ class Crypto(commands.Cog):
                 footer="Feeds added · sends updates on the cryptocurrency you set",
             )
             with contextlib.suppress(Exception):
-                await channel.send(embed=embed)
+                from core.discord.ctx import embed_to_layout
+                layout = embed_to_layout(embed)
+                await channel.send(view=layout)
         await ctx.success(
             f"Crypto feed **{label}** → {channel.mention}\n"
             f"> -# Posts when price/24h change/market cap moves meaningfully"
@@ -502,7 +504,6 @@ class Crypto(commands.Cog):
             lines.append(f"`{i}` {label} · **{r['coin_label']}** · {price_s} ({chg_s})")
         embed = panel_embed(
             title="Crypto Feeds",
-            color=color.base,
             lines=lines,
             footer=f"{len(rows)} feed(s)",
             timestamp=False,
@@ -746,7 +747,6 @@ class Crypto(commands.Cog):
 
         embed = panel_embed(
             title="ETH Gas Prices",
-            color=color.base,
             lines=[],
             footer=f"Powered by {source}",
             timestamp=False,
@@ -768,7 +768,6 @@ class Crypto(commands.Cog):
     async def transaction(self, ctx: Context, *, hash: str) -> None:
         embed = panel_embed(
             title="Transaction Lookup",
-            color=color.base,
             lines=[
                 f"[View on Blockchain](https://www.blockchain.com/btc/tx/{hash})",
                 f"[View on Etherscan](https://etherscan.io/tx/{hash})",
@@ -790,7 +789,6 @@ class Crypto(commands.Cog):
         embed = c2(
             title="Transaction Subscribed",
             message=f"Now watching `{hash}` for confirmations.",
-            color=color.base,
             timestamp=False,
         )
         embed.set_footer(text="You'll be notified when the transaction is confirmed")
@@ -879,7 +877,9 @@ class Crypto(commands.Cog):
                         footer=f"Crypto feed {move}",
                     )
                     try:
-                        await channel.send(embed=embed)
+                        from core.discord.ctx import embed_to_layout
+                layout = embed_to_layout(embed)
+                await channel.send(view=layout)
                     except discord.HTTPException as exc:
                         if exc.status == 429:
                             retry = float(getattr(exc, "retry_after", 2.0) or 2.0)

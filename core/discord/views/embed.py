@@ -109,6 +109,7 @@ def panel_embed(
         caption(footer) if footer else None,
     )
     embed = discord.Embed(description=description or None, url=url)
+    embed.color = None
     if title:
         embed.title = title
     if author:
