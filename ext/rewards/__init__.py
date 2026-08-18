@@ -657,7 +657,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         description=(
             "Set the level-up message script (embed/container/plain). "
             "Add `--rolegain` to make it a role reward message that only sends "
-            f"when the member gains a role from {ctx.cmd('leveling rewards')}"
+            "when the member gains a role from leveling rewards"
         ),
         example=",leveling message Nice {user.mention} - Level {level}!",
         usage="<script or none> [--rolegain]",

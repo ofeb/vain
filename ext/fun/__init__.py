@@ -43,7 +43,7 @@ _CONTEXTS = dict(guilds=True, dms=True, groupchats=True)
 
 
 def _split_wyr_options(raw: str) -> tuple[str | None, str | None]:
-    f"Split {ctx.cmd('wyr a or b')} or {ctx.cmd('wyr a, b')} into two options."""
+    """Split ``wyr a or b`` or ``wyr a, b`` into two options."""
     text = str(raw or "").strip()
     if not text:
         return None, None
