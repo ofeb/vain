@@ -143,7 +143,33 @@ class Manipulation(Package):
     @media.command(name="caption", description="Add a caption to an image")
     @describe(text="Caption text")
     async def media_caption(self, ctx: Context, *, text: str) -> None:
-        await self._flux_command(ctx, "caption", text=text)
+        await self._flux_command(
+            ctx,
+            "caption",
+            text=text,
+            pil_fallback=lambda data, t=text: image_ops.pil_caption(data, t),
+        )
+
+    @hybrid(
+        name="caption",
+        description="Add a white-bar caption to an image",
+        aliases=["cap"],
+        guild_only=True,
+    )
+    @describe(text="Caption text")
+    async def caption(self, ctx: Context, *, text: str) -> None:
+        if not text or not str(text).strip():
+            return await ctx.warn(
+                f"Provide caption text\n> -# **usage:** {ctx.cmd('caption your text')} (with an image)"
+            )
+        attachment = await PartialAttachment.imageonly_fallback(ctx)
+        await self._process(
+            ctx,
+            attachment,
+            filename="caption.png",
+            processor=lambda d, t=text: asyncio.to_thread(image_ops.pil_caption, d, t),
+            pil_fallback=lambda d, t=text: image_ops.pil_caption(d, t),
+        )
 
     @media.command(name="blur", description="Blur an image")
     @describe(radius="Blur radius")
