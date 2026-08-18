@@ -108,6 +108,28 @@ PERMISSION_NAMES = {
     "send_voice_messages": "Send Voice Messages",
 }
 
+
+
+def _when_line(ts=None):
+    if ts is None:
+        ts = int(discord.utils.utcnow().timestamp())
+    return f"-# **when**: <t:{ts}:F> · <t:{ts}:R>"
+
+
+def _log_panel(*, title, lines, footer=None, author_icon=None):
+    """History-style log card: bold title + -# rows, no colour."""
+    parts = [f"**{title}**"]
+    parts.extend(lines or [])
+    if footer:
+        parts.append(f"-# {footer}")
+    embed = discord.Embed(description="\n".join(parts))
+    embed.color = None
+    if author_icon:
+        embed.set_author(name=title, icon_url=author_icon)
+    else:
+        embed.set_author(name=title)
+    return embed
+
 class LogEvents:
     _BULK_THRESHOLD: int = 3
     _BULK_WINDOW: float = 10.0
@@ -141,15 +163,17 @@ class LogEvents:
 
         ts = int(message.created_at.timestamp())
         lines = [
-            f"**When:** <t:{ts}:F> · <t:{ts}:R>",
-            f"A message by {message.author.mention} was deleted in {message.channel.mention}.",
+            _when_line(ts),
+            f"-# **author**: {message.author.mention} (`{message.author.id}`)",
+            f"-# **channel**: {message.channel.mention}",
         ]
-        if message.content:
-            lines.append(f"**Content:** {message.content[:1024]}")
+        content = (message.content or "").strip()
+        if content:
+            lines.append(f"-# **content**: {content[:900]}")
         elif message.attachments:
-            lines.append("**Content:** *Deleted image attachment*")
+            lines.append("-# **content**: *deleted image attachment*")
         else:
-            lines.append("**Content:** *No text*")
+            lines.append("-# **content**: *no text*")
 
         image_atts = [
             a
@@ -159,78 +183,82 @@ class LogEvents:
         ]
         other_atts = [a for a in message.attachments if a not in image_atts]
         if image_atts:
-            names = "\n".join(f"[`{a.filename}`]({a.url})" for a in image_atts[:8])
-            lines.append(f"**Deleted image:**\n{names}")
+            names = ", ".join(f"[`{a.filename}`]({a.url})" for a in image_atts[:8])
+            lines.append(f"-# **images**: {names}")
         if other_atts:
-            names = "\n".join(f"[`{a.filename}`]({a.url})" for a in other_atts[:5])
-            lines.append(f"**Attachments:**\n{names}")
+            names = ", ".join(f"[`{a.filename}`]({a.url})" for a in other_atts[:5])
+            lines.append(f"-# **files**: {names}")
 
-        embed = panel_embed(
-            author="Message deleted",
-            author_icon=message.author.display_avatar.url,
+        embed = _log_panel(
+            title="Message deleted",
             lines=lines,
             footer=f"{message.author} · {message.author.id}",
+            author_icon=message.author.display_avatar.url,
         )
         await self._log(message.guild.id, "messages", embed)
 
 
     @Package.listener()
     async def on_bulk_message_delete(self, messages: list[discord.Message]) -> None:
-        messages = [m for m in messages if not m.author.bot and m.guild]
         if not messages:
             return
-
         guild = messages[0].guild
         channel = messages[0].channel
-
+        if guild is None:
+            return
         if await self._is_ignored(guild.id, channel.id):
             return
 
-        uncached = sum(1 for m in messages if m.content is None)
+        authors: dict[int, discord.abc.User] = {}
+        transcript: list[str] = []
+        uncached = 0
+        for msg in messages:
+            author = msg.author
+            if author is None:
+                uncached += 1
+                transcript.append(f"[unknown] (uncached message {msg.id})")
+                continue
+            text = (msg.content or "").strip()
+            if not text and msg.attachments:
+                text = f"[{len(msg.attachments)} attachment(s)]"
+            ts = msg.created_at.strftime("%Y-%m-%d %H:%M:%S") if msg.created_at else "?"
+            transcript.append(f"[{ts}] {author}: {text}")
+            if getattr(author, "bot", False):
+                continue
+            authors[author.id] = author
 
-        members: dict[int, discord.Member] = {}
-        for m in messages:
-            if m.author and not m.author.bot:
-                members[m.author.id] = m.author
-
-        lines: list[str] = []
-        for m in messages:
-            if m.content:
-                ts = m.created_at.strftime("%Y-%m-%d %H:%M:%S")
-                lines.append(f"[{ts}] {m.author}: {m.content}")
-
+        now = int(discord.utils.utcnow().timestamp())
         lines = [
-            f"**{len(messages)}** messages deleted in {channel.mention}",
+            _when_line(now),
+            f"-# **channel**: {channel.mention}",
+            f"-# **count**: `{len(messages)}` message{'s' if True else ''}",
         ]
+        lines[2] = f"-# **count**: `{len(messages)}` messages" if len(messages) != 1 else f"-# **count**: `1` message"
         if uncached:
-            lines.append(
-                f"({uncached} message{'s' if uncached != 1 else ''} were not cached)"
-            )
-        if members:
-            member_list = "\n".join(
-                f"{m.mention} (`{m}`) ({m.id})" for m in members.values()
-            )
-            lines.append(
-                label_line(
-                    f"{len(members)} member{'s' if len(members) != 1 else ''}",
-                    member_list[:1024],
-                )
-            )
+            lines.append(f"-# **uncached**: `{uncached}` (not fully available to the bot)")
+        if authors:
+            mentions = " ".join(a.mention for a in authors.values())
+            lines.append(f"-# **people**: {mentions}")
+            id_list = ", ".join(str(i) for i in authors.keys())
+            lines.append(f"-# **ids**: `{id_list}`")
+        else:
+            lines.append("-# **people**: *none resolved*")
 
-        embed = panel_embed(
-            title="Bulk Message Delete",
+        embed = _log_panel(
+            title="Bulk message delete",
             lines=lines,
-            footer=f"Channel ID : {channel.id}",
+            footer=f"{len(authors)} people · channel {channel.id}",
         )
-
-        file_content = "\n".join(lines).encode() if lines else None
+        file_content = ("\n".join(transcript)).encode("utf-8", errors="replace") if transcript else None
+        file_name = "bulk-delete.txt" if transcript else None
         await self._log(
             guild.id,
             "messages",
             embed,
             file_content=file_content,
-            file_name="messages.txt",
+            file_name=file_name,
         )
+
 
     @Package.listener()
     async def on_message_edit(self, before: discord.Message, after: discord.Message) -> None:
@@ -242,19 +270,22 @@ class LogEvents:
             return
 
         ts = int(discord.utils.utcnow().timestamp())
-        embed = panel_embed(
-            author="Message edited",
-            author_icon=before.author.display_avatar.url,
-            lines=[
-                f"**When:** <t:{ts}:F> · <t:{ts}:R>",
-                f"{before.author.mention} edited a message in {before.channel.mention}.",
-                f"**Edited message:** [Jump to message]({after.jump_url})",
-                f"**Before:** {before.content[:1024] or '*empty*'}",
-                f"**After:** {after.content[:1024] or '*empty*'}",
-            ],
+        lines = [
+            _when_line(ts),
+            f"-# **author**: {before.author.mention} (`{before.author.id}`)",
+            f"-# **channel**: {before.channel.mention}",
+            f"-# **message**: [jump]({after.jump_url})",
+            f"-# **before**: {(before.content or '')[:500] or '*empty*'}",
+            f"-# **after**: {(after.content or '')[:500] or '*empty*'}",
+        ]
+        embed = _log_panel(
+            title="Message edited",
+            lines=lines,
             footer=f"{before.author} · {before.author.id}",
+            author_icon=before.author.display_avatar.url,
         )
         await self._log(before.guild.id, "messages", embed)
+
 
     @Package.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent) -> None:
@@ -273,14 +304,17 @@ class LogEvents:
         emoji = str(payload.emoji)
         jump = f"https://discord.com/channels/{payload.guild_id}/{payload.channel_id}/{payload.message_id}"
         ts = int(discord.utils.utcnow().timestamp())
-        embed = panel_embed(
-            author="Reaction added",
-            author_icon=getattr(getattr(user, "display_avatar", None), "url", None),
-            lines=[
-                f"**When:** <t:{ts}:F> · <t:{ts}:R>",
-                f"{user.mention} added {emoji} to [this message]({jump})",
-            ],
+        lines = [
+            _when_line(ts),
+            f"-# **user**: {user.mention} (`{user.id}`)",
+            f"-# **emoji**: {emoji}",
+            f"-# **message**: [jump]({jump})",
+        ]
+        embed = _log_panel(
+            title="Reaction added",
+            lines=lines,
             footer=f"{user} · {user.id}",
+            author_icon=getattr(getattr(user, "display_avatar", None), "url", None),
         )
         await self._log(payload.guild_id, "messages", embed)
 
@@ -301,14 +335,17 @@ class LogEvents:
         emoji = str(payload.emoji)
         jump = f"https://discord.com/channels/{payload.guild_id}/{payload.channel_id}/{payload.message_id}"
         ts = int(discord.utils.utcnow().timestamp())
-        embed = panel_embed(
-            author="Reaction removed",
-            author_icon=getattr(getattr(user, "display_avatar", None), "url", None),
-            lines=[
-                f"**When:** <t:{ts}:F> · <t:{ts}:R>",
-                f"{user.mention} removed {emoji} from [this message]({jump})",
-            ],
+        lines = [
+            _when_line(ts),
+            f"-# **user**: {user.mention} (`{user.id}`)",
+            f"-# **emoji**: {emoji}",
+            f"-# **message**: [jump]({jump})",
+        ]
+        embed = _log_panel(
+            title="Reaction removed",
+            lines=lines,
             footer=f"{user} · {user.id}",
+            author_icon=getattr(getattr(user, "display_avatar", None), "url", None),
         )
         await self._log(payload.guild_id, "messages", embed)
 
