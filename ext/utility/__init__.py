@@ -160,6 +160,8 @@ from core.managers.permissions import has_permissions
 from core.tools.snipe import SnipeError
 from core.tools import image_ops
 from core.networks.gemini import GeminiClient
+from core.networks.translate import GoogleTranslateClient
+from core.networks.transcribe import WhisperTranscribeClient
 from core.networks import ocr as ocr_net
 
 from core.discord.views.embed import c2, reply_embed, panel_embed
@@ -779,6 +781,18 @@ class Utility(commands.Cog):
     def _gemini(self) -> GeminiClient:
         return GeminiClient()
 
+    def _translator(self) -> GoogleTranslateClient:
+        return GoogleTranslateClient()
+
+    def _transcriber(self) -> WhisperTranscribeClient:
+        return WhisperTranscribeClient(self.bot)
+
+    async def _transcribe_bytes(self, audio: bytes, *, mime_type: str = "audio/ogg") -> str:
+        try:
+            return await self._transcriber().transcribe_audio(audio, mime_type=mime_type)
+        except Exception:
+            return await self._gemini().transcribe_audio(audio, mime_type=mime_type)
+
     async def _ctx_to_context(self, interaction: discord.Interaction) -> Context:
         return await self.bot.get_context(interaction, cls=Context)
 
@@ -849,7 +863,7 @@ class Utility(commands.Cog):
             await interaction.followup.send("That message has no text to translate.", ephemeral=True)
             return
         try:
-            result = await self._gemini().translate(text, to_lang="en")
+            result = await self._translator().translate(text, to_lang="en")
         except Exception as exc:
             await interaction.followup.send(f"Translate failed: {exc}", ephemeral=True)
             return
@@ -881,7 +895,7 @@ class Utility(commands.Cog):
             return
         try:
             audio = await voice.read()
-            text = await self._gemini().transcribe_audio(
+            text = await self._transcribe_bytes(
                 audio, mime_type=voice.content_type or "audio/ogg"
             )
         except Exception as exc:
@@ -1021,7 +1035,7 @@ class Utility(commands.Cog):
 
         async with ctx.typing():
             try:
-                result = await self._gemini().translate(text, to_lang=to_lang, from_lang=from_lang)
+                result = await self._translator().translate(text, to_lang=to_lang, from_lang=from_lang)
             except Exception as exc:
                 return await ctx.fail(f"Translate failed\n> -# {exc}")
 
@@ -1099,7 +1113,7 @@ class Utility(commands.Cog):
         async with ctx.typing():
             try:
                 audio = await voice.read()
-                text = await self._gemini().transcribe_audio(
+                text = await self._transcribe_bytes(
                     audio, mime_type=voice.content_type or "audio/ogg"
                 )
             except Exception as exc:

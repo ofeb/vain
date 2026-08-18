@@ -80,28 +80,40 @@ class PartialAttachment(commands.Converter):
         raise commands.CommandError("No attachment provided")
 
 
+def _quote_delete_emoji():
+    try:
+        from config import emojis
+        return (
+            getattr(emojis.paginator, "delete", None)
+            or getattr(emojis.paginator, "cancel", None)
+            or "<:delete:1535040504516055191>"
+        )
+    except Exception:
+        return "<:delete:1535040504516055191>"
+
+
 class _QuoteChannelView(discord.ui.View):
+    """Guilt-style quote channel post: @user · Jump in content, Delete uses shared emoji."""
+
     def __init__(self, *, jump_url: str, author_id: int) -> None:
         super().__init__(timeout=None)
         self.author_id = author_id
-        self.add_item(
-            discord.ui.Button(
-                label="Jump to message",
-                style=discord.ButtonStyle.link,
-                url=jump_url,
-            )
+        self.jump_url = jump_url
+        btn = discord.ui.Button(
+            label="Delete",
+            style=discord.ButtonStyle.danger,
+            emoji=_quote_delete_emoji(),
+            custom_id=f"quote-delete:{author_id}",
         )
+        btn.callback = self._delete_callback
+        self.add_item(btn)
 
-    @discord.ui.button(label="Delete", style=discord.ButtonStyle.danger, emoji="🗑️")
-    async def delete_quote(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    async def _delete_callback(self, interaction: discord.Interaction) -> None:
         member = interaction.user
-        allowed = False
-        if member.id == self.author_id:
-            allowed = True
-        elif isinstance(member, discord.Member):
+        allowed = member.id == self.author_id
+        if not allowed and isinstance(member, discord.Member):
             perms = member.guild_permissions
-            if perms.manage_messages or perms.administrator:
-                allowed = True
+            allowed = bool(perms.manage_messages or perms.administrator)
         if not allowed:
             await interaction.response.send_message("You can't delete this quote.", ephemeral=True)
             return
@@ -110,6 +122,7 @@ class _QuoteChannelView(discord.ui.View):
         if not interaction.response.is_done():
             with contextlib.suppress(Exception):
                 await interaction.response.defer()
+
 
 class Manipulation(Package):
     """Media manipulation commands."""
@@ -689,8 +702,19 @@ class Manipulation(Package):
             return await ctx.warn(
                 f"Reply to a message or pass a message link\n> -# **usage:** {ctx.cmd('quote')} (reply)"
             )
+        if message.author.bot:
+            return await ctx.warn(
+                "I can't quote bots\n> -# **try quoting a real person instead**"
+            )
         if not (message.content or "").strip():
-            return await ctx.warn("You can't quote this message (no text content).")
+            if message.attachments or message.stickers or message.embeds:
+                return await ctx.warn(
+                    "There's nothing to quote there\n"
+                    "> -# **images, stickers and embeds don't work - need text**"
+                )
+            return await ctx.warn(
+                "That message is empty\n> -# **need some text to quote**"
+            )
 
         async with ctx.typing():
             avatar_url = str(message.author.display_avatar.with_size(512).url)

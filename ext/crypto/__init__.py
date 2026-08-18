@@ -217,28 +217,26 @@ class Crypto(commands.Cog):
         elif change < 0:
             arrow = "▼"
 
-        if title is None:
-            title = f"{name} ({symbol}) / USD - ${usd:,.2f}" if usd >= 1 else f"{name} ({symbol}) / USD - ${usd:,.6f}"
-
-        embed = panel_embed(
-            title=title,
-            color=color.base,
-            lines=[],
-            footer=footer,
-            thumbnail=thumbnail,
-            timestamp=False,
-        )
         price_s = f"${usd:,.2f}" if usd >= 1 else f"${usd:,.6f}"
-        embed.add_field(name="Price", value=price_s, inline=True)
-        embed.add_field(
-            name="24h Change",
-            value=f"{arrow} {change:+.2f}%" if change else "0.00%",
-            inline=True,
-        )
+        change_s = f"{arrow} {change:+.2f}%" if change else "0.00%"
+        if title is None:
+            title = f"**{name}** (`{symbol}`) · {price_s}"
+
+        lines = [
+            f"> -# **Price:** `{price_s}`",
+            f"> -# **24h Change:** `{change_s}`",
+        ]
         if cap:
-            embed.add_field(name="Market Cap", value=f"${cap:,.0f}", inline=True)
+            lines.append(f"> -# **Market Cap:** `${cap:,.0f}`")
         if vol:
-            embed.add_field(name="24h Volume", value=f"${vol:,.0f}", inline=True)
+            lines.append(f"> -# **24h Volume:** `${vol:,.0f}`")
+
+        embed = c2(message="\n".join(lines), title=title, footer=footer)
+        if thumbnail:
+            try:
+                embed.set_thumbnail(url=thumbnail)
+            except Exception:
+                pass
         return embed
 
     def _should_post_update(
