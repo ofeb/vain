@@ -1903,7 +1903,7 @@ class Music(MusicEvents, Package):
         await self._apply_preset(player, name)
         await ctx.success(f"enabled **{name}**")
 
-    @hybrid(name="play", aliases=["p"], guild_only=True)
+    @hybrid(name="play", aliases=["pl"], guild_only=True)
     @describe(query="Song name or URL", next="Play after the current track")
     async def play(self, ctx: Context, *, query: str, next: bool = False) -> None:
         query, play_next = self._parse_play_flags(query, next=next)
@@ -2505,6 +2505,15 @@ class Music(MusicEvents, Package):
         target = max(int(player.position) - position * 1000, 0)
         await player.seek(target)
         await ctx.success(f"-{position}s → `{self._fmt_ms(target)}`")
+
+    @hybrid(name="connect", aliases=["p", "join"], guild_only=True)
+    async def connect(self, ctx: Context) -> None:
+        player = await self._player(ctx)
+        if player is None:
+            return
+        channel = ctx.author.voice.channel if ctx.author.voice else None
+        mention = channel.mention if channel else "voice"
+        return await ctx.success(f"connected to {mention}")
 
     @hybrid(name="disconnect", aliases=["dc", "leave"], guild_only=True)
     async def disconnect(self, ctx: Context) -> None:
