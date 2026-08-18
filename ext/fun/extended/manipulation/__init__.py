@@ -466,6 +466,25 @@ class Manipulation(Package):
                 continue
         return ImageFont.load_default()
 
+    def _quote_body_font(self, text: str, size: int):
+        """Latin body uses DejaVu; complex scripts use CJK-capable fonts."""
+        needs_complex = False
+        for ch in text or "":
+            o = ord(ch)
+            if o < 128:
+                continue
+            # Latin-1 / Latin Extended still use latin font
+            if o <= 0x024F or 0x1E00 <= o <= 0x1EFF:
+                continue
+            # emoji
+            if 0x1F300 <= o <= 0x1FAFF or 0x2600 <= o <= 0x27BF:
+                continue
+            needs_complex = True
+            break
+        if needs_complex:
+            return self._quote_font(size)
+        return self._quote_latin_font(size)
+
     def _quote_mark_font(self, size: int):
         candidates = [
             "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
@@ -655,7 +674,6 @@ class Manipulation(Package):
 
             quote_font = self._quote_mark_font(110)
             body_size = 40
-            body_font = self._quote_font(body_size)
             attr_font = self._quote_latin_font(24)
             mark_font = self._quote_latin_font(18)
 
@@ -663,11 +681,12 @@ class Manipulation(Package):
             if len(clean) > 320:
                 clean = clean[:317].rstrip() + "..."
 
+            body_font = self._quote_body_font(clean, body_size)
             emoji_size = max(18, int(body_size * 0.95))
             lines = image_ops.wrap_text_with_emojis(clean, body_font, max_text_w, emoji_map, emoji_size)
             while body_size > 22 and len(lines) > 7:
                 body_size -= 2
-                body_font = self._quote_font(body_size)
+                body_font = self._quote_body_font(clean, body_size)
                 emoji_size = max(18, int(body_size * 0.95))
                 lines = image_ops.wrap_text_with_emojis(clean, body_font, max_text_w, emoji_map, emoji_size)
 
@@ -811,26 +830,42 @@ class Manipulation(Package):
     @has_permissions(manage_guild=True)
     async def quote_channel(self, ctx: Context, *, target: str = None) -> None:
         await self._ensure_quote_schema()
+        # No arg -> set to the channel/thread this was run in
         if target is None or not str(target).strip():
-            current = await self._get_quote_channel(ctx.guild.id)
-            mention = f"<#{current}>" if current else "not set"
-            return await ctx.normal(
-                f"Quote channel is {mention}\n"
-                f"> -# **set with:** {ctx.cmd('quote channel #channel')} · "
-                f"**clear with:** {ctx.cmd('quote channel reset')}"
+            dest = ctx.channel
+            if dest is None:
+                return await ctx.warn("Couldn't resolve this channel")
+            await self.db.execute(
+                """
+                INSERT INTO quote_channels (guild_id, channel_id)
+                VALUES ($1, $2)
+                ON CONFLICT (guild_id) DO UPDATE SET channel_id = EXCLUDED.channel_id
+                """,
+                ctx.guild.id,
+                dest.id,
             )
+            return await ctx.success(f"Quotes will also post in {dest.mention}")
 
         raw = str(target).strip()
         channel = None
-        with contextlib.suppress(Exception):
-            channel = await commands.TextChannelConverter().convert(ctx, raw)
+        # Resolve <#id> via get_channel_or_thread (threads won't resolve via TextChannelConverter alone)
+        m = re.search(r"<#(\d+)>", raw)
+        if m:
+            cid = int(m.group(1))
+            channel = ctx.guild.get_channel_or_thread(cid) if ctx.guild else None
+        if channel is None and raw.isdigit():
+            channel = ctx.guild.get_channel_or_thread(int(raw)) if ctx.guild else None
         if channel is None:
             with contextlib.suppress(Exception):
                 channel = await commands.ThreadConverter().convert(ctx, raw)
         if channel is None:
+            with contextlib.suppress(Exception):
+                channel = await commands.TextChannelConverter().convert(ctx, raw)
+        if channel is None:
             return await ctx.warn(
                 "Provide a channel or thread\n"
                 f"> -# **usage:** {ctx.cmd('quote channel #channel')} · "
+                f"{ctx.cmd('quote channel')} sets it to here · "
                 f"{ctx.cmd('quote channel reset')} to clear"
             )
 

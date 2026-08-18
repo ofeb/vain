@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import re
 from datetime import datetime, timezone, timedelta
 
 import discord
@@ -11,6 +12,9 @@ from core.discord.package import Package
 from core.discord.hybrid import hybrid
 from core.discord.views.embed import c2
 from core.tools.moderation_args import parse_duration_seconds, is_duration_token
+
+
+_JUMP_RE = re.compile(r"\n?-#\s*\[jump\]\([^)]+\)\s*$", re.IGNORECASE)
 
 
 class _RemindDurationModal(ui.Modal, title="Remind me"):
@@ -45,30 +49,20 @@ class _RemindDurationModal(ui.Modal, title="Remind me"):
                     "Reminders can't exceed **30 days**.",
                     ephemeral=True,
                 )
-            text = (self.target_message.content or "").strip()
+            text = (self.target_message.content or "").strip() or "Reminder"
+            if len(text) > 900:
+                text = text[:897].rstrip() + "..."
             jump = self.target_message.jump_url
-            if not text:
-                text = f"[jump to message]({jump})"
-            else:
-                if len(text) > 900:
-                    text = text[:897].rstrip() + "..."
-                text = f"{text}\n-# [jump]({jump})"
-
-            when = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=seconds)
             guild_id = interaction.guild.id if interaction.guild else 0
-            rid = await self.cog.db.fetchval(
-                """INSERT INTO reminders (user_id, guild_id, message, time)
-                   VALUES ($1, $2, $3, $4)
-                   RETURNING id""",
-                interaction.user.id,
-                guild_id,
-                text,
-                when,
+            rid, pretty = await self.cog._create_reminder(
+                user_id=interaction.user.id,
+                guild_id=guild_id,
+                message=text,
+                seconds=seconds,
+                jump_url=jump,
             )
-            pretty = self.cog._format_duration(seconds)
             await interaction.followup.send(
-                f"> <:approve_new:1526186163457490974> I'll remind you in **{pretty}**\n"
-                f"> -# **id:** #{rid}",
+                f"I'll remind you in **{pretty}**\n> -# **id:** #{rid}",
                 ephemeral=True,
             )
         except Exception as exc:
@@ -80,7 +74,7 @@ class _RemindDurationModal(ui.Modal, title="Remind me"):
 
 
 class Remind(Package):
-    """Personal reminders stored in the database."""
+    """Personal reminders stored in the database. Always delivered via DM."""
 
     def __init__(self, bot):
         super().__init__(bot)
@@ -109,22 +103,37 @@ class Remind(Package):
                 id BIGSERIAL PRIMARY KEY,
                 user_id BIGINT NOT NULL,
                 guild_id BIGINT NOT NULL DEFAULT 0,
+                number INTEGER NOT NULL DEFAULT 1,
                 message TEXT NOT NULL,
+                jump_url TEXT,
                 time TIMESTAMP WITHOUT TIME ZONE NOT NULL
             )
             """
         )
-        # Older installs may lack columns; add only what we need (never channel_id)
         for stmt in (
             "ALTER TABLE reminders ADD COLUMN IF NOT EXISTS guild_id BIGINT NOT NULL DEFAULT 0",
             "ALTER TABLE reminders ADD COLUMN IF NOT EXISTS message TEXT",
             "ALTER TABLE reminders ADD COLUMN IF NOT EXISTS time TIMESTAMP WITHOUT TIME ZONE",
             "ALTER TABLE reminders ADD COLUMN IF NOT EXISTS user_id BIGINT",
+            "ALTER TABLE reminders ADD COLUMN IF NOT EXISTS number INTEGER",
+            "ALTER TABLE reminders ADD COLUMN IF NOT EXISTS jump_url TEXT",
         ):
-            try:
+            with contextlib.suppress(Exception):
                 await self.db.execute(stmt)
-            except Exception:
-                pass
+        # Backfill number for old rows missing it
+        with contextlib.suppress(Exception):
+            await self.db.execute(
+                """
+                UPDATE reminders r
+                SET number = sub.n
+                FROM (
+                    SELECT id, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY time ASC, id ASC) AS n
+                    FROM reminders
+                    WHERE number IS NULL OR number < 1
+                ) sub
+                WHERE r.id = sub.id
+                """
+            )
         await self.db.execute(
             "CREATE INDEX IF NOT EXISTS reminders_user_idx ON reminders (user_id)"
         )
@@ -132,12 +141,23 @@ class Remind(Package):
             "CREATE INDEX IF NOT EXISTS reminders_time_idx ON reminders (time)"
         )
 
+    async def _next_number(self, user_id: int) -> int:
+        """Smallest free positive integer for this user (restarts at 1 when empty)."""
+        rows = await self.db.fetch(
+            "SELECT number FROM reminders WHERE user_id = $1 AND number IS NOT NULL",
+            user_id,
+        )
+        used = {int(r["number"]) for r in rows if r["number"] is not None}
+        n = 1
+        while n in used:
+            n += 1
+        return n
+
     def _register_menus(self) -> None:
         for menu in list(self._menus):
             with contextlib.suppress(Exception):
                 self.bot.tree.remove_command(menu.name, type=discord.AppCommandType.message)
         self._menus.clear()
-
         menu = app_commands.ContextMenu(
             name="Remind me to do this",
             callback=self.ctx_remind,
@@ -147,11 +167,9 @@ class Remind(Package):
             app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)(menu)
         with contextlib.suppress(Exception):
             app_commands.allowed_installs(guilds=True, users=True)(menu)
-        try:
+        with contextlib.suppress(Exception):
             self.bot.tree.add_command(menu, override=True)
             self._menus.append(menu)
-        except Exception:
-            pass
 
     def _format_duration(self, seconds: int) -> str:
         units = (
@@ -182,22 +200,25 @@ class Remind(Package):
         guild_id: int,
         message: str,
         seconds: int,
+        jump_url: str | None = None,
     ) -> tuple[int, str]:
         await self._ensure_schema()
+        number = await self._next_number(user_id)
         when = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=seconds)
-        rid = await self.db.fetchval(
-            """INSERT INTO reminders (user_id, guild_id, message, time)
-               VALUES ($1, $2, $3, $4)
+        await self.db.fetchval(
+            """INSERT INTO reminders (user_id, guild_id, number, message, jump_url, time)
+               VALUES ($1, $2, $3, $4, $5, $6)
                RETURNING id""",
             user_id,
             guild_id,
+            number,
             message,
+            jump_url,
             when,
         )
-        return int(rid), self._format_duration(seconds)
+        return number, self._format_duration(seconds)
 
     def _parse_reminder_args(self, reminder: str) -> tuple[int | None, str | None, str | None]:
-        """Returns (seconds, message, error)."""
         tokens = (reminder or "").split()
         if not tokens:
             return None, None, "empty"
@@ -229,7 +250,6 @@ class Remind(Package):
         groupchats=True,
     )
     async def reminder(self, ctx, *, reminder: str = None):
-        """Set a reminder. Format: <duration> <message>"""
         if ctx.invoked_subcommand is not None:
             return
         if not reminder or not str(reminder).strip():
@@ -259,8 +279,7 @@ class Remind(Package):
             )
         if err == "max":
             return await ctx.warn(
-                "Reminders can't exceed **30 days**\n"
-                f"> -# **maximum:** 30 days"
+                "Reminders can't exceed **30 days**\n> -# **maximum:** 30 days"
             )
         if err == "message" or not message:
             return await ctx.warn(
@@ -296,30 +315,36 @@ class Remind(Package):
     async def reminder_list(self, ctx):
         await self._ensure_schema()
         rows = await self.db.fetch(
-            """SELECT id, message, time
+            """SELECT number, message, jump_url, time
                FROM reminders
                WHERE user_id = $1
-               ORDER BY time ASC
+               ORDER BY number ASC
                LIMIT 25""",
             ctx.author.id,
         )
         if not rows:
             return await ctx.warn("You have **no active reminders**")
 
-        lines = []
+        blocks: list[str] = []
         for row in rows:
             ts = row["time"]
             if isinstance(ts, datetime) and ts.tzinfo is None:
                 ts = ts.replace(tzinfo=timezone.utc)
             stamp = int(ts.timestamp()) if isinstance(ts, datetime) else 0
             msg = (row["message"] or "").strip()
-            if len(msg) > 80:
-                msg = msg[:77] + "..."
-            lines.append(f"**#{row['id']}** · <t:{stamp}:R>\n> -# {msg}")
+            msg = _JUMP_RE.sub("", msg).strip()
+            if len(msg) > 120:
+                msg = msg[:117] + "..."
+            num = row["number"] if row["number"] is not None else "?"
+            jump = (row["jump_url"] or "").strip()
+            line = f"**#{num}** · <t:{stamp}:R>\n{msg}"
+            if jump:
+                line += f"\n[jump to message]({jump})"
+            blocks.append(line)
 
         embed = c2(
             title="Your reminders",
-            message="\n".join(lines),
+            message="\n\n".join(blocks),
             footer=f"{len(rows)} reminder{'s' if len(rows) != 1 else ''}",
         )
         return await ctx.send(embed=embed)
@@ -328,12 +353,12 @@ class Remind(Package):
         name="remove",
         aliases=["rm", "delete", "del", "cancel"],
         description="Remove a reminder by id",
-        example=",reminder remove 12",
+        example=",reminder remove 1",
     )
     async def reminder_remove(self, ctx, id: int):
         await self._ensure_schema()
         result = await self.db.execute(
-            "DELETE FROM reminders WHERE id = $1 AND user_id = $2",
+            "DELETE FROM reminders WHERE number = $1 AND user_id = $2",
             id,
             ctx.author.id,
         )
@@ -342,10 +367,7 @@ class Remind(Package):
                 f"Reminder **#{id}** not found\n"
                 f"> -# **check your reminders with:** {ctx.cmd('reminder list')}"
             )
-        return await ctx.success(
-            f"Removed reminder\n"
-            f"> -# **id:** #{id}"
-        )
+        return await ctx.success(f"Removed reminder\n> -# **id:** #{id}")
 
     @tasks.loop(seconds=20.0)
     async def _remind_loop(self) -> None:
@@ -354,7 +376,7 @@ class Remind(Package):
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         try:
             rows = await self.db.fetch(
-                """SELECT id, user_id, message, time
+                """SELECT id, user_id, number, message, jump_url, time
                    FROM reminders
                    WHERE time <= $1
                    ORDER BY time ASC
@@ -376,14 +398,20 @@ class Remind(Package):
 
                 with contextlib.suppress(discord.Forbidden, discord.HTTPException):
                     msg = (row["message"] or "").strip() or "—"
+                    msg = _JUMP_RE.sub("", msg).strip()
+                    num = row["number"] if row["number"] is not None else row["id"]
+                    jump = (row["jump_url"] or "").strip()
+                    body = (
+                        f"**It's time!**\n"
+                        f"> -# **#{num}**\n"
+                        f"\n{msg}"
+                    )
+                    if jump:
+                        body += f"\n\n[jump to message]({jump})"
                     embed = c2(
                         title="Reminder",
-                        message=(
-                            f"**It's time!**\n"
-                            f"> -# **message:** {msg}\n"
-                            f"> -# **id:** #{row['id']}"
-                        ),
-                        footer="you set this earlier",
+                        message=body,
+                        footer="delivered to your DMs",
                         timestamp=True,
                     )
                     await user.send(content=user.mention, embed=embed)
