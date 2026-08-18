@@ -119,7 +119,7 @@ class Purge(Package):
 
     @group(
         name="purge",
-        aliases=["c", "clear", "p"],
+        aliases=["c", "clear"],
         example=",purge 100",
         description="Purge messages from chat (default 30, max 1000)",
         invoke_without_command=True,
