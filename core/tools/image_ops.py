@@ -141,18 +141,53 @@ def _build_caption_strip(text: str, width: int, size: int, text_width: int):
     return strip
 
 
+def _caption_frame(src: "Image.Image", strip: "Image.Image") -> "Image.Image":
+    w, h = src.size
+    caption_h = strip.height
+    out = Image.new("RGBA", (w, h + caption_h), (255, 255, 255, 255))
+    out.paste(strip, (0, 0), strip)
+    frame = src.convert("RGBA")
+    if frame.size != (w, h):
+        frame = frame.resize((w, h), Image.Resampling.NEAREST)
+    out.paste(frame, (0, caption_h), frame)
+    return out
+
+
 def pil_caption(data: bytes, text: str) -> bytes:
-    """White-bar Impact-style caption above the image using var/caption.otf."""
+    """White-bar caption; original frame pixels stay the same size. Always GIF."""
     _require_pil()
     from PIL import Image
 
-    src = _load_image(data)
+    src = Image.open(BytesIO(data))
     w, h = src.size
     size = max(1, w // 10)
     text_width = max(20, w - (((w // 25) * 2)))
     strip = _build_caption_strip(text, w, size, text_width)
-    caption_h = strip.height
-    out = Image.new("RGBA", (w, h + caption_h), (255, 255, 255, 255))
-    out.paste(strip, (0, 0), strip)
-    out.paste(src, (0, caption_h), src)
-    return _save_png(out)
+
+    frames = []
+    durations = []
+    n = getattr(src, "n_frames", 1) or 1
+    for i in range(n):
+        try:
+            src.seek(i)
+        except Exception:
+            break
+        frame = src.convert("RGBA")
+        frames.append(_caption_frame(frame, strip).convert("P", palette=Image.ADAPTIVE))
+        durations.append(int(src.info.get("duration", 40) or 40))
+
+    if not frames:
+        frames = [_caption_frame(src.convert("RGBA"), strip).convert("P", palette=Image.ADAPTIVE)]
+        durations = [40]
+
+    buf = BytesIO()
+    save_kw = {
+        "format": "GIF",
+        "save_all": True,
+        "append_images": frames[1:],
+        "duration": durations if len(durations) == len(frames) else 40,
+        "loop": src.info.get("loop", 0),
+        "disposal": 2,
+    }
+    frames[0].save(buf, **save_kw)
+    return buf.getvalue()

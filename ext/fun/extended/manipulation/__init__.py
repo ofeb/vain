@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import os
 import tempfile
 from io import BytesIO
 from typing import TYPE_CHECKING, Callable, Awaitable
 
+import aiohttp
 import discord
 from discord.ext import commands
 
@@ -152,24 +154,103 @@ class Manipulation(Package):
 
     @hybrid(
         name="caption",
-        description="Add a white-bar caption to an image",
+        description="Add a caption to the last image or gif in the channel",
         aliases=["cap"],
         guild_only=True,
     )
-    @describe(text="Caption text")
+    @describe(text="Caption text, optionally with an image URL")
     async def caption(self, ctx: Context, *, text: str) -> None:
         if not text or not str(text).strip():
             return await ctx.warn(
-                f"Provide caption text\n> -# **usage:** {ctx.cmd('caption your text')} (with an image)"
+                f"Provide caption text\n> -# **usage:** {ctx.cmd('caption your text')}"
             )
-        attachment = await PartialAttachment.imageonly_fallback(ctx)
-        await self._process(
-            ctx,
-            attachment,
-            filename="caption.png",
-            processor=lambda d, t=text: asyncio.to_thread(image_ops.pil_caption, d, t),
-            pil_fallback=lambda d, t=text: image_ops.pil_caption(d, t),
-        )
+        raw = str(text).strip()
+        source_url = None
+        url_match = re.search(r"https?://\S+", raw)
+        if url_match:
+            source_url = url_match.group(0).rstrip(")>.,")
+            raw = (raw[: url_match.start()] + raw[url_match.end() :]).strip()
+        if not raw:
+            return await ctx.warn("Provide caption text")
+
+        data = None
+        if ctx.message and ctx.message.attachments:
+            att = ctx.message.attachments[0]
+            if att.content_type and att.content_type.startswith(("image/", "video/")) or att.filename.lower().endswith(
+                (".png", ".jpg", ".jpeg", ".webp", ".gif")
+            ):
+                data = await att.read()
+        if data is None and ctx.message and ctx.message.reference:
+            try:
+                ref = ctx.message.reference.resolved
+                if ref is None:
+                    ref = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+                if getattr(ref, "attachments", None):
+                    data = await ref.attachments[0].read()
+                elif source_url is None:
+                    for embed in getattr(ref, "embeds", []) or []:
+                        u = getattr(getattr(embed, "image", None), "url", None) or getattr(
+                            getattr(embed, "thumbnail", None), "url", None
+                        )
+                        if u:
+                            source_url = u
+                            break
+            except Exception:
+                pass
+        if data is None and source_url:
+            data = await self._fetch_media_bytes(source_url)
+        if data is None:
+            data = await self._last_channel_image(ctx)
+
+        if not data:
+            return await ctx.warn("No image or gif found in this channel")
+
+        async with ctx.typing():
+            try:
+                result = await asyncio.to_thread(image_ops.pil_caption, data, raw)
+            except Exception:
+                return await ctx.fail("Failed to caption that media")
+            await ctx.send(file=discord.File(BytesIO(result), filename="caption.gif"))
+
+    async def _fetch_media_bytes(self, url: str) -> bytes | None:
+        try:
+            timeout = aiohttp.ClientTimeout(total=20)
+            headers = {"User-Agent": "Mozilla/5.0"}
+            async with aiohttp.ClientSession(headers=headers, timeout=timeout) as session:
+                async with session.get(url, allow_redirects=True) as resp:
+                    if resp.status != 200:
+                        return None
+                    return await resp.read()
+        except Exception:
+            return None
+
+    async def _last_channel_image(self, ctx: Context) -> bytes | None:
+        if ctx.channel is None:
+            return None
+        skip_id = ctx.message.id if ctx.message else None
+        try:
+            async for msg in ctx.channel.history(limit=80):
+                if skip_id and msg.id == skip_id:
+                    continue
+                for att in msg.attachments:
+                    name = (att.filename or "").lower()
+                    ctype = (att.content_type or "").lower()
+                    if ctype.startswith("image/") or name.endswith((".png", ".jpg", ".jpeg", ".webp", ".gif")):
+                        try:
+                            return await att.read()
+                        except Exception:
+                            continue
+                for embed in msg.embeds:
+                    u = getattr(getattr(embed, "image", None), "url", None) or getattr(
+                        getattr(embed, "thumbnail", None), "url", None
+                    )
+                    if u:
+                        data = await self._fetch_media_bytes(u)
+                        if data:
+                            return data
+        except Exception:
+            return None
+        return None
 
     @media.command(name="blur", description="Blur an image")
     @describe(radius="Blur radius")
