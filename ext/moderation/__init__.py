@@ -2992,26 +2992,6 @@ class ModerationCommands(Package):
         await ctx.send(embed=embed)
 
     @command(
-        name="dump",
-        description="Dumps all members of a role",
-    )
-    @has_permissions(manage_roles=True)
-    async def dump(self, ctx, role: discord.Role, flags: str | None = None):
-        """dump role members"""
-        members = role.members
-        if not members:
-            return await ctx.warn(f"No members\n> -# **no members have** {role.mention}")
-        lines = [member.mention for member in members[:50]]
-        embed = panel_embed(
-            title=f"Members - {role.name}",
-            color=role.color.value or self.color,
-            lines=lines,
-            footer=f"{len(members)} total" if len(members) > 50 else None,
-            timestamp=False,
-        )
-        await ctx.send(embed=embed)
-
-    @command(
         name="newmembers",
         description="View list of recently joined members",
     )
