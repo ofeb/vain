@@ -452,8 +452,14 @@ class Context(commands.Context):
             **kw,
         )
 
+    def _ephemeral_if_app(self, kw: dict) -> dict:
+        if getattr(self, "interaction", None) is not None:
+            kw.setdefault("ephemeral", True)
+        return kw
+
     async def fail(self, message: str, **kw):
         """send a failure reply with deny colour"""
+        kw = self._ephemeral_if_app(kw)
         emoji = await self._get_emoji("deny")
         return await self._send_embed_response(
             self._message_embed(
@@ -467,6 +473,7 @@ class Context(commands.Context):
 
     async def warn(self, message: str, **kw):
         """send a warning reply with warn colour"""
+        kw = self._ephemeral_if_app(kw)
         emoji = await self._get_emoji("warn")
         return await self._send_embed_response(
             self._message_embed(
@@ -480,6 +487,7 @@ class Context(commands.Context):
 
     async def cooldown(self, message: str, **kw):
         """send a cooldown reply as a C2 embed lookalike"""
+        kw = self._ephemeral_if_app(kw)
         emoji = await self._get_emoji("cooldown")
         return await self._send_embed_response(
             self._message_embed(
