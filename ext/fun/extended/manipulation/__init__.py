@@ -798,25 +798,37 @@ class Manipulation(Package):
 
             if ctx.guild is not None:
                 dest_id = await self._get_quote_channel(ctx.guild.id)
-                if dest_id and dest_id != ctx.channel.id:
-                    dest = ctx.guild.get_channel(dest_id)
+                if dest_id:
+                    dest = None
+                    if ctx.guild:
+                        dest = ctx.guild.get_channel_or_thread(dest_id)
+                        if dest is None:
+                            dest = ctx.guild.get_channel(dest_id)
+                        if dest is None:
+                            with contextlib.suppress(Exception):
+                                dest = await ctx.guild.fetch_channel(dest_id)
+                    # Always mirror to quote dest (even if same channel)
                     if dest is not None and hasattr(dest, "send"):
                         view = _QuoteChannelView(
                             jump_url=message.jump_url,
                             author_id=ctx.author.id,
                         )
-                        try:
-                            await dest.send(
-                                content=(
-                                    f"{message.author.mention} · "
-                                    f"[Jump to message]({message.jump_url})"
-                                ),
-                                file=discord.File(io.BytesIO(image_data), filename="quote.gif"),
-                                view=view,
-                                allowed_mentions=discord.AllowedMentions(users=False),
-                            )
-                        except Exception:
+                        # Prefer not double-posting the full quote image in-channel when dest is here
+                        if dest.id == getattr(ctx.channel, "id", None):
                             pass
+                        else:
+                            try:
+                                await dest.send(
+                                    content=(
+                                        f"-# **@{message.author.name}** · "
+                                        f"[Jump to message]({message.jump_url})"
+                                    ),
+                                    file=discord.File(io.BytesIO(image_data), filename="quote.gif"),
+                                    view=view,
+                                    allowed_mentions=discord.AllowedMentions.none(),
+                                )
+                            except Exception:
+                                pass
             return sent
 
     @quote_command.group(

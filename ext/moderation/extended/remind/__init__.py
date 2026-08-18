@@ -291,11 +291,13 @@ class Remind(Package):
 
         guild_id = ctx.guild.id if ctx.guild else 0
         try:
+            jump = getattr(getattr(ctx, "message", None), "jump_url", None)
             rid, pretty = await self._create_reminder(
                 user_id=ctx.author.id,
                 guild_id=guild_id,
                 message=message,
                 seconds=seconds,
+                jump_url=jump,
             )
         except Exception as exc:
             return await ctx.fail(f"Couldn't save that reminder\n> -# {exc}")
@@ -397,24 +399,26 @@ class Remind(Package):
                     continue
 
                 with contextlib.suppress(discord.Forbidden, discord.HTTPException):
-                    msg = (row["message"] or "").strip() or "—"
+                    msg = (row["message"] or "").strip() or "something"
                     msg = _JUMP_RE.sub("", msg).strip()
-                    num = row["number"] if row["number"] is not None else row["id"]
                     jump = (row["jump_url"] or "").strip()
                     body = (
-                        f"**It's time!**\n"
-                        f"> -# **#{num}**\n"
-                        f"\n{msg}"
+                        "> **oi wake up**, I'm here to **remind** you to start your **chore**\n\n"
+                        f"> -# **chore:** {msg}"
                     )
+                    embed = c2(message=body)
+                    embed.color = None
+                    view = None
                     if jump:
-                        body += f"\n\n[jump to message]({jump})"
-                    embed = c2(
-                        title="Reminder",
-                        message=body,
-                        footer="delivered to your DMs",
-                        timestamp=True,
-                    )
-                    await user.send(content=user.mention, embed=embed)
+                        view = discord.ui.View(timeout=None)
+                        view.add_item(
+                            discord.ui.Button(
+                                label="When did I say this?",
+                                style=discord.ButtonStyle.link,
+                                url=jump,
+                            )
+                        )
+                    await user.send(content=user.mention, embed=embed, view=view)
             except Exception:
                 continue
 

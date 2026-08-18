@@ -166,7 +166,7 @@ class LogEvents:
             lines.append(f"**Attachments:**\n{names}")
 
         embed = panel_embed(
-            author="Message Deleted",
+            author="Message deleted",
             author_icon=message.author.display_avatar.url,
             lines=lines,
             footer=f"{message.author} · {message.author.id}",
@@ -243,7 +243,7 @@ class LogEvents:
 
         ts = int(discord.utils.utcnow().timestamp())
         embed = panel_embed(
-            author="Message Edited",
+            author="Message edited",
             author_icon=before.author.display_avatar.url,
             lines=[
                 f"**When:** <t:{ts}:F> · <t:{ts}:R>",
@@ -274,7 +274,7 @@ class LogEvents:
         jump = f"https://discord.com/channels/{payload.guild_id}/{payload.channel_id}/{payload.message_id}"
         ts = int(discord.utils.utcnow().timestamp())
         embed = panel_embed(
-            author="Reaction Added",
+            author="Reaction added",
             author_icon=getattr(getattr(user, "display_avatar", None), "url", None),
             lines=[
                 f"**When:** <t:{ts}:F> · <t:{ts}:R>",
@@ -302,7 +302,7 @@ class LogEvents:
         jump = f"https://discord.com/channels/{payload.guild_id}/{payload.channel_id}/{payload.message_id}"
         ts = int(discord.utils.utcnow().timestamp())
         embed = panel_embed(
-            author="Reaction Removed",
+            author="Reaction removed",
             author_icon=getattr(getattr(user, "display_avatar", None), "url", None),
             lines=[
                 f"**When:** <t:{ts}:F> · <t:{ts}:R>",

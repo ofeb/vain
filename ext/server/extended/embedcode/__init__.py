@@ -6,10 +6,11 @@ import re
 
 import discord
 from discord import ui
+from discord.ext import commands
 from discord.ext.commands import hybrid_command, CommandError
 
 from core.discord.package import Package
-from core.discord.hybrid import describe
+from core.discord.hybrid import hybrid, describe
 from core.managers.permissions import has_permissions
 from config import color
 
@@ -17,76 +18,228 @@ if TYPE_CHECKING:
     from core.vain import Vain
 
 
+class _ModifyCodeView(discord.ui.View):
+    def __init__(self, *, owner_id: int, kind: str, code: str):
+        super().__init__(timeout=300)
+        self.owner_id = owner_id
+        self.kind = kind  # "embed" | "container"
+        self.code = code
+        label = "Modify container" if kind == "container" else "Modify embed"
+        btn = discord.ui.Button(label=label, style=discord.ButtonStyle.primary)
+        btn.callback = self._modify
+        self.add_item(btn)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Only the person who ran the command can use this.", ephemeral=True)
+            return False
+        return True
+
+    async def _modify(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer(ephemeral=True)
+        try:
+            from ext.utility.improper.builders import EmbedBuilderView, ContainerBuilderView
+        except Exception:
+            try:
+                from utility.improper.builders import EmbedBuilderView, ContainerBuilderView
+            except Exception as exc:
+                return await interaction.followup.send(f"Couldn't open builder\n> -# {exc}", ephemeral=True)
+
+        accent = getattr(interaction.client, "color", None) or 0x2B2D31
+        if self.kind == "container":
+            builder = ContainerBuilderView(interaction.user.id, accent=int(accent))
+        else:
+            builder = EmbedBuilderView(interaction.user.id, accent=int(accent))
+
+        # Best-effort apply simple $v fields into builder data
+        try:
+            _apply_script_to_builder(builder, self.code)
+        except Exception:
+            pass
+
+        channel = interaction.channel
+        try:
+            preview_content, preview_layout = builder._preview_container() if self.kind == "container" else (None, None)
+            if self.kind == "container":
+                await builder._refresh_content_message(preview_content, channel)
+                m = await channel.send(view=builder._controls())
+                builder.message = m
+                try:
+                    preview = await channel.send(content=None, view=preview_layout)
+                    builder.preview_message = preview
+                except Exception:
+                    builder.preview_message = None
+            else:
+                # embed builder path
+                if hasattr(builder, "start"):
+                    await builder.start(interaction)
+                else:
+                    m = await channel.send(view=builder)
+                    builder.message = m
+            await interaction.followup.send(
+                f"Opened **{'container' if self.kind == 'container' else 'embed'} builder** with your code preloaded where possible.",
+                ephemeral=True,
+            )
+        except Exception as exc:
+            await interaction.followup.send(f"Couldn't open builder\n> -# {exc}", ephemeral=True)
+
+
+def _apply_script_to_builder(builder: Any, code: str) -> None:
+    """Parse common $v{key: value} chunks into builder.data when present."""
+    data = getattr(builder, "data", None)
+    if not isinstance(data, dict):
+        return
+    text = code or ""
+    for m in re.finditer(r"\$v\{(\w+)\s*:\s*(.*?)\}", text, re.DOTALL):
+        key = m.group(1).lower().strip()
+        val = m.group(2).strip()
+        if key in {"description", "desc"}:
+            data["description"] = val
+        elif key == "title":
+            data["title"] = val
+        elif key == "footer":
+            if "text:" in val:
+                # text: x && icon: y
+                parts = [p.strip() for p in val.split("&&")]
+                for part in parts:
+                    if part.lower().startswith("text:"):
+                        data["footer"] = part.split(":", 1)[1].strip()
+                    elif part.lower().startswith("icon:"):
+                        data["footer_icon"] = part.split(":", 1)[1].strip()
+            else:
+                data["footer"] = val
+        elif key == "color":
+            data["color"] = val.lstrip("#")
+        elif key == "image":
+            data["image"] = val.split("&&")[0].strip()
+        elif key == "thumbnail":
+            data["thumbnail"] = val
+        elif key == "author":
+            parts = [p.strip() for p in val.split("&&")]
+            for part in parts:
+                low = part.lower()
+                if low.startswith("name:"):
+                    data["author"] = part.split(":", 1)[1].strip()
+                elif low.startswith("icon:"):
+                    data["author_icon"] = part.split(":", 1)[1].strip()
+                elif low.startswith("url:"):
+                    data["author_url"] = part.split(":", 1)[1].strip()
+                elif ":" not in part and not data.get("author"):
+                    data["author"] = part
+
+
 class Embedcode(Package):
     """copy embed or container code from a message"""
 
-    @hybrid_command(
+    @hybrid(
         name="embedcode",
         aliases=["copyembed", "ec"],
         description="Copy the embed code (or container code) from a message",
-        example=",embedcode https://discord.com/channels/123/456/789",
-        guild_only=True,
+        example=",embedcode (reply) or ,embedcode <message link/id>",
+        guilds=True,
+        dms=True,
+        groupchats=True,
     )
-    @describe(message="Message link to copy from")
+    @describe(message="Message link, id, or leave empty to use a reply")
     @has_permissions(manage_messages=True)
-    async def embedcode(self, ctx, *, message: str):
-        """copy embed code (or container code) from a message"""
-        msg = await self._fetch_message(ctx, message)
+    async def embedcode(self, ctx, *, message: str = None):
+        msg = await self._resolve_message(ctx, message)
         if msg is None:
-            return
+            return await ctx.warn(
+                "Reply to a message or pass a link / id\n"
+                f"> -# **usage:** {ctx.cmd('embedcode')} (reply)"
+            )
 
+        kind = "embed"
         title = "Embed Code"
         if msg.embeds:
             code = self._embed_to_code(msg.embeds[0])
         else:
             layout = self._message_layout(msg)
             if layout is None:
-                return await ctx.warn("That message has no embeds or container code")
-            code = self._container_to_code(layout)
-            title = "Container Code"
+                if (msg.content or "").strip():
+                    code = f"{{embed}}$v{{description: {msg.content.strip()}}}"
+                else:
+                    return await ctx.warn("That message has no embeds, container, or text")
+            else:
+                code = self._container_to_code(layout)
+                title = "Container Code"
+                kind = "container"
 
-        if len(code) > 2000:
-            return await ctx.warn("Code is too long to send. Check your DMs.")
+        await self._deliver_code(ctx, title=title, code=code, kind=kind)
 
-        try:
-            await ctx.author.send(content=self._code_dm_embed(code))
-            await ctx.success(f"{title} sent to your DMs!")
-        except discord.Forbidden:
-            await ctx.warn("Could not DM you. Check your privacy settings.")
-
-    @hybrid_command(
+    @hybrid(
         name="containercode",
         aliases=["ccode", "containerc", "copycontainer"],
         description="Copy the container code (or embed code) from a message",
-        example=",containercode https://discord.com/channels/123/456/789",
-        guild_only=True,
+        example=",containercode (reply) or ,containercode <message link/id>",
+        guilds=True,
+        dms=True,
+        groupchats=True,
     )
-    @describe(message="Message link to copy from")
+    @describe(message="Message link, id, or leave empty to use a reply")
     @has_permissions(manage_messages=True)
-    async def containercode(self, ctx, *, message: str):
-        """copy container code (or embed code) from a message"""
-        msg = await self._fetch_message(ctx, message)
+    async def containercode(self, ctx, *, message: str = None):
+        msg = await self._resolve_message(ctx, message)
         if msg is None:
-            return
+            return await ctx.warn(
+                "Reply to a message or pass a link / id\n"
+                f"> -# **usage:** {ctx.cmd('containercode')} (reply)"
+            )
 
-        title = "Embed Code"
         layout = self._message_layout(msg)
         if layout is not None:
             code = self._container_to_code(layout)
-            title = "Container Code"
+            title, kind = "Container Code", "container"
         elif msg.embeds:
             code = self._embed_to_code(msg.embeds[0])
+            title, kind = "Embed Code", "embed"
+        elif (msg.content or "").strip():
+            code = f"{{container}}$v{{description: {msg.content.strip()}}}"
+            title, kind = "Container Code", "container"
         else:
-            return await ctx.warn("That message has no container code or embeds")
+            return await ctx.warn("That message has no container, embeds, or text")
 
-        if len(code) > 2000:
-            return await ctx.warn("Code is too long to send. Check your DMs.")
+        await self._deliver_code(ctx, title=title, code=code, kind=kind)
 
+    async def _deliver_code(self, ctx, *, title: str, code: str, kind: str) -> None:
+        view = _ModifyCodeView(owner_id=ctx.author.id, kind=kind, code=code)
         try:
             await ctx.author.send(content=self._code_dm_embed(code))
-            await ctx.success(f"{title} sent to your DMs!")
+            await ctx.success(f"{title} sent to your DMs!", view=view)
         except discord.Forbidden:
-            await ctx.warn("Could not DM you. Check your privacy settings.")
+            # fall back: send code in channel truncated + modify button
+            preview = code if len(code) <= 1800 else code[:1800] + "…"
+            await ctx.success(
+                f"{title} (couldn't DM you — check privacy settings)\n```\n{preview}\n```",
+                view=view,
+            )
+
+    async def _resolve_message(self, ctx, raw: str | None) -> discord.Message | None:
+        # Reply first
+        if ctx.message and ctx.message.reference:
+            ref = ctx.message.reference.resolved
+            if isinstance(ref, discord.Message):
+                return ref
+            mid = ctx.message.reference.message_id
+            if mid:
+                with contextlib.suppress(Exception):
+                    return await ctx.channel.fetch_message(mid)
+
+        if not raw or not str(raw).strip():
+            return None
+
+        text = str(raw).strip()
+        # message link
+        msg = await self._fetch_message(ctx, text)
+        if msg is not None:
+            return msg
+        # bare snowflake id in current channel
+        if text.isdigit():
+            with contextlib.suppress(Exception):
+                return await ctx.channel.fetch_message(int(text))
+        return None
+
 
     def _code_dm_embed(self, code: str) -> str:
         """Copy-friendly plain-text script in a fenced code block."""
