@@ -119,7 +119,7 @@ def _translate_layout(
             except Exception:
                 pass
 
-    title = "# <a:messages:1539180118801383424>  **Translation**"
+    title = "# <a:messages:1539180118801383424> **Translation**"
     direction = f"-# {from_label} → {to_label}"
     orig = (original or "").strip()
     if len(orig) > 1800:
