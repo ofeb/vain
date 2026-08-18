@@ -243,7 +243,7 @@ class Reaction(ReactionEvents, Package):
             trigger_raw = trigger_raw[: m.start()].rstrip()
 
         if user_mode:
-            # add <member|emojis...> --user  OR  add <emojis> <member> --user
+            
             combined = f"{emoji} {trigger_raw}".strip()
             return await self._add_user_autoreact(ctx, combined + " --user")
 
@@ -298,7 +298,7 @@ class Reaction(ReactionEvents, Package):
     async def reaction_delete(self, ctx: Context, *, trigger: str) -> None:
         """Remove all auto reactions for a trigger (or a user rule)."""
         trigger = trigger.strip()
-        # allow deleting user rules via mention / id / user:id
+        
         if trigger.lower().startswith("user:"):
             key = trigger
         else:
@@ -307,7 +307,7 @@ class Reaction(ReactionEvents, Package):
                 from discord.ext.commands import MemberConverter
                 member = await MemberConverter().convert(ctx, trigger)
                 key = f"user:{member.id}"
-                # try both user key and plain trigger
+                
                 result = await self.bot.db.execute(
                     """
                     DELETE FROM auto_reactions

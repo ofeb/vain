@@ -55,7 +55,7 @@ class AutoroleEvents(Package):
                 if not role:
                     to_delete.append(role_id)
                     continue
-                # Skip managed / integration roles and roles the bot cannot assign
+                
                 if role.managed or role.is_default():
                     continue
                 if role >= member.guild.me.top_role:

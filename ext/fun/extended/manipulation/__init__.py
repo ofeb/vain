@@ -782,7 +782,7 @@ class Manipulation(Package):
             filename = "image"
         if not data:
             return await ctx.warn("No image provided or found")
-        # detect gif
+        
         head = data[:6]
         if head.startswith(b"GIF87a") or head.startswith(b"GIF89a"):
             return await ctx.warn("Already a GIF")

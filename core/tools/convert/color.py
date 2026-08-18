@@ -10,7 +10,7 @@ class ColorConvert(Converter):
     """convert string to discord Color"""
     async def convert(self, ctx: Context, arg: str) -> discord.Color:
         raw = (arg or "").strip()
-        # auto-prefix # for bare hex
+        
         h = raw[1:] if raw.startswith("#") else raw
         h = h.lower()
         try:
@@ -19,7 +19,7 @@ class ColorConvert(Converter):
             color = discord.Color.from_str(f"#{h}")
         except Exception:
             raise CommandError(f"**{arg}** isnt a valid color use hex like ff0000")
-        # pure black (#000000) is Discord's "default" / invisible role colour — bump to #000001
+        
         if color.value == 0:
             color = discord.Color(1)
         return color

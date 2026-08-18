@@ -71,7 +71,7 @@ class FilterEvents(Package):
                 guild_id,
             )
         except Exception:
-            # table may not exist yet
+            
             with contextlib.suppress(Exception):
                 await self.db.execute(
                     """

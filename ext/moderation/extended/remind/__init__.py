@@ -192,7 +192,7 @@ class Remind(Package):
                     continue
 
                 with contextlib.suppress(discord.Forbidden, discord.HTTPException):
-                    # three pings then a clean c2 embed
+                    
                     await user.send(user.mention)
                     await user.send(user.mention)
                     await user.send(user.mention)

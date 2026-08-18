@@ -98,14 +98,14 @@ def _parse_hex_color(token: str) -> discord.Color | None:
     if not token:
         return None
     raw = token.strip()
-    # strip optional #
+    
     h = raw[1:] if raw.startswith("#") else raw
     if not re.fullmatch(r"[0-9a-fA-F]{6}", h) and not re.fullmatch(r"[0-9a-fA-F]{3}", h):
         return None
     if len(h) == 3:
         h = "".join(c * 2 for c in h)
     value = int(h, 16)
-    # Discord treats pure black (#000000) as the default / invisible colour
+    
     if value == 0:
         value = 1
     return discord.Color(value)
@@ -124,7 +124,7 @@ def _parse_create_args(args: str) -> tuple[str | None, discord.Color | None, dis
     raw = (args or "").strip()
     if not raw:
         return None, None, None
-    # normalise commas so "ff0000, 00ff00 name" splits cleanly
+    
     normalised = raw.replace(",", " ")
     tokens = [t for t in normalised.split() if t]
     colors: list[discord.Color] = []
@@ -155,7 +155,7 @@ def _parse_modify_args(args: str) -> tuple[str | None, discord.Color | None, dis
         return None, None, None
 
     colors: list[discord.Color] = []
-    # pull hex tokens from the end
+    
     while tokens:
         col = _parse_hex_color(tokens[-1])
         if col is None:
@@ -175,7 +175,7 @@ def _apply_role_colors(role: discord.Role, primary: discord.Color, secondary: di
     """Edit role colour, using gradient when secondary is provided and supported."""
     kwargs = {"reason": reason}
     if secondary is not None:
-        # Prefer RoleColours / colours kwarg when available (boost level 3 gradient)
+        
         RoleColours = getattr(discord, "RoleColours", None)
         if RoleColours is not None:
             try:
@@ -187,7 +187,7 @@ def _apply_role_colors(role: discord.Role, primary: discord.Color, secondary: di
                 pass
             except Exception:
                 pass
-        # Fallback kwargs used by some discord.py builds
+        
         for kw in (
             {"colour": primary, "secondary_colour": secondary},
             {"color": primary, "secondary_color": secondary},
@@ -240,7 +240,7 @@ class BoosterroleCommands(Package):
         if primary is None and name is None:
             return await ctx.send_help(ctx.command)
 
-        # if first token wasn't a colour, treat whole string as name with default colour
+        
         if primary is None and name is not None:
             primary = discord.Color(1)
 
@@ -326,7 +326,7 @@ class BoosterroleCommands(Package):
                 f"> -# **color:** {color_label}"
             )
 
-        # existing role — update
+        
         edit_name = name if name is not None else None
         if secondary is not None and primary is not None:
             await _apply_role_colors(
@@ -697,7 +697,7 @@ class BoosterroleCommands(Package):
                 )
 
         if secondary is not None and primary is not None:
-            # gradient requires boost level 3
+            
             if getattr(ctx.guild, "premium_tier", 0) < 3:
                 raise CommandError(
                     "Gradient colours need **Server Boost Level 3**\n"

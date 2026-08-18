@@ -200,10 +200,10 @@ def pil_to_gif(data: bytes) -> bytes:
 
     src = Image.open(BytesIO(data))
     frame = src.convert("RGBA")
-    # preserve size exactly
+    
     w, h = frame.size
     buf = BytesIO()
-    # GIF needs palette; use adaptive without resize
+    
     pal = frame.convert("P", palette=Image.ADAPTIVE, colors=255)
     pal.save(buf, format="GIF")
     return buf.getvalue()

@@ -16,7 +16,7 @@ class MusicEvents(Package):
         aliases = list(getattr(cmd, "aliases", None) or [])
         if "leave" in aliases:
             cmd.aliases = [a for a in aliases if a != "leave"]
-        # discord.py already registered the alias in all_commands at add_cog time
+        
         bot = getattr(self, "bot", None)
         if bot is not None and bot.all_commands.get("leave") is cmd:
             bot.all_commands.pop("leave", None)

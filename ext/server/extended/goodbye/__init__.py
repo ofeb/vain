@@ -180,7 +180,7 @@ class GoodbyeCommands(Package):
         )
 
     async def on_member_remove(self, member: Member) -> None:
-        # Safe antiraid gate (get_antiraid_state does not exist on db)
+        
         try:
             row = await self.db.fetchrow(
                 "SELECT raid_active FROM antiraid_config WHERE guild_id = $1",

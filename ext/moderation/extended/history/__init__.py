@@ -87,8 +87,8 @@ class History(Package):
                         note=notes_by_case.get(row["case_id"]),
                     )
                 )
-                # blank spacer between cases so the note line is not jammed
-                # against the next Case header
+                
+                
                 if idx < len(chunk) - 1:
                     lines.append("\u200b")
             page_num = (i // _CASES_PER_PAGE) + 1

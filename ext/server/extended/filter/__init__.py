@@ -93,7 +93,7 @@ def _normalize_invite_code(raw: str) -> str:
         if lower.startswith(prefix):
             s = s[len(prefix):]
             break
-    # strip trailing junk
+    
     s = s.split("?")[0].split("#")[0].strip().strip("/")
     return s
 
@@ -103,7 +103,7 @@ def _invite_allow_entries(code: str) -> list[str]:
     code = _normalize_invite_code(code)
     if not code:
         return []
-    # Discord allow_list is substring-based; cover common shapes + wildcards
+    
     entries = {
         code,
         f"*{code}*",
@@ -118,7 +118,7 @@ def _invite_allow_entries(code: str) -> list[str]:
         f"/{code}",
         f"*/{code}*",
     }
-    # AutoMod allow_list entries must be 1-60 chars
+    
     return [e for e in entries if 1 <= len(e) <= 60]
 
 
@@ -164,7 +164,7 @@ class FilterCommands(Package):
             raw = " ".join(str(w) for w in words)
         else:
             raw = str(words or "")
-        # split on commas or whitespace
+        
         parts = []
         for chunk in raw.replace(",", " ").split():
             w = chunk.strip().lower()
@@ -209,7 +209,7 @@ class FilterCommands(Package):
                     reason=f"filter updated by {author}",
                 )
         except discord.HTTPException:
-            # Bot-side filter still works even if AutoMod fails
+            
             pass
 
     async def _get_automod_rules(self, guild: discord.Guild):
@@ -306,12 +306,12 @@ class FilterCommands(Package):
 
         await self._sync_words_automod(ctx.guild, all_words, author=ctx.author)
 
-        # bust event cache so enforcement picks up new words immediately
+        
         try:
             events = self.bot.get_cog("FilterEvents") or self.bot.get_cog("Filter")
             if events is not None and hasattr(events, "_words_cache"):
                 events._words_cache.pop(ctx.guild.id, None)
-            # also clear on any package that has the cache
+            
             for cog in self.bot.cogs.values():
                 if hasattr(cog, "_words_cache"):
                     cog._words_cache.pop(ctx.guild.id, None)
@@ -341,14 +341,14 @@ class FilterCommands(Package):
                 ctx.guild.id,
                 w,
             )
-            # asyncpg returns status like "DELETE 1"
+            
             if result and str(result).endswith("1"):
                 dropped.append(w)
             else:
-                # try anyway - mark as dropped if known pattern
+                
                 dropped.append(w)
 
-        # verify what remains / what was actually stored
+        
         remaining_rows = await self.db.fetch(
             "SELECT word FROM filter_words WHERE guild_id = $1 ORDER BY word",
             ctx.guild.id,
@@ -381,7 +381,7 @@ class FilterCommands(Package):
         )
         words = [r["word"] for r in rows]
         if not words:
-            # fallback: show AutoMod rule words if DB empty (legacy)
+            
             bot_rules = await self._get_bot_rules(ctx.guild)
             rule = _find_rule(bot_rules, name=WORDS_RULE)
             if rule:
@@ -607,7 +607,7 @@ class FilterCommands(Package):
                 current_allow.append(e)
                 existing.add(e.lower())
 
-        # Discord allow_list max 100
+        
         if len(current_allow) > 100:
             current_allow = current_allow[:100]
 

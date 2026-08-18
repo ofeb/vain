@@ -168,7 +168,7 @@ class FileVainCache:
 
     async def set(self, key: str, value: Any, ex: int | None = None, **_: Any) -> bool:
         async with self._lock:
-            # Always store JSON-serializable values (bytes from real redis clients break orjson)
+            
             stored = self._normalize_member(value) if not isinstance(value, (int, float, bool, type(None))) else value
             entry = {"kind": "string", "value": stored, "exp": None}
             if ex is not None:

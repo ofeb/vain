@@ -541,7 +541,7 @@ class Context(commands.Context):
             text = str(exc)
             if "10003" not in text and "Unknown Channel" not in text:
                 raise
-        # channel gone / invalid (jsk override, deleted channel, user-as-channel)
+        
         dest = None
         author = getattr(self, "author", None)
         if author is not None:
