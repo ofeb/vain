@@ -4,6 +4,7 @@ import contextlib
 from datetime import datetime, timezone, timedelta
 
 import discord
+from discord import app_commands, ui
 from discord.ext import tasks
 
 from core.discord.package import Package
@@ -16,21 +17,103 @@ def label_line(label: str, value: str) -> str:
     return f"**{label}**: {value}"
 
 
+class _RemindDurationModal(ui.Modal, title="Remind me"):
+    duration = ui.TextInput(
+        label="When?",
+        placeholder="e.g. 30m, 2h, 1d",
+        min_length=1,
+        max_length=32,
+        required=True,
+    )
+
+    def __init__(self, cog: "Remind", message: discord.Message):
+        super().__init__()
+        self.cog = cog
+        self.target_message = message
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer(ephemeral=True)
+        seconds = parse_duration_seconds(str(self.duration.value).strip())
+        if not seconds or seconds < 30:
+            return await interaction.followup.send(
+                "Please provide a **valid duration** (minimum 30 seconds, e.g. `30m`, `2h`, `1d`).",
+                ephemeral=True,
+            )
+        if seconds > 30 * 86400:
+            return await interaction.followup.send(
+                "Reminders can't exceed **30 days**.",
+                ephemeral=True,
+            )
+        text = (self.target_message.content or "").strip()
+        if not text:
+            text = f"[message]({self.target_message.jump_url})"
+        else:
+            if len(text) > 900:
+                text = text[:897].rstrip() + "..."
+            text = f"{text}\n-# [jump]({self.target_message.jump_url})"
+
+        when = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=seconds)
+        guild_id = interaction.guild.id if interaction.guild else 0
+        channel_id = interaction.channel.id if interaction.channel else 0
+        rid = await self.cog.db.fetchval(
+            """INSERT INTO reminders (user_id, guild_id, channel_id, message, time)
+               VALUES ($1, $2, $3, $4, $5)
+               RETURNING id""",
+            interaction.user.id,
+            guild_id,
+            channel_id,
+            text,
+            when,
+        )
+        pretty = self.cog._format_duration(seconds)
+        await interaction.followup.send(
+            f"I'll remind you in **{pretty}**\n> -# **id:** #{rid}",
+            ephemeral=True,
+        )
+
+
 class Remind(Package):
     """Personal reminders stored in the database."""
 
     def __init__(self, bot):
         super().__init__(bot)
+        self._menus: list[app_commands.ContextMenu] = []
 
     async def cog_load(self) -> None:
+        self._register_menus()
         if not self._remind_loop.is_running():
             self._remind_loop.start()
         await super().cog_load()
 
     async def cog_unload(self) -> None:
+        for menu in self._menus:
+            with contextlib.suppress(Exception):
+                self.bot.tree.remove_command(menu.name, type=discord.AppCommandType.message)
+        self._menus.clear()
         if self._remind_loop.is_running():
             self._remind_loop.cancel()
         await super().cog_unload()
+
+    def _register_menus(self) -> None:
+        for menu in list(self._menus):
+            with contextlib.suppress(Exception):
+                self.bot.tree.remove_command(menu.name, type=discord.AppCommandType.message)
+        self._menus.clear()
+
+        menu = app_commands.ContextMenu(
+            name="Remind me to do this",
+            callback=self.ctx_remind,
+            type=discord.AppCommandType.message,
+        )
+        with contextlib.suppress(Exception):
+            app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)(menu)
+        with contextlib.suppress(Exception):
+            app_commands.allowed_installs(guilds=True, users=True)(menu)
+        try:
+            self.bot.tree.add_command(menu, override=True)
+            self._menus.append(menu)
+        except Exception:
+            pass
 
     def _format_duration(self, seconds: int) -> str:
         units = (
@@ -51,15 +134,25 @@ class Remind(Package):
                 break
         return ", ".join(parts) if parts else "0 seconds"
 
+    async def ctx_remind(self, interaction: discord.Interaction, message: discord.Message) -> None:
+        """Message context menu: Remind me to do this."""
+        await interaction.response.send_modal(_RemindDurationModal(self, message))
+
     @hybrid(
         name="remind",
         aliases=["reminder", "remindme"],
         description="Set a personal reminder",
         group=True,
         example=",remind 2h check tickets",
+        guilds=True,
+        dms=True,
+        groupchats=True,
     )
-    async def remind(self, ctx, *, reminder: str):
+    async def remind(self, ctx, *, reminder: str = None):
         """Set a reminder. Format: <duration> <message>"""
+        if not reminder or not str(reminder).strip():
+            return await ctx.send_help(ctx.command)
+
         tokens = reminder.split()
         if not tokens:
             return await ctx.send_help(ctx.command)
@@ -86,65 +179,74 @@ class Remind(Package):
 
         message = " ".join(message_tokens).strip()
         if not message:
-            return await ctx.fail(
+            return await ctx.warn(
                 "Please provide a **reminder message**\n"
-                f"> -# **usage:** {ctx.cmd('remind <duration> <message>')}"
+                f"> -# **usage:** {ctx.cmd('remind 2h check tickets')}"
             )
 
         when = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=seconds)
+        guild_id = ctx.guild.id if ctx.guild else 0
+        channel_id = ctx.channel.id if ctx.channel else 0
 
-        row = await self.db.fetchrow(
-            """INSERT INTO reminders (user_id, guild_id, message, time)
-               VALUES ($1, $2, $3, $4)
+        rid = await self.db.fetchval(
+            """INSERT INTO reminders (user_id, guild_id, channel_id, message, time)
+               VALUES ($1, $2, $3, $4, $5)
                RETURNING id""",
             ctx.author.id,
-            ctx.guild.id if ctx.guild else 0,
-            message[:1500],
+            guild_id,
+            channel_id,
+            message,
             when,
         )
-        rid = row["id"] if row else "?"
-        label = self._format_duration(seconds)
+
+        pretty = self._format_duration(seconds)
         return await ctx.success(
-            f"Reminder **#{rid}** set\n"
-            f"> -# **duration:** {label}\n"
-            f"> -# **message:** {message[:200]}"
+            f"I'll remind you in **{pretty}**\n"
+            f"> -# **message:** {message}\n"
+            f"> -# **id:** #{rid}"
         )
 
     @remind.command(
         name="list",
         aliases=["ls", "all"],
-        description="View your active reminders",
+        description="List your active reminders",
+        example=",remind list",
     )
     async def remind_list(self, ctx):
-        """List your reminders."""
+        """List your pending reminders."""
         rows = await self.db.fetch(
             """SELECT id, message, time
                FROM reminders
                WHERE user_id = $1
-               ORDER BY time ASC""",
+               ORDER BY time ASC
+               LIMIT 25""",
             ctx.author.id,
         )
         if not rows:
-            return await ctx.warn(
-                "You have no active reminders\n"
-                f"> -# **create one with:** {ctx.cmd('remind <duration> <message>')}"
-            )
+            return await ctx.warn("You have **no active reminders**")
 
         lines = []
-        for row in rows[:25]:
-            when = row["time"]
-            stamp = discord.utils.format_dt(when, style="R") if when else "unknown"
-            msg = (row["message"] or "")[:80]
-            lines.append(f"> **#{row['id']}**: {msg} — {stamp}")
+        for row in rows:
+            ts = row["time"]
+            if isinstance(ts, datetime) and ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            stamp = int(ts.timestamp()) if isinstance(ts, datetime) else 0
+            msg = (row["message"] or "").strip()
+            if len(msg) > 80:
+                msg = msg[:77] + "..."
+            lines.append(f"**#{row['id']}** · <t:{stamp}:R>\n> -# {msg}")
 
-        await ctx.success(
-            f"Your reminders ({len(rows)})\n" + "\n".join(lines)
+        embed = c2(
+            title="Your reminders",
+            message="\n".join(lines),
+            footer=f"{len(rows)} reminder{'s' if len(rows) != 1 else ''}",
         )
+        return await ctx.send(embed=embed)
 
     @remind.command(
         name="remove",
-        aliases=["delete", "del", "cancel"],
-        description="Remove one of your reminders",
+        aliases=["rm", "delete", "del", "cancel"],
+        description="Remove a reminder by id",
         example=",remind remove 12",
     )
     async def remind_remove(self, ctx, id: int):
@@ -192,11 +294,6 @@ class Remind(Package):
                     continue
 
                 with contextlib.suppress(discord.Forbidden, discord.HTTPException):
-                    
-                    await user.send(user.mention)
-                    await user.send(user.mention)
-                    await user.send(user.mention)
-
                     msg = (row["message"] or "").strip() or "—"
                     embed = c2(
                         title="Reminder",
@@ -208,7 +305,7 @@ class Remind(Package):
                         footer="you set this earlier",
                         timestamp=True,
                     )
-                    await user.send(embed=embed)
+                    await user.send(content=user.mention, embed=embed)
             except Exception:
                 continue
 
