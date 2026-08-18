@@ -22,6 +22,7 @@ from core.tools.moderation_args import (
 from core.tools.moderation_logs import (
     DEFAULT_INVOKE_DM,
     build_modlog_embed,
+    send_c2_embed,
     send_invoke_dm,
     send_invoke_response,
 )
@@ -365,7 +366,7 @@ class ModerationCommands(Package):
         else:
             target_label = "Unknown User"
         embed = build_modlog_embed(
-            color=self.color,
+            color=None,
             action=action,
             target_label=target_label,
             moderator_label=ctx.author.mention,
@@ -373,7 +374,7 @@ class ModerationCommands(Package):
             case_id=case_id,
             extra=extra,
         )
-        await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+        await send_c2_embed(channel, embed)
 
     async def _invoke_dm(
         self,
@@ -997,14 +998,14 @@ class ModerationCommands(Package):
                 )
         else:
             embed = build_modlog_embed(
-                color=self.color,
+                color=None,
                 action="jailed",
                 target_label=member.mention,
                 moderator_label=ctx.author.mention,
                 reason=self._default_reason(reason),
                 case_id=case_id,
             )
-            await jail_channel.send(content=member.mention, embed=embed)
+            await send_c2_embed(jail_channel, embed, content=member.mention)
 
         if await self._invoke_response(ctx, "jail", user=member, reason=reason, case_id=case_id):
             return

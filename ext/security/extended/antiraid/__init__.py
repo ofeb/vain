@@ -11,7 +11,7 @@ from discord.ext import commands
 from discord.ext.commands import CommandError, FlagConverter, flag, group
 
 from core.discord.package import Package
-from core.tools.moderation_logs import build_security_log_embed
+from core.tools.moderation_logs import send_c2_embed, build_security_log_embed
 
 from .events import AntiraidEvents
 from core.tools.convert import MemberConvert, StatusConvert
@@ -147,7 +147,7 @@ class Antiraid(AntiraidEvents, Package):
         if not isinstance(channel, discord.TextChannel):
             return
         with contextlib.suppress(discord.Forbidden, discord.HTTPException):
-            await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+            await send_c2_embed(channel, embed)
 
     async def _sanction_member(
         self,

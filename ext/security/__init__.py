@@ -16,7 +16,7 @@ from core.discord.package import Package
 from .events import AntinukeEvents
 from core.tools.convert import MemberConvert, StatusConvert
 from core.tools.flags import AntiNukeFlags
-from core.tools.moderation_logs import build_modlog_embed, build_security_log_embed
+from core.tools.moderation_logs import build_modlog_embed, build_security_log_embed, send_c2_embed
 from core.tools.permissions import DANGEROUS_PERMISSIONS, normalize_dangerous_permission
 
 from .models import AntinukeConfig, PermissionWatch
@@ -345,7 +345,7 @@ class Antinuke(AntinukeEvents, Package):
         if not isinstance(channel, discord.TextChannel):
             return
         with contextlib.suppress(discord.Forbidden, discord.HTTPException):
-            await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+            await send_c2_embed(channel, embed)
 
     async def _alert_guild_owner(self, guild: discord.Guild, body: str) -> None:
         owner = guild.owner
@@ -429,7 +429,7 @@ class Antinuke(AntinukeEvents, Package):
             return case_id
 
         embed = build_modlog_embed(
-            color=self.color,
+            color=None,
             action=action,
             target_label=f"<@{target_id}> (`{target_id}`)",
             moderator_label=getattr(moderator, "mention", str(moderator)),
@@ -437,7 +437,7 @@ class Antinuke(AntinukeEvents, Package):
             case_id=case_id,
         )
         with contextlib.suppress(discord.Forbidden, discord.HTTPException):
-            await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+            await send_c2_embed(channel, embed)
         return case_id
 
     async def _confine_member(

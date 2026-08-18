@@ -12,6 +12,7 @@ from discord.ext.commands import BucketType, cooldown, group
 from config import color
 from core.discord.package import Package
 from core.discord.views.embed import panel_embed
+from core.tools.moderation_logs import send_c2_embed
 from core.managers.permissions import has_permissions
 from core.tools.embed import is_container_script, is_embed_script, maybe_wrap_embed_script
 
@@ -268,7 +269,7 @@ class Honeypot(Package):
             timestamp=True,
         )
         with contextlib.suppress(discord.Forbidden, discord.HTTPException):
-            await channel.send(embed=embed)
+            await send_c2_embed(channel, embed)
 
     @group(
         name="honeypot",

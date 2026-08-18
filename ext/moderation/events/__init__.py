@@ -10,6 +10,7 @@ from asyncio import Lock
 from core.discord.package import Package
 
 from core.discord.views.embed import panel_embed
+from core.tools.moderation_logs import send_c2_embed
 
 def label_line(label: str, value: str) -> str:
     return f"**{label}**: {value}"
@@ -176,10 +177,10 @@ class ModerationEvents(Package):
 
         embed = panel_embed(
             title="Role Changes",
-            color=0xE1D2DE,
+            color=None,
             lines=lines,
         )
-        await log_channel.send(embed=embed)
+        await send_c2_embed(log_channel, embed)
 
     @Package.listener("on_member_ban")
     async def on_ban_log(self, guild: discord.Guild, user: discord.User):
@@ -200,10 +201,10 @@ class ModerationEvents(Package):
                     lines.append(label_line("Reason", entry.reason))
                 embed = panel_embed(
                     title="Member Banned",
-                    color=0xE07A7A,
+                    color=None,
                     lines=lines,
                 )
-                await log_channel.send(embed=embed)
+                await send_c2_embed(log_channel, embed)
                 break
 
     @Package.listener("on_member_unban")
@@ -222,8 +223,8 @@ class ModerationEvents(Package):
             if entry.target.id == user.id:
                 embed = panel_embed(
                     title="Member Unbanned",
-                    color=0xA8D8A8,
+                    color=None,
                     lines=[f"{user.name} was unbanned by {entry.user.mention}"],
                 )
-                await log_channel.send(embed=embed)
+                await send_c2_embed(log_channel, embed)
                 break

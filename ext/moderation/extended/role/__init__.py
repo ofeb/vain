@@ -29,7 +29,7 @@ from core.tools.guild_members import collect_guild_members
 from core.tools.hierarchy import ensure_member_hierarchy
 from core.tools.human.text import join as human_join
 from core.tools.human.text import plural
-from core.tools.moderation_logs import build_modlog_embed
+from core.tools.moderation_logs import build_modlog_embed, send_c2_embed
 from core.tools.pages import Paginator, build_pages
 
 MASS_ROLE_CONCURRENCY = MaxConcurrency(1, per=BucketType.guild, wait=False)
@@ -354,7 +354,7 @@ class Role(Package):
             target_label = "Unknown User"
 
         embed = build_modlog_embed(
-            color=self.color,
+            color=None,
             action=action,
             target_label=target_label,
             moderator_label=ctx.author.mention,
@@ -362,7 +362,7 @@ class Role(Package):
             case_id=case_id,
             extra=extra,
         )
-        await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+        await send_c2_embed(channel, embed)
 
     
 
