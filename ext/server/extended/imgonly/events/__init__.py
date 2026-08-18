@@ -158,7 +158,7 @@ class ImgonlyEvents(Package):
             )
 
         return (
-            f"{message.author.mention} this is a **gallery** channel\n"
+            f"> {message.author.mention} this is a **gallery** channel\n"
             f"> -# only **images or attachments** are allowed in {message.channel.mention}"
         )
 
