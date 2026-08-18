@@ -621,9 +621,9 @@ class Utility(commands.Cog):
         for i, chunk in enumerate(pages):
             embeds.append(
                 panel_embed(
-                    title=f"Answer · {qshow}",
+                    title=f"**Q**: `{qshow}`",
                     lines=[chunk],
-                    footer=f"Gemini · {i + 1}/{len(pages)}" if len(pages) > 1 else "Gemini",
+                    footer=f"Powered by Gemini · {i + 1}/{len(pages)}" if len(pages) > 1 else "Gemini",
                     timestamp=False,
                 )
             )
@@ -756,9 +756,9 @@ class Utility(commands.Cog):
         for i, chunk in enumerate(pages):
             embeds.append(
                 panel_embed(
-                    title=f"Answer · {qshow}",
+                    title=f"**Q**: · `{qshow}`",
                     lines=[chunk],
-                    footer=f"Gemini · {i + 1}/{len(pages)}" if len(pages) > 1 else "Gemini",
+                    footer=f"Powered by Gemini · {i + 1}/{len(pages)}" if len(pages) > 1 else "Gemini",
                     timestamp=False,
                 )
             )
@@ -932,21 +932,21 @@ class Utility(commands.Cog):
         dms=True,
         groupchats=True,
     )
-    @describe(image="Image to extract text from", url="Image URL")
+    @describe(attachment="Image to extract text from", url="Image URL")
     async def ocr(
         self,
         ctx: Context,
-        image: discord.Attachment | None = None,
-        url: str | None = None,
+        attachment: discord.Attachment = None,
+        url: str = None,
     ) -> None:
         data = None
         filename = "image.png"
         slash = bool(getattr(ctx, "interaction", None))
 
-        if image is not None:
+        if attachment is not None:
             try:
-                data = await image.read()
-                filename = image.filename or filename
+                data = await attachment.read()
+                filename = attachment.filename or filename
             except Exception:
                 data = None
         if data is None and url:
