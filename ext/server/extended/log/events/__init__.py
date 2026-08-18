@@ -139,23 +139,40 @@ class LogEvents:
         if await self._is_ignored(message.guild.id, message.author.id):
             return
 
+        ts = int(message.created_at.timestamp())
         lines = [
-            f"Message from {message.author.mention} deleted in {message.channel.mention}",
-            label_line("Sent", f"<t:{int(message.created_at.timestamp())}>"),
+            f"**When:** <t:{ts}:F> · <t:{ts}:R>",
+            f"A message by {message.author.mention} was deleted in {message.channel.mention}.",
         ]
         if message.content:
-            lines.append(label_line("Content", message.content[:1024]))
-        if message.attachments:
-            urls = "\n".join(a.url for a in message.attachments[:5])
-            lines.append(label_line("Attachments", urls[:1024]))
+            lines.append(f"**Content:** {message.content[:1024]}")
+        elif message.attachments:
+            lines.append("**Content:** *Deleted image attachment*")
+        else:
+            lines.append("**Content:** *No text*")
+
+        image_atts = [
+            a
+            for a in message.attachments
+            if (a.content_type or "").startswith("image")
+            or a.filename.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"))
+        ]
+        other_atts = [a for a in message.attachments if a not in image_atts]
+        if image_atts:
+            names = "\n".join(f"[`{a.filename}`]({a.url})" for a in image_atts[:8])
+            lines.append(f"**Deleted image:**\n{names}")
+        if other_atts:
+            names = "\n".join(f"[`{a.filename}`]({a.url})" for a in other_atts[:5])
+            lines.append(f"**Attachments:**\n{names}")
 
         embed = panel_embed(
             author="Message Deleted",
             author_icon=message.author.display_avatar.url,
             lines=lines,
-            footer=f"User ID : {message.author.id}",
+            footer=f"{message.author} · {message.author.id}",
         )
         await self._log(message.guild.id, "messages", embed)
+
 
     @Package.listener()
     async def on_bulk_message_delete(self, messages: list[discord.Message]) -> None:
@@ -224,18 +241,77 @@ class LogEvents:
         if await self._is_ignored(before.guild.id, before.author.id):
             return
 
+        ts = int(discord.utils.utcnow().timestamp())
         embed = panel_embed(
             author="Message Edited",
             author_icon=before.author.display_avatar.url,
             lines=[
-                f"Message from {before.author.mention} edited <t:{int(discord.utils.utcnow().timestamp())}:R>",
-                f"[View the message in #{before.channel.name}]({after.jump_url})",
-                label_line("Before", before.content[:1024] or "*empty*"),
-                label_line("After", after.content[:1024] or "*empty*"),
+                f"**When:** <t:{ts}:F> · <t:{ts}:R>",
+                f"{before.author.mention} edited a message in {before.channel.mention}.",
+                f"**Edited message:** [Jump to message]({after.jump_url})",
+                f"**Before:** {before.content[:1024] or '*empty*'}",
+                f"**After:** {after.content[:1024] or '*empty*'}",
             ],
-            footer=f"User ID : {before.author.id}",
+            footer=f"{before.author} · {before.author.id}",
         )
         await self._log(before.guild.id, "messages", embed)
+
+    @Package.listener()
+    async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent) -> None:
+        if not payload.guild_id or payload.user_id == getattr(self.bot.user, "id", None):
+            return
+        guild = self.bot.get_guild(payload.guild_id)
+        if guild is None:
+            return
+        if await self._is_ignored(payload.guild_id, payload.channel_id):
+            return
+        if await self._is_ignored(payload.guild_id, payload.user_id):
+            return
+        user = guild.get_member(payload.user_id) or self.bot.get_user(payload.user_id)
+        if user is None or getattr(user, "bot", False):
+            return
+        emoji = str(payload.emoji)
+        jump = f"https://discord.com/channels/{payload.guild_id}/{payload.channel_id}/{payload.message_id}"
+        ts = int(discord.utils.utcnow().timestamp())
+        embed = panel_embed(
+            author="Reaction Added",
+            author_icon=getattr(getattr(user, "display_avatar", None), "url", None),
+            lines=[
+                f"**When:** <t:{ts}:F> · <t:{ts}:R>",
+                f"{user.mention} added {emoji} to [this message]({jump})",
+            ],
+            footer=f"{user} · {user.id}",
+        )
+        await self._log(payload.guild_id, "messages", embed)
+
+    @Package.listener()
+    async def on_raw_reaction_remove(self, payload: discord.RawReactionActionEvent) -> None:
+        if not payload.guild_id:
+            return
+        guild = self.bot.get_guild(payload.guild_id)
+        if guild is None:
+            return
+        if await self._is_ignored(payload.guild_id, payload.channel_id):
+            return
+        if await self._is_ignored(payload.guild_id, payload.user_id):
+            return
+        user = guild.get_member(payload.user_id) or self.bot.get_user(payload.user_id)
+        if user is None or getattr(user, "bot", False):
+            return
+        emoji = str(payload.emoji)
+        jump = f"https://discord.com/channels/{payload.guild_id}/{payload.channel_id}/{payload.message_id}"
+        ts = int(discord.utils.utcnow().timestamp())
+        embed = panel_embed(
+            author="Reaction Removed",
+            author_icon=getattr(getattr(user, "display_avatar", None), "url", None),
+            lines=[
+                f"**When:** <t:{ts}:F> · <t:{ts}:R>",
+                f"{user.mention} removed {emoji} from [this message]({jump})",
+            ],
+            footer=f"{user} · {user.id}",
+        )
+        await self._log(payload.guild_id, "messages", embed)
+
 
     @Package.listener()
     async def on_member_join(self, member: discord.Member) -> None:
