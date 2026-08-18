@@ -17,38 +17,172 @@ from discord import ui
 from discord import app_commands
 
 _LANG_CHOICES = [
-    ("English", "en"),
-    ("Spanish", "es"),
-    ("French", "fr"),
-    ("German", "de"),
-    ("Italian", "it"),
-    ("Portuguese", "pt"),
-    ("Russian", "ru"),
-    ("Japanese", "ja"),
-    ("Korean", "ko"),
-    ("Chinese", "zh"),
+    ("Afrikaans", "af"),
+    ("Albanian", "sq"),
+    ("Amharic", "am"),
     ("Arabic", "ar"),
-    ("Hindi", "hi"),
-    ("Turkish", "tr"),
-    ("Dutch", "nl"),
-    ("Polish", "pl"),
-    ("Swedish", "sv"),
-    ("Ukrainian", "uk"),
-    ("Vietnamese", "vi"),
-    ("Thai", "th"),
-    ("Indonesian", "id"),
-    ("Romanian", "ro"),
-    ("Greek", "el"),
+    ("Armenian", "hy"),
+    ("Assamese", "as"),
+    ("Aymara", "ay"),
+    ("Azerbaijani", "az"),
+    ("Bambara", "bm"),
+    ("Basque", "eu"),
+    ("Belarusian", "be"),
+    ("Bengali", "bn"),
+    ("Bhojpuri", "bho"),
+    ("Bosnian", "bs"),
+    ("Bulgarian", "bg"),
+    ("Catalan", "ca"),
+    ("Cebuano", "ceb"),
+    ("Chinese (Simplified)", "zh-CN"),
+    ("Chinese (Traditional)", "zh-TW"),
+    ("Corsican", "co"),
+    ("Croatian", "hr"),
     ("Czech", "cs"),
-    ("Finnish", "fi"),
     ("Danish", "da"),
+    ("Dhivehi", "dv"),
+    ("Dogri", "doi"),
+    ("Dutch", "nl"),
+    ("English", "en"),
+    ("Esperanto", "eo"),
+    ("Estonian", "et"),
+    ("Ewe", "ee"),
+    ("Filipino", "fil"),
+    ("Finnish", "fi"),
+    ("French", "fr"),
+    ("Frisian", "fy"),
+    ("Galician", "gl"),
+    ("Georgian", "ka"),
+    ("German", "de"),
+    ("Greek", "el"),
+    ("Guarani", "gn"),
+    ("Gujarati", "gu"),
+    ("Haitian Creole", "ht"),
+    ("Hausa", "ha"),
+    ("Hawaiian", "haw"),
+    ("Hebrew", "he"),
+    ("Hindi", "hi"),
+    ("Hmong", "hmn"),
+    ("Hungarian", "hu"),
+    ("Icelandic", "is"),
+    ("Igbo", "ig"),
+    ("Ilocano", "ilo"),
+    ("Indonesian", "id"),
+    ("Irish", "ga"),
+    ("Italian", "it"),
+    ("Japanese", "ja"),
+    ("Javanese", "jv"),
+    ("Kannada", "kn"),
+    ("Kazakh", "kk"),
+    ("Khmer", "km"),
+    ("Kinyarwanda", "rw"),
+    ("Konkani", "gom"),
+    ("Korean", "ko"),
+    ("Krio", "kri"),
+    ("Kurdish", "ku"),
+    ("Kurdish (Sorani)", "ckb"),
+    ("Kyrgyz", "ky"),
+    ("Lao", "lo"),
+    ("Latin", "la"),
+    ("Latvian", "lv"),
+    ("Lingala", "ln"),
+    ("Lithuanian", "lt"),
+    ("Luganda", "lg"),
+    ("Luxembourgish", "lb"),
+    ("Macedonian", "mk"),
+    ("Maithili", "mai"),
+    ("Malagasy", "mg"),
+    ("Malay", "ms"),
+    ("Malayalam", "ml"),
+    ("Maltese", "mt"),
+    ("Maori", "mi"),
+    ("Marathi", "mr"),
+    ("Meiteilon (Manipuri)", "mni-Mtei"),
+    ("Mizo", "lus"),
+    ("Mongolian", "mn"),
+    ("Myanmar (Burmese)", "my"),
+    ("Nepali", "ne"),
+    ("Norwegian", "no"),
+    ("Nyanja (Chichewa)", "ny"),
+    ("Odia (Oriya)", "or"),
+    ("Oromo", "om"),
+    ("Pashto", "ps"),
+    ("Persian", "fa"),
+    ("Polish", "pl"),
+    ("Portuguese", "pt"),
+    ("Punjabi", "pa"),
+    ("Quechua", "qu"),
+    ("Romanian", "ro"),
+    ("Russian", "ru"),
+    ("Samoan", "sm"),
+    ("Sanskrit", "sa"),
+    ("Scots Gaelic", "gd"),
+    ("Serbian", "sr"),
+    ("Sesotho", "st"),
+    ("Shona", "sn"),
+    ("Sindhi", "sd"),
+    ("Sinhala", "si"),
+    ("Slovak", "sk"),
+    ("Slovenian", "sl"),
+    ("Somali", "so"),
+    ("Spanish", "es"),
+    ("Sundanese", "su"),
+    ("Swahili", "sw"),
+    ("Swedish", "sv"),
+    ("Tagalog", "tl"),
+    ("Tajik", "tg"),
+    ("Tamil", "ta"),
+    ("Tatar", "tt"),
+    ("Telugu", "te"),
+    ("Thai", "th"),
+    ("Tigrinya", "ti"),
+    ("Tsonga", "ts"),
+    ("Turkish", "tr"),
+    ("Turkmen", "tk"),
+    ("Twi (Akan)", "ak"),
+    ("Ukrainian", "uk"),
+    ("Urdu", "ur"),
+    ("Uyghur", "ug"),
+    ("Uzbek", "uz"),
+    ("Vietnamese", "vi"),
+    ("Welsh", "cy"),
+    ("Xhosa", "xh"),
+    ("Yiddish", "yi"),
+    ("Yoruba", "yo"),
+    ("Zulu", "zu"),
 ]
 
-# Discord allows max 25 choices per option
-_TO_CHOICES = [app_commands.Choice(name=n, value=v) for n, v in _LANG_CHOICES[:25]]
-_FROM_CHOICES = [app_commands.Choice(name="Auto-detect", value="auto")] + [
-    app_commands.Choice(name=n, value=v) for n, v in _LANG_CHOICES[:24]
-]
+def _lang_choice_label(name: str, code: str) -> str:
+    return f"{name} ({code})"
+
+
+def _lang_autocomplete_choices(current: str, *, include_auto: bool = False) -> list[app_commands.Choice[str]]:
+    """Filter languages by typed needle; always return at most 25 (Discord limit)."""
+    needle = (current or "").strip().lower()
+    out: list[app_commands.Choice[str]] = []
+    if include_auto:
+        auto_label = "Auto-detect (auto)"
+        if not needle or needle in auto_label.lower() or needle in ("auto", "detect"):
+            out.append(app_commands.Choice(name=auto_label, value="auto"))
+    for name, code in _LANG_CHOICES:
+        label = _lang_choice_label(name, code)
+        if not needle or needle in name.lower() or needle in code.lower() or needle in label.lower():
+            out.append(app_commands.Choice(name=label, value=code))
+        if len(out) >= 25:
+            break
+    # If user typed an exact valid-looking code not in the filtered list, surface it
+    if needle and _LANG.match(needle) and not any(c.value.lower() == needle for c in out):
+        for name, code in _LANG_CHOICES:
+            if code.lower() == needle:
+                out = [app_commands.Choice(name=_lang_choice_label(name, code), value=code)] + out
+                out = out[:25]
+                break
+        else:
+            # unknown but valid-looking code — still offer it
+            out = [app_commands.Choice(name=f"{needle} ({needle})", value=needle)] + out
+            out = out[:25]
+    return out[:25]
+
 
 _LANG_NAME_BY_CODE = {code: name for name, code in _LANG_CHOICES}
 _LANG_CODE_BY_NAME = {name.lower(): code for name, code in _LANG_CHOICES}
@@ -986,11 +1120,10 @@ class Utility(commands.Cog):
     )
     @describe(
         text="Text to translate",
-        to="Target language (default: English)",
-        source="Source language (default: auto-detect)",
+        to="Target language",
+        source="Source language (auto-detects by default)",
     )
     @app_commands.rename(source="from")
-    @app_commands.choices(to=_TO_CHOICES, source=_FROM_CHOICES)
     async def translate(
         self,
         ctx: Context,
@@ -1060,6 +1193,22 @@ class Utility(commands.Cog):
             target_code=target_code,
         )
         return await ctx.send(view=view)
+
+    @translate.autocomplete("to")
+    async def translate_to_autocomplete(
+        self,
+        interaction: discord.Interaction,
+        current: str,
+    ) -> list[app_commands.Choice[str]]:
+        return _lang_autocomplete_choices(current, include_auto=False)
+
+    @translate.autocomplete("source")
+    async def translate_from_autocomplete(
+        self,
+        interaction: discord.Interaction,
+        current: str,
+    ) -> list[app_commands.Choice[str]]:
+        return _lang_autocomplete_choices(current, include_auto=True)
 
     @commands.command(
         name="transcribe",
