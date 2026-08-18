@@ -360,7 +360,7 @@ class InformationCommands(Package):
 
         container = ui.Container()
 
-        container.add_item(ui.TextDisplay(f"-# **User Info — {user.display_name}**"))
+        container.add_item(ui.TextDisplay(f"-# **User Info - {user.display_name}**"))
         container.add_item(ui.Separator(visible=True))
 
         info_lines = []

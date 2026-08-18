@@ -64,6 +64,7 @@ def c2(
     else:
         description = body(raw) or None
     embed = discord.Embed(description=description)
+    embed.color = None
     if title:
         embed.title = title
     if author:

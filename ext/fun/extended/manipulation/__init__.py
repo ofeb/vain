@@ -451,6 +451,21 @@ class Manipulation(Package):
                 continue
         return ImageFont.load_default()
 
+    def _quote_latin_font(self, size: int):
+        """ASCII/Latin UI bits (@, em dash, vain brand) never use CJK fallback."""
+        candidates = [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+            "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+            FONT_PATH,
+        ]
+        for path in candidates:
+            try:
+                return ImageFont.truetype(path, size)
+            except Exception:
+                continue
+        return ImageFont.load_default()
+
     def _quote_mark_font(self, size: int):
         candidates = [
             "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
@@ -641,8 +656,8 @@ class Manipulation(Package):
             quote_font = self._quote_mark_font(110)
             body_size = 40
             body_font = self._quote_font(body_size)
-            attr_font = self._quote_font(24)
-            mark_font = self._quote_font(18)
+            attr_font = self._quote_latin_font(24)
+            mark_font = self._quote_latin_font(18)
 
             clean = " ".join((content or "").split())
             if len(clean) > 320:
@@ -736,25 +751,25 @@ class Manipulation(Package):
         text = (message.content or "").strip()
         has_media = bool(message.attachments or message.stickers)
         has_rich = bool(message.embeds) or bool(getattr(message, "components", None))
+        BOT_QUOTE = "Vain bot is so awesome it really is indeed the best bot ever 🤍"
 
         if not text:
             if message.author.bot:
-                return await ctx.warn(
-                    "Vain bot is so awesome it really is indeed the best bot ever 🤍"
-                )
-            if has_media or has_rich:
+                text = BOT_QUOTE
+            elif has_media or has_rich:
                 return await ctx.warn(
                     "Cute picture, but there's nothing to quote\n"
-                    "> -# **I need actual text — images and embeds alone don't work**"
+                    "> -# **I need actual text - images and embeds alone don't work**"
                 )
-            return await ctx.warn(
-                "That message is empty\n> -# **need some text to quote**"
-            )
+            else:
+                return await ctx.warn(
+                    "That message is empty\n> -# **need some text to quote**"
+                )
 
         async with ctx.typing():
             avatar_url = str(message.author.display_avatar.with_size(512).url)
             image_data = await self._generate_quote_image(
-                message.clean_content,
+                text,
                 message.author.display_name,
                 message.author.name,
                 avatar_url,

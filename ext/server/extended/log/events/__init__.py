@@ -433,7 +433,6 @@ class LogEvents:
                 author_icon=author_icon,
                 lines=lines,
                 footer=footer,
-                color=role_color,
             )
             await self._log(role.guild.id, "roles", embed)
             return
@@ -454,7 +453,6 @@ class LogEvents:
             author_icon=entry.user.display_avatar.url if entry and entry.user else None,
             lines=lines,
             footer=f"User ID : {entry.user.id}" if entry and entry.user else None,
-            color=role_color,
         )
         await self._log(role.guild.id, "roles", embed)
 
