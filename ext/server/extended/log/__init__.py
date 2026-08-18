@@ -7,6 +7,7 @@ import re
 from typing import TYPE_CHECKING, Optional, Union
 
 import discord
+from discord import ui
 from discord.ext.commands import group
 
 from core.discord.ctx import Context
@@ -80,6 +81,54 @@ PERMISSION_NAMES = {
     "create_expressions": "Create Expressions",
     "send_voice_messages": "Send Voice Messages",
 }
+
+def log_container(title: str, lines: list | None = None, *, accent: int | None = None):
+    """Colorless C2 log card by default. Optional accent only when log color is set."""
+    from core.discord.ctx import layout_from_items
+    body = f"**{title}**"
+    if lines:
+        cleaned = []
+        for ln in lines:
+            s = (ln or "").strip()
+            if not s:
+                continue
+            cleaned.append(s)
+        if cleaned:
+            body = body + "\n" + "\n".join(cleaned)
+    container = ui.Container()
+    for attr in ("accent_color", "accent_colour"):
+        if hasattr(container, attr):
+            try:
+                setattr(container, attr, accent)
+            except Exception:
+                pass
+    container.add_item(ui.TextDisplay(body))
+    return layout_from_items([container], timeout=None)
+
+
+def embed_to_log_container(embed: discord.Embed, *, accent: int | None = None):
+    title = "Log"
+    if embed.author and embed.author.name:
+        title = embed.author.name
+    elif embed.title:
+        title = embed.title
+    lines = []
+    if embed.description:
+        for ln in str(embed.description).splitlines():
+            s = ln.strip()
+            if not s:
+                continue
+            if s == f"**{title}**" or s == title:
+                continue
+            lines.append(s)
+    if embed.footer and embed.footer.text:
+        ft = str(embed.footer.text).strip()
+        if ft and not any(ft in (x or "") for x in lines):
+            if not ft.startswith("-#"):
+                ft = f"-# {ft}"
+            lines.append(ft)
+    return log_container(title, lines, accent=accent)
+
 
 class Log(LogEvents, Package):
     """Server logging via webhooks matching Vain's format."""
@@ -162,7 +211,7 @@ class Log(LogEvents, Package):
         file_content: bytes | None = None,
         file_name: str | None = None,
     ) -> None:
-        """Send a log entry. ``payload`` is a LayoutView/View (preferred) or Embed."""
+        """Send a log entry as a colorless C2 container (unless log color is set)."""
         rows = await self.db.fetch(
             "SELECT channel_id FROM log_config WHERE guild_id = $1 AND $2 = ANY(events)",
             guild_id, event_type,
@@ -170,43 +219,49 @@ class Log(LogEvents, Package):
         for row in rows:
             channel_id = row[0]
             channel = self.bot.get_channel(channel_id)
+            custom_color = await self._get_event_color(guild_id, channel_id, event_type)
+
+            # Normalize payload → LayoutView
+            view = payload
+            if isinstance(payload, discord.Embed):
+                view = embed_to_log_container(payload, accent=custom_color)
+            else:
+                # existing layout: apply accent if configured
+                if custom_color is not None:
+                    try:
+                        from discord.ui import LayoutView as _LV
+                        if isinstance(payload, _LV):
+                            for child in getattr(payload, "children", []) or []:
+                                for attr in ("accent_color", "accent_colour"):
+                                    if hasattr(child, attr):
+                                        with contextlib.suppress(Exception):
+                                            setattr(child, attr, custom_color)
+                    except Exception:
+                        pass
+
             file_kw = {}
             if file_content is not None and file_name:
                 file_kw["file"] = discord.File(io.BytesIO(file_content), filename=file_name)
 
-            # Prefer bot channel send for Components V2; webhook embed fallback
-            is_layout = isinstance(payload, (discord.ui.LayoutView, discord.ui.View)) and not isinstance(
-                payload, discord.Embed
-            )
-            # detect LayoutView
-            try:
-                from discord.ui import LayoutView as _LV
-                is_layout = isinstance(payload, _LV)
-            except Exception:
-                is_layout = hasattr(payload, "add_item") and not isinstance(payload, discord.Embed)
+            sent = False
+            if channel is not None and hasattr(channel, "send"):
+                with contextlib.suppress(discord.HTTPException, discord.Forbidden, Exception):
+                    await channel.send(view=view, silent=True, **file_kw)
+                    sent = True
+            if sent:
+                continue
 
-            if is_layout and channel is not None and hasattr(channel, "send"):
-                with contextlib.suppress(discord.HTTPException, discord.Forbidden):
-                    await channel.send(view=payload, silent=True, **file_kw)
-                    continue
-
-            # Embed path (legacy / color override / webhook)
+            # Fallback: webhook with classic embed only if container send failed
             embed = payload if isinstance(payload, discord.Embed) else None
             if embed is None:
                 continue
-            embed.color = None
-            custom_color = await self._get_event_color(guild_id, channel_id, event_type)
-            if custom_color is not None:
-                embed.color = custom_color
+            embed.color = custom_color if custom_color is not None else None
             wh = await self._get_webhook(channel_id)
             if wh:
                 with contextlib.suppress(discord.HTTPException):
-                    send_kwargs = {"embed": embed, "username": "vain logs", "silent": True}
-                    send_kwargs.update(file_kw)
-                    await wh.send(**send_kwargs)
-            elif channel is not None:
-                with contextlib.suppress(discord.HTTPException, discord.Forbidden):
-                    await channel.send(embed=embed, silent=True, **file_kw)
+                    sk = {"embed": embed, "username": "vain logs", "silent": True}
+                    sk.update(file_kw)
+                    await wh.send(**sk)
 
 
     @group(

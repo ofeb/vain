@@ -11,7 +11,7 @@ from core.discord.package import Package
 from core.discord.views.embed import panel_embed
 
 def label_line(label: str, value: str) -> str:
-    return f"**{label}**: {value}"
+    return f"-# **{label.lower()}**: {value}"
 
 def _channel_type_label(channel: discord.abc.GuildChannel) -> str:
     if isinstance(channel, discord.VoiceChannel):
@@ -313,7 +313,7 @@ class LogEvents:
             return
 
         embed = panel_embed(
-            author="Member Joined",
+            author="Member joined",
             author_icon=member.display_avatar.url,
             lines=[
                 f"{member.mention} joined the server",
@@ -337,7 +337,7 @@ class LogEvents:
             if entry.reason:
                 lines.append(label_line("Reason", entry.reason))
             embed = panel_embed(
-                author="Member Kicked",
+                author="Member kicked",
                 author_icon=member.display_avatar.url,
                 lines=lines,
                 footer=f"User ID : {member.id}",
@@ -349,7 +349,7 @@ class LogEvents:
         if member.joined_at:
             lines.append(label_line("Joined", f"<t:{int(member.joined_at.timestamp())}:R>"))
         embed = panel_embed(
-            author="Member Left",
+            author="Member left",
             author_icon=member.display_avatar.url,
             lines=lines,
             footer=f"User ID : {member.id}",
@@ -365,7 +365,7 @@ class LogEvents:
 
         if before.nick != after.nick:
             embed = panel_embed(
-                author="Nickname Changed",
+                author="Nickname changed",
                 author_icon=after.display_avatar.url,
                 lines=[
                     f"{after.mention} nickname changed",
@@ -423,7 +423,7 @@ class LogEvents:
                 else:
                     lines.append(label_line("Moderator", f"{entry.user.mention} (`{entry.user.id}`)"))
             embed = panel_embed(
-                author="Member Roles Updated",
+                author="Member roles updated",
                 author_icon=after.display_avatar.url,
                 lines=lines,
                 footer=f"User ID : {after.id}",
@@ -441,7 +441,7 @@ class LogEvents:
                 else:
                     lines.append(label_line("Moderator", f"{entry.user.mention} (`{entry.user.id}`)"))
             embed = panel_embed(
-                author="Member Roles Updated",
+                author="Member roles updated",
                 author_icon=after.display_avatar.url,
                 lines=lines,
                 footer=f"User ID : {after.id}",
@@ -462,7 +462,7 @@ class LogEvents:
                 lines.append(label_line("Reason", entry.reason))
 
         embed = panel_embed(
-            author="Member Banned",
+            author="Member banned",
             author_icon=user.display_avatar.url,
             lines=lines,
             footer=f"User ID : {user.id}",
@@ -477,7 +477,7 @@ class LogEvents:
             lines.append(label_line("Moderator", f"{entry.user.mention} (`{entry.user.id}`)"))
 
         embed = panel_embed(
-            author="Member Unbanned",
+            author="Member unbanned",
             author_icon=user.display_avatar.url,
             lines=lines,
             footer=f"User ID : {user.id}",
@@ -498,8 +498,8 @@ class LogEvents:
                 footer = f"User ID : {entry.user.id}"
                 author_icon = entry.user.display_avatar.url
             embed = panel_embed(
-                title="Bulk Role Create",
-                author="Bulk Role Create",
+                title="Bulk role create",
+                author="Bulk role create",
                 author_icon=author_icon,
                 lines=lines,
                 footer=footer,
@@ -519,7 +519,7 @@ class LogEvents:
             label_line("Color", f"`#{role.color.value:06x}`"),
         ]
         embed = panel_embed(
-            author="Role Created",
+            author="Role created",
             author_icon=entry.user.display_avatar.url if entry and entry.user else None,
             lines=lines,
             footer=f"User ID : {entry.user.id}" if entry and entry.user else None,
@@ -539,8 +539,8 @@ class LogEvents:
                 footer = f"User ID : {entry.user.id}"
                 author_icon = entry.user.display_avatar.url
             embed = panel_embed(
-                title="Bulk Role Delete",
-                author="Bulk Role Delete",
+                title="Bulk role delete",
+                author="Bulk role delete",
                 author_icon=author_icon,
                 lines=lines,
                 footer=footer,
@@ -562,7 +562,7 @@ class LogEvents:
             ),
         ]
         embed = panel_embed(
-            author="Role Deleted",
+            author="Role deleted",
             author_icon=entry.user.display_avatar.url if entry and entry.user else None,
             lines=lines,
             footer=f"User ID : {entry.user.id}" if entry and entry.user else None,
@@ -615,7 +615,7 @@ class LogEvents:
             *changes,
         ]
         embed = panel_embed(
-            author="Role Updated",
+            author="Role updated",
             author_icon=moderator.display_avatar.url if moderator else None,
             lines=lines,
             footer=f"User ID : {moderator.id}" if moderator else None,
@@ -637,8 +637,8 @@ class LogEvents:
                 footer = f"User ID : {entry.user.id}"
                 author_icon = entry.user.display_avatar.url
             embed = panel_embed(
-                title="Bulk Channel Create",
-                author="Bulk Channel Create",
+                title="Bulk channel create",
+                author="Bulk channel create",
                 author_icon=author_icon,
                 lines=lines,
                 footer=footer,
@@ -656,7 +656,7 @@ class LogEvents:
             else f"{label} {channel.mention} created",
         ]
         embed = panel_embed(
-            author="Channel Created",
+            author="Channel created",
             author_icon=entry.user.display_avatar.url if entry and entry.user else None,
             lines=lines,
             footer=f"User ID : {entry.user.id}" if entry and entry.user else None,
@@ -678,8 +678,8 @@ class LogEvents:
                 footer = f"User ID : {entry.user.id}"
                 author_icon = entry.user.display_avatar.url
             embed = panel_embed(
-                title="Bulk Channel Delete",
-                author="Bulk Channel Delete",
+                title="Bulk channel delete",
+                author="Bulk channel delete",
                 author_icon=author_icon,
                 lines=lines,
                 footer=footer,
@@ -702,7 +702,7 @@ class LogEvents:
             created_line,
         ]
         embed = panel_embed(
-            author="Channel Deleted",
+            author="Channel deleted",
             author_icon=entry.user.display_avatar.url if entry and entry.user else None,
             lines=lines,
             footer=f"User ID : {entry.user.id}" if entry and entry.user else None,
@@ -763,7 +763,7 @@ class LogEvents:
             label_line("Changes", "\n".join(changes)),
         ]
         embed = panel_embed(
-            author="Channel Updated",
+            author="Channel updated",
             author_icon=moderator.display_avatar.url if moderator else None,
             lines=lines,
             footer=f"User ID : {moderator.id}" if moderator else None,
@@ -888,7 +888,7 @@ class LogEvents:
                     label_line("Name", emoji.name),
                 ]
                 embed = panel_embed(
-                    author="Emoji Created",
+                    author="Emoji created",
                     author_icon=entry.user.display_avatar.url if entry and entry.user else None,
                     lines=lines,
                     footer=f"User ID : {entry.user.id}" if entry and entry.user else None,
@@ -905,7 +905,7 @@ class LogEvents:
                     else f"Emoji **{emoji.name}** deleted",
                 ]
                 embed = panel_embed(
-                    author="Emoji Deleted",
+                    author="Emoji deleted",
                     author_icon=entry.user.display_avatar.url if entry and entry.user else None,
                     lines=lines,
                     footer=f"User ID : {entry.user.id}" if entry and entry.user else None,
@@ -923,7 +923,7 @@ class LogEvents:
                     label_line("Name", f"{before_emoji.name} → {after_emoji.name}"),
                 ]
                 embed = panel_embed(
-                    author="Emoji Updated",
+                    author="Emoji updated",
                     author_icon=entry.user.display_avatar.url if entry and entry.user else None,
                     lines=lines,
                     footer=f"User ID : {entry.user.id}" if entry and entry.user else None,
@@ -938,14 +938,14 @@ class LogEvents:
         invite_url = f"[`{invite.code}`](https://discord.gg/{invite.code})"
         if invite.inviter:
             embed = panel_embed(
-                author="Invite Created",
+                author="Invite created",
                 author_icon=invite.inviter.display_avatar.url,
                 lines=[f"New Invite {invite_url} created by {invite.inviter.mention}"],
                 footer=f"User ID : {invite.inviter.id}",
             )
         else:
             embed = panel_embed(
-                author="Invite Created",
+                author="Invite created",
                 lines=[f"New Invite {invite_url} created"],
             )
         await self._log(invite.guild.id, "invites", embed)
@@ -955,7 +955,7 @@ class LogEvents:
         if not invite.guild:
             return
         embed = panel_embed(
-            author="Invite Deleted",
+            author="Invite deleted",
             lines=[f"Invite [`{invite.code}`](https://discord.gg/{invite.code}) deleted"],
         )
         await self._log(invite.guild.id, "invites", embed)
@@ -1008,14 +1008,14 @@ class LogEvents:
         if thread.owner:
             lines = [f"Thread {thread.mention} created by {thread.owner.mention}"]
             embed = panel_embed(
-                author="Thread Created",
+                author="Thread created",
                 author_icon=thread.owner.display_avatar.url,
                 lines=lines,
                 footer=f"User ID : {thread.owner_id}",
             )
         else:
             embed = panel_embed(
-                author="Thread Created",
+                author="Thread created",
                 lines=[
                     f"Thread {thread.mention} created in {thread.parent.mention if thread.parent else 'unknown'}",
                 ],
@@ -1032,7 +1032,7 @@ class LogEvents:
                     f"<t:{int(thread.created_at.timestamp())}:F> (<t:{int(thread.created_at.timestamp())}:R>)",
                 )
             )
-        embed = panel_embed(author="Thread Deleted", lines=lines)
+        embed = panel_embed(author="Thread deleted", lines=lines)
         await self._log(thread.guild.id, "channels", embed)
 
     @Package.listener()
@@ -1049,7 +1049,7 @@ class LogEvents:
             return
 
         embed = panel_embed(
-            author="Thread Updated",
+            author="Thread updated",
             lines=[
                 f"Thread {after.mention} updated",
                 label_line("Changes", "\n".join(changes)),
