@@ -87,6 +87,30 @@ def discord_ts(value, style: str = "R") -> str:
     return f"<t:{int(dt.timestamp())}:{style}>"
 
 
+def discord_footer_date(value, *, fallback: str = "Unknown") -> str:
+    """Format a timestamp like Discord message headers.
+
+    - Same calendar day (UTC): ``Today at 14:32``
+    - Previous calendar day: ``Yesterday at 14:32``
+    - Older: ``09/08/2026, 00:30`` (DD/MM/YYYY, HH:MM)
+    """
+    dt = parse_dt(value)
+    if dt is None:
+        if isinstance(value, str) and value.strip() and not _ISO_RE.match(value.strip()):
+            return value.strip()
+        return fallback
+    dt = dt.astimezone(datetime.timezone.utc)
+    now = datetime.datetime.now(tz=datetime.timezone.utc)
+    day = dt.date()
+    today = now.date()
+    time_str = dt.strftime("%H:%M")
+    if day == today:
+        return f"Today at {time_str}"
+    if day == today - datetime.timedelta(days=1):
+        return f"Yesterday at {time_str}"
+    return dt.strftime("%d/%m/%Y, %H:%M")
+
+
 def duration(value: int, ms: bool = True) -> str:
     """convert seconds or ms into HH:MM:SS string"""
     if ms:
