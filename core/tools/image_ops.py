@@ -113,7 +113,7 @@ def _build_caption_strip(text: str, width: int, size: int, text_width: int, emoj
     if font is None:
         font = ImageFont.load_default()
 
-    emoji_size = max(12, int(size * 0.95))
+    emoji_size = max(12, int(size * 0.88))
     wrapped_lines: list[str] = []
     for paragraph in text_value.splitlines() or ["..."]:
         if not paragraph.strip():
@@ -133,8 +133,11 @@ def _build_caption_strip(text: str, width: int, size: int, text_width: int, emoj
         bb_h = max(emoji_size, size)
         try:
             from PIL import ImageDraw as _ID, Image as _I
-            bb = _ID.Draw(_I.new("RGBA", (1, 1))).textbbox((0, 0), ln, font=font)
-            bb_h = max(bb_h, bb[3] - bb[1])
+            # measure only the text parts for height
+            plain = "".join(v if k == "text" else " " for k, v in tokenize_emojis(ln))
+            sample = plain.strip() or "Hg"
+            bb = _ID.Draw(_I.new("RGBA", (1, 1))).textbbox((0, 0), sample, font=font)
+            bb_h = max(bb_h, bb[3] - bb[1], emoji_size)
         except Exception:
             pass
         line_heights.append(bb_h)
@@ -151,7 +154,16 @@ def _build_caption_strip(text: str, width: int, size: int, text_width: int, emoj
             lw = line_width_with_emojis(line, font, emoji_bytes, emoji_size)
             x = max(0, (width - lw) // 2)
             measure_draw_emoji_line(
-                draw, (x, y), line, font, (0, 0, 0, 255), emoji_bytes, emoji_size, draw_it=True, canvas=strip
+                draw,
+                (x, y),
+                line,
+                font,
+                (0, 0, 0, 255),
+                emoji_bytes,
+                emoji_size,
+                draw_it=True,
+                canvas=strip,
+                line_height=line_heights[idx],
             )
         y += line_heights[idx] + line_gap
     return strip
@@ -375,41 +387,55 @@ def measure_draw_emoji_line(
     *,
     draw_it: bool = True,
     canvas=None,
+    line_height: int | None = None,
 ) -> int:
-    """Draw/measure a line that may contain unicode/custom emojis. Returns width."""
+    """Draw/measure a line that may contain unicode/custom emojis. Returns width.
+
+    Text and emoji glyphs are vertically centered inside ``line_height`` so a
+    caption like ``hello ☠️`` sits on one shared middle line.
+    """
     x, y = xy
     start_x = x
     emoji_bytes = emoji_bytes or {}
+    fsize = getattr(font, "size", None) or emoji_size
+    line_h = int(line_height or max(fsize, emoji_size))
+
     for kind, val in tokenize_emojis(line):
         if kind == "text":
             if not val:
                 continue
-            if draw_it:
-                draw.text((x, y), val, fill=fill, font=font)
             bb = draw.textbbox((0, 0), val, font=font)
-            x += max(1, bb[2] - bb[0])
+            tw = max(1, bb[2] - bb[0])
+            th = max(1, bb[3] - bb[1])
+            if draw_it:
+                # center glyph box in the line, compensate bbox top offset
+                ty = y + (line_h - th) // 2 - bb[1]
+                draw.text((x, ty), val, fill=fill, font=font)
+            x += tw
         else:
             data = emoji_bytes.get(val)
-            size = emoji_size
+            size = int(emoji_size)
             if data:
                 try:
                     em = _load_emoji_im(data, size)
                     if draw_it and canvas is not None:
-                        fsize = getattr(font, "size", size) or size
-                        ey = y + max(0, (fsize - size) // 2)
+                        ey = y + (line_h - size) // 2
                         canvas.paste(em, (int(x), int(ey)), em)
-                        x += size + 2
+                        x += size + max(2, size // 12)
                         continue
                     if not draw_it:
-                        x += size + 2
+                        x += size + max(2, size // 12)
                         continue
                 except Exception:
                     pass
             ph = _emoji_placeholder(val) if kind == "custom" else "?"
-            if draw_it:
-                draw.text((x, y), ph, fill=fill, font=font)
             bb = draw.textbbox((0, 0), ph, font=font)
-            x += max(1, bb[2] - bb[0])
+            tw = max(1, bb[2] - bb[0])
+            th = max(1, bb[3] - bb[1])
+            if draw_it:
+                ty = y + (line_h - th) // 2 - bb[1]
+                draw.text((x, ty), ph, fill=fill, font=font)
+            x += tw
     return max(1, x - start_x)
 
 

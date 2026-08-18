@@ -635,6 +635,7 @@ class Manipulation(Package):
                     emoji_size,
                     draw_it=True,
                     canvas=canvas,
+                    line_height=line_gap,
                 )
                 y += line_gap
 
