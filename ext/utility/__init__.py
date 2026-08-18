@@ -830,20 +830,19 @@ class Utility(commands.Cog):
     async def translate(
         self,
         ctx: Context,
+        *,
         text: str = None,
         to: str = None,
         source: str = None,
-        *,
-        payload: str = None,
     ) -> None:
         to_lang = (to or "en").strip().lower() if to else "en"
         from_lang = (source or "").strip().lower() or None
         body_text = (text or "").strip() or None
 
         # Prefix-style: ,tr es hello  /  ,tr es en hola  /  ,tr hello world
-        raw = (payload or "").strip()
-        if not body_text and raw:
-            tokens = raw.split()
+        # (rest of message lands in text)
+        if body_text and not to and not source:
+            tokens = body_text.split()
             if tokens and _LANG.match(tokens[0]):
                 if len(tokens) >= 2 and _LANG.match(tokens[1]):
                     from_lang = tokens[0].lower()
@@ -852,12 +851,6 @@ class Utility(commands.Cog):
                 else:
                     to_lang = tokens[0].lower()
                     body_text = " ".join(tokens[1:]).strip() or None
-            else:
-                body_text = raw
-
-        # If slash/prefix only passed text in the combined payload field historically
-        if body_text is None and text:
-            body_text = text.strip() or None
 
         if body_text is None:
             if ctx.message and ctx.message.reference:
