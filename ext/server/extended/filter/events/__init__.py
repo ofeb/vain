@@ -41,6 +41,7 @@ class FilterEvents(Package):
 
     _cache: dict[tuple[int, str], tuple[float, object]] = {}
     _regex_cache: dict[int, tuple[float, list]] = {}
+    _words_cache: dict[int, tuple[float, set[str]]] = {}
     _spam: dict[tuple[int, int], list[float]] = defaultdict(list)
 
     async def _row(self, guild_id: int, table: str):
@@ -56,6 +57,64 @@ class FilterEvents(Package):
 
     def _invalidate(self, guild_id: int, table: str):
         self._cache.pop((guild_id, table), None)
+        if table == "filter_words":
+            self._words_cache.pop(guild_id, None)
+
+    async def _filtered_words(self, guild_id: int) -> set[str]:
+        """Load blacklisted words from DB (cached)."""
+        cached = self._words_cache.get(guild_id)
+        if cached and time.monotonic() - cached[0] < CACHE_TTL:
+            return cached[1]
+        try:
+            rows = await self.db.fetch(
+                """SELECT word FROM filter_words WHERE guild_id = $1""",
+                guild_id,
+            )
+        except Exception:
+            # table may not exist yet
+            with contextlib.suppress(Exception):
+                await self.db.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS filter_words (
+                        guild_id BIGINT NOT NULL,
+                        word TEXT NOT NULL,
+                        PRIMARY KEY (guild_id, word)
+                    )
+                    """
+                )
+            rows = await self.db.fetch(
+                """SELECT word FROM filter_words WHERE guild_id = $1""",
+                guild_id,
+            )
+        words = {str(r["word"]).lower() for r in (rows or []) if r.get("word")}
+        self._words_cache[guild_id] = (time.monotonic(), words)
+        return words
+
+    def _author_is_admin(self, message: discord.Message) -> bool:
+        """True if the author should bypass word/invite filters (Administrator / owner)."""
+        author = message.author
+        if not isinstance(author, discord.Member):
+            return False
+        if author.id == message.guild.owner_id:
+            return True
+        perms = getattr(author, "guild_permissions", None)
+        if perms is not None and perms.administrator:
+            return True
+        return False
+
+    async def _check_words(self, message: discord.Message) -> bool:
+        """Delete messages containing any filtered word (everyone except Administrators)."""
+        if not message.content or self._author_is_admin(message):
+            return False
+        words = await self._filtered_words(message.guild.id)
+        if not words:
+            return False
+        content = message.content.lower()
+        for word in words:
+            if word and word in content:
+                await self._punish(message, "delete", f"filtered word ({word})")
+                return True
+        return False
 
     async def _regex_rows(self, guild_id: int) -> list:
         cached = self._regex_cache.get(guild_id)
@@ -175,6 +234,7 @@ class FilterEvents(Package):
 
     async def _check_content(self, message: discord.Message) -> bool:
         for check in (
+            self._check_words,
             self._check_caps,
             self._check_spoilers,
             self._check_music,

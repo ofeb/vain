@@ -969,6 +969,8 @@ class Server(
             await StickymessageCommands._ensure_schema(self)  # type: ignore[misc]
         with contextlib.suppress(Exception):
             StickymessageCommands._ensure_runtime(self)  # type: ignore[misc]
+        with contextlib.suppress(Exception):
+            await FilterCommands._ensure_words_table(self)  # type: ignore[misc]
 
 async def setup(bot: Vain) -> None:
     """load server extension"""

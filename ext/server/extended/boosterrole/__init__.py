@@ -1,4 +1,5 @@
 from typing import Optional
+import re
 import contextlib
 import discord
 from discord.ext.commands import group, CommandError, ColourConverter as ColorConverter
@@ -90,6 +91,87 @@ class _ShareConfirmView(discord.ui.View):
 
 
 from core.managers.permissions import has_permissions
+
+
+def _parse_hex_color(token: str) -> discord.Color | None:
+    """Parse a hex colour token. Auto-prefixes #. Maps #000000 -> #000001."""
+    if not token:
+        return None
+    raw = token.strip()
+    # strip optional #
+    h = raw[1:] if raw.startswith("#") else raw
+    if not re.fullmatch(r"[0-9a-fA-F]{6}", h) and not re.fullmatch(r"[0-9a-fA-F]{3}", h):
+        return None
+    if len(h) == 3:
+        h = "".join(c * 2 for c in h)
+    value = int(h, 16)
+    # Discord treats pure black (#000000) as the default / invisible colour
+    if value == 0:
+        value = 1
+    return discord.Color(value)
+
+
+def _parse_modify_args(args: str) -> tuple[str | None, discord.Color | None, discord.Color | None]:
+    """Parse `br modify` args: optional name + 1–2 trailing hex colours.
+
+    Accepts forms like:
+      - ``ff0000``
+      - ``ff0000 00ff00``
+      - ``cool name ff0000``
+      - ``cool name ff0000 00ff00``
+      - ``#000000 hi`` is NOT used here (create path); modify expects colours at the end.
+    """
+    tokens = (args or "").split()
+    if not tokens:
+        return None, None, None
+
+    colors: list[discord.Color] = []
+    # pull hex tokens from the end
+    while tokens:
+        col = _parse_hex_color(tokens[-1])
+        if col is None:
+            break
+        colors.append(col)
+        tokens.pop()
+        if len(colors) >= 2:
+            break
+    colors.reverse()
+    name = " ".join(tokens).strip() or None
+    primary = colors[0] if colors else None
+    secondary = colors[1] if len(colors) > 1 else None
+    return name, primary, secondary
+
+
+def _apply_role_colors(role: discord.Role, primary: discord.Color, secondary: discord.Color | None, *, reason: str):
+    """Edit role colour, using gradient when secondary is provided and supported."""
+    kwargs = {"reason": reason}
+    if secondary is not None:
+        # Prefer RoleColours / colours kwarg when available (boost level 3 gradient)
+        RoleColours = getattr(discord, "RoleColours", None)
+        if RoleColours is not None:
+            try:
+                return role.edit(
+                    colours=RoleColours(primary=primary, secondary=secondary),
+                    reason=reason,
+                )
+            except TypeError:
+                pass
+            except Exception:
+                pass
+        # Fallback kwargs used by some discord.py builds
+        for kw in (
+            {"colour": primary, "secondary_colour": secondary},
+            {"color": primary, "secondary_color": secondary},
+        ):
+            try:
+                return role.edit(**kw, reason=reason)
+            except TypeError:
+                continue
+            except Exception:
+                continue
+    return role.edit(color=primary, reason=reason)
+
+
 class BoosterroleCommands(Package):
     """Personal booster colour roles for your server boosters."""
 
@@ -115,13 +197,38 @@ class BoosterroleCommands(Package):
     async def boosterrole_create(
         self,
         ctx,
-        color: Optional[ColorConverter] = None,
+        color: Optional[str] = None,
         *,
         name: Optional[str] = None,
     ):
         """create booster role"""
         if not color and not name:
             return await ctx.send_help(ctx.command)
+
+        # colour may arrive as bare hex (000000 / ff0000) — normalise
+        parsed_color = None
+        if color is not None:
+            if isinstance(color, discord.Color):
+                parsed_color = color
+                if parsed_color.value == 0:
+                    parsed_color = discord.Color(1)
+            else:
+                # try hex first, then fall back to ColourConverter
+                parsed_color = _parse_hex_color(str(color))
+                if parsed_color is None:
+                    try:
+                        parsed_color = await ColorConverter().convert(ctx, str(color))
+                        if parsed_color.value == 0:
+                            parsed_color = discord.Color(1)
+                    except Exception:
+                        # maybe "color" token is actually part of the name
+                        if name:
+                            name = f"{color} {name}"
+                        else:
+                            name = str(color)
+                        parsed_color = None
+                color = parsed_color
+
         extras = {}
         if name:
             if len(name) > 32:
@@ -163,7 +270,7 @@ class BoosterroleCommands(Package):
             if not name:
                 name = ctx.author.name
             role = await ctx.guild.create_role(
-                name=name, color=color, reason="booster role"
+                name=name, color=color if color is not None else discord.Color.default(), reason="booster role"
             )
             if pos:
                 await role.edit(position=pos)
@@ -175,14 +282,19 @@ class BoosterroleCommands(Package):
             )
             await ctx.author.add_roles(role, reason="booster role assigned")
             return await ctx.success(
-                f"Created and assigned {role.mention}\n"
-                f"> -# **color:** `{color}`"
+                f"Created and assigned {role.mention}\n> -# **color:** `#{getattr(color, 'value', 0):06X}`" if color is not None else f"Created and assigned {role.mention}\n> -# **color:** `default`"
             )
         else:
-            await role.edit(color=color, **extras, reason="booster role")
+            await role.edit(**(
+                {**extras, "reason": "booster role", **({"color": color} if color is not None else {})}
+            ))
+            bits = []
+            if color is not None:
+                bits.append(f"**color:** `#{color.value:06X}`")
+            if extras.get("name"):
+                bits.append(f"**name:** `{extras['name']}`")
             return await ctx.success(
-                f"Updated your color\n"
-                f"> -# **color:** `{color}`"
+                "Updated your role\n> -# " + (" · ".join(bits) if bits else "saved")
             )
 
     @boosterrole.command(
@@ -491,6 +603,91 @@ class BoosterroleCommands(Package):
         raise CommandError(
             "Your role was deleted\n"
             f"> -# **create a new one with:** `,boosterrole`"
+        )
+
+    @boosterrole.command(
+        name="modify",
+        aliases=["edit", "update", "mod"],
+        description="Modify your booster role name and/or colour (gradient with 2 colours on boost level 3)",
+        example=",boosterrole modify coolname ff0000",
+    )
+    @is_booster()
+    async def boosterrole_modify(self, ctx, *, args: str = None):
+        """modify booster role name and/or colour(s)"""
+        if not args or not args.strip():
+            return await ctx.send_help(ctx.command)
+
+        name, primary, secondary = _parse_modify_args(args)
+        if not name and primary is None:
+            raise CommandError(
+                "Provide a **name** and/or **colour**\n"
+                "> -# **examples:** `,br modify coolname ff0000` · `,br modify ff0000 00ff00`"
+            )
+
+        if name is not None:
+            if len(name) > 32:
+                raise CommandError(
+                    "Name **can't** exceed **32** characters\n"
+                    f"> -# **provided:** {len(name)} characters"
+                )
+            if len(name) < 2:
+                raise CommandError(
+                    "Name needs at least **2** characters\n"
+                    f"> -# **provided:** {len(name)} character{'s' if len(name) != 1 else ''}"
+                )
+
+        if secondary is not None and primary is not None:
+            # gradient requires boost level 3
+            if getattr(ctx.guild, "premium_tier", 0) < 3:
+                raise CommandError(
+                    "Gradient colours need **Server Boost Level 3**\n"
+                    f"> -# **current level:** {ctx.guild.premium_tier}"
+                )
+
+        role_id = await self.db.fetchval(
+            """SELECT role_id FROM custom_roles WHERE guild_id = $1 AND user_id = $2""",
+            ctx.guild.id,
+            ctx.author.id,
+        )
+        if not role_id:
+            raise CommandError(
+                "You don't have a booster role yet\n"
+                f"> -# **create one with:** `,boosterrole`"
+            )
+        role = ctx.guild.get_role(role_id)
+        if not role:
+            raise CommandError(
+                "Your role was deleted\n"
+                f"> -# **create a new one with:** `,boosterrole`"
+            )
+
+        edit_kwargs: dict = {"reason": f"booster role modified by {ctx.author}"}
+        if name is not None:
+            edit_kwargs["name"] = name
+
+        if primary is not None and secondary is not None:
+            await _apply_role_colors(role, primary, secondary, reason=edit_kwargs["reason"])
+            if name is not None and role.name != name:
+                with contextlib.suppress(discord.HTTPException):
+                    await role.edit(name=name, reason=edit_kwargs["reason"])
+            return await ctx.success(
+                f"Role updated\n"
+                f"> -# **name:** `{role.name}`\n"
+                f"> -# **gradient:** `#{primary.value:06X}` → `#{secondary.value:06X}`"
+            )
+
+        if primary is not None:
+            edit_kwargs["color"] = primary
+        if name is not None or primary is not None:
+            await role.edit(**edit_kwargs)
+
+        bits = []
+        if name is not None:
+            bits.append(f"**name:** `{name}`")
+        if primary is not None:
+            bits.append(f"**color:** `#{primary.value:06X}`")
+        return await ctx.success(
+            "Role updated\n> -# " + " · ".join(bits)
         )
 
     @boosterrole.command(

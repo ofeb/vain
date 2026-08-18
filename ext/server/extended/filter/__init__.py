@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import re
 from typing import Optional, Union
 
@@ -143,6 +144,74 @@ def _link_allow_entries(raw: str) -> list[str]:
 class FilterCommands(Package):
     """chat filter management using Discord AutoMod + custom bot filters"""
 
+    async def _ensure_words_table(self) -> None:
+        await self.db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS filter_words (
+                guild_id BIGINT NOT NULL,
+                word TEXT NOT NULL,
+                PRIMARY KEY (guild_id, word)
+            )
+            """
+        )
+
+    async def cog_load(self) -> None:
+        await self._ensure_words_table()
+
+    def _split_words(self, words) -> list[str]:
+        """Split user input into individual filter words."""
+        if isinstance(words, list):
+            raw = " ".join(str(w) for w in words)
+        else:
+            raw = str(words or "")
+        # split on commas or whitespace
+        parts = []
+        for chunk in raw.replace(",", " ").split():
+            w = chunk.strip().lower()
+            if w:
+                parts.append(w)
+        return parts
+
+    async def _sync_words_automod(self, guild: discord.Guild, words: list[str], *, author) -> None:
+        """Keep the Discord AutoMod keyword rule in sync with the DB word list."""
+        bot_rules = await self._get_bot_rules(guild)
+        rule = _find_rule(bot_rules, name=WORDS_RULE)
+        keywords = [f"*{w}*" for w in words]
+        try:
+            if not words:
+                if rule:
+                    await rule.delete(reason=f"word filter cleared by {author}")
+                return
+            if not rule:
+                await guild.create_automod_rule(
+                    name=WORDS_RULE,
+                    event_type=AutoModRuleEventType.message_send,
+                    trigger=AutoModTrigger(
+                        type=AutoModRuleTriggerType.keyword,
+                        keyword_filter=keywords[:1000],
+                    ),
+                    enabled=True,
+                    actions=[
+                        AutoModRuleAction(
+                            custom_message=f"blocked by {self.bot.user.name} - blacklisted word"
+                        )
+                    ],
+                    reason=f"word filter by {author}",
+                )
+            else:
+                await rule.edit(
+                    trigger=AutoModTrigger(
+                        type=AutoModRuleTriggerType.keyword,
+                        keyword_filter=keywords[:1000],
+                        allow_list=list(rule.trigger.allow_list or []),
+                    ),
+                    enabled=True,
+                    reason=f"filter updated by {author}",
+                )
+        except discord.HTTPException:
+            # Bot-side filter still works even if AutoMod fails
+            pass
+
     async def _get_automod_rules(self, guild: discord.Guild):
         """fetch all automod rules for the guild"""
         try:
@@ -178,19 +247,27 @@ class FilterCommands(Package):
         if not ok:
             return await ctx.warn("Cancelled\n> -# **no changes were made**")
 
+        await self.db.execute(
+            "DELETE FROM filter_words WHERE guild_id = $1",
+            ctx.guild.id,
+        )
+        for cog in self.bot.cogs.values():
+            if hasattr(cog, "_words_cache"):
+                cog._words_cache.pop(ctx.guild.id, None)
         bot_rules = await self._get_bot_rules(ctx.guild)
         rule = _find_rule(bot_rules, name=WORDS_RULE)
-
-        if not rule:
-            raise CommandError("no word filter rule found")
-
-        await rule.edit(
-            trigger=AutoModTrigger(
-                type=AutoModRuleTriggerType.keyword,
-                keyword_filter=[],
-            ),
-            reason=f"filter reset by {ctx.author}",
-        )
+        if rule:
+            try:
+                await rule.delete(reason=f"filter reset by {ctx.author}")
+            except discord.HTTPException:
+                with contextlib.suppress(discord.HTTPException):
+                    await rule.edit(
+                        trigger=AutoModTrigger(
+                            type=AutoModRuleTriggerType.keyword,
+                            keyword_filter=[],
+                        ),
+                        reason=f"filter reset by {ctx.author}",
+                    )
         return await ctx.success("Word filter cleared")
 
     @filter_.command(
@@ -201,57 +278,48 @@ class FilterCommands(Package):
     )
     @has_permissions(manage_guild=True)
     async def filter_add(self, ctx, *, words):
-        word_list = words if isinstance(words, list) else [words]
+        await self._ensure_words_table()
+        word_list = self._split_words(words)
+        if not word_list:
+            raise CommandError("provide at least one word")
         if any(len(w) > 60 or len(w) < 1 for w in word_list):
             raise CommandError("each word must be 1–60 characters")
 
-        word_list = [str(w).strip().lower() for w in word_list if str(w).strip()]
-        if not word_list:
-            raise CommandError("provide at least one word")
-
-        bot_rules = await self._get_bot_rules(ctx.guild)
-        rule = _find_rule(bot_rules, name=WORDS_RULE)
-
-        new_keywords = [f"*{w}*" for w in word_list]
-        if not rule:
-            if len(new_keywords) > 1000:
-                raise CommandError("can only filter 1000 words max")
-            await ctx.guild.create_automod_rule(
-                name=WORDS_RULE,
-                event_type=AutoModRuleEventType.message_send,
-                trigger=AutoModTrigger(
-                    type=AutoModRuleTriggerType.keyword,
-                    keyword_filter=new_keywords,
-                ),
-                enabled=True,
-                actions=[
-                    AutoModRuleAction(
-                        custom_message=f"blocked by {self.bot.user.name} - blacklisted word"
-                    )
-                ],
-                reason=f"word filter by {ctx.author}",
+        for w in word_list:
+            await self.db.execute(
+                """
+                INSERT INTO filter_words (guild_id, word)
+                VALUES ($1, $2)
+                ON CONFLICT (guild_id, word) DO NOTHING
+                """,
+                ctx.guild.id,
+                w,
             )
-        else:
-            kf = list(rule.trigger.keyword_filter or [])
-            existing_lower = {k.lower() for k in kf}
-            for kw in new_keywords:
-                if kw.lower() not in existing_lower:
-                    kf.append(kw)
-                    existing_lower.add(kw.lower())
-            if len(kf) > 1000:
-                raise CommandError("hit the 1000 word limit")
-            await rule.edit(
-                trigger=AutoModTrigger(
-                    type=AutoModRuleTriggerType.keyword,
-                    keyword_filter=kf,
-                    allow_list=list(rule.trigger.allow_list or []),
-                ),
-                enabled=True,
-                reason=f"filter updated by {ctx.author}",
-            )
+
+        rows = await self.db.fetch(
+            "SELECT word FROM filter_words WHERE guild_id = $1 ORDER BY word",
+            ctx.guild.id,
+        )
+        all_words = [r["word"] for r in rows]
+        if len(all_words) > 1000:
+            raise CommandError("can only filter 1000 words max")
+
+        await self._sync_words_automod(ctx.guild, all_words, author=ctx.author)
+
+        # bust event cache so enforcement picks up new words immediately
+        try:
+            events = self.bot.get_cog("FilterEvents") or self.bot.get_cog("Filter")
+            if events is not None and hasattr(events, "_words_cache"):
+                events._words_cache.pop(ctx.guild.id, None)
+            # also clear on any package that has the cache
+            for cog in self.bot.cogs.values():
+                if hasattr(cog, "_words_cache"):
+                    cog._words_cache.pop(ctx.guild.id, None)
+        except Exception:
+            pass
 
         return await ctx.success(
-            f"added to word filter: {human_join(word_list, final='and', markdown='`')}"
+            f"added to word filter: {human_join(word_list, final='and', markdown='`')}\n> -# **applies to everyone** except members with **Administrator**"
         )
 
     @filter_.command(
@@ -261,38 +329,42 @@ class FilterCommands(Package):
     )
     @has_permissions(manage_guild=True)
     async def filter_remove(self, ctx, *, words):
-        word_list = words if isinstance(words, list) else [words]
+        await self._ensure_words_table()
+        word_list = self._split_words(words)
+        if not word_list:
+            raise CommandError("provide at least one word")
 
-        bot_rules = await self._get_bot_rules(ctx.guild)
-        rule = _find_rule(bot_rules, name=WORDS_RULE)
-
-        if not rule:
-            raise CommandError("no word filter configured")
-
-        kf = list(rule.trigger.keyword_filter or [])
         dropped = []
         for w in word_list:
-            target = f"*{str(w).strip().lower()}*"
-            # case-insensitive remove
-            matched = [k for k in kf if k.lower() == target]
-            if matched:
-                for k in matched:
-                    kf.remove(k)
-                dropped.append(str(w).strip().lower())
+            result = await self.db.execute(
+                "DELETE FROM filter_words WHERE guild_id = $1 AND word = $2",
+                ctx.guild.id,
+                w,
+            )
+            # asyncpg returns status like "DELETE 1"
+            if result and str(result).endswith("1"):
+                dropped.append(w)
+            else:
+                # try anyway - mark as dropped if known pattern
+                dropped.append(w)
 
-        if not dropped:
-            return await ctx.warn(f"none of those words are filtered")
-
-        await rule.edit(
-            trigger=AutoModTrigger(
-                type=AutoModRuleTriggerType.keyword,
-                keyword_filter=kf,
-                allow_list=list(rule.trigger.allow_list or []),
-            ),
-            reason=f"filter edited by {ctx.author}",
+        # verify what remains / what was actually stored
+        remaining_rows = await self.db.fetch(
+            "SELECT word FROM filter_words WHERE guild_id = $1 ORDER BY word",
+            ctx.guild.id,
         )
+        remaining = {r["word"] for r in remaining_rows}
+        actually_dropped = [w for w in word_list if w not in remaining]
+        if not actually_dropped:
+            return await ctx.warn("none of those words are filtered")
+
+        await self._sync_words_automod(ctx.guild, list(remaining), author=ctx.author)
+        for cog in self.bot.cogs.values():
+            if hasattr(cog, "_words_cache"):
+                cog._words_cache.pop(ctx.guild.id, None)
+
         return await ctx.success(
-            f"removed: {human_join(dropped, final='and', markdown='`')}"
+            f"removed: {human_join(actually_dropped, final='and', markdown='`')}"
         )
 
     @filter_.command(
@@ -302,13 +374,18 @@ class FilterCommands(Package):
     )
     @has_permissions(manage_guild=True)
     async def filter_list(self, ctx):
-        bot_rules = await self._get_bot_rules(ctx.guild)
-        rule = _find_rule(bot_rules, name=WORDS_RULE)
-
-        if not rule:
-            raise CommandError("no word filter configured")
-
-        words = [w.replace("*", "") for w in (rule.trigger.keyword_filter or [])]
+        await self._ensure_words_table()
+        rows = await self.db.fetch(
+            "SELECT word FROM filter_words WHERE guild_id = $1 ORDER BY word",
+            ctx.guild.id,
+        )
+        words = [r["word"] for r in rows]
+        if not words:
+            # fallback: show AutoMod rule words if DB empty (legacy)
+            bot_rules = await self._get_bot_rules(ctx.guild)
+            rule = _find_rule(bot_rules, name=WORDS_RULE)
+            if rule:
+                words = [w.replace("*", "") for w in (rule.trigger.keyword_filter or [])]
         if not words:
             return await ctx.warn("no words in the filter")
 
@@ -318,8 +395,6 @@ class FilterCommands(Package):
         return await ctx.paginate(
             embed, [f"`{i}` {w}" for i, w in enumerate(words, start=1)]
         )
-
-    
 
     @filter_.group(
         name="links",
