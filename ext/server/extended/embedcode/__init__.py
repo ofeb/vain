@@ -35,6 +35,7 @@ class Embedcode(Package):
         if msg is None:
             return
 
+        title = "Embed Code"
         if msg.embeds:
             code = self._embed_to_code(msg.embeds[0])
         else:
@@ -68,6 +69,7 @@ class Embedcode(Package):
         if msg is None:
             return
 
+        title = "Embed Code"
         layout = self._message_layout(msg)
         if layout is not None:
             code = self._container_to_code(layout)

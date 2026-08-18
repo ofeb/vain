@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+_CONTEXTS = dict(guilds=True, dms=True, groupchats=True)
+
 import datetime
 import re
 import io
