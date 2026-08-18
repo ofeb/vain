@@ -124,7 +124,7 @@ class Reaction(ReactionEvents, Package):
     async def reaction_add(self, ctx: Context, emoji: str, *, trigger: str) -> None:
         """Add a reaction trigger.
 
-        Usage: `,autoreaction add <emoji(s)> <trigger> [--strict or --not_strict] [--reply yes/no]`
+        Usage: {ctx.cmd('autoreaction add <emoji(s)> <trigger> [--strict or --not_strict] [--reply yes/no]')}
 
         Default is **not strict** (word-boundary match), so `pic` won't fire on
         words like `suspicious`. Multi-word triggers work: `rep for pic`.
@@ -230,7 +230,7 @@ class Reaction(ReactionEvents, Package):
     )
     @has_permissions(manage_expressions=True)
     async def reaction_strict(self, ctx: Context, trigger: str, state: str = None) -> None:
-        """`,autoreaction strict <name|all> on|off`"""
+        """{ctx.cmd('autoreaction strict <name|all> on|off')}"""
         if not state:
             return await ctx.warn("Use `on` or `off`")
         low = state.lower().strip()

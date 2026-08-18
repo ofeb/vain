@@ -144,7 +144,7 @@ class Starboard(Package):
                 f"self-star `{cfg.self_star}`"
             )
         if not lines:
-            return await ctx.warn("No starboards configured - use `,starboard add`")
+            return await ctx.warn(f"No starboards configured - use {ctx.cmd('starboard add')}")
         embed = Embed(title="Starboards", color=getattr(self.bot, "color", color.base))
         embed.set_author(
             name=str(ctx.author), icon_url=ctx.author.display_avatar.url

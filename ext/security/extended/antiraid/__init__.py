@@ -328,7 +328,7 @@ class Antiraid(AntiraidEvents, Package):
         """View all current one-time antiraid whitelist entries."""
         rows = await self.db.fetch_antiraid_whitelist(ctx.guild.id)
         if not rows:
-            return await ctx.warn("No antiraid whitelist entries exist\n> -# **usage:** `,antiraid whitelist <member>` to add one")
+            return await ctx.warn(f"No antiraid whitelist entries exist\n> -# **usage:** {ctx.cmd('antiraid whitelist <member>')} to add one")
 
         width = max(2, len(str(len(rows))))
         lines = [

@@ -121,7 +121,7 @@ class Slowmode(Package):
         seconds = self._parse_delay(delay)
         if seconds < 1:
             raise CommandError(
-                "delay must be at least **1 second** (use `,slowmode off` to disable)"
+                f"delay must be at least **1 second** (use {ctx.cmd('slowmode off')} to disable)"
             )
         if seconds > 6 * 60 * 60:
             return await ctx.warn("You **can't** set a slowmode for more than **6 hours**")

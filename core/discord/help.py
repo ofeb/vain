@@ -56,11 +56,22 @@ async def get_bot_dominant_color(bot) -> int:
 
 
 def _get_prefix(ctx: Context) -> str:
-    """Get the current prefix for a context (guild/self/user prefix aware)."""
+    """Get the current prefix for a context (guild/self/user prefix aware).
+
+    Slash / hybrid interactions use ``/`` so Usage and Example lines match
+    how the user invoked the command.
+    """
+    inv = getattr(ctx, "invoke_prefix", None)
+    if callable(inv):
+        pass
+    if inv and not callable(inv):
+        return str(inv)
+    if getattr(ctx, "interaction", None) is not None:
+        return "/"
     p = getattr(ctx, "clean_prefix", None) or getattr(ctx, "prefix", ",")
-    if isinstance(p, list):
+    if isinstance(p, (list, tuple)):
         p = p[0] if p else ","
-    return p
+    return str(p or ",")
 
 
 if TYPE_CHECKING:

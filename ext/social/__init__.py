@@ -197,7 +197,7 @@ class Socials(Package):
                 embed=c2(
                     color=color.base,
                     title="Social Feeds",
-                    message="No social feeds configured.\n> -# Use `,socials <platform> add @user`",
+                    message=f"No social feeds configured.\n> -# Use {ctx.cmd('socials <platform> add @user')}",
                 )
             )
             return
@@ -1790,7 +1790,7 @@ class Socials(Package):
                 raw = await twitch_video(m.group(1))
                 post = parse_twitch_video(raw or {}, source_url=url) if raw else None
             else:
-                await ctx.warn("Use a Twitch VOD URL (`twitch.tv/videos/...`), or `,twitch user`.")
+                await ctx.warn(f"Use a Twitch VOD URL (`twitch.tv/videos/...`), or {ctx.cmd('twitch user')}.")
                 return
         else:
             await ctx.warn(

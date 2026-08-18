@@ -350,7 +350,7 @@ class Snipe(commands.Cog):
             if ctx.message.reference:
                 message = await ctx.channel.fetch_message(ctx.message.reference.message_id)
             else:
-                await ctx.warn("Please reply to a message or provide a **message ID**\n> -# **usage:** reply to a message or use `,reactionhistory <message_id>`")
+                await ctx.warn(f"Please reply to a message or provide a **message ID**\n> -# **usage:** reply to a message or use {ctx.cmd('reactionhistory <message_id>')}")
                 return
 
         data = await self.bot.db.fetch(

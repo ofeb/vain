@@ -307,7 +307,7 @@ class Timezone(Package):
 
         if not tz:
             if target.id == ctx.author.id:
-                return await ctx.warn("You **haven't** set your timezone\n> -# **set one with:** `,timezone set`")
+                return await ctx.warn(f"You **haven't** set your timezone\n> -# **set one with:** {ctx.cmd('timezone set')}")
             return await ctx.warn(
                 f"**{target.display_name}** has not set their timezone"
             )
@@ -332,7 +332,7 @@ class Timezone(Package):
         except pytz.exceptions.UnknownTimeZoneError:
             return await ctx.fail(
                 f"Invalid timezone stored for {target.mention}\n"
-                f"> -# **zone:** `{tz}` · ask them to reset with `,timezone set`"
+                f"> -# **zone:** `{tz}` · ask them to reset with {ctx.cmd('timezone set')}"
             )
 
     @timezone.command(
@@ -352,7 +352,7 @@ class Timezone(Package):
 
         if not tz:
             if target.id == ctx.author.id:
-                return await ctx.warn("You **haven't** set your timezone\n> -# **set one with:** `,timezone set`")
+                return await ctx.warn(f"You **haven't** set your timezone\n> -# **set one with:** {ctx.cmd('timezone set')}")
             return await ctx.warn(
                 f"**{target.display_name}** has not set their timezone"
             )
@@ -377,7 +377,7 @@ class Timezone(Package):
         except pytz.exceptions.UnknownTimeZoneError:
             return await ctx.fail(
                 f"Invalid timezone stored for {target.mention}\n"
-                f"> -# **zone:** `{tz}` · ask them to reset with `,timezone set`"
+                f"> -# **zone:** `{tz}` · ask them to reset with {ctx.cmd('timezone set')}"
             )
 
     @timezone.command(
@@ -419,7 +419,7 @@ class Timezone(Package):
         if result == "UPDATE 0":
             return await ctx.warn(
                 "You have no timezone set\n"
-                f"> -# **set one with:** `,timezone set`"
+                f"> -# **set one with:** {ctx.cmd('timezone set')}"
             )
         await ctx.send(
             embed=c2(
@@ -437,7 +437,7 @@ class Timezone(Package):
         if member.id == ctx.author.id:
             return await ctx.warn(
                 "You **can't** compare with yourself\n"
-                f"> -# **usage:** `,timezone compare @user`"
+                f"> -# **usage:** {ctx.cmd('timezone compare @user')}"
             )
 
         guild_id = _get_guild_id(ctx)
@@ -454,12 +454,12 @@ class Timezone(Package):
         if not my_tz_name:
             return await ctx.fail(
                 "You **haven't** set your timezone yet\n"
-                f"> -# **set one with:** `,timezone set`"
+                f"> -# **set one with:** {ctx.cmd('timezone set')}"
             )
         if not their_tz_name:
             return await ctx.fail(
                 f"{member.mention} hasn't set their timezone\n"
-                f"> -# **ask them to use:** `,timezone set`"
+                f"> -# **ask them to use:** {ctx.cmd('timezone set')}"
             )
 
         try:
@@ -468,7 +468,7 @@ class Timezone(Package):
         except pytz.exceptions.UnknownTimeZoneError:
             return await ctx.fail(
                 "One of the stored timezones is invalid\n"
-                f"> -# **re-set with:** `,timezone set`"
+                f"> -# **re-set with:** {ctx.cmd('timezone set')}"
             )
 
         my_time = datetime.now(my_tz)
@@ -516,7 +516,7 @@ class Timezone(Package):
         if not timezones:
             return await ctx.warn(
                 "No timezones set in this server\n"
-                f"> -# **set yours with:** `,timezone set`"
+                f"> -# **set yours with:** {ctx.cmd('timezone set')}"
             )
 
         lines = []

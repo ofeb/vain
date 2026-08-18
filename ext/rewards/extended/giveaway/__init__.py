@@ -126,7 +126,7 @@ async def _parse_start_args(
     text = body.strip()
     if not text:
         raise commands.BadArgument(
-            "Usage: `,giveaway start [channel] <prize>, <duration>` "
+            f"Usage: {ctx.cmd('giveaway start [channel] <prize>, <duration>')} "
             "\u00b7 add `--winners 3` or `--requirement level 5`"
         )
 
@@ -135,7 +135,7 @@ async def _parse_start_args(
     tokens = [t for t in tokens if t]
     if not tokens:
         raise commands.BadArgument(
-            "Usage: `,giveaway start [channel] <prize>, <duration>`"
+            f"Usage: {ctx.cmd('giveaway start [channel] <prize>, <duration>')}"
         )
 
     
@@ -164,7 +164,7 @@ async def _parse_start_args(
         if not parts:
             raise commands.BadArgument(
                 "Include a prize and duration. Example: "
-                "`,giveaway start #chat Nitro, 2 hours`"
+                f"{ctx.cmd('giveaway start #chat Nitro, 2 hours')}"
             )
 
         
@@ -194,7 +194,7 @@ async def _parse_start_args(
                 )
                 if dur_at is None:
                     raise commands.BadArgument(
-                        "Missing duration. Example: `,giveaway start Nitro, 2 hours`"
+                        f"Missing duration. Example: {ctx.cmd('giveaway start Nitro, 2 hours')}"
                     )
                 seconds = _parse_duration_value(parts[dur_at])
                 prize = " ".join(parts[:dur_at] + parts[dur_at + 1 :]).strip().rstrip(",")
@@ -207,7 +207,7 @@ async def _parse_start_args(
         raise commands.BadArgument("Duration can\u2019t be longer than **1 year**.")
     if not prize:
         raise commands.BadArgument(
-            "A prize is required. Example: `,giveaway start #chat Nitro, 2 hours`"
+            f"A prize is required. Example: {ctx.cmd('giveaway start #chat Nitro, 2 hours')}"
         )
     if winners_flag is not None:
         winners = winners_flag
@@ -360,7 +360,7 @@ class Giveaway(commands.Cog):
         lines = catalog_lines()
         header = (
             "**Giveaway entry rules**\n"
-            "> -# Attach with `--requirement …` on `,giveaway start`\n"
+            f"> -# Attach with `--requirement …` on {ctx.cmd('giveaway start')}\n"
             "> -# Combine several: `--requirement level 5, badge`\n"
             "> -# Winners flag: `--winners 3`\n"
         )
@@ -410,10 +410,10 @@ class Giveaway(commands.Cog):
         """Reroll winners. Reply to the giveaway, or pass a message id/link.
 
         Examples:
-        - reply to the giveaway: `,giveaway reroll`
-        - `,giveaway reroll 123456789012345678`
-        - `,giveaway reroll https://discord.com/channels/.../.../...`
-        - `,giveaway reroll 123… 2` (2 winners)
+        - reply to the giveaway: {ctx.cmd('giveaway reroll')}
+        - {ctx.cmd('giveaway reroll 123456789012345678')}
+        - {ctx.cmd('giveaway reroll https://discord.com/channels/.../.../...')}
+        - {ctx.cmd('giveaway reroll 123… 2')} (2 winners)
         """
         
         winners_count = winners
@@ -689,17 +689,17 @@ class Giveaway(commands.Cog):
         """Launch a giveaway.
 
         Preferred:
-        - `,giveaway start #chat Nitro, 2 hours`
-        - `,giveaway start #chat Nitro, 2 hours --winners 3`
-        - `,giveaway start #chat Nitro, 2h --requirement level 5, badge`
+        - {ctx.cmd('giveaway start #chat Nitro, 2 hours')}
+        - {ctx.cmd('giveaway start #chat Nitro, 2 hours --winners 3')}
+        - {ctx.cmd('giveaway start #chat Nitro, 2h --requirement level 5, badge')}
 
-        See `,giveaway requirements` for every entry rule.
+        See {ctx.cmd('giveaway requirements')} for every entry rule.
         """
         if not arguments or not str(arguments).strip():
             await ctx.warn(
-                "Usage: `,giveaway start [channel] <prize>, <duration>`\n"
-                "> -# e.g. `,giveaway start #chat Nitro, 2 hours --winners 3`\n"
-                "> -# rules: `,giveaway requirements`"
+                f"Usage: {ctx.cmd('giveaway start [channel] <prize>, <duration>')}\n"
+                f"> -# e.g. {ctx.cmd('giveaway start #chat Nitro, 2 hours --winners 3')}\n"
+                f"> -# rules: {ctx.cmd('giveaway requirements')}"
             )
             return
 
@@ -944,7 +944,7 @@ class Giveaway(commands.Cog):
             await events.update_settings(ctx.guild.id, join_type="reaction")
             await ctx.success(
                 "Join type set\n> -# **method:** reaction"
-                "\n> -# **set emoji:** `,giveaway customize join reaction`"
+                f"\n> -# **set emoji:** {ctx.cmd('giveaway customize join reaction')}"
             )
             return
         await ctx.warn("Invalid option\n> -# **use:** `button` or `reaction`")
@@ -1061,7 +1061,7 @@ class Giveaway(commands.Cog):
     )
     @has_permissions(manage_guild=True)
     async def customize_dmonwin(self, ctx: Context, state: str = None) -> None:
-        """`,giveaway customize dmonwin on|off` - off by default."""
+        """{ctx.cmd('giveaway customize dmonwin on|off')} - off by default."""
         events = self._events()
         if events is None:
             await ctx.warn("Not loaded\n> -# **giveaway events are not loaded**")
@@ -1083,7 +1083,7 @@ class Giveaway(commands.Cog):
             await events.set_dm_on_win(ctx.guild.id, False)
             await ctx.success("DM on win\n> -# **status:** disabled")
             return
-        await ctx.warn("Invalid option\n> -# **use:** `on` or `off`\n> -# **or:** `,giveaway customize dmonwin script ...`")
+        await ctx.warn(f"Invalid option\n> -# **use:** `on` or `off`\n> -# **or:** {ctx.cmd('giveaway customize dmonwin script ...')}")
 
     @customize_dmonwin.command(name="on", description="Enable DMing winners")
     @has_permissions(manage_guild=True)

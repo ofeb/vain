@@ -353,6 +353,35 @@ class Context(commands.Context):
                 }
         return self._custom_color.get(key, getattr(color, key, color.base))
 
+
+    @property
+    def invoke_prefix(self) -> str:
+        """Prefix used for this invocation: `/` for slash, else clean_prefix."""
+        if getattr(self, "interaction", None) is not None:
+            return "/"
+        p = getattr(self, "clean_prefix", None)
+        if p is None or p == "":
+            p = getattr(self, "prefix", None)
+        if isinstance(p, (list, tuple)):
+            p = p[0] if p else ","
+        if not p:
+            p = ","
+        return str(p)
+
+    def cmd(self, invocation: str) -> str:
+        """Format a command sample with the active prefix (or `/` for slash).
+
+        Accepts bare names (``timezone set``) or already-prefixed strings
+        (``,timezone set``, ``/timezone set``). Returns e.g. ``,timezone set``
+        or ``/timezone set`` matching how the user invoked the bot.
+        """
+        inv = str(invocation or "").strip()
+        for lead in ("/", ",", ";", "!", ".", "?"):
+            if inv.startswith(lead):
+                inv = inv[len(lead) :].lstrip()
+                break
+        return f"{self.invoke_prefix}{inv}"
+
     def _strip_self_mention(self, message: str) -> str:
         text = str(message or "").strip()
         mention = str(getattr(self.author, "mention", "")).strip()

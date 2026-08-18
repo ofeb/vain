@@ -1404,7 +1404,7 @@ class Tickets(Package):
         if not message:
             await _ephemeral(
                 interaction,
-                "Set a panel first with `,tc panel <message>`.",
+                f"Set a panel first with {ctx.cmd('tc panel <message>')}.",
             )
             return
 

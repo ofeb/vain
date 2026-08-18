@@ -353,7 +353,7 @@ class Log(LogEvents, Package):
     )
     @has_permissions(manage_guild=True)
     async def log_color(self, ctx: Context, *tokens: str) -> None:
-        """`,log color [channel] <event|all> <hex>`"""
+        f"{ctx.cmd('log color [channel] <event|all> <hex>')}"""
         if not tokens:
             return await ctx.send_help(ctx.command)
 

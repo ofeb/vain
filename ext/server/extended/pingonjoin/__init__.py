@@ -175,7 +175,7 @@ class PingOnJoinCommands(PingOnJoinEvents, Package):
                 return await ctx.send(f"```\n{str(current)[:1900]}\n```")
             return await ctx.success(
                 "Using the **default** ping (just a mention). "
-                "Set one with `,pingonjoin message <script>`"
+                f"Set one with {ctx.cmd('pingonjoin message <script>')}"
             )
         if script.strip().lower() in {"clear", "reset", "default", "none", "remove"}:
             await self._set_message(ctx.guild.id, None)
@@ -210,10 +210,10 @@ class PingOnJoinCommands(PingOnJoinEvents, Package):
         """Control auto-delete for ping on join messages.
 
         Examples:
-        - `,poj delete` - show current settings
-        - `,poj delete on` / `enable` - turn auto-delete on
-        - `,poj delete off` / `disable` - turn auto-delete off
-        - `,poj delete 10s` / `30` - set delay (default **10s**)
+        - {ctx.cmd('poj delete')} - show current settings
+        - {ctx.cmd('poj delete on')} / `enable` - turn auto-delete on
+        - {ctx.cmd('poj delete off')} / `disable` - turn auto-delete off
+        - {ctx.cmd('poj delete 10s')} / `30` - set delay (default **10s**)
         """
         await self._ensure_table()
         if not option or not str(option).strip():

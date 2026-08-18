@@ -311,7 +311,7 @@ class Nuke(Package):
             current = await self._get_default_message(ctx.guild.id)
             return await ctx.normal(
                 f"Current default nuke message:\n```\n{current[:1500]}\n```\n"
-                f"Use `,nuke script <message>` to change it, or `,nuke script reset` to restore `first`."
+                f"Use {ctx.cmd('nuke script <message>')} to change it, or {ctx.cmd('nuke script reset')} to restore `first`."
             )
 
         if message.strip().lower() in {"reset", "clear", "default", "none"}:
@@ -337,7 +337,7 @@ class Nuke(Package):
         embed = Embed(
             title="Nuke / Autonuke Variables",
                         description=(
-                "Use these inside custom embed scripts for `,nuke` and `,autonuke`.\n"
+                f"Use these inside custom embed scripts for {ctx.cmd('nuke')} and {ctx.cmd('autonuke')}.\n"
                 "Also see: https://vain.bot/resources/scripting/variables"
             ),
         )
@@ -372,7 +372,7 @@ class Nuke(Package):
             current = await self._get_autonuke_default_message(ctx.guild.id)
             return await ctx.normal(
                 f"Current default autonuke message:\n```\n{current[:1500]}\n```\n"
-                f"Use `,autonuke message <message>` to change it, or `,autonuke message reset` to restore `first`."
+                f"Use {ctx.cmd('autonuke message <message>')} to change it, or {ctx.cmd('autonuke message reset')} to restore `first`."
             )
 
         if message.strip().lower() in {"reset", "clear", "default", "none"}:
@@ -400,7 +400,7 @@ class Nuke(Package):
 
         Usage: autonuke add [channel] <interval> [custom embed script]
         Channel defaults to the current channel. If no script is given, the
-        guild default autonuke message (from `,autonuke message`) is used.
+        guild default autonuke message (from {ctx.cmd('autonuke message')}) is used.
         """
         tokens = args.split() if args else []
         channel: TextChannel = ctx.channel  # type: ignore[assignment]

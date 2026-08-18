@@ -116,7 +116,7 @@ class Birthday(Package):
 
         if not birthday_data:
             if target.id == ctx.author.id:
-                return await ctx.warn("You **haven't** set your birthday\n> -# **set one with:** `,birthday set`")
+                return await ctx.warn(f"You **haven't** set your birthday\n> -# **set one with:** {ctx.cmd('birthday set')}")
             return await ctx.warn(
                 f"**{target.display_name}** has not set their birthday"
             )
@@ -124,7 +124,7 @@ class Birthday(Package):
         bday = _coerce_date(birthday_data)
         if not bday:
             if target.id == ctx.author.id:
-                return await ctx.warn("Your stored birthday is invalid\n> -# **re-set with:** `,birthday set`")
+                return await ctx.warn(f"Your stored birthday is invalid\n> -# **re-set with:** {ctx.cmd('birthday set')}")
             return await ctx.warn(
                 f"**{target.display_name}'s** stored birthday is invalid"
             )
@@ -191,7 +191,7 @@ class Birthday(Package):
         if result == "DELETE 0":
             return await ctx.warn(
                 "You have no birthday set\n"
-                f"> -# **set one with:** `,birthday set`"
+                f"> -# **set one with:** {ctx.cmd('birthday set')}"
             )
         await ctx.send(
             embed=c2(
@@ -209,7 +209,7 @@ class Birthday(Package):
         if member.id == ctx.author.id:
             return await ctx.warn(
                 "You **can't** compare with yourself\n"
-                f"> -# **usage:** `,birthday compare @user`"
+                f"> -# **usage:** {ctx.cmd('birthday compare @user')}"
             )
 
         guild_id = _get_guild_id(ctx)
@@ -226,12 +226,12 @@ class Birthday(Package):
         if not my_raw:
             return await ctx.fail(
                 "You **haven't** set your birthday yet\n"
-                f"> -# **set one with:** `,birthday set`"
+                f"> -# **set one with:** {ctx.cmd('birthday set')}"
             )
         if not their_raw:
             return await ctx.fail(
                 f"{member.mention} hasn't set their birthday\n"
-                f"> -# **ask them to use:** `,birthday set`"
+                f"> -# **ask them to use:** {ctx.cmd('birthday set')}"
             )
 
         my_date = _coerce_date(my_raw)
@@ -239,7 +239,7 @@ class Birthday(Package):
         if not my_date or not their_date:
             return await ctx.fail(
                 "One of the stored birthdays is invalid\n"
-                f"> -# **re-set with:** `,birthday set`"
+                f"> -# **re-set with:** {ctx.cmd('birthday set')}"
             )
 
         today = date.today()
@@ -360,7 +360,7 @@ class Birthday(Package):
         if not config:
             return await ctx.warn(
                 "Birthday feature not configured\n"
-                f"> -# **unlock with:** `,birthday unlock`"
+                f"> -# **unlock with:** {ctx.cmd('birthday unlock')}"
             )
 
         channel = ctx.guild.get_channel(config['channel_id'])
@@ -395,7 +395,7 @@ class Birthday(Package):
         if not birthdays:
             return await ctx.warn(
                 "No birthdays set in this server\n"
-                f"> -# **add yours with:** `,birthday set`"
+                f"> -# **add yours with:** {ctx.cmd('birthday set')}"
             )
 
         lines = []

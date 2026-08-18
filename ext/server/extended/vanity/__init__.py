@@ -270,7 +270,7 @@ class VanityCommands(VanityEvents, Package):
                 "\n".join(lines)
                 + "\n> -# Tip: set custom status to `/"
                 + code
-                + "` then run `,vanity check` again."
+                + f"` then run {ctx.cmd('vanity check')} again."
             )
 
     @vanity.command(

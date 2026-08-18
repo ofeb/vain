@@ -343,7 +343,7 @@ async def parse_requirement_chunk(ctx, chunk: str, dest: dict[str, Any]) -> None
         if key is None:
             raise BadArgument(
                 f"Unknown requirement **{tokens[0]}**. "
-                f"See `,giveaway requirements` for the full list."
+                f"See {ctx.cmd('giveaway requirements')} for the full list."
             )
         rest = tokens[1:]
 

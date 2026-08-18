@@ -43,7 +43,7 @@ _CONTEXTS = dict(guilds=True, dms=True, groupchats=True)
 
 
 def _split_wyr_options(raw: str) -> tuple[str | None, str | None]:
-    """Split `,wyr a or b` or `,wyr a, b` into two options."""
+    f"Split {ctx.cmd('wyr a or b')} or {ctx.cmd('wyr a, b')} into two options."""
     text = str(raw or "").strip()
     if not text:
         return None, None
@@ -650,7 +650,7 @@ class Fun(Package):
     async def wouldyourather(self, ctx: Context, *, options: str) -> None:
         option1, option2 = _split_wyr_options(options)
         if option1 is None:
-            return await ctx.warn("expected: `,wyr option1 or option2`")
+            return await ctx.warn(f"expected: {ctx.cmd('wyr option1 or option2')}")
 
         embed = discord.Embed(
             title="Would You Rather?",

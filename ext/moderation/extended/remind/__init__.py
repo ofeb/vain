@@ -88,7 +88,7 @@ class Remind(Package):
         if not message:
             return await ctx.fail(
                 "Please provide a **reminder message**\n"
-                f"> -# **usage:** `,remind <duration> <message>`"
+                f"> -# **usage:** {ctx.cmd('remind <duration> <message>')}"
             )
 
         when = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=seconds)
@@ -127,7 +127,7 @@ class Remind(Package):
         if not rows:
             return await ctx.warn(
                 "You have no active reminders\n"
-                f"> -# **create one with:** `,remind <duration> <message>`"
+                f"> -# **create one with:** {ctx.cmd('remind <duration> <message>')}"
             )
 
         lines = []
@@ -157,7 +157,7 @@ class Remind(Package):
         if result == "DELETE 0":
             return await ctx.warn(
                 f"Reminder **#{id}** not found\n"
-                f"> -# **check your reminders with:** `,remind list`"
+                f"> -# **check your reminders with:** {ctx.cmd('remind list')}"
             )
         return await ctx.success(
             f"Removed reminder\n"

@@ -69,7 +69,7 @@ class Highlight(Package):
         if not highlights:
             return await ctx.warn(
                 "You have no keywords set\n"
-                f"> -# **add one with:** `,highlight add <keyword>`"
+                f"> -# **add one with:** {ctx.cmd('highlight add <keyword>')}"
             )
 
         keywords = [f"`{h['keyword']}`" for h in highlights]
@@ -156,7 +156,7 @@ class Highlight(Package):
         if result == "DELETE 0":
             return await ctx.warn(
                 f"{label} is not ignored\n"
-                f"> -# **check with:** `,highlight ignores`"
+                f"> -# **check with:** {ctx.cmd('highlight ignores')}"
             )
         await ctx.success(
             f"Stopped ignoring\n"
@@ -178,7 +178,7 @@ class Highlight(Package):
         if not ignores:
             return await ctx.warn(
                 "You have no ignored targets\n"
-                f"> -# **ignore with:** `,highlight ignore <target>`"
+                f"> -# **ignore with:** {ctx.cmd('highlight ignore <target>')}"
             )
 
         lines = []

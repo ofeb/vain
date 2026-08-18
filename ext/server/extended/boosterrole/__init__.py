@@ -373,7 +373,7 @@ class BoosterroleCommands(Package):
         if not role_id:
             raise CommandError(
                 "You don't have a booster role yet\n"
-                f"> -# **create one with:** `,boosterrole`"
+                f"> -# **create one with:** {ctx.cmd('boosterrole')}"
             )
         col = Color.from_str(await get_dominant_color(ctx.author) or "#303135")
         role = ctx.guild.get_role(role_id)
@@ -385,7 +385,7 @@ class BoosterroleCommands(Package):
             )
         raise CommandError(
             "Your role was deleted\n"
-            f"> -# **create a new one with:** `,boosterrole`"
+            f"> -# **create a new one with:** {ctx.cmd('boosterrole')}"
         )
 
     @boosterrole.command(
@@ -404,7 +404,7 @@ class BoosterroleCommands(Package):
         if not role_id:
             raise CommandError(
                 "You don't have a booster role yet\n"
-                f"> -# **create one with:** `,boosterrole`"
+                f"> -# **create one with:** {ctx.cmd('boosterrole')}"
             )
         rand = random.randint(0, 0xFFFFFF)
         col = Color.from_str(f"#{rand:06X}")
@@ -417,7 +417,7 @@ class BoosterroleCommands(Package):
             )
         raise CommandError(
             "Your role was deleted\n"
-            f"> -# **create a new one with:** `,boosterrole`"
+            f"> -# **create a new one with:** {ctx.cmd('boosterrole')}"
         )
 
     @boosterrole.group(
@@ -449,13 +449,13 @@ class BoosterroleCommands(Package):
         if not role_id:
             raise CommandError(
                 "You don't have a booster role yet\n"
-                f"> -# **create one with:** `,boosterrole`"
+                f"> -# **create one with:** {ctx.cmd('boosterrole')}"
             )
         role = ctx.guild.get_role(role_id)
         if not role:
             raise CommandError(
                 "Your role was deleted\n"
-                f"> -# **create a new one with:** `,boosterrole`"
+                f"> -# **create a new one with:** {ctx.cmd('boosterrole')}"
             )
 
         resolved = await self._resolve_boosterrole_icon(ctx, icon)
@@ -490,18 +490,18 @@ class BoosterroleCommands(Package):
         if not role_id:
             raise CommandError(
                 "You don't have a booster role\n"
-                f"> -# **create one with:** `,boosterrole`"
+                f"> -# **create one with:** {ctx.cmd('boosterrole')}"
             )
         role = ctx.guild.get_role(role_id)
         if not role:
             raise CommandError(
                 "Your role was deleted\n"
-                f"> -# **create a new one with:** `,boosterrole`"
+                f"> -# **create a new one with:** {ctx.cmd('boosterrole')}"
             )
         if not role.display_icon:
             raise CommandError(
                 "Your role doesn't have an icon\n"
-                f"> -# **set one with:** `,boosterrole icon`"
+                f"> -# **set one with:** {ctx.cmd('boosterrole icon')}"
             )
 
         await role.edit(display_icon=None, reason=f"icon removed by {ctx.author}")
@@ -651,7 +651,7 @@ class BoosterroleCommands(Package):
         if not role_id:
             raise CommandError(
                 "You don't have a booster role yet\n"
-                f"> -# **create one with:** `,boosterrole`"
+                f"> -# **create one with:** {ctx.cmd('boosterrole')}"
             )
         role = ctx.guild.get_role(role_id)
         if role:
@@ -662,7 +662,7 @@ class BoosterroleCommands(Package):
             )
         raise CommandError(
             "Your role was deleted\n"
-            f"> -# **create a new one with:** `,boosterrole`"
+            f"> -# **create a new one with:** {ctx.cmd('boosterrole')}"
         )
 
     @boosterrole.command(
@@ -681,7 +681,7 @@ class BoosterroleCommands(Package):
         if not name and primary is None:
             raise CommandError(
                 "Provide a **name** and/or **colour**\n"
-                "> -# **examples:** `,br modify coolname ff0000` · `,br modify ff0000 00ff00`"
+                f"> -# **examples:** {ctx.cmd('br modify coolname ff0000')} · {ctx.cmd('br modify ff0000 00ff00')}"
             )
 
         if name is not None:
@@ -712,13 +712,13 @@ class BoosterroleCommands(Package):
         if not role_id:
             raise CommandError(
                 "You don't have a booster role yet\n"
-                f"> -# **create one with:** `,boosterrole`"
+                f"> -# **create one with:** {ctx.cmd('boosterrole')}"
             )
         role = ctx.guild.get_role(role_id)
         if not role:
             raise CommandError(
                 "Your role was deleted\n"
-                f"> -# **create a new one with:** `,boosterrole`"
+                f"> -# **create a new one with:** {ctx.cmd('boosterrole')}"
             )
 
         edit_kwargs: dict = {"reason": f"booster role modified by {ctx.author}"}
@@ -766,7 +766,7 @@ class BoosterroleCommands(Package):
         if not role_id:
             raise CommandError(
                 "You don't have a booster role set up\n"
-                f"> -# **create one with:** `,boosterrole`"
+                f"> -# **create one with:** {ctx.cmd('boosterrole')}"
             )
         role = ctx.guild.get_role(role_id)
         if role:
@@ -819,7 +819,7 @@ class BoosterroleCommands(Package):
         if not role_id:
             raise CommandError(
                 "No award role set\n"
-                f"> -# **set one with:** `,boosterrole award <role>`"
+                f"> -# **set one with:** {ctx.cmd('boosterrole award <role>')}"
             )
         role = ctx.guild.get_role(role_id)
         return await ctx.success(
@@ -845,7 +845,7 @@ class BoosterroleCommands(Package):
         except Exception:
             raise CommandError(
                 "No award role is set\n"
-                f"> -# **set one with:** `,boosterrole award <role>`"
+                f"> -# **set one with:** {ctx.cmd('boosterrole award <role>')}"
             )
         return await ctx.success(
             "Award role **removed**\n"
@@ -972,7 +972,7 @@ class BoosterroleCommands(Package):
         if not all_roles:
             raise CommandError(
                 "No booster roles found\n"
-                f"> -# **members can create with:** `,boosterrole`"
+                f"> -# **members can create with:** {ctx.cmd('boosterrole')}"
             )
         stale = [
             r for r in all_roles
@@ -1018,12 +1018,12 @@ class BoosterroleCommands(Package):
         if member.id == ctx.author.id:
             raise CommandError(
                 "You **can't** share with yourself\n"
-                f"> -# **usage:** `,boosterrole share @user`"
+                f"> -# **usage:** {ctx.cmd('boosterrole share @user')}"
             )
         if member.bot:
             raise CommandError(
                 "You **can't** share with a bot\n"
-                f"> -# **usage:** `,boosterrole share @user`"
+                f"> -# **usage:** {ctx.cmd('boosterrole share @user')}"
             )
 
         role_id = await self.db.fetchval(
@@ -1034,13 +1034,13 @@ class BoosterroleCommands(Package):
         if not role_id:
             raise CommandError(
                 "You don't have a booster role yet\n"
-                f"> -# **create one with:** `,boosterrole`"
+                f"> -# **create one with:** {ctx.cmd('boosterrole')}"
             )
         role = ctx.guild.get_role(role_id)
         if not role:
             raise CommandError(
                 "Your role was deleted\n"
-                f"> -# **create a new one with:** `,boosterrole`"
+                f"> -# **create a new one with:** {ctx.cmd('boosterrole')}"
             )
 
         if role in member.roles:
@@ -1084,20 +1084,20 @@ class BoosterroleCommands(Package):
         if not role_id:
             raise CommandError(
                 "You don't have a booster role\n"
-                f"> -# **create one with:** `,boosterrole`"
+                f"> -# **create one with:** {ctx.cmd('boosterrole')}"
             )
         role = ctx.guild.get_role(role_id)
         if not role:
             raise CommandError(
                 "Your role was deleted\n"
-                f"> -# **create a new one with:** `,boosterrole`"
+                f"> -# **create a new one with:** {ctx.cmd('boosterrole')}"
             )
 
         members = [m.mention for m in role.members if m.id != ctx.author.id]
         if not members:
             return await ctx.warn(
                 "No members in your shared role\n"
-                f"> -# **share with:** `,boosterrole share @user`"
+                f"> -# **share with:** {ctx.cmd('boosterrole share @user')}"
             )
 
         return await ctx.success(
@@ -1121,19 +1121,19 @@ class BoosterroleCommands(Package):
         if not role_id:
             raise CommandError(
                 "You don't have a booster role\n"
-                f"> -# **create one with:** `,boosterrole`"
+                f"> -# **create one with:** {ctx.cmd('boosterrole')}"
             )
         role = ctx.guild.get_role(role_id)
         if not role:
             raise CommandError(
                 "Your role was deleted\n"
-                f"> -# **create a new one with:** `,boosterrole`"
+                f"> -# **create a new one with:** {ctx.cmd('boosterrole')}"
             )
 
         if role not in member.roles:
             raise CommandError(
                 f"{member.mention} doesn't have your role\n"
-                f"> -# **check with:** `,boosterrole share list`"
+                f"> -# **check with:** {ctx.cmd('boosterrole share list')}"
             )
 
         await member.remove_roles(role, reason=f"removed by {ctx.author}")

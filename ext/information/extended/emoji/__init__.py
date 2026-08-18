@@ -87,16 +87,16 @@ class Emoji(Package):
         description="Returns a large version of a custom emoji",
     )
     async def emoji_enlarge(self, ctx, *, emoji: str | None = None):
-        """Show a large custom emoji - `,emoji enlarge <:name:id>`."""
+        f"Show a large custom emoji - {ctx.cmd('emoji enlarge <:name:id>')}."""
         token = (emoji or "").strip()
         if not token:
-            return await ctx.warn("Please provide a **valid emoji**\n> -# **usage:** `,emoji enlarge <:name:id>`")
+            return await ctx.warn(f"Please provide a **valid emoji**\n> -# **usage:** {ctx.cmd('emoji enlarge <:name:id>')}")
 
         
         token = token.split()[0]
         custom = _parse_partial_emoji(token)
         if custom is None or not custom.id or not custom.url:
-            return await ctx.warn("Please provide a **valid emoji**\n> -# **usage:** `,emoji enlarge <:name:id>`")
+            return await ctx.warn(f"Please provide a **valid emoji**\n> -# **usage:** {ctx.cmd('emoji enlarge <:name:id>')}")
 
         e = c2(message=str(custom), timestamp=False)
         e.set_image(url=str(custom.url))
@@ -164,7 +164,7 @@ class Emoji(Package):
         try:
             custom_emoji = _parse_partial_emoji(emoji)
             if custom_emoji is None:
-                return await ctx.warn("No emoji was provided\n> -# **usage:** `,emoji remove <:name:id>`")
+                return await ctx.warn(f"No emoji was provided\n> -# **usage:** {ctx.cmd('emoji remove <:name:id>')}")
             emoji_obj = discord.utils.get(ctx.guild.emojis, id=custom_emoji.id)
             if emoji_obj is None:
                 emoji_obj = discord.utils.get(ctx.guild.emojis, name=custom_emoji.name)
@@ -251,7 +251,7 @@ class Emoji(Package):
 
         if pe is None or not pe.id:
             return await ctx.warn(
-                "Please provide a **valid emoji or message link**\n> -# **usage:** `,emoji information <:name:id>` or a message link"
+                f"Please provide a **valid emoji or message link**\n> -# **usage:** {ctx.cmd('emoji information <:name:id>')} or a message link"
             )
 
         guild_emoji = None
@@ -320,7 +320,7 @@ class Emoji(Package):
         try:
             custom_emoji = _parse_partial_emoji(emoji)
             if custom_emoji is None:
-                return await ctx.warn("No emoji was provided\n> -# **usage:** `,emoji rename <:name:id> newname`")
+                return await ctx.warn(f"No emoji was provided\n> -# **usage:** {ctx.cmd('emoji rename <:name:id> newname')}")
             emoji_obj = discord.utils.get(ctx.guild.emojis, id=custom_emoji.id)
             if emoji_obj is None:
                 emoji_obj = discord.utils.get(ctx.guild.emojis, name=custom_emoji.name)

@@ -424,9 +424,9 @@ class Role(Package):
     )
     @has_permissions(manage_roles=True)
     async def role(self, ctx, *, args: str | None = None) -> None:
-        """Toggle a role. Usage: ``,r @user RoleName`` (add if missing, remove if present).
+        """Toggle a role. Usage: ``r @user RoleName`` (add if missing, remove if present).
 
-        Multi-member: ``,r @a @b Role Name``. Parsing stops consuming members once the
+        Multi-member: ``r @a @b Role Name``. Parsing stops consuming members once the
         remaining tokens form a valid role - so a role named ``member`` is never
         fuzzy-matched as a second user.
         """

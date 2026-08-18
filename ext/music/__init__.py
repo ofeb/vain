@@ -1773,7 +1773,7 @@ class Music(MusicEvents, Package):
         await inter.response.defer(ephemeral=True)
         player = inter.guild.voice_client if inter.guild else None
         if player is None:
-            return await inter.followup.send("nothing playing - use `,play` first", ephemeral=True)
+            return await inter.followup.send(f"nothing playing - use {ctx.cmd('play')} first", ephemeral=True)
 
         tracks: list = []
         normalized = self._clean_media_url(query)
@@ -2405,9 +2405,9 @@ class Music(MusicEvents, Package):
         """Jump the queue to a track now (by position, name, or URL).
 
         Examples:
-        - `,fastforward 3` - play queue #3 now
-        - `,fastforward blinding lights` - find in queue / search and play
-        - `,fastforward https://open.spotify.com/track/...`
+        - {ctx.cmd('fastforward 3')} - play queue #3 now
+        - {ctx.cmd('fastforward blinding lights')} - find in queue / search and play
+        - {ctx.cmd('fastforward https://open.spotify.com/track/...')}
         """
         player = ctx.voice_client
         if player is None:
@@ -2448,9 +2448,9 @@ class Music(MusicEvents, Package):
         """Move a track to the front of the queue (plays when current song ends).
 
         Examples:
-        - `,priority 5`
-        - `,priority never gonna give you up`
-        - `,priority https://open.spotify.com/track/...`
+        - {ctx.cmd('priority 5')}
+        - {ctx.cmd('priority never gonna give you up')}
+        - {ctx.cmd('priority https://open.spotify.com/track/...')}
         """
         state = self._queue(ctx.guild.id)
         player = ctx.voice_client

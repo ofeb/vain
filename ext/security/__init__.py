@@ -960,7 +960,7 @@ class Antinuke(AntinukeEvents, Package):
             uid for uid in admin_ids if not (uid in seen or seen.add(uid))
         ]
         if not deduped:
-            return await ctx.warn("No antinuke admins are configured\n> -# **usage:** `,antinuke admin <member>` to add one")
+            return await ctx.warn(f"No antinuke admins are configured\n> -# **usage:** {ctx.cmd('antinuke admin <member>')} to add one")
         width = max(2, len(str(len(deduped))))
         embed = Embed(title="Antinuke admins", color=self.color).set_author(
             name=str(ctx.author),
@@ -997,7 +997,7 @@ class Antinuke(AntinukeEvents, Package):
             entries.append(f"{label} whitelisted ({uid}) [{tag}]")
 
         if not entries:
-            return await ctx.warn("No antinuke modules are currently active\n> -# **usage:** `,antinuke enable` to turn on protection")
+            return await ctx.warn(f"No antinuke modules are currently active\n> -# **usage:** {ctx.cmd('antinuke enable')} to turn on protection")
         width = max(2, len(str(len(entries))))
         numbered = [
             f"{idx:0{width}d} {entry}" for idx, entry in enumerate(entries, start=1)

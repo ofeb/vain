@@ -933,7 +933,7 @@ class ModerationCommands(Package):
 
         row = await self._ensure_jail_ready(ctx)
         if not row:
-            return await ctx.warn("Jail setup failed\n> -# **try** `,setupjail`")
+            return await ctx.warn(f"Jail setup failed\n> -# **try** {ctx.cmd('setupjail')}")
 
         jail_role = row["jail_role"]
         jail_channel = row["jail_channel"]
