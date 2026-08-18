@@ -372,7 +372,7 @@ def _transcribe_embed(text: str):
 
 
 def _ask_embed(text: str):
-    return c2(message=text)
+    return c2(message=text, footer=f" {_gemini_model()}")
 
 
 class Snipe(commands.Cog):

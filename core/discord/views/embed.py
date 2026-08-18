@@ -53,17 +53,23 @@ def c2(
 
     No embed colour - C2 containers render without an accent strip.
     ``color`` is accepted for call-site compatibility and ignored.
+    Footer is set via ``set_footer`` so embed_to_layout inserts a divider
+    between the body and the ``-#`` footer line.
     """
     _ = color
-    description = compose(
-        body(message),
-        caption(footer) if footer else None,
-    )
-    embed = discord.Embed(description=description)
+    embed = discord.Embed(description=body(message) or None)
     if title:
         embed.title = title
     if author:
         embed.set_author(name=author)
+    if footer:
+        cleaned = str(footer).strip()
+        while cleaned.startswith("> -#"):
+            cleaned = cleaned[4:].strip()
+        while cleaned.startswith("-#"):
+            cleaned = cleaned[2:].lstrip()
+        if cleaned:
+            embed.set_footer(text=cleaned)
     if timestamp:
         embed.timestamp = discord.utils.utcnow()
     return embed
