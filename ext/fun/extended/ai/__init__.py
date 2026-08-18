@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import io
 import re
@@ -17,6 +18,7 @@ from core.discord.package import Package
 from core.discord.views.embed import c2, panel_embed
 from core.networks.gemini import GeminiClient
 from core.networks import ocr as ocr_net
+from core.tools import image_ops
 
 if TYPE_CHECKING:
     from core.vain import Vain
@@ -103,8 +105,10 @@ class AI(Package):
                 message.author.name,
                 avatar_url,
             )
-            file = discord.File(io.BytesIO(image_data), filename="quote.png")
+            gif_data = await asyncio.to_thread(image_ops.pil_to_gif, image_data)
+            file = discord.File(io.BytesIO(gif_data), filename="quote.gif")
             await interaction.followup.send(file=file)
+            image_data = gif_data
             if interaction.guild is not None and hasattr(cog, "_get_quote_channel"):
                 dest_id = await cog._get_quote_channel(interaction.guild.id)
                 if dest_id and dest_id != getattr(interaction.channel, "id", None):
@@ -121,7 +125,7 @@ class AI(Package):
                                     f"{message.author.mention} · "
                                     f"[Jump to message]({message.jump_url})"
                                 ),
-                                file=discord.File(io.BytesIO(image_data), filename="quote.png"),
+                                file=discord.File(io.BytesIO(image_data), filename="quote.gif"),
                                 view=view,
                                 allowed_mentions=discord.AllowedMentions(users=False),
                             )
