@@ -129,7 +129,7 @@ class ImgonlyEvents(Package):
             send_channel = message.channel
             with contextlib.suppress(discord.HTTPException, discord.Forbidden):
                 sent = await send_channel.send(text)
-                self._schedule_delete(sent, delay=12.0)
+                self._schedule_delete(sent, delay=60.0)
 
         except Exception:
             log.exception("on_imgonly_message failed")
