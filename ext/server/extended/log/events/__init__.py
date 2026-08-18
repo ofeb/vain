@@ -233,7 +233,7 @@ class LogEvents:
         await self._log(
             guild.id, "messages", view,
             file_content=file_content,
-            file_name="bulk-delete.txt" if file_content else None,
+            file_name="multiple-deleted.txt" if file_content else None,
         )
 
 

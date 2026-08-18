@@ -1411,6 +1411,189 @@ class Utility(commands.Cog):
             builder.preview_message = None
 
 
+
+    @hybrid(
+        name="dominant",
+        aliases=["dom", "domcolor", "palette"],
+        description="Get dominant color(s) from avatars, image URLs, or attachments",
+        example=",dominant @user --colors 3",
+        guilds=True,
+        dms=True,
+        groupchats=True,
+    )
+    async def dominant(self, ctx: Context, *, query: str = None) -> None:
+        """Extract dominant colors via ColorThief. Flag: --colors / --colour (1-5, default 1)."""
+        import re as _re
+
+        rest = (query or "").strip()
+        if not rest and ctx.message and ctx.message.content:
+            inv = ctx.invoked_with or "dominant"
+            full = ctx.message.content
+            idx = full.lower().find(inv.lower())
+            if idx >= 0:
+                rest = full[idx + len(inv) :].strip()
+
+        color_count = 1
+        tokens = rest.split() if rest else []
+        cleaned_tokens: list[str] = []
+        i = 0
+        while i < len(tokens):
+            low = tokens[i].lower().strip(",")
+            if low in ("--colors", "--colour", "--color", "-c"):
+                if i + 1 < len(tokens) and tokens[i + 1].isdigit():
+                    color_count = max(1, min(5, int(tokens[i + 1])))
+                    i += 2
+                    continue
+                i += 1
+                continue
+            if low.startswith("--colors=") or low.startswith("--colour=") or low.startswith("--color="):
+                try:
+                    color_count = max(1, min(5, int(low.split("=", 1)[1])))
+                except Exception:
+                    pass
+                i += 1
+                continue
+            cleaned_tokens.append(tokens[i])
+            i += 1
+        rest = " ".join(cleaned_tokens).strip()
+
+        # Collect sources: attachments, urls, users
+        sources: list[tuple[str, str]] = []  # (kind_label_template, url)
+
+        if ctx.message and ctx.message.attachments:
+            for n, att in enumerate(ctx.message.attachments, 1):
+                ct = (att.content_type or "").lower()
+                name = (att.filename or "").lower()
+                ok = ct.startswith("image") or name.endswith(
+                    (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp")
+                )
+                if not ok:
+                    continue
+                label = "this attachment" if len(ctx.message.attachments) == 1 else f"attachment #{n}"
+                sources.append((label, att.url))
+
+        # split by comma for multi
+        parts = [p.strip() for p in rest.split(",") if p.strip()] if rest else []
+        if not parts and rest:
+            parts = [rest]
+
+        user_converter = commands.MemberConverter()
+        url_re = _re.compile(r"https?://\\S+", _re.I)
+
+        for part in parts:
+            # strip trailing punctuation from urls
+            m = url_re.search(part)
+            if m:
+                url = m.group(0).rstrip(")>.,'\"")
+                sources.append(("url", url))
+                continue
+            # try user
+            try:
+                member = await user_converter.convert(ctx, part)
+                sources.append((f"avatar:{member.id}", str(member.display_avatar.url)))
+            except Exception:
+                # bare snowflake
+                if part.isdigit():
+                    try:
+                        user = self.bot.get_user(int(part)) or await self.bot.fetch_user(int(part))
+                        sources.append((f"avatar:{user.id}", str(user.display_avatar.url)))
+                    except Exception:
+                        pass
+
+        # default: author avatar
+        if not sources and not rest:
+            sources.append(
+                (f"avatar:{ctx.author.id}", str(ctx.author.display_avatar.url))
+            )
+
+        if not sources:
+            return await ctx.warn(
+                "Attachments or URLs **must** be **GIFs** or **Images**"
+            )
+
+        sources = sources[:10]
+
+        async def _fetch_colors(url: str) -> list[str]:
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(url, timeout=aiohttp.ClientTimeout(total=12)) as resp:
+                        if resp.status != 200:
+                            return []
+                        data = await resp.read()
+            except Exception:
+                return []
+
+            def _extract() -> list[str]:
+                try:
+                    img = Image.open(BytesIO(data))
+                    if getattr(img, "is_animated", False):
+                        img.seek(0)
+                    if img.mode not in ("RGB", "RGBA"):
+                        img = img.convert("RGB")
+                    else:
+                        img = img.convert("RGB")
+                    buf = BytesIO()
+                    img.save(buf, format="PNG")
+                    buf.seek(0)
+                    ct = ColorThief(buf)
+                    if color_count <= 1:
+                        r, g, b = ct.get_color(quality=1)
+                        return [f"#{r:02x}{g:02x}{b:02x}"]
+                    palette = ct.get_palette(color_count=color_count, quality=1) or []
+                    out = []
+                    for rgb in palette[:color_count]:
+                        r, g, b = rgb
+                        out.append(f"#{r:02x}{g:02x}{b:02x}")
+                    return out
+                except Exception:
+                    return []
+
+            return await asyncio.to_thread(_extract)
+
+        blocks: list[str] = []
+        any_ok = False
+        for idx, (kind, url) in enumerate(sources, 1):
+            colors = await _fetch_colors(url)
+            if not colors:
+                continue
+            any_ok = True
+            if kind.startswith("avatar:"):
+                uid = kind.split(":", 1)[1]
+                title = f"[**dominant colors for <@{uid}>'s avatar**]({url})"
+            elif kind == "url":
+                if len(sources) == 1:
+                    title = f"[**dominant colors for this url**]({url})"
+                else:
+                    # count only url kinds for numbering
+                    url_n = sum(1 for k, _ in sources[:idx] if k == "url")
+                    title = f"[**dominant colors for URL #{url_n}**]({url})"
+            elif kind == "this attachment":
+                title = f"[**dominant colors for this attachment**]({url})"
+            else:
+                title = f"[**dominant colors for {kind}**]({url})"
+            color_bits = " ".join(f"`{c}`" for c in colors)
+            blocks.append(f"-# {title}:\n{color_bits}")
+
+        if not any_ok:
+            return await ctx.warn(
+                "Attachments or URLs **must** be **GIFs** or **Images**"
+            )
+
+        from discord import ui as _ui
+        from core.discord.ctx import layout_from_items
+
+        container = _ui.Container()
+        for attr in ("accent_color", "accent_colour"):
+            if hasattr(container, attr):
+                try:
+                    setattr(container, attr, None)
+                except Exception:
+                    pass
+        container.add_item(_ui.TextDisplay("\n\n".join(blocks)))
+        view = layout_from_items([container], timeout=None)
+        await ctx.send(view=view, allowed_mentions=discord.AllowedMentions.none())
+
+
 async def setup(bot: commands.Bot):
     from .events import SnipeEvents
 

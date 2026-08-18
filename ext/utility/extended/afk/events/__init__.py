@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import discord
 from discord.utils import format_dt
@@ -14,6 +14,7 @@ from core.discord.views.embed import c2
 
 if TYPE_CHECKING:
     from core.vain import Vain
+
 
 class AFKEvents:
     def _store(self) -> AFK | None:
@@ -35,18 +36,24 @@ class AFKEvents:
         if not data:
             return
         if await store.remove(message.author.id):
+            mentions = await store.get_mentions(message.author.id)
+            view = None
+            if mentions:
+                from .. import views as afk_views
+                view = afk_views.AFKMentionsButton(owner_id=message.author.id, bot=self.bot)
             embed = c2(
-                color=color.approve,
                 message=(
                     f"{message.author.mention}: Welcome back, you were away "
                     f"for {format_dt(data.timestamp, 'R')}."
                 ),
                 timestamp=False,
             )
+            embed.color = None
             await message.reply(
                 embed=embed,
+                view=view,
                 allowed_mentions=discord.AllowedMentions.none(),
-                delete_after=15,
+                delete_after=30 if view is None else None,
             )
 
     @Package.listener("on_message")
@@ -64,23 +71,35 @@ class AFKEvents:
             pass
 
         for user in message.mentions:
-            if user.bot:
+            if user.bot or user.id == message.author.id:
                 continue
             if not await store.exists(user.id):
                 continue
             data = await store.get(user.id)
             if not data:
                 continue
+            # track mention for the AFK user
+            try:
+                await store.add_mention(
+                    user.id,
+                    author_id=message.author.id,
+                    author_name=str(message.author),
+                    jump_url=message.jump_url,
+                    channel_id=message.channel.id,
+                    content=message.content or "",
+                    timestamp=message.created_at.timestamp(),
+                )
+            except Exception:
+                pass
             embed = c2(
-                color=color.approve,
                 message=(
                     f"{user.mention} is AFK: **{data.status}** - "
                     f"{format_dt(data.timestamp, 'R')}"
                 ),
                 timestamp=False,
             )
+            embed.color = None
             await message.reply(
                 embed=embed,
                 allowed_mentions=discord.AllowedMentions.none(),
             )
-

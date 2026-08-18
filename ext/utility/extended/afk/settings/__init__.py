@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import contextlib
+import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from logging import getLogger
@@ -50,13 +52,15 @@ class AFK:
     def _key(self, user_id: int) -> str:
         return f"afk:{user_id}"
 
+    def _mentions_key(self, user_id: int) -> str:
+        return f"afk:mentions:{user_id}"
+
     async def set(self, user_id: int, status: str = "AFK") -> None:
         mapping = {
             "status": (status or "AFK")[:200],
             "timestamp": str(int(datetime.now(timezone.utc).timestamp())),
         }
         key = self._key(user_id)
-        
         try:
             await self.redis.hset(key, mapping=mapping)
         except TypeError:
@@ -65,6 +69,7 @@ class AFK:
         expire = getattr(self.redis, "expire", None)
         if expire is not None:
             await expire(key, 7 * 86400)
+        await self.clear_mentions(user_id)
         logger.debug("afk set user=%s", user_id)
 
     async def get(self, user_id: int) -> AFKData | None:
@@ -81,7 +86,7 @@ class AFK:
             return None
         try:
             ts = int(float(norm.get("timestamp") or 0))
-        except ValueError:
+        except Exception:
             ts = 0
         return AFKData(
             status=norm.get("status") or "AFK",
@@ -89,10 +94,62 @@ class AFK:
         )
 
     async def remove(self, user_id: int) -> bool:
-        return bool(await self.redis.delete(self._key(user_id)))
+        try:
+            result = await self.redis.delete(self._key(user_id))
+            return bool(result)
+        except Exception:
+            return False
 
     async def exists(self, user_id: int) -> bool:
         return bool(await self.redis.exists(self._key(user_id)))
+
+    async def clear_mentions(self, user_id: int) -> None:
+        with contextlib.suppress(Exception):
+            await self.redis.delete(self._mentions_key(user_id))
+
+    async def add_mention(
+        self,
+        user_id: int,
+        *,
+        author_id: int,
+        author_name: str,
+        jump_url: str,
+        channel_id: int,
+        content: str,
+        timestamp: float,
+    ) -> None:
+        payload = json.dumps(
+            {
+                "author_id": author_id,
+                "author_name": author_name,
+                "jump_url": jump_url,
+                "channel_id": channel_id,
+                "content": (content or "")[:200],
+                "timestamp": timestamp,
+            }
+        )
+        key = self._mentions_key(user_id)
+        try:
+            await self.redis.rpush(key, payload)
+            await self.redis.ltrim(key, -200, -1)
+            await self.redis.expire(key, 7 * 86400)
+        except Exception:
+            pass
+
+    async def get_mentions(self, user_id: int) -> list[dict]:
+        key = self._mentions_key(user_id)
+        try:
+            rows = await self.redis.lrange(key, 0, -1)
+        except Exception:
+            return []
+        out: list[dict] = []
+        for row in rows or []:
+            raw = row.decode() if isinstance(row, (bytes, bytearray)) else str(row)
+            try:
+                out.append(json.loads(raw))
+            except Exception:
+                continue
+        return out
 
 
 async def fetch(redis: Any, user_id: int) -> AFKData | None:
