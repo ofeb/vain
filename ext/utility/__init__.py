@@ -522,6 +522,7 @@ class Utility(commands.Cog):
             ("Translate this message", self.ctx_translate),
             ("Transcribe this message", self.ctx_transcribe),
             ("Extract Text (OCR)", self.ctx_ocr),
+            ("Ask this message", self.ctx_ask),
         )
         for name, callback in specs:
             with contextlib.suppress(Exception):
@@ -529,6 +530,22 @@ class Utility(commands.Cog):
             menu = self._make_menu(name, callback)
             self.bot.tree.add_command(menu)
             self._menus.append(menu)
+        self._ensure_hybrid_contexts()
+
+    def _ensure_hybrid_contexts(self) -> None:
+        names = ("ask", "translate", "ocr", "transcribe")
+        for name in names:
+            cmd = self.bot.tree.get_command(name)
+            if cmd is None:
+                continue
+            try:
+                app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)(cmd)
+            except Exception:
+                pass
+            try:
+                app_commands.allowed_installs(guilds=True, users=True)(cmd)
+            except Exception:
+                pass
 
     async def cog_unload(self) -> None:
         for menu in self._menus:
@@ -584,7 +601,37 @@ class Utility(commands.Cog):
         except Exception as exc:
             await interaction.followup.send(f"Couldn't quote that: {exc}", ephemeral=True)
 
-    async def ctx_translate(self, interaction: discord.Interaction, message: discord.Message) -> None:
+    async def ctx_ask(self, interaction: discord.Interaction, message: discord.Message) -> None:
+        await interaction.response.defer(thinking=True)
+        text = (message.content or "").strip()
+        if not text:
+            await interaction.followup.send("That message has no text to ask about.", ephemeral=True)
+            return
+        try:
+            answer = await self._gemini().prompt(text)
+        except Exception as exc:
+            await interaction.followup.send(f"Ask failed: {exc}", ephemeral=True)
+            return
+        if not answer:
+            await interaction.followup.send("No response from AI.", ephemeral=True)
+            return
+        pages = _chunk_text(answer, 1800)
+        embeds = []
+        for i, chunk in enumerate(pages):
+            embeds.append(
+                panel_embed(
+                    title="Answer",
+                    lines=[chunk],
+                    footer=f"Gemini · {i + 1}/{len(pages)}" if len(pages) > 1 else "Gemini",
+                    timestamp=False,
+                )
+            )
+        if len(embeds) == 1:
+            await interaction.followup.send(embed=embeds[0])
+        else:
+            await interaction.followup.send(embeds=embeds[:10])
+
+        async def ctx_translate(self, interaction: discord.Interaction, message: discord.Message) -> None:
         await interaction.response.defer(thinking=True)
         text = (message.content or "").strip()
         if not text:
@@ -691,7 +738,9 @@ class Utility(commands.Cog):
         aliases=["chatgpt", "gemini", "gpt", "ai"],
         description="Ask a question and get results from AI",
         example=",ask what colors make up purple",
-        **_CONTEXTS,
+        guilds=True,
+        dms=True,
+        groupchats=True,
     )
     @describe(question="Your question")
     async def ask(self, ctx: Context, *, question: str) -> None:
@@ -726,7 +775,9 @@ class Utility(commands.Cog):
         aliases=["tr"],
         description="Translate text or a replied message",
         example=",tr es hello",
-        **_CONTEXTS,
+        guilds=True,
+        dms=True,
+        groupchats=True,
     )
     @describe(payload="Language codes and/or text")
     async def translate(self, ctx: Context, *, payload: str = None) -> None:
@@ -805,7 +856,9 @@ class Utility(commands.Cog):
         name="transcribe",
         description="Transcribe a Discord voice message",
         example=",transcribe",
-        **_CONTEXTS,
+        guilds=True,
+        dms=True,
+        groupchats=True,
     )
     @describe(message="Message with a voice attachment")
     async def transcribe(self, ctx: Context, message: discord.Message = None) -> None:
@@ -880,7 +933,9 @@ class Utility(commands.Cog):
         aliases=["extracttext", "readimage"],
         description="Extract text from an image (OCR)",
         example=",ocr",
-        **_CONTEXTS,
+        guilds=True,
+        dms=True,
+        groupchats=True,
     )
     @describe(attachment="Image to extract text from", url="Image URL")
     async def ocr(
