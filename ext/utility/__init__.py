@@ -732,7 +732,7 @@ class Utility(commands.Cog):
             return
         if _is_gif(data, filename):
             await interaction.followup.send(
-                "you **can't** OCR a **gif**, please try using an image!",
+                "you **can't** OCR a **gif**\n> -# use an **image** instead of a gif",
                 ephemeral=True,
             )
             return
