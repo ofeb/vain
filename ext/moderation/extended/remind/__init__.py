@@ -56,14 +56,12 @@ class _RemindDurationModal(ui.Modal, title="Remind me"):
 
             when = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=seconds)
             guild_id = interaction.guild.id if interaction.guild else 0
-            channel_id = getattr(interaction.channel, "id", 0) or 0
             rid = await self.cog.db.fetchval(
-                """INSERT INTO reminders (user_id, guild_id, channel_id, message, time)
-                   VALUES ($1, $2, $3, $4, $5)
+                """INSERT INTO reminders (user_id, guild_id, message, time)
+                   VALUES ($1, $2, $3, $4)
                    RETURNING id""",
                 interaction.user.id,
                 guild_id,
-                channel_id,
                 text,
                 when,
             )
@@ -111,12 +109,22 @@ class Remind(Package):
                 id BIGSERIAL PRIMARY KEY,
                 user_id BIGINT NOT NULL,
                 guild_id BIGINT NOT NULL DEFAULT 0,
-                channel_id BIGINT NOT NULL DEFAULT 0,
                 message TEXT NOT NULL,
                 time TIMESTAMP WITHOUT TIME ZONE NOT NULL
             )
             """
         )
+        # Older installs may lack columns; add only what we need (never channel_id)
+        for stmt in (
+            "ALTER TABLE reminders ADD COLUMN IF NOT EXISTS guild_id BIGINT NOT NULL DEFAULT 0",
+            "ALTER TABLE reminders ADD COLUMN IF NOT EXISTS message TEXT",
+            "ALTER TABLE reminders ADD COLUMN IF NOT EXISTS time TIMESTAMP WITHOUT TIME ZONE",
+            "ALTER TABLE reminders ADD COLUMN IF NOT EXISTS user_id BIGINT",
+        ):
+            try:
+                await self.db.execute(stmt)
+            except Exception:
+                pass
         await self.db.execute(
             "CREATE INDEX IF NOT EXISTS reminders_user_idx ON reminders (user_id)"
         )
@@ -172,19 +180,17 @@ class Remind(Package):
         *,
         user_id: int,
         guild_id: int,
-        channel_id: int,
         message: str,
         seconds: int,
     ) -> tuple[int, str]:
         await self._ensure_schema()
         when = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=seconds)
         rid = await self.db.fetchval(
-            """INSERT INTO reminders (user_id, guild_id, channel_id, message, time)
-               VALUES ($1, $2, $3, $4, $5)
+            """INSERT INTO reminders (user_id, guild_id, message, time)
+               VALUES ($1, $2, $3, $4)
                RETURNING id""",
             user_id,
             guild_id,
-            channel_id,
             message,
             when,
         )
@@ -265,12 +271,10 @@ class Remind(Package):
             return await ctx.send_help(ctx.command)
 
         guild_id = ctx.guild.id if ctx.guild else 0
-        channel_id = ctx.channel.id if ctx.channel else 0
         try:
             rid, pretty = await self._create_reminder(
                 user_id=ctx.author.id,
                 guild_id=guild_id,
-                channel_id=channel_id,
                 message=message,
                 seconds=seconds,
             )
@@ -350,7 +354,7 @@ class Remind(Package):
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         try:
             rows = await self.db.fetch(
-                """SELECT id, user_id, guild_id, message, time
+                """SELECT id, user_id, message, time
                    FROM reminders
                    WHERE time <= $1
                    ORDER BY time ASC
