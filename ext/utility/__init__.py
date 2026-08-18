@@ -112,8 +112,14 @@ def _translate_layout(
 
     layout = ui.LayoutView(timeout=None)
     container = ui.Container()
+    for _attr in ("accent_color", "accent_colour"):
+        if hasattr(container, _attr):
+            try:
+                setattr(container, _attr, None)
+            except Exception:
+                pass
 
-    title = "# <a:messages:1539180118801383424> **Translation**\n\n"
+    title = "<a:messages:1539180118801383424>  **Translation**"
     direction = f"-# {from_label} → {to_label}"
     orig = (original or "").strip()
     if len(orig) > 1800:
