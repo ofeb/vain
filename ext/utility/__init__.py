@@ -15,6 +15,40 @@ import aiohttp
 import discord
 from discord import ui
 from discord import app_commands
+
+_LANG_CHOICES = [
+    ("English", "en"),
+    ("Spanish", "es"),
+    ("French", "fr"),
+    ("German", "de"),
+    ("Italian", "it"),
+    ("Portuguese", "pt"),
+    ("Russian", "ru"),
+    ("Japanese", "ja"),
+    ("Korean", "ko"),
+    ("Chinese", "zh"),
+    ("Arabic", "ar"),
+    ("Hindi", "hi"),
+    ("Turkish", "tr"),
+    ("Dutch", "nl"),
+    ("Polish", "pl"),
+    ("Swedish", "sv"),
+    ("Ukrainian", "uk"),
+    ("Vietnamese", "vi"),
+    ("Thai", "th"),
+    ("Indonesian", "id"),
+    ("Romanian", "ro"),
+    ("Greek", "el"),
+    ("Czech", "cs"),
+    ("Finnish", "fi"),
+    ("Danish", "da"),
+]
+
+_TO_CHOICES = [app_commands.Choice(name=n, value=v) for n, v in _LANG_CHOICES]
+_FROM_CHOICES = [app_commands.Choice(name="Auto-detect", value="auto")] + [
+    app_commands.Choice(name=n, value=v) for n, v in _LANG_CHOICES
+]
+
 from discord.ext import commands
 
 from core.discord.ctx import Context
@@ -626,6 +660,13 @@ class Utility(commands.Cog):
                 app_commands.allowed_installs(guilds=True, users=True)(cmd)
             except Exception:
                 pass
+            if name == "translate":
+                try:
+                    for param in getattr(cmd, "parameters", []) or []:
+                        if getattr(param, "name", None) == "text":
+                            param.required = True
+                except Exception:
+                    pass
 
     async def cog_unload(self) -> None:
         for menu in self._menus:
@@ -815,28 +856,30 @@ class Utility(commands.Cog):
     @hybrid(
         name="translate",
         aliases=["tr"],
-        description="Translate text or a replied message",
+        description="Translate text to another language",
         example=",tr es hello",
         guilds=True,
         dms=True,
         groupchats=True,
     )
     @describe(
-        text="Text to translate (or reply to a message)",
-        to="Target language code (default: en)",
-        source="Source language code (default: auto-detect)",
+        text="Text to translate",
+        to="Target language",
+        source="Source language",
     )
     @app_commands.rename(source="from")
+    @app_commands.choices(to=_TO_CHOICES, source=_FROM_CHOICES)
     async def translate(
         self,
         ctx: Context,
-        *,
         text: str = None,
         to: str = None,
         source: str = None,
     ) -> None:
         to_lang = (to or "en").strip().lower() if to else "en"
         from_lang = (source or "").strip().lower() or None
+        if from_lang in {"auto", "detect", "none"}:
+            from_lang = None
         body_text = (text or "").strip() or None
 
         # Prefix-style: ,tr es hello  /  ,tr es en hola  /  ,tr hello world
