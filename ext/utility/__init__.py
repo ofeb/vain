@@ -268,14 +268,51 @@ async def _send_snipe_pages(
 
 
 def _chunk_text(text: str, size: int = 1800) -> list[str]:
-    text = text or ""
+    """Split text into pages without cutting mid-word or mid-paragraph when possible."""
+    text = (text or "").strip()
+    if not text:
+        return [""]
     if len(text) <= size:
         return [text]
+
     chunks: list[str] = []
-    while text:
-        chunks.append(text[:size])
-        text = text[size:]
-    return chunks
+    remaining = text
+    while remaining:
+        if len(remaining) <= size:
+            chunks.append(remaining.strip())
+            break
+        window = remaining[: size + 1]
+        cut = -1
+        # Prefer paragraph break
+        para = window.rfind("\n\n")
+        if para >= int(size * 0.45):
+            cut = para
+        else:
+            # Prefer end of line
+            line = window.rfind("\n")
+            if line >= int(size * 0.55):
+                cut = line
+            else:
+                # Prefer sentence end
+                for sep in (". ", "! ", "? ", "。", "…"):
+                    idx = window.rfind(sep)
+                    if idx >= int(size * 0.55):
+                        cut = idx + len(sep) - 1
+                        break
+                if cut < 0:
+                    # Prefer word boundary
+                    sp = window.rfind(" ")
+                    if sp >= int(size * 0.4):
+                        cut = sp
+        if cut < 1:
+            cut = size
+        piece = remaining[: cut + 1].rstrip()
+        if not piece:
+            piece = remaining[:size]
+            cut = size - 1
+        chunks.append(piece)
+        remaining = remaining[cut + 1 :].lstrip()
+    return [c for c in chunks if c]
 
 
 def _is_voice_attachment(att: discord.Attachment) -> bool:
@@ -784,23 +821,45 @@ class Utility(commands.Cog):
         dms=True,
         groupchats=True,
     )
-    @describe(payload="Language codes and/or text")
-    async def translate(self, ctx: Context, *, payload: str = None) -> None:
-        text = None
-        to_lang = "en"
-        from_lang = None
+    @describe(
+        text="Text to translate (or reply to a message)",
+        to="Target language code (default: en)",
+        source="Source language code (default: auto-detect)",
+    )
+    @app_commands.rename(source="from")
+    async def translate(
+        self,
+        ctx: Context,
+        text: str = None,
+        to: str = None,
+        source: str = None,
+        *,
+        payload: str = None,
+    ) -> None:
+        to_lang = (to or "en").strip().lower() if to else "en"
+        from_lang = (source or "").strip().lower() or None
+        body_text = (text or "").strip() or None
 
-        tokens = (payload or "").split()
-        if tokens and _LANG.match(tokens[0]):
-            if len(tokens) >= 2 and _LANG.match(tokens[1]):
-                from_lang = tokens[0].lower()
-                to_lang = tokens[1].lower()
-                text = " ".join(tokens[2:]).strip() or None
+        # Prefix-style: ,tr es hello  /  ,tr es en hola  /  ,tr hello world
+        raw = (payload or "").strip()
+        if not body_text and raw:
+            tokens = raw.split()
+            if tokens and _LANG.match(tokens[0]):
+                if len(tokens) >= 2 and _LANG.match(tokens[1]):
+                    from_lang = tokens[0].lower()
+                    to_lang = tokens[1].lower()
+                    body_text = " ".join(tokens[2:]).strip() or None
+                else:
+                    to_lang = tokens[0].lower()
+                    body_text = " ".join(tokens[1:]).strip() or None
             else:
-                to_lang = tokens[0].lower()
-                text = " ".join(tokens[1:]).strip() or None
+                body_text = raw
 
-        if text is None:
+        # If slash/prefix only passed text in the combined payload field historically
+        if body_text is None and text:
+            body_text = text.strip() or None
+
+        if body_text is None:
             if ctx.message and ctx.message.reference:
                 ref = ctx.message.reference.resolved
                 if not isinstance(ref, discord.Message):
@@ -809,14 +868,15 @@ class Utility(commands.Cog):
                     except Exception:
                         ref = None
                 if isinstance(ref, discord.Message) and (ref.content or "").strip():
-                    text = ref.content.strip()
-            if text is None and tokens and not _LANG.match(tokens[0]):
-                text = payload.strip() if payload else None
+                    body_text = ref.content.strip()
 
-        if not text:
+        if not body_text:
             return await ctx.warn(
-                f"Provide text or reply to a message\n> -# **usage:** {ctx.cmd('tr es')} · {ctx.cmd('tr es en hola')}"
+                f"Provide text or reply to a message\n"
+                f"> -# **usage:** {ctx.cmd('translate text:hola to:en')} · {ctx.cmd('tr es hello')}"
             )
+
+        text = body_text
 
         async with ctx.typing():
             try:
