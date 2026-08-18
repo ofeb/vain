@@ -433,6 +433,9 @@ class Manipulation(Package):
 
     def _quote_font(self, size: int):
         candidates = [
+            "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
             "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
             "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
@@ -460,37 +463,62 @@ class Manipulation(Package):
         return self._quote_font(size)
 
     def _quote_wrap(self, text: str, font, max_width: int) -> list[str]:
-        words = (text or "").replace("\n", " ").split()
-        if not words:
-            return [""]
+        raw = (text or "").replace("\r", "")
+        paragraphs = raw.split("\n") if "\n" in raw else [raw]
         lines: list[str] = []
-        current = ""
-        for word in words:
-            test = f"{current} {word}".strip()
-            bbox = font.getbbox(test)
-            if bbox[2] - bbox[0] <= max_width:
-                current = test
+
+        def _width(s: str) -> int:
+            try:
+                bb = font.getbbox(s)
+                return max(0, bb[2] - bb[0])
+            except Exception:
+                return len(s) * max(1, getattr(font, "size", 12) // 2)
+
+        for para in paragraphs:
+            if not para and "\n" in raw:
+                lines.append("")
                 continue
-            if current:
-                lines.append(current)
-            wb = font.getbbox(word)
-            if wb[2] - wb[0] <= max_width:
-                current = word
+            if not para:
                 continue
-            chunk = ""
-            for ch in word:
-                trial = chunk + ch
-                tb = font.getbbox(trial)
-                if tb[2] - tb[0] <= max_width:
-                    chunk = trial
-                else:
-                    if chunk:
-                        lines.append(chunk)
-                    chunk = ch
-            current = chunk
-        if current:
-            lines.append(current)
+            if " " in para or "\t" in para:
+                tokens = para.replace("\t", " ").split()
+                current = ""
+                for word in tokens:
+                    test = f"{current} {word}".strip() if current else word
+                    if _width(test) <= max_width:
+                        current = test
+                        continue
+                    if current:
+                        lines.append(current)
+                    if _width(word) <= max_width:
+                        current = word
+                        continue
+                    chunk = ""
+                    for ch in word:
+                        t2 = chunk + ch
+                        if _width(t2) <= max_width:
+                            chunk = t2
+                        else:
+                            if chunk:
+                                lines.append(chunk)
+                            chunk = ch
+                    current = chunk
+                if current:
+                    lines.append(current)
+            else:
+                current = ""
+                for ch in para:
+                    t2 = current + ch
+                    if _width(t2) <= max_width:
+                        current = t2
+                    else:
+                        if current:
+                            lines.append(current)
+                        current = ch
+                if current:
+                    lines.append(current)
         return lines or [""]
+
 
     def _quote_text_color(self, rgb: tuple[int, int, int]) -> tuple[int, int, int]:
         r, g, b = rgb
@@ -702,18 +730,23 @@ class Manipulation(Package):
             return await ctx.warn(
                 f"Reply to a message or pass a message link\n> -# **usage:** {ctx.cmd('quote')} (reply)"
             )
-        if message.author.bot:
-            return await ctx.warn(
-                "I can't quote bots\n> -# **try quoting a real person instead**"
-            )
-        if not (message.content or "").strip():
-            if message.attachments or message.stickers or message.embeds:
+        text = (message.content or "").strip()
+        has_media = bool(message.attachments or message.stickers)
+        has_rich = bool(message.embeds) or bool(getattr(message, "components", None))
+
+        if not text:
+            if has_media or has_rich:
                 return await ctx.warn(
-                    "There's nothing to quote there\n"
-                    "> -# **images, stickers and embeds don't work - need text**"
+                    "Cute picture, but there's nothing to quote\n"
+                    "> -# **I need actual text — images and embeds alone don't work**"
                 )
             return await ctx.warn(
                 "That message is empty\n> -# **need some text to quote**"
+            )
+        if message.author.bot and (has_media or has_rich) and not text:
+            return await ctx.warn(
+                "That bot left me nothing to quote\n"
+                "> -# **embeds, images and components don't count**"
             )
 
         async with ctx.typing():
