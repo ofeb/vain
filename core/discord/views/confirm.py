@@ -13,11 +13,13 @@ import discord
 from discord.ext.commands import Context
 
 from config import color, emojis
+from core.discord.views.embed import c2
 
 
 def _confirm_embed(message: str) -> discord.Embed:
-    return discord.Embed(
-        description=f"> {message}",
+    return c2(
+        message=message or "Are you sure you want to do this?",
+        timestamp=False,
     )
 
 

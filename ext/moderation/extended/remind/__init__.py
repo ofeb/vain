@@ -5,9 +5,10 @@ from datetime import datetime, timezone, timedelta
 
 import discord
 from discord.ext import tasks
-from discord.ext.commands import group, has_permissions, command
 
 from core.discord.package import Package
+from core.discord.hybrid import hybrid
+from core.discord.views.embed import c2
 from core.tools.moderation_args import parse_duration_seconds, is_duration_token
 
 
@@ -50,11 +51,11 @@ class Remind(Package):
                 break
         return ", ".join(parts) if parts else "0 seconds"
 
-    @group(
+    @hybrid(
         name="remind",
         aliases=["reminder", "remindme"],
         description="Set a personal reminder",
-        invoke_without_command=True,
+        group=True,
         example=",remind 2h check tickets",
     )
     async def remind(self, ctx, *, reminder: str):
@@ -189,11 +190,25 @@ class Remind(Package):
                         user = await self.bot.fetch_user(row["user_id"])
                 if user is None:
                     continue
+
                 with contextlib.suppress(discord.Forbidden, discord.HTTPException):
-                    await user.send(
-                        f"It's time!\n"
-                        f"> {row['message']}"
+                    # three pings then a clean c2 embed
+                    await user.send(user.mention)
+                    await user.send(user.mention)
+                    await user.send(user.mention)
+
+                    msg = (row["message"] or "").strip() or "—"
+                    embed = c2(
+                        title="Reminder",
+                        message=(
+                            f"**It's time!**\n"
+                            f"> -# **message:** {msg}\n"
+                            f"> -# **id:** #{row['id']}"
+                        ),
+                        footer="you set this earlier",
+                        timestamp=True,
                     )
+                    await user.send(embed=embed)
             except Exception:
                 continue
 

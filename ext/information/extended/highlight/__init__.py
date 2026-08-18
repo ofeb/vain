@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import discord
-from discord.ext.commands import group, has_permissions, command
+from discord.ext.commands import group, command
 
 from core.discord.package import Package
+from core.managers.permissions import has_permissions
 
 
 class Highlight(Package):
@@ -18,6 +19,7 @@ class Highlight(Package):
         description="Set notifications for when a keyword is said",
         invoke_without_command=True,
     )
+    @has_permissions(guild_owner=True)
     async def highlight(self, ctx):
         """highlight group help"""
         return await ctx.send_help(ctx.command)
