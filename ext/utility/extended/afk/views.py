@@ -81,7 +81,7 @@ class AFKMentionsButton(ui.View):
         self.owner_id = owner_id
         self.bot = bot
 
-    @ui.button(label="View mentions", style=discord.ButtonStyle.secondary)
+    @ui.button(label="Mentions", style=discord.ButtonStyle.primary)
     async def view_mentions(self, interaction: discord.Interaction, button: ui.Button) -> None:
         if interaction.user.id != self.owner_id:
             return await interaction.response.send_message(

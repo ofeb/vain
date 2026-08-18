@@ -1470,7 +1470,10 @@ class Utility(commands.Cog):
                 if not ok:
                     continue
                 label = "this attachment" if len(ctx.message.attachments) == 1 else f"attachment #{n}"
-                sources.append((label, att.url))
+                media_url = getattr(att, "url", None) or getattr(att, "proxy_url", None)
+                if not media_url:
+                    continue
+                sources.append((label, str(media_url)))
 
         # split by comma for multi
         parts = [p.strip() for p in rest.split(",") if p.strip()] if rest else []
