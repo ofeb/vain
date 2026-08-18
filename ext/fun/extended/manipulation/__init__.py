@@ -682,10 +682,8 @@ class Manipulation(Package):
                 message.author.name,
                 avatar_url,
             )
-            gif_data = await asyncio.to_thread(image_ops.pil_to_gif, image_data)
-            file = discord.File(io.BytesIO(gif_data), filename="quote.gif")
+            file = discord.File(io.BytesIO(image_data), filename="quote.gif")
             sent = await ctx.send(file=file)
-            image_data = gif_data
 
             if ctx.guild is not None:
                 dest_id = await self._get_quote_channel(ctx.guild.id)

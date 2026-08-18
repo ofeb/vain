@@ -154,43 +154,22 @@ def _caption_frame(src: "Image.Image", strip: "Image.Image") -> "Image.Image":
 
 
 def pil_caption(data: bytes, text: str) -> bytes:
-    """White-bar caption; original frame pixels stay the same size. Always GIF."""
+    """White-bar caption on first frame as PNG (filename can still be .gif)."""
     _require_pil()
     from PIL import Image
 
     src = Image.open(BytesIO(data))
-    w, h = src.size
+    try:
+        src.seek(0)
+    except Exception:
+        pass
+    frame = src.convert("RGBA")
+    w, h = frame.size
     size = max(1, w // 10)
     text_width = max(20, w - (((w // 25) * 2)))
     strip = _build_caption_strip(text, w, size, text_width)
-
-    frames = []
-    durations = []
-    n = getattr(src, "n_frames", 1) or 1
-    for i in range(n):
-        try:
-            src.seek(i)
-        except Exception:
-            break
-        frame = src.convert("RGBA")
-        frames.append(_caption_frame(frame, strip).convert("P", palette=Image.ADAPTIVE))
-        durations.append(int(src.info.get("duration", 40) or 40))
-
-    if not frames:
-        frames = [_caption_frame(src.convert("RGBA"), strip).convert("P", palette=Image.ADAPTIVE)]
-        durations = [40]
-
-    buf = BytesIO()
-    save_kw = {
-        "format": "GIF",
-        "save_all": True,
-        "append_images": frames[1:],
-        "duration": durations if len(durations) == len(frames) else 40,
-        "loop": src.info.get("loop", 0),
-        "disposal": 2,
-    }
-    frames[0].save(buf, **save_kw)
-    return buf.getvalue()
+    out = _caption_frame(frame, strip)
+    return _save_png(out)
 
 
 def pil_to_gif(data: bytes) -> bytes:

@@ -63,16 +63,33 @@ class GeminiClient:
         *,
         to_lang: str = "en",
         from_lang: str | None = None,
-    ) -> str:
-        src = from_lang or "auto-detected language"
+    ) -> dict[str, str]:
+        src = from_lang or "auto"
         system = (
-            "You are a precise translator. Output ONLY the translated text, "
-            "no quotes, no explanation, no language labels."
+            "You are a precise translator. Respond with ONLY valid JSON, no markdown: "
+            '{"lang":"<English name of the source language>","text":"<translated text only>"}'
         )
         prompt = (
-            f"Translate the following text from {src} to {to_lang}:\n\n{text}"
+            f"Detect the source language and translate the text to {to_lang}. "
+            f"Hint for source language: {src}.\n\nText:\n{text}"
         )
-        return await self.prompt(prompt, system=system)
+        raw = await self.prompt(prompt, system=system)
+        lang = from_lang or "Unknown"
+        out = raw.strip()
+        try:
+            start = out.find("{")
+            end = out.rfind("}")
+            if start >= 0 and end > start:
+                import json
+                data = json.loads(out[start : end + 1])
+                if isinstance(data, dict):
+                    if data.get("lang"):
+                        lang = str(data["lang"]).strip()
+                    if data.get("text") is not None:
+                        out = str(data["text"]).strip()
+        except Exception:
+            pass
+        return {"lang": lang, "text": out}
 
     async def transcribe_audio(self, audio: bytes, *, mime_type: str = "audio/ogg") -> str:
         if not audio:

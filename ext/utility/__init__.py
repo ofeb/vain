@@ -559,10 +559,8 @@ class Utility(commands.Cog):
                 message.author.name,
                 avatar_url,
             )
-            gif_data = await asyncio.to_thread(image_ops.pil_to_gif, image_data)
-            file = discord.File(io.BytesIO(gif_data), filename="quote.gif")
+            file = discord.File(io.BytesIO(image_data), filename="quote.gif")
             await interaction.followup.send(file=file)
-            image_data = gif_data
             if interaction.guild is not None and hasattr(cog, "_get_quote_channel"):
                 dest_id = await cog._get_quote_channel(interaction.guild.id)
                 if dest_id and dest_id != getattr(interaction.channel, "id", None):
@@ -593,19 +591,22 @@ class Utility(commands.Cog):
             await interaction.followup.send("That message has no text to translate.", ephemeral=True)
             return
         try:
-            out = await self._gemini().translate(text, to_lang="en")
+            result = await self._gemini().translate(text, to_lang="en")
         except Exception as exc:
             await interaction.followup.send(f"Translate failed: {exc}", ephemeral=True)
             return
+        out = (result.get("text") if isinstance(result, dict) else str(result or "")).strip()
+        detected = (result.get("lang") if isinstance(result, dict) else None) or "Unknown"
+        orig = text.replace("`", "'")[:900]
+        trans = (out or "*empty*").replace("`", "'")[:1800]
         embed = panel_embed(
-            title="Translate",
-            author=str(message.author),
-            author_icon=message.author.display_avatar.url,
             lines=[
-                f"**Original**\n{text[:900]}",
-                f"**English**\n{out[:900] or '*empty*'}",
+                f"> **Detected Language**: (`{detected}`)",
+                f"> -# `{orig}`",
+                "",
+                f"> **Translated to**: `English`",
+                f"> -# `{trans}`",
             ],
-            footer="→ English",
             timestamp=False,
         )
         await interaction.followup.send(embed=embed)
@@ -630,8 +631,6 @@ class Utility(commands.Cog):
             return
         embed = panel_embed(
             title="Transcript",
-            author=str(message.author),
-            author_icon=message.author.display_avatar.url,
             lines=[text[:3500] or "*empty transcript*"],
             footer="voice message",
             timestamp=False,
@@ -661,10 +660,8 @@ class Utility(commands.Cog):
                                     data = await resp.read()
                                     text = await ocr_net.ocr_image(data, filename="embed.png")
                                     embed = panel_embed(
-                                        title="Extracted text",
-                                        author=str(message.author),
-                                        author_icon=message.author.display_avatar.url,
-                                        lines=[text[:3500] or "*no text found*"],
+            title="Extracted text",
+            lines=[text[:3500] or "*no text found*"],
                                         footer="OCR",
                                         timestamp=False,
                                     )
@@ -683,8 +680,6 @@ class Utility(commands.Cog):
             return
         embed = panel_embed(
             title="Extracted text",
-            author=str(message.author),
-            author_icon=message.author.display_avatar.url,
             lines=[text[:3500] or "*no text found*"],
             footer="OCR",
             timestamp=False,
@@ -717,8 +712,6 @@ class Utility(commands.Cog):
         for i, chunk in enumerate(pages):
             emb = panel_embed(
                 title=f"Answer · {qshow}",
-                author=str(ctx.author),
-                author_icon=ctx.author.display_avatar.url,
                 lines=[chunk],
                 footer=f"Gemini · {i + 1}/{len(pages)}" if len(pages) > 1 else "Gemini",
                 timestamp=False,
@@ -771,23 +764,39 @@ class Utility(commands.Cog):
 
         async with ctx.typing():
             try:
-                out = await self._gemini().translate(text, to_lang=to_lang, from_lang=from_lang)
+                result = await self._gemini().translate(text, to_lang=to_lang, from_lang=from_lang)
             except Exception as exc:
                 return await ctx.fail(f"Translate failed\n> -# {exc}")
 
+        out = (result.get("text") if isinstance(result, dict) else str(result or "")).strip()
+        detected = (result.get("lang") if isinstance(result, dict) else None) or from_lang or "Unknown"
         if not out:
             return await ctx.warn("Empty translation")
 
-        src_label = from_lang or "auto"
+        to_label = (to_lang or "en").lower()
+        LANG_NAMES = {
+            "en": "English", "es": "Spanish", "fr": "French", "de": "German",
+            "it": "Italian", "pt": "Portuguese", "ru": "Russian", "ja": "Japanese",
+            "ko": "Korean", "zh": "Chinese", "ar": "Arabic", "hi": "Hindi",
+            "tr": "Turkish", "nl": "Dutch", "pl": "Polish", "sv": "Swedish",
+        }
+        to_name = LANG_NAMES.get(to_label, to_lang.upper() if to_lang and len(to_lang) <= 3 else str(to_lang).title())
+        if from_lang:
+            from_name = LANG_NAMES.get(from_lang.lower(), from_lang.upper() if len(from_lang) <= 3 else from_lang.title())
+            head = f"> **{from_name}**"
+        else:
+            head = f"> **Detected Language**: (`{detected}`)"
+        orig = text.replace("`", "'")[:900]
+        trans = out.replace("`", "'")[:1800]
+        lines = [
+            head,
+            f"> -# `{orig}`",
+            "",
+            f"> **Translated to**: `{to_name}`",
+            f"> -# `{trans}`",
+        ]
         embed = panel_embed(
-            title="Translate",
-            author=str(ctx.author),
-            author_icon=ctx.author.display_avatar.url,
-            lines=[
-                f"**{src_label} → {to_lang}**",
-                out[:3500],
-            ],
-            footer=f"{src_label} → {to_lang}",
+            lines=lines,
             timestamp=False,
         )
         return await ctx.send(embed=embed)
@@ -857,8 +866,6 @@ class Utility(commands.Cog):
 
         embed = panel_embed(
             title="Transcript",
-            author=str(source.author),
-            author_icon=source.author.display_avatar.url,
             lines=[text[:3500] or "*empty transcript*"],
             footer="voice message",
             timestamp=False,
@@ -932,8 +939,6 @@ class Utility(commands.Cog):
 
         embed = panel_embed(
             title="Extracted text",
-            author=str(ctx.author),
-            author_icon=ctx.author.display_avatar.url,
             lines=[text[:3500] or "*no text found*"],
             footer="OCR",
             timestamp=False,
