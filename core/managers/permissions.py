@@ -57,7 +57,7 @@ def has_permissions(**permissions):
         owner_required = any(required.get(name) for name in _SPECIAL_PERMISSIONS)
         missing = []
         if owner_required and ctx.author.id != ctx.guild.owner_id:
-            missing.append("server owner")
+            missing.append("guild owner")
 
         guild_permissions = ctx.author.guild_permissions
         for name, enabled in required.items():
@@ -76,7 +76,7 @@ def has_permissions(**permissions):
         unresolved = []
         for name in missing:
             lookup = name.replace(" ", "_")
-            if lookup == "server_owner":
+            if lookup in ("server_owner", "guild_owner"):
                 if ctx.author.id == ctx.guild.owner_id:
                     continue
             elif lookup in fake_permissions:
@@ -87,9 +87,9 @@ def has_permissions(**permissions):
         if not unresolved:
             return True
 
-        if unresolved == ["server owner"]:
+        if unresolved == ["guild owner"]:
             raise CommandError(
-                f"You must be the **server owner** to run this command."
+                f"You must be the **guild owner** to run this command."
             )
 
         raise MissingPermissions([name.replace(" ", "_") for name in unresolved])

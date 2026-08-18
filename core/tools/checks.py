@@ -31,7 +31,7 @@ def guild_owner():
     async def predicate(ctx: Context) -> bool:
         if ctx.author.id == ctx.guild.owner_id or ctx.author.id in ctx.bot.owners:
             return True
-        raise CommandError("You must be the **server owner** to run this command.")
+        raise CommandError("You must be the **guild owner** to run this command.")
     return check(predicate)
 
 

@@ -157,12 +157,12 @@ class OwnerEvents(Package):
 
         embed = panel_embed(
             title=f"Joined {guild.name}",
-            color=dom,
             lines=lines,
             thumbnail=guild.icon.url if guild.icon else None,
             timestamp=True,
-            footer=f"Guild join · {guilds} servers",
+            footer=f"Guild join · {guilds} guilds",
         )
+        embed.color = None
 
         ch = await _devlog_channel(self.bot)
         if ch is None:
@@ -191,12 +191,12 @@ class OwnerEvents(Package):
 
         embed = panel_embed(
             title=f"Left {guild.name}",
-            color=dom,
             lines=lines,
             thumbnail=guild.icon.url if guild.icon else None,
             timestamp=True,
-            footer=f"Guild leave · {guilds} servers",
+            footer=f"Guild leave · {guilds} guilds",
         )
+        embed.color = None
 
         ch = await _devlog_channel(self.bot)
         if ch is None:

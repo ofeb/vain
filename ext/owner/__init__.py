@@ -13,6 +13,7 @@ from discord.ext import commands
 from discord.ext.commands import CommandError
 
 from core.discord.package import Package
+from core.discord.views.paginate import send_pages
 from core.discord.ctx import Context
 from core.discord.hybrid import group, command, describe
 from config import color
@@ -183,18 +184,79 @@ class Owner(Package):
 
     @command(
         name="guilds",
-        description="List all guilds the bot is in",
+        description="List guilds the bot is in (page / search)",
+        aliases=["servers"],
     )
-    async def guilds(self, ctx: Context) -> None:
+    async def guilds(self, ctx: Context, page: int = None, *, flags: str = None) -> None:
+        """List guilds. Usage: ,guilds [page] [--search name]"""
+        search = None
+        raw = (flags or "").strip()
+        # Also allow: ,guilds --search name  (page omitted)
+        # and: ,guilds 2 --search name
+        # Parse page from first token if flags empty and page is actually search syntax via message
+        content = ""
+        if ctx.message and ctx.message.content:
+            # strip prefix + command name
+            content = ctx.message.content
+            for pref in (ctx.prefix or "",):
+                if content.startswith(pref):
+                    content = content[len(pref):]
+                    break
+            parts = content.split(None, 1)
+            rest = parts[1] if len(parts) > 1 else ""
+        else:
+            rest = ""
+            if page is not None and flags:
+                rest = f"{page} {flags}".strip()
+            elif page is not None:
+                rest = str(page)
+            elif flags:
+                rest = flags
+
+        # Prefer parsing from rest of message
+        if ctx.message and ctx.message.content:
+            inv = (ctx.invoked_with or "guilds")
+            full = ctx.message.content
+            # find command after prefix
+            idx = full.lower().find(inv.lower())
+            rest = full[idx + len(inv):].strip() if idx >= 0 else rest
+
+        start_page = 1
+        tokens = rest.split()
+        i = 0
+        while i < len(tokens):
+            tok = tokens[i]
+            low = tok.lower()
+            if low in ("--search", "-s", "--name", "--query"):
+                search = " ".join(tokens[i + 1:]).strip() or None
+                break
+            if tok.isdigit() and search is None and start_page == 1 and i == 0:
+                start_page = max(1, int(tok))
+                i += 1
+                continue
+            # bare search without flag: remaining text
+            if not tok.startswith("-"):
+                # if first non-page token and no --search, treat as search only if not pure int
+                if not tok.isdigit():
+                    search = " ".join(tokens[i:]).strip()
+                    break
+            i += 1
+
+        guild_list = sorted(
+            self.bot.guilds,
+            key=lambda g: (g.member_count or 0),
+            reverse=True,
+        )
+        if search:
+            q = search.lower()
+            guild_list = [g for g in guild_list if q in (g.name or "").lower()]
+
+        if not guild_list:
+            tip = f" for `{search}`" if search else ""
+            return await ctx.warn(f"No guilds found{tip}")
+
         entries = []
-        for i, guild in enumerate(
-            sorted(
-                self.bot.guilds,
-                key=lambda g: g.member_count or 0,
-                reverse=True,
-            ),
-            1,
-        ):
+        for i, guild in enumerate(guild_list, 1):
             owner = guild.owner
             if owner is None:
                 try:
@@ -207,24 +269,29 @@ class Owner(Package):
                 else f"Unknown (`{guild.owner_id}`)"
             )
             entries.append(
-                f"`{i}.` **{guild.name}** (`{guild.id}`) - "
-                f"{guild.member_count} members - Owner: {owner_name}"
+                f"`{i}.` **{guild.name}** (`{guild.id}`) — "
+                f"`{guild.member_count or 0}` members — Owner: {owner_name}"
             )
 
-        pages = [entries[i : i + 15] for i in range(0, len(entries), 15)] or [[]]
-        page = 0
-        try:
-            dom = await get_bot_dominant_color(self.bot)
-        except Exception:
-            dom = color.base
-        embed = panel_embed(
-            title=f"Guilds ({len(self.bot.guilds)})",
-            color=dom,
-            lines=pages[page],
-            footer=f"Page {page + 1}/{len(pages)}",
-            timestamp=False,
-        )
-        await ctx.send(embed=embed)
+        per_page = 10
+        chunks = [entries[i : i + per_page] for i in range(0, len(entries), per_page)] or [[]]
+        title_base = f"Guilds ({len(guild_list)})"
+        if search:
+            title_base += f" · search `{search}`"
+
+        pages = []
+        for idx, chunk in enumerate(chunks):
+            embed = panel_embed(
+                title=title_base,
+                lines=chunk,
+                footer=f"Page {idx + 1}/{len(chunks)}",
+            )
+            embed.color = None
+            pages.append(embed)
+
+        # Shared paginator; start at requested page
+        start_index = min(max(start_page, 1), len(pages)) - 1
+        return await send_pages(ctx, pages, start_index=start_index)
 
     @command(
         name="leaveserver",

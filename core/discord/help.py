@@ -900,7 +900,7 @@ def _permission_label(cmd: Command) -> str | None:
         if "is_owner" in blob:
             label = "Bot Owner"
         elif "trusted" in blob or "guild_owner" in blob:
-            label = "Server Owner"
+            label = "Guild Owner"
         elif "has_permissions" in blob:
             try:
                 for cell in (chk.__closure__ or []):
@@ -908,7 +908,7 @@ def _permission_label(cmd: Command) -> str | None:
                     if not isinstance(value, dict):
                         continue
                     if value.get("server_owner") or value.get("guild_owner"):
-                        label = "Server Owner"
+                        label = "Guild Owner"
                         if label not in seen:
                             seen.add(label)
                             labels.append(label)
@@ -970,7 +970,7 @@ def _information(cmd: Command) -> dict[str, str]:
     if cooldown := _cooldown_label(cmd):
         info["cooldown"] = cooldown
     if cmd.qualified_name.startswith("antinuke"):
-        info["permissions"] = "Server Owner"
+        info["permissions"] = "Guild Owner"
     elif permissions := _permission_label(cmd):
         info["permissions"] = permissions
     return info

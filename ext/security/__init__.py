@@ -78,7 +78,7 @@ class Antinuke(AntinukeEvents, Package):
         if ctx.command and ctx.command.name == "admin":
             if ctx.author.id != ctx.guild.owner_id:
                 raise CommandError(
-                    "You must be the **server owner** to run this command."
+                    "You must be the **guild owner** to run this command."
                 )
             return True
 
@@ -923,7 +923,7 @@ class Antinuke(AntinukeEvents, Package):
             return await ctx.warn("Bots can't be **antinuke admins**\n> -# **reason:** only server members can hold this role")
         if member.id == ctx.guild.owner_id:
             return await ctx.warn(
-                "The **server owner** already has admin access by default\n> -# **reason:** no need to add them again"
+                "The **guild owner** already has admin access by default\n> -# **reason:** no need to add them again"
             )
 
         admins = await self.db.fetchval(
