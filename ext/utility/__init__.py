@@ -113,7 +113,7 @@ def _translate_layout(
     layout = ui.LayoutView(timeout=None)
     container = ui.Container()
 
-    title = "<a:messages:1539180118801383424>  **Translation**"
+    title = "# <a:messages:1539180118801383424> **Translation**\n\n"
     direction = f"-# {from_label} → {to_label}"
     orig = (original or "").strip()
     if len(orig) > 1800:
@@ -122,11 +122,11 @@ def _translate_layout(
     if len(trans) > 1800:
         trans = trans[:1797] + "..."
 
-    # Title, direction, original — no separator between these
+
     orig_block = f"```{orig}```"
     container.add_item(ui.TextDisplay(f"{title}\n{direction}\n\n{orig_block}"))
     container.add_item(_make_separator(visible=True, spacing=1))
-    # Translation in a code block
+
     container.add_item(ui.TextDisplay(f"```{trans}```"))
 
     url = _google_translate_url(original, source=source_code, target=target_code)
