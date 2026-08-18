@@ -616,15 +616,27 @@ class Vain(commands.AutoShardedBot):
                         )
 
         if ctx.guild is not None:
-            me = ctx.channel.permissions_for(ctx.guild.me)
-            need = (
-                ("send_messages",)
-                if is_help
-                else ("send_messages", "embed_links", "attach_files")
-            )
-            missing = [p for p in need if not getattr(me, p)]
-            if missing:
-                raise commands.BotMissingPermissions(missing)
+            channel = getattr(ctx, "channel", None)
+            perms_for = getattr(channel, "permissions_for", None)
+            me = getattr(ctx.guild, "me", None)
+            if me is None or not hasattr(me, "guild"):
+                bot_user = getattr(ctx.bot, "user", None)
+                if bot_user is not None:
+                    me = ctx.guild.get_member(bot_user.id)
+            if callable(perms_for) and me is not None:
+                try:
+                    my_perms = perms_for(me)
+                except Exception:
+                    my_perms = None
+                if my_perms is not None:
+                    need = (
+                        ("send_messages",)
+                        if is_help
+                        else ("send_messages", "embed_links", "attach_files")
+                    )
+                    missing = [p for p in need if not getattr(my_perms, p, True)]
+                    if missing:
+                        raise commands.BotMissingPermissions(missing)
 
         if not owner and not is_help:
             await self.cooldown_check(ctx)
