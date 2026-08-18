@@ -2275,29 +2275,30 @@ class Socials(Package):
         usage="[channel|none]",
     )
     @has_permissions(manage_guild=True)
-    async def quote_channel(self, ctx: Context, channel: discord.TextChannel = None) -> None:
+    async def quote_channel(self, ctx: Context, *, target: str = None) -> None:
         await self._ensure_quote_schema()
-        if channel is None:
+        if target is None or not str(target).strip():
             current = await self._get_quote_channel(ctx.guild.id)
-            if current:
-                mention = f"<#{current}>"
-            else:
-                mention = "not set"
+            mention = f"<#{current}>" if current else "not set"
             return await ctx.normal(
                 f"Quote channel is {mention}\n"
                 f"> -# **set with:** {ctx.cmd('quote channel #channel')} · "
                 f"**clear with:** {ctx.cmd('quote channel none')}"
             )
 
-        name = getattr(channel, "name", "")
-        if str(channel).lower() in {"none", "off", "clear", "remove", "reset"} or name.lower() in {
-            "none", "off", "clear", "remove", "reset"
-        }:
+        raw = str(target).strip()
+        if raw.lower() in {"none", "off", "clear", "remove", "reset"}:
             await self.db.execute(
                 "DELETE FROM quote_channels WHERE guild_id = $1",
                 ctx.guild.id,
             )
             return await ctx.success("Quote channel cleared")
+
+        channel = None
+        with contextlib.suppress(Exception):
+            channel = await commands.TextChannelConverter().convert(ctx, raw)
+        if channel is None:
+            return await ctx.warn("Provide a text channel or `none`")
 
         await self.db.execute(
             """
