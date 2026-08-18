@@ -162,17 +162,14 @@ class Log(LogEvents, Package):
         file_content: bytes | None = None,
         file_name: str | None = None,
     ) -> None:
-        if embed.color is None:
-            embed.color = self.color
+        # Colourless logs (C2-style neutral cards)
+        embed.color = None
         rows = await self.db.fetch(
             "SELECT channel_id FROM log_config WHERE guild_id = $1 AND $2 = ANY(events)",
             guild_id, event_type,
         )
         for row in rows:
             channel_id = row[0]
-            custom_color = await self._get_event_color(guild_id, channel_id, event_type)
-            if custom_color is not None:
-                embed.color = custom_color
             wh = await self._get_webhook(channel_id)
             if wh:
                 with contextlib.suppress(discord.HTTPException):
