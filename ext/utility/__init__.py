@@ -44,9 +44,10 @@ _LANG_CHOICES = [
     ("Danish", "da"),
 ]
 
-_TO_CHOICES = [app_commands.Choice(name=n, value=v) for n, v in _LANG_CHOICES]
+# Discord allows max 25 choices per option
+_TO_CHOICES = [app_commands.Choice(name=n, value=v) for n, v in _LANG_CHOICES[:25]]
 _FROM_CHOICES = [app_commands.Choice(name="Auto-detect", value="auto")] + [
-    app_commands.Choice(name=n, value=v) for n, v in _LANG_CHOICES
+    app_commands.Choice(name=n, value=v) for n, v in _LANG_CHOICES[:24]
 ]
 
 _LANG_NAME_BY_CODE = {code: name for name, code in _LANG_CHOICES}
@@ -767,8 +768,11 @@ class Utility(commands.Cog):
             if name == "translate":
                 try:
                     for param in getattr(cmd, "parameters", []) or []:
-                        if getattr(param, "name", None) == "text":
+                        pname = getattr(param, "name", None)
+                        if pname == "text":
                             param.required = True
+                        elif pname in ("to", "from", "source"):
+                            param.required = False
                 except Exception:
                     pass
 
@@ -974,7 +978,7 @@ class Utility(commands.Cog):
     @hybrid(
         name="translate",
         aliases=["tr"],
-        description="Translate text to another language",
+        description="Translate text using Google Translate",
         example=",tr es hello",
         guilds=True,
         dms=True,
@@ -982,15 +986,14 @@ class Utility(commands.Cog):
     )
     @describe(
         text="Text to translate",
-        to="Target language",
-        source="Source language",
+        to="Target language (default: English)",
+        source="Source language (default: auto-detect)",
     )
     @app_commands.rename(source="from")
     @app_commands.choices(to=_TO_CHOICES, source=_FROM_CHOICES)
     async def translate(
         self,
         ctx: Context,
-        *,
         text: str = None,
         to: str = None,
         source: str = None,
