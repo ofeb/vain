@@ -738,6 +738,10 @@ class Manipulation(Package):
         has_rich = bool(message.embeds) or bool(getattr(message, "components", None))
 
         if not text:
+            if message.author.bot:
+                return await ctx.warn(
+                    "Vain bot is so awesome it really is indeed the best bot ever 🤍"
+                )
             if has_media or has_rich:
                 return await ctx.warn(
                     "Cute picture, but there's nothing to quote\n"
@@ -745,11 +749,6 @@ class Manipulation(Package):
                 )
             return await ctx.warn(
                 "That message is empty\n> -# **need some text to quote**"
-            )
-        if message.author.bot and (has_media or has_rich) and not text:
-            return await ctx.warn(
-                "That bot left me nothing to quote\n"
-                "> -# **embeds, images and components don't count**"
             )
 
         async with ctx.typing():
