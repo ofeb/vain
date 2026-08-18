@@ -420,6 +420,20 @@ def _build_edit_container(snipe: dict, *, accent: int | None = None) -> ui.Conta
     )
     container.add_item(ui.TextDisplay(f"**Before**\n{before[:1800]}"))
     container.add_item(ui.TextDisplay(f"**After**\n{after[:1800]}"))
+    urls = []
+    for link in (snipe.get("attachments") or []):
+        if link:
+            urls.append(str(link))
+    for link in (snipe.get("stickers") or []):
+        if link and str(link) not in urls:
+            urls.append(str(link))
+    if urls:
+        try:
+            items = [discord.MediaGalleryItem(url) for url in urls[:10]]
+            container.add_item(ui.MediaGallery(*items))
+        except Exception:
+            for url in urls[:5]:
+                container.add_item(ui.TextDisplay(f"[attachment]({url})"))
     return container
 
 
