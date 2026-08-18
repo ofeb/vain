@@ -4,6 +4,8 @@ use ctx.success ctx.fail ctx.warn for quick replies"""
 
 from __future__ import annotations
 
+import contextlib
+
 import asyncio
 from typing import Any, Iterable, Optional, Sequence
 
@@ -525,6 +527,34 @@ class Context(commands.Context):
 
     deny = fail
 
+
+    async def _deliver(self, **send_kw):
+        """Send to the current channel, then DM if the channel is gone."""
+        try:
+            return await super().send(**send_kw)
+        except discord.NotFound as exc:
+            code = getattr(getattr(exc, "code", None), "real", None) or getattr(exc, "code", None)
+            text = str(exc)
+            if "10003" not in text and code != 10003:
+                raise
+        except discord.HTTPException as exc:
+            text = str(exc)
+            if "10003" not in text and "Unknown Channel" not in text:
+                raise
+        # channel gone / invalid (jsk override, deleted channel, user-as-channel)
+        dest = None
+        author = getattr(self, "author", None)
+        if author is not None:
+            with contextlib.suppress(Exception):
+                dest = author.dm_channel or await author.create_dm()
+        if dest is None:
+            return None
+        send_kw.pop("reference", None)
+        send_kw.pop("mention_author", None)
+        with contextlib.suppress(discord.HTTPException, discord.Forbidden):
+            return await dest.send(**send_kw)
+        return None
+
     async def send(
         self,
         content: Optional[str] = None,
@@ -605,7 +635,7 @@ class Context(commands.Context):
             elif file_list:
                 send_kw["files"] = file_list
             
-            return await super().send(view=layout, **send_kw)
+            return await self._deliver(view=layout, **send_kw)
 
 
         if isinstance(view, discord.ui.LayoutView):
@@ -652,7 +682,7 @@ class Context(commands.Context):
                 elif file_list:
                     send_kw["files"] = file_list
                 
-                return await super().send(view=layout, **send_kw)
+                return await self._deliver(view=layout, **send_kw)
             except Exception:
                 
                 pass
@@ -668,7 +698,7 @@ class Context(commands.Context):
             send_kw["file"] = file_list[0]
         elif file_list:
             send_kw["files"] = file_list
-        return await super().send(content=content, **send_kw)
+        return await self._deliver(content=content, **send_kw)
 
     async def send_embed(self, code: str, **kw) -> discord.Message:
         """parse embed script and send it"""
