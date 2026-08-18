@@ -228,13 +228,7 @@ class Fun(Package):
         if not result:
             return await ctx.warn("I couldn't uwuify that")
         result = result[:2000]
-        embed = c2(
-            title="UwU",
-            color=color.base,
-            message=result,
-            timestamp=False,
-        )
-        await ctx.send(embed=embed)
+        await ctx.send(content=result)
 
     @hybrid(
         name="banner",

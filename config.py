@@ -138,6 +138,10 @@ class api:
     twitch_client_id: str = ""
     twitch_client_secret: str = ""
     llm: str = "gemini-2.5-flash-lite"
+    gemini_api_key: str = "AQ.Ab8RN6KgI2bxOLtU7XQFkqJ8Q_XPtlEmExj4LPruvSlOQtP6WA"
+    gemini_model: str = "gemini-2.5-flash-lite"
+    gemini_project: str = "projects/268591218263"
+    ocr_space_api_key: str = "K85711694388957"
 
     social_base: str = "https://scl.guilt.bot"
     social_cf_client_id: str = "e263d488792e91ef3c26e324b4f8c1da.access"

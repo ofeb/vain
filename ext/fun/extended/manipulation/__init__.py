@@ -751,6 +751,47 @@ class Manipulation(Package):
         )
         return await ctx.success(f"Quotes will also post in {channel.mention}")
 
+    @hybrid(
+        name="imagetogif",
+        aliases=["img2gif", "togif", "image2gif"],
+        description="Convert an image to GIF",
+        guild_only=True,
+    )
+    async def imagetogif(self, ctx: Context) -> None:
+        data = None
+        filename = "image"
+        if ctx.message and ctx.message.attachments:
+            att = ctx.message.attachments[0]
+            data = await att.read()
+            filename = (att.filename or "image").rsplit(".", 1)[0]
+        elif ctx.message and ctx.message.reference:
+            try:
+                ref = ctx.message.reference.resolved
+                if ref is None:
+                    ref = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+                if getattr(ref, "attachments", None):
+                    att = ref.attachments[0]
+                    data = await att.read()
+                    filename = (att.filename or "image").rsplit(".", 1)[0]
+            except Exception:
+                data = None
+        if data is None:
+            data = await self._last_channel_image(ctx)
+            filename = "image"
+        if not data:
+            return await ctx.warn("No image provided or found")
+        # detect gif
+        head = data[:6]
+        if head.startswith(b"GIF87a") or head.startswith(b"GIF89a"):
+            return await ctx.warn("Already a GIF")
+        async with ctx.typing():
+            try:
+                result = await asyncio.to_thread(image_ops.pil_to_gif, data)
+            except Exception:
+                return await ctx.fail("Failed to convert that image")
+            await ctx.send(file=discord.File(BytesIO(result), filename=f"{filename}.gif"))
+
+
 async def setup(bot: Vain):
     from .events import ManipulationEvents
 

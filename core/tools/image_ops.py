@@ -191,3 +191,19 @@ def pil_caption(data: bytes, text: str) -> bytes:
     }
     frames[0].save(buf, **save_kw)
     return buf.getvalue()
+
+
+def pil_to_gif(data: bytes) -> bytes:
+    """Convert a static image to GIF without changing pixel dimensions."""
+    _require_pil()
+    from PIL import Image
+
+    src = Image.open(BytesIO(data))
+    frame = src.convert("RGBA")
+    # preserve size exactly
+    w, h = frame.size
+    buf = BytesIO()
+    # GIF needs palette; use adaptive without resize
+    pal = frame.convert("P", palette=Image.ADAPTIVE, colors=255)
+    pal.save(buf, format="GIF")
+    return buf.getvalue()
