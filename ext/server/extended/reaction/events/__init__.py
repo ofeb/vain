@@ -69,9 +69,15 @@ class ReactionEvents(Package):
             if not trigger:
                 continue
 
-            
-            if trigger == channel_id:
-                pass  
+            if trigger.startswith("user:"):
+                try:
+                    target_id = int(trigger.split(":", 1)[1])
+                except ValueError:
+                    continue
+                if ctx.author.id != target_id:
+                    continue
+            elif trigger == channel_id:
+                pass
             elif not content:
                 continue
             elif not _matches_trigger(
@@ -101,6 +107,9 @@ class ReactionEvents(Package):
                     log.debug("failed to send auto reaction reply", exc_info=True)
 
             
-            if trigger != channel_id and applied:
-                
+            if (
+                applied
+                and not trigger.startswith("user:")
+                and trigger != channel_id
+            ):
                 break

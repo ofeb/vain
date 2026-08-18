@@ -78,15 +78,91 @@ class Reaction(ReactionEvents, Package):
         aliases=["autoreact", "autoreactions", "reaction", "reactions", "arx"],
         description=(
             "Auto-react to messages matching a trigger (like autoresponder, but emojis). "
-            "Use `--strict` for exact match; default is word-boundary match."
+            "Use `--strict` for exact match; default is word-boundary match. "
+            "Use `--user` with a member to react to all of their messages (no trigger word)."
         ),
         invoke_without_command=True,
         guild_only=True,
     )
     @has_permissions(manage_expressions=True)
-    async def reaction_group(self, ctx: Context) -> None:
-        """Auto-reaction management group."""
+    async def reaction_group(self, ctx: Context, *, payload: str = None) -> None:
+        """Auto-reaction management group.
+
+        Supports ``autoreact @user emoji --user`` without the add subcommand.
+        """
+        if ctx.invoked_subcommand is not None:
+            return
+        raw = (payload or "").strip()
+        if not raw:
+            content = (ctx.message.content or "").strip()
+            if content:
+                parts = content.split(None, 1)
+                raw = parts[1].strip() if len(parts) > 1 else ""
+        if raw and "--user" in raw.lower():
+            return await self._add_user_autoreact(ctx, raw)
         return await ctx.send_help(ctx.command)
+
+    async def _add_user_autoreact(self, ctx: Context, raw: str) -> None:
+        """Parse ``@user emoji1 emoji2 --user`` and store a user-targeted rule."""
+        cleaned = re.sub(r"(?i)--user\b", " ", raw).strip()
+        cleaned = re.sub(r"\s+", " ", cleaned)
+        if not cleaned:
+            return await ctx.warn(
+                f"expected: member and emoji(s)\n> -# **usage:** `{ctx.cmd('autoreact @user 😂 --user')}`"
+            )
+
+        tokens = cleaned.split()
+        member = None
+        emoji_tokens: list[str] = []
+        from discord.ext.commands import MemberConverter
+
+        conv = MemberConverter()
+        for take in (1, 2, 3):
+            if take > len(tokens):
+                break
+            candidate = " ".join(tokens[:take])
+            try:
+                member = await conv.convert(ctx, candidate)
+                emoji_tokens = tokens[take:]
+                break
+            except Exception:
+                member = None
+        if member is None:
+            return await ctx.warn(
+                f"member not found\n> -# **usage:** `{ctx.cmd('autoreact @user 😂 🔥 --user')}`"
+            )
+        emojis_list = parse_emojis(" ".join(emoji_tokens))
+        if not emojis_list:
+            return await ctx.warn("expected at least one emoji after the member")
+
+        for em in emojis_list:
+            try:
+                await ctx.message.add_reaction(em)
+            except Exception:
+                return await ctx.warn(f"invalid emoji: `{em}`")
+
+        trigger_key = f"user:{member.id}"
+        await self.bot.db.execute(
+            """
+            INSERT INTO auto_reactions (guild_id, trigger, response, owner_id, strict, reply)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT (guild_id, trigger, response)
+            DO UPDATE SET
+                owner_id = EXCLUDED.owner_id,
+                strict = EXCLUDED.strict,
+                reply = EXCLUDED.reply
+            """,
+            ctx.guild.id,
+            trigger_key,
+            emojis_list,
+            ctx.author.id,
+            False,
+            False,
+        )
+        await ctx.success(
+            f"Created user auto reaction for **{member.display_name}** → {' '.join(emojis_list)}\n"
+            f"> -# reacts to **all** of their messages (no trigger word)"
+        )
 
     @reaction_group.command(
         name="clear",
@@ -124,7 +200,8 @@ class Reaction(ReactionEvents, Package):
     async def reaction_add(self, ctx: Context, emoji: str, *, trigger: str) -> None:
         """Add a reaction trigger.
 
-        Usage: {ctx.cmd('autoreaction add <emoji(s)> <trigger> [--strict or --not_strict] [--reply yes/no]')}
+        Usage: autoreaction add <emoji(s)> <trigger> [--strict|--not_strict] [--reply yes/no]
+        User mode: autoreact @user <emojis> --user
 
         Default is **not strict** (word-boundary match), so `pic` won't fire on
         words like `suspicious`. Multi-word triggers work: `rep for pic`.
@@ -134,10 +211,11 @@ class Reaction(ReactionEvents, Package):
         """
         strict = False
         reply = False
+        user_mode = False
         trigger_raw = trigger.strip()
         
         flag_re = re.compile(
-            r"(?:\s+--(?P<flag>strict|not_strict|not-strict|reply)"
+            r"(?:\s+--(?P<flag>strict|not_strict|not-strict|reply|user)"
             r"(?:=(?P<eqval>\S+)|\s+(?P<val>(?!\-\-)\S+))?)\s*$",
             re.IGNORECASE,
         )
@@ -160,7 +238,14 @@ class Reaction(ReactionEvents, Package):
                     reply = False
                 else:
                     return await ctx.warn("`--reply` must be `on`/`yes`/`true` or `off`/`no`/`false`")
+            elif flag == "user":
+                user_mode = True
             trigger_raw = trigger_raw[: m.start()].rstrip()
+
+        if user_mode:
+            # add <member|emojis...> --user  OR  add <emojis> <member> --user
+            combined = f"{emoji} {trigger_raw}".strip()
+            return await self._add_user_autoreact(ctx, combined + " --user")
 
         trigger_raw = trigger_raw.strip()
         if not trigger_raw:
@@ -211,12 +296,38 @@ class Reaction(ReactionEvents, Package):
     @describe(trigger="Trigger word/phrase to remove")
     @has_permissions(manage_expressions=True)
     async def reaction_delete(self, ctx: Context, *, trigger: str) -> None:
-        """Remove all auto reactions for a trigger."""
+        """Remove all auto reactions for a trigger (or a user rule)."""
         trigger = trigger.strip()
+        # allow deleting user rules via mention / id / user:id
+        if trigger.lower().startswith("user:"):
+            key = trigger
+        else:
+            key = trigger
+            try:
+                from discord.ext.commands import MemberConverter
+                member = await MemberConverter().convert(ctx, trigger)
+                key = f"user:{member.id}"
+                # try both user key and plain trigger
+                result = await self.bot.db.execute(
+                    """
+                    DELETE FROM auto_reactions
+                    WHERE guild_id = $1 AND (
+                        LOWER(trigger) = LOWER($2) OR trigger = $3
+                    )
+                    """,
+                    ctx.guild.id,
+                    trigger,
+                    key,
+                )
+                if result and result != "DELETE 0":
+                    await ctx.success(f"Deleted auto reaction for **{member.display_name}**")
+                    return
+            except Exception:
+                pass
         result = await self.bot.db.execute(
             "DELETE FROM auto_reactions WHERE guild_id = $1 AND LOWER(trigger) = LOWER($2)",
             ctx.guild.id,
-            trigger,
+            key if key.startswith("user:") else trigger,
         )
         
         if str(result).endswith("0"):

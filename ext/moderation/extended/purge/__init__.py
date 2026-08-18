@@ -163,8 +163,8 @@ class Purge(Package):
         if not messages:
             raise CommandError("No purgable messages found")
         to_delete = self._with_invoke(ctx, messages)
-        deleted = await self.delete_messages(to_delete)
-        return await self._success(ctx, purge_type=purge_type, amount=deleted)
+        await self.delete_messages(to_delete)
+        return await self._success(ctx, purge_type=purge_type, amount=len(messages))
 
     @purge.command(
         name="attachments",
@@ -183,8 +183,8 @@ class Purge(Package):
         if not messages:
             raise CommandError("No purgable messages found")
         to_delete = self._with_invoke(ctx, messages)
-        deleted = await self.delete_messages(to_delete)
-        return await self._success(ctx, purge_type="attachments", amount=deleted)
+        await self.delete_messages(to_delete)
+        return await self._success(ctx, purge_type="attachments", amount=len(messages))
 
     @purge.command(
         name="endswith",
@@ -206,9 +206,9 @@ class Purge(Package):
         if not messages:
             raise CommandError("No purgable messages found")
         to_delete = self._with_invoke(ctx, messages)
-        deleted = await self.delete_messages(to_delete)
+        await self.delete_messages(to_delete)
         return await self._success(
-            ctx, purge_type=f"endswith · `{substring}`", amount=deleted
+            ctx, purge_type=f"endswith · `{substring}`", amount=len(messages)
         )
 
     @purge.command(
@@ -239,8 +239,8 @@ class Purge(Package):
         if not messages:
             raise CommandError("No purgable messages found")
         to_delete = self._with_invoke(ctx, messages)
-        deleted = await self.delete_messages(to_delete)
-        return await self._success(ctx, purge_type=purge_type, amount=deleted)
+        await self.delete_messages(to_delete)
+        return await self._success(ctx, purge_type=purge_type, amount=len(messages))
 
     @purge.command(
         name="emoji",
@@ -263,8 +263,8 @@ class Purge(Package):
         if not messages:
             raise CommandError("No purgable messages found")
         to_delete = self._with_invoke(ctx, messages)
-        deleted = await self.delete_messages(to_delete)
-        return await self._success(ctx, purge_type="emoji", amount=deleted)
+        await self.delete_messages(to_delete)
+        return await self._success(ctx, purge_type="emoji", amount=len(messages))
 
     @purge.command(
         name="before",
@@ -283,8 +283,8 @@ class Purge(Package):
         if not messages:
             raise CommandError("No purgable messages found")
         to_delete = self._with_invoke(ctx, messages)
-        deleted = await self.delete_messages(to_delete)
-        return await self._success(ctx, purge_type="before", amount=deleted)
+        await self.delete_messages(to_delete)
+        return await self._success(ctx, purge_type="before", amount=len(messages))
 
     @purge.command(
         name="stickers",
@@ -303,8 +303,8 @@ class Purge(Package):
         if not messages:
             raise CommandError("No purgable messages found")
         to_delete = self._with_invoke(ctx, messages)
-        deleted = await self.delete_messages(to_delete)
-        return await self._success(ctx, purge_type="stickers", amount=deleted)
+        await self.delete_messages(to_delete)
+        return await self._success(ctx, purge_type="stickers", amount=len(messages))
 
     @purge.command(
         name="contains",
@@ -326,9 +326,9 @@ class Purge(Package):
         if not messages:
             raise CommandError("No purgable messages found")
         to_delete = self._with_invoke(ctx, messages)
-        deleted = await self.delete_messages(to_delete)
+        await self.delete_messages(to_delete)
         return await self._success(
-            ctx, purge_type=f"contains · `{substring}`", amount=deleted
+            ctx, purge_type=f"contains · `{substring}`", amount=len(messages)
         )
 
     @purge.command(
@@ -353,8 +353,8 @@ class Purge(Package):
         if not messages:
             raise CommandError("No purgable messages found")
         to_delete = self._with_invoke(ctx, messages)
-        deleted = await self.delete_messages(to_delete)
-        return await self._success(ctx, purge_type="between", amount=deleted)
+        await self.delete_messages(to_delete)
+        return await self._success(ctx, purge_type="between", amount=len(messages))
 
     @purge.command(
         name="bots",
@@ -373,8 +373,8 @@ class Purge(Package):
         if not messages:
             raise CommandError("No purgable messages found")
         to_delete = self._with_invoke(ctx, messages)
-        deleted = await self.delete_messages(to_delete)
-        return await self._success(ctx, purge_type="bots", amount=deleted)
+        await self.delete_messages(to_delete)
+        return await self._success(ctx, purge_type="bots", amount=len(messages))
 
     @purge.command(
         name="webhooks",
@@ -393,8 +393,8 @@ class Purge(Package):
         if not messages:
             raise CommandError("No purgable messages found")
         to_delete = self._with_invoke(ctx, messages)
-        deleted = await self.delete_messages(to_delete)
-        return await self._success(ctx, purge_type="webhooks", amount=deleted)
+        await self.delete_messages(to_delete)
+        return await self._success(ctx, purge_type="webhooks", amount=len(messages))
 
     @purge.command(
         name="reactions",
@@ -413,8 +413,8 @@ class Purge(Package):
         if not messages:
             raise CommandError("No purgable messages found")
         to_delete = self._with_invoke(ctx, messages)
-        deleted = await self.delete_messages(to_delete)
-        return await self._success(ctx, purge_type="reactions", amount=deleted)
+        await self.delete_messages(to_delete)
+        return await self._success(ctx, purge_type="reactions", amount=len(messages))
 
     @purge.command(
         name="images",
@@ -438,8 +438,8 @@ class Purge(Package):
         if not messages:
             raise CommandError("No purgable messages found")
         to_delete = self._with_invoke(ctx, messages)
-        deleted = await self.delete_messages(to_delete)
-        return await self._success(ctx, purge_type="images", amount=deleted)
+        await self.delete_messages(to_delete)
+        return await self._success(ctx, purge_type="images", amount=len(messages))
 
     @purge.command(
         name="after",
@@ -458,8 +458,8 @@ class Purge(Package):
         if not messages:
             raise CommandError("No purgable messages found")
         to_delete = self._with_invoke(ctx, messages)
-        deleted = await self.delete_messages(to_delete)
-        return await self._success(ctx, purge_type="after", amount=deleted)
+        await self.delete_messages(to_delete)
+        return await self._success(ctx, purge_type="after", amount=len(messages))
 
     @purge.command(
         name="links",
@@ -478,8 +478,8 @@ class Purge(Package):
         if not messages:
             raise CommandError("No purgable messages found")
         to_delete = self._with_invoke(ctx, messages)
-        deleted = await self.delete_messages(to_delete)
-        return await self._success(ctx, purge_type="links", amount=deleted)
+        await self.delete_messages(to_delete)
+        return await self._success(ctx, purge_type="links", amount=len(messages))
 
     @purge.command(
         name="embeds",
@@ -498,8 +498,8 @@ class Purge(Package):
         if not messages:
             raise CommandError("No purgable messages found")
         to_delete = self._with_invoke(ctx, messages)
-        deleted = await self.delete_messages(to_delete)
-        return await self._success(ctx, purge_type="embeds", amount=deleted)
+        await self.delete_messages(to_delete)
+        return await self._success(ctx, purge_type="embeds", amount=len(messages))
 
     @purge.command(
         name="startswith",
@@ -521,9 +521,9 @@ class Purge(Package):
         if not messages:
             raise CommandError("No purgable messages found")
         to_delete = self._with_invoke(ctx, messages)
-        deleted = await self.delete_messages(to_delete)
+        await self.delete_messages(to_delete)
         return await self._success(
-            ctx, purge_type=f"startswith · `{substring}`", amount=deleted
+            ctx, purge_type=f"startswith · `{substring}`", amount=len(messages)
         )
 
     @purge.command(
@@ -543,8 +543,8 @@ class Purge(Package):
         if not messages:
             raise CommandError("No purgable messages found")
         to_delete = self._with_invoke(ctx, messages)
-        deleted = await self.delete_messages(to_delete)
-        return await self._success(ctx, purge_type="humans", amount=deleted)
+        await self.delete_messages(to_delete)
+        return await self._success(ctx, purge_type="humans", amount=len(messages))
 
     @purge.command(
         name="upto",
@@ -563,8 +563,8 @@ class Purge(Package):
         if not messages:
             raise CommandError("No purgable messages found")
         to_delete = self._with_invoke(ctx, messages)
-        deleted = await self.delete_messages(to_delete)
-        return await self._success(ctx, purge_type="upto", amount=deleted)
+        await self.delete_messages(to_delete)
+        return await self._success(ctx, purge_type="upto", amount=len(messages))
 
     async def _do_selfpurge(self, ctx: Context, search: Optional[int] = None):
         amount = self._clamp_amount(search)
@@ -577,8 +577,8 @@ class Purge(Package):
         if not messages:
             raise CommandError("No purgable messages found")
         to_delete = self._with_invoke(ctx, messages)
-        deleted = await self.delete_messages(to_delete)
-        return await self._success(ctx, purge_type="self", amount=deleted)
+        await self.delete_messages(to_delete)
+        return await self._success(ctx, purge_type="self", amount=len(messages))
 
     @purge.command(
         name="self",
@@ -615,10 +615,10 @@ class Purge(Package):
         if not messages:
             raise CommandError("No bot messages found")
         to_delete = self._with_invoke(ctx, messages)
-        deleted = await self.delete_messages(to_delete)
+        await self.delete_messages(to_delete)
         return await ctx.success(
             f"**botclear** complete!\n"
             f"> -# **type**: bot\n"
-            f"> -# **amount**: {deleted}",
+            f"> -# **amount**: {len(messages)}",
             delete_after=2.0,
         )
