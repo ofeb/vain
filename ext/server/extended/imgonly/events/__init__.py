@@ -158,8 +158,8 @@ class ImgonlyEvents(Package):
             )
 
         return (
-            f"{message.author.mention} this is a **gallery** channel"
-            f"only **images or attachments** are allowed in {message.channel.mention}"
+            f"{message.author.mention} this is a **gallery** channel\n"
+            f"> -# only **images or attachments** are allowed in {message.channel.mention}"
         )
 
     def _schedule_delete(self, message: discord.Message, delay: float) -> None:
