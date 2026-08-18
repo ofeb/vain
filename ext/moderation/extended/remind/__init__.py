@@ -13,10 +13,6 @@ from core.discord.views.embed import c2
 from core.tools.moderation_args import parse_duration_seconds, is_duration_token
 
 
-def label_line(label: str, value: str) -> str:
-    return f"**{label}**: {value}"
-
-
 class _RemindDurationModal(ui.Modal, title="Remind me"):
     duration = ui.TextInput(
         label="When?",
@@ -32,44 +28,57 @@ class _RemindDurationModal(ui.Modal, title="Remind me"):
         self.target_message = message
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer(ephemeral=True)
-        seconds = parse_duration_seconds(str(self.duration.value).strip())
-        if not seconds or seconds < 30:
-            return await interaction.followup.send(
-                "Please provide a **valid duration** (minimum 30 seconds, e.g. `30m`, `2h`, `1d`).",
-                ephemeral=True,
-            )
-        if seconds > 30 * 86400:
-            return await interaction.followup.send(
-                "Reminders can't exceed **30 days**.",
-                ephemeral=True,
-            )
-        text = (self.target_message.content or "").strip()
-        if not text:
-            text = f"[message]({self.target_message.jump_url})"
-        else:
-            if len(text) > 900:
-                text = text[:897].rstrip() + "..."
-            text = f"{text}\n-# [jump]({self.target_message.jump_url})"
+        try:
+            await interaction.response.defer(ephemeral=True)
+        except Exception:
+            pass
+        try:
+            await self.cog._ensure_schema()
+            seconds = parse_duration_seconds(str(self.duration.value).strip())
+            if not seconds or seconds < 30:
+                return await interaction.followup.send(
+                    "Please provide a **valid duration** (minimum 30 seconds, e.g. `30m`, `2h`, `1d`).",
+                    ephemeral=True,
+                )
+            if seconds > 30 * 86400:
+                return await interaction.followup.send(
+                    "Reminders can't exceed **30 days**.",
+                    ephemeral=True,
+                )
+            text = (self.target_message.content or "").strip()
+            jump = self.target_message.jump_url
+            if not text:
+                text = f"[jump to message]({jump})"
+            else:
+                if len(text) > 900:
+                    text = text[:897].rstrip() + "..."
+                text = f"{text}\n-# [jump]({jump})"
 
-        when = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=seconds)
-        guild_id = interaction.guild.id if interaction.guild else 0
-        channel_id = interaction.channel.id if interaction.channel else 0
-        rid = await self.cog.db.fetchval(
-            """INSERT INTO reminders (user_id, guild_id, channel_id, message, time)
-               VALUES ($1, $2, $3, $4, $5)
-               RETURNING id""",
-            interaction.user.id,
-            guild_id,
-            channel_id,
-            text,
-            when,
-        )
-        pretty = self.cog._format_duration(seconds)
-        await interaction.followup.send(
-            f"I'll remind you in **{pretty}**\n> -# **id:** #{rid}",
-            ephemeral=True,
-        )
+            when = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=seconds)
+            guild_id = interaction.guild.id if interaction.guild else 0
+            channel_id = getattr(interaction.channel, "id", 0) or 0
+            rid = await self.cog.db.fetchval(
+                """INSERT INTO reminders (user_id, guild_id, channel_id, message, time)
+                   VALUES ($1, $2, $3, $4, $5)
+                   RETURNING id""",
+                interaction.user.id,
+                guild_id,
+                channel_id,
+                text,
+                when,
+            )
+            pretty = self.cog._format_duration(seconds)
+            await interaction.followup.send(
+                f"> <:approve_new:1526186163457490974> I'll remind you in **{pretty}**\n"
+                f"> -# **id:** #{rid}",
+                ephemeral=True,
+            )
+        except Exception as exc:
+            with contextlib.suppress(Exception):
+                await interaction.followup.send(
+                    f"Couldn't save that reminder\n> -# {exc}",
+                    ephemeral=True,
+                )
 
 
 class Remind(Package):
@@ -80,6 +89,7 @@ class Remind(Package):
         self._menus: list[app_commands.ContextMenu] = []
 
     async def cog_load(self) -> None:
+        await self._ensure_schema()
         self._register_menus()
         if not self._remind_loop.is_running():
             self._remind_loop.start()
@@ -93,6 +103,26 @@ class Remind(Package):
         if self._remind_loop.is_running():
             self._remind_loop.cancel()
         await super().cog_unload()
+
+    async def _ensure_schema(self) -> None:
+        await self.db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS reminders (
+                id BIGSERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL,
+                guild_id BIGINT NOT NULL DEFAULT 0,
+                channel_id BIGINT NOT NULL DEFAULT 0,
+                message TEXT NOT NULL,
+                time TIMESTAMP WITHOUT TIME ZONE NOT NULL
+            )
+            """
+        )
+        await self.db.execute(
+            "CREATE INDEX IF NOT EXISTS reminders_user_idx ON reminders (user_id)"
+        )
+        await self.db.execute(
+            "CREATE INDEX IF NOT EXISTS reminders_time_idx ON reminders (time)"
+        )
 
     def _register_menus(self) -> None:
         for menu in list(self._menus):
@@ -135,28 +165,36 @@ class Remind(Package):
         return ", ".join(parts) if parts else "0 seconds"
 
     async def ctx_remind(self, interaction: discord.Interaction, message: discord.Message) -> None:
-        """Message context menu: Remind me to do this."""
         await interaction.response.send_modal(_RemindDurationModal(self, message))
 
-    @hybrid(
-        name="remind",
-        aliases=["reminder", "remindme"],
-        description="Set a personal reminder",
-        group=True,
-        example=",remind 2h check tickets",
-        guilds=True,
-        dms=True,
-        groupchats=True,
-    )
-    async def remind(self, ctx, *, reminder: str = None):
-        """Set a reminder. Format: <duration> <message>"""
-        if not reminder or not str(reminder).strip():
-            return await ctx.send_help(ctx.command)
+    async def _create_reminder(
+        self,
+        *,
+        user_id: int,
+        guild_id: int,
+        channel_id: int,
+        message: str,
+        seconds: int,
+    ) -> tuple[int, str]:
+        await self._ensure_schema()
+        when = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=seconds)
+        rid = await self.db.fetchval(
+            """INSERT INTO reminders (user_id, guild_id, channel_id, message, time)
+               VALUES ($1, $2, $3, $4, $5)
+               RETURNING id""",
+            user_id,
+            guild_id,
+            channel_id,
+            message,
+            when,
+        )
+        return int(rid), self._format_duration(seconds)
 
-        tokens = reminder.split()
+    def _parse_reminder_args(self, reminder: str) -> tuple[int | None, str | None, str | None]:
+        """Returns (seconds, message, error)."""
+        tokens = (reminder or "").split()
         if not tokens:
-            return await ctx.send_help(ctx.command)
-
+            return None, None, "empty"
         seconds = None
         message_tokens = list(tokens)
         if is_duration_token(tokens[0]):
@@ -165,55 +203,94 @@ class Remind(Package):
         elif len(tokens) >= 2 and is_duration_token(tokens[-1]):
             seconds = parse_duration_seconds(tokens[-1])
             message_tokens = tokens[:-1]
-
         if not seconds or seconds < 30:
+            return None, None, "duration"
+        if seconds > 30 * 86400:
+            return None, None, "max"
+        message = " ".join(message_tokens).strip()
+        if not message:
+            return None, None, "message"
+        return seconds, message, None
+
+    @hybrid(
+        name="reminder",
+        aliases=["remind", "remindme"],
+        description="Set a personal reminder",
+        group=True,
+        example=",reminder add 2h check tickets",
+        guilds=True,
+        dms=True,
+        groupchats=True,
+    )
+    async def reminder(self, ctx, *, reminder: str = None):
+        """Set a reminder. Format: <duration> <message>"""
+        if ctx.invoked_subcommand is not None:
+            return
+        if not reminder or not str(reminder).strip():
+            return await ctx.send_help(ctx.command)
+        return await self._reminder_add_impl(ctx, reminder)
+
+    @reminder.command(
+        name="add",
+        aliases=["set", "create", "new"],
+        description="Add a personal reminder",
+        example=",reminder add 2h check tickets",
+    )
+    async def reminder_add(self, ctx, *, reminder: str = None):
+        if not reminder or not str(reminder).strip():
+            return await ctx.warn(
+                "Provide a duration and message\n"
+                f"> -# **usage:** {ctx.cmd('reminder add 2h check tickets')}"
+            )
+        return await self._reminder_add_impl(ctx, reminder)
+
+    async def _reminder_add_impl(self, ctx, reminder: str):
+        seconds, message, err = self._parse_reminder_args(reminder)
+        if err == "duration":
             return await ctx.warn(
                 "Please provide a **valid duration**\n"
                 f"> -# **minimum:** 30 seconds (e.g. `30m`, `2h`, `1d`)"
             )
-        if seconds > 30 * 86400:
+        if err == "max":
             return await ctx.warn(
                 "Reminders can't exceed **30 days**\n"
                 f"> -# **maximum:** 30 days"
             )
-
-        message = " ".join(message_tokens).strip()
-        if not message:
+        if err == "message" or not message:
             return await ctx.warn(
                 "Please provide a **reminder message**\n"
-                f"> -# **usage:** {ctx.cmd('remind 2h check tickets')}"
+                f"> -# **usage:** {ctx.cmd('reminder add 2h check tickets')}"
             )
+        if err or not seconds:
+            return await ctx.send_help(ctx.command)
 
-        when = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=seconds)
         guild_id = ctx.guild.id if ctx.guild else 0
         channel_id = ctx.channel.id if ctx.channel else 0
+        try:
+            rid, pretty = await self._create_reminder(
+                user_id=ctx.author.id,
+                guild_id=guild_id,
+                channel_id=channel_id,
+                message=message,
+                seconds=seconds,
+            )
+        except Exception as exc:
+            return await ctx.fail(f"Couldn't save that reminder\n> -# {exc}")
 
-        rid = await self.db.fetchval(
-            """INSERT INTO reminders (user_id, guild_id, channel_id, message, time)
-               VALUES ($1, $2, $3, $4, $5)
-               RETURNING id""",
-            ctx.author.id,
-            guild_id,
-            channel_id,
-            message,
-            when,
-        )
-
-        pretty = self._format_duration(seconds)
         return await ctx.success(
             f"I'll remind you in **{pretty}**\n"
             f"> -# **message:** {message}\n"
             f"> -# **id:** #{rid}"
         )
 
-    @remind.command(
+    @reminder.command(
         name="list",
         aliases=["ls", "all"],
         description="List your active reminders",
-        example=",remind list",
+        example=",reminder list",
     )
-    async def remind_list(self, ctx):
-        """List your pending reminders."""
+    async def reminder_list(self, ctx):
+        await self._ensure_schema()
         rows = await self.db.fetch(
             """SELECT id, message, time
                FROM reminders
@@ -243,14 +320,14 @@ class Remind(Package):
         )
         return await ctx.send(embed=embed)
 
-    @remind.command(
+    @reminder.command(
         name="remove",
         aliases=["rm", "delete", "del", "cancel"],
         description="Remove a reminder by id",
-        example=",remind remove 12",
+        example=",reminder remove 12",
     )
-    async def remind_remove(self, ctx, id: int):
-        """Remove a reminder by id."""
+    async def reminder_remove(self, ctx, id: int):
+        await self._ensure_schema()
         result = await self.db.execute(
             "DELETE FROM reminders WHERE id = $1 AND user_id = $2",
             id,
@@ -259,7 +336,7 @@ class Remind(Package):
         if result == "DELETE 0":
             return await ctx.warn(
                 f"Reminder **#{id}** not found\n"
-                f"> -# **check your reminders with:** {ctx.cmd('remind list')}"
+                f"> -# **check your reminders with:** {ctx.cmd('reminder list')}"
             )
         return await ctx.success(
             f"Removed reminder\n"
