@@ -187,7 +187,7 @@ class Manipulation(Package):
             ctx,
             "caption",
             text=text,
-            pil_fallback=lambda data, t=text: image_ops.pil_caption(data, t),
+            pil_fallback=lambda data, t=text: image_ops.pil_caption(data, t, None),
         )
 
     @hybrid(
@@ -245,7 +245,8 @@ class Manipulation(Package):
 
         async with ctx.typing():
             try:
-                result = await asyncio.to_thread(image_ops.pil_caption, data, raw)
+                emoji_map = await image_ops.fetch_emoji_images(raw)
+                result = await asyncio.to_thread(image_ops.pil_caption, data, raw, emoji_map)
             except Exception:
                 return await ctx.fail("Failed to caption that media")
             await ctx.send(file=discord.File(BytesIO(result), filename="caption.gif"))
@@ -544,6 +545,8 @@ class Manipulation(Package):
             except Exception:
                 avatar_bytes = None
 
+        emoji_map = await image_ops.fetch_emoji_images(content or "")
+
         def _build() -> bytes:
             W, H = 1000, 520
             AV_W = 480
@@ -599,15 +602,17 @@ class Manipulation(Package):
             if len(clean) > 320:
                 clean = clean[:317].rstrip() + "..."
 
-            lines = self._quote_wrap(clean, body_font, max_text_w)
+            emoji_size = max(18, int(body_size * 0.95))
+            lines = image_ops.wrap_text_with_emojis(clean, body_font, max_text_w, emoji_map, emoji_size)
             while body_size > 22 and len(lines) > 7:
                 body_size -= 2
                 body_font = self._quote_font(body_size)
-                lines = self._quote_wrap(clean, body_font, max_text_w)
+                emoji_size = max(18, int(body_size * 0.95))
+                lines = image_ops.wrap_text_with_emojis(clean, body_font, max_text_w, emoji_map, emoji_size)
 
             line_gap = int(body_size * 1.28)
             block_h = line_gap * len(lines)
-            quote_mark = "\u201C"
+            quote_mark = "“"
             qm_bbox = quote_font.getbbox(quote_mark)
             qm_h = qm_bbox[3] - qm_bbox[1]
 
@@ -618,7 +623,17 @@ class Manipulation(Package):
 
             y = top + qm_h + 4
             for line in lines:
-                draw.text((text_left, y), line, fill=text_rgb, font=body_font)
+                image_ops.measure_draw_emoji_line(
+                    draw,
+                    (text_left, y),
+                    line,
+                    body_font,
+                    text_rgb,
+                    emoji_map,
+                    emoji_size,
+                    draw_it=True,
+                    canvas=canvas,
+                )
                 y += line_gap
 
             attr = f"\u2014  @{username}" if username else f"\u2014  {display_name}"

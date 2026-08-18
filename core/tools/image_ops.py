@@ -92,51 +92,57 @@ def _caption_font_path():
     return Path(__file__).resolve().parents[2] / "var" / "caption.otf"
 
 
-def _build_caption_strip(text: str, width: int, size: int, text_width: int):
+def _build_caption_strip(text: str, width: int, size: int, text_width: int, emoji_bytes: dict | None = None):
+    _require_pil()
     from PIL import Image, ImageDraw, ImageFont
 
-    text_value = (text or "").strip() or "..."
-    font_path = _caption_font_path()
+    text_value = (text or "...").strip() or "..."
+    font_path = _query_caption_font()
     try:
         font = ImageFont.truetype(str(font_path), size=size)
     except Exception:
         font = ImageFont.load_default()
 
-    measure = ImageDraw.Draw(Image.new("RGBA", (1, 1), (0, 0, 0, 0)))
+    emoji_size = max(12, int(size * 0.95))
     wrapped_lines: list[str] = []
     for paragraph in text_value.splitlines() or ["..."]:
-        words = paragraph.split()
-        if not words:
+        if not paragraph.strip():
             wrapped_lines.append("")
             continue
-        current = words[0]
-        for word in words[1:]:
-            candidate = f"{current} {word}"
-            cb = measure.textbbox((0, 0), candidate, font=font)
-            if (cb[2] - cb[0]) <= text_width:
-                current = candidate
-            else:
-                wrapped_lines.append(current)
-                current = word
-        wrapped_lines.append(current)
+        wrapped_lines.extend(
+            wrap_text_with_emojis(paragraph, font, text_width, emoji_bytes, emoji_size)
+        )
     if not wrapped_lines:
         wrapped_lines = ["..."]
 
-    line_boxes = [measure.textbbox((0, 0), ln if ln else " ", font=font) for ln in wrapped_lines]
-    line_heights = [max(1, box[3] - box[1]) for box in line_boxes]
-    line_gap = max(1, size // 8)
-    text_h = sum(line_heights) + (line_gap * (len(wrapped_lines) - 1))
-    caption_h = max(1, text_h + size)
+    line_heights = []
+    for ln in wrapped_lines:
+        if not ln:
+            line_heights.append(max(1, size))
+            continue
+        bb_h = max(emoji_size, size)
+        try:
+            from PIL import ImageDraw as _ID, Image as _I
+            bb = _ID.Draw(_I.new("RGBA", (1, 1))).textbbox((0, 0), ln, font=font)
+            bb_h = max(bb_h, bb[3] - bb[1])
+        except Exception:
+            pass
+        line_heights.append(bb_h)
+    line_gap = max(4, size // 10)
+    text_h = sum(line_heights) + line_gap * max(0, len(wrapped_lines) - 1)
+    pad_y = max(8, size // 4)
+    caption_h = text_h + pad_y * 2
 
     strip = Image.new("RGBA", (width, caption_h), (255, 255, 255, 255))
     draw = ImageDraw.Draw(strip)
     y = max(0, (caption_h - text_h) // 2)
     for idx, line in enumerate(wrapped_lines):
-        bb = draw.textbbox((0, 0), line if line else " ", font=font)
-        lw = max(1, bb[2] - bb[0])
-        x = max(0, (width - lw) // 2)
         if line:
-            draw.text((x, y), line, fill=(0, 0, 0, 255), font=font)
+            lw = line_width_with_emojis(line, font, emoji_bytes, emoji_size)
+            x = max(0, (width - lw) // 2)
+            measure_draw_emoji_line(
+                draw, (x, y), line, font, (0, 0, 0, 255), emoji_bytes, emoji_size, draw_it=True, canvas=strip
+            )
         y += line_heights[idx] + line_gap
     return strip
 
@@ -153,7 +159,7 @@ def _caption_frame(src: "Image.Image", strip: "Image.Image") -> "Image.Image":
     return out
 
 
-def pil_caption(data: bytes, text: str) -> bytes:
+def pil_caption(data: bytes, text: str, emoji_bytes: dict | None = None) -> bytes:
     """White-bar caption on first frame as PNG (filename can still be .gif)."""
     _require_pil()
     from PIL import Image
@@ -167,7 +173,7 @@ def pil_caption(data: bytes, text: str) -> bytes:
     w, h = frame.size
     size = max(1, w // 10)
     text_width = max(20, w - (((w // 25) * 2)))
-    strip = _build_caption_strip(text, w, size, text_width)
+    strip = _build_caption_strip(text, w, size, text_width, emoji_bytes=emoji_bytes)
     out = _caption_frame(frame, strip)
     return _save_png(out)
 
@@ -186,3 +192,234 @@ def pil_to_gif(data: bytes) -> bytes:
     pal = frame.convert("P", palette=Image.ADAPTIVE, colors=255)
     pal.save(buf, format="GIF")
     return buf.getvalue()
+
+
+import re as _re
+
+_CUSTOM_EMOJI_RE = _re.compile(r"<(a?):([A-Za-z0-9_~]+):(\d+)>")
+# Broad unicode emoji coverage (Discord/Twemoji style)
+_UNICODE_EMOJI_RE = _re.compile(
+    "(?:"
+    r"[\U0001F1E6-\U0001F1FF]{2}"
+    r"|[\U0001F300-\U0001FAFF]"
+    r"|[\U00002600-\U000027BF]"
+    r"|[\U0001F900-\U0001F9FF]"
+    r"|[\U0001F600-\U0001F64F]"
+    r"|[\U0001F680-\U0001F6FF]"
+    r"|[\u2600-\u26FF]"
+    r"|[\u2700-\u27BF]"
+    r"|\u200D"
+    r"|\uFE0F"
+    r"|[\U0001F000-\U0001F02F]"
+    r")+"
+)
+
+
+def tokenize_emojis(text: str) -> list[tuple[str, str]]:
+    """Split text into (kind, value) tokens: text | unicode | custom."""
+    raw = text or ""
+    tokens: list[tuple[str, str]] = []
+    i = 0
+    while i < len(raw):
+        m = _CUSTOM_EMOJI_RE.match(raw, i)
+        if m:
+            tokens.append(("custom", m.group(0)))
+            i = m.end()
+            continue
+        m = _UNICODE_EMOJI_RE.match(raw, i)
+        if m:
+            seq = m.group(0)
+            # collapse pure joiners
+            if seq.strip("\u200d\ufe0f"):
+                tokens.append(("unicode", seq))
+            i = m.end()
+            continue
+        # accumulate plain text until next emoji
+        j = i + 1
+        while j < len(raw):
+            if _CUSTOM_EMOJI_RE.match(raw, j) or _UNICODE_EMOJI_RE.match(raw, j):
+                break
+            j += 1
+        tokens.append(("text", raw[i:j]))
+        i = j
+    return tokens
+
+
+def twemoji_codepoint(seq: str) -> str:
+    parts = []
+    for ch in seq:
+        o = ord(ch)
+        if o in (0xFE0F,):  # variation selector often omitted in twemoji filenames
+            continue
+        parts.append(f"{o:x}")
+    return "-".join(parts)
+
+
+def twemoji_url(seq: str) -> str:
+    cp = twemoji_codepoint(seq)
+    return f"https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/{cp}.png"
+
+
+def custom_emoji_url(token: str) -> tuple[str, bool]:
+    m = _CUSTOM_EMOJI_RE.match(token)
+    if not m:
+        return "", False
+    animated = m.group(1) == "a"
+    eid = m.group(3)
+    ext = "gif" if animated else "png"
+    return f"https://cdn.discordapp.com/emojis/{eid}.{ext}?size=96&quality=lossless", animated
+
+
+def _emoji_placeholder(token: str) -> str:
+    m = _CUSTOM_EMOJI_RE.match(token)
+    if m:
+        return f":{m.group(2)}:"
+    return "\ufffd"
+
+
+async def fetch_emoji_images(text: str, session=None) -> dict[str, bytes]:
+    """Download Twemoji + Discord custom emoji assets used in text."""
+    import aiohttp
+
+    needed: dict[str, str] = {}
+    for kind, val in tokenize_emojis(text):
+        if kind == "unicode":
+            needed[val] = twemoji_url(val)
+        elif kind == "custom":
+            url, _ = custom_emoji_url(val)
+            if url:
+                needed[val] = url
+    if not needed:
+        return {}
+
+    own = session is None
+    if own:
+        timeout = aiohttp.ClientTimeout(total=20)
+        session = aiohttp.ClientSession(
+            timeout=timeout,
+            headers={"User-Agent": "Mozilla/5.0 vain-bot"},
+        )
+    out: dict[str, bytes] = {}
+    try:
+        for key, url in needed.items():
+            try:
+                async with session.get(url) as resp:
+                    if resp.status == 200:
+                        data = await resp.read()
+                        if data[:8] != b"\x89PNG\r\n\x1a\n" and data[:3] != b"GIF":
+                            # try twemoji without stripping FE0F failed - try with
+                            if key and key[0] and ord(key[0]) > 0xFF:
+                                pass
+                        out[key] = data
+            except Exception:
+                continue
+    finally:
+        if own:
+            await session.close()
+    return out
+
+
+def _load_emoji_im(data: bytes, size: int):
+    from PIL import Image
+    im = Image.open(BytesIO(data))
+    try:
+        im.seek(0)
+    except Exception:
+        pass
+    im = im.convert("RGBA")
+    return im.resize((size, size), Image.Resampling.LANCZOS)
+
+
+def measure_draw_emoji_line(
+    draw,
+    xy: tuple[int, int],
+    line: str,
+    font,
+    fill,
+    emoji_bytes: dict[str, bytes] | None,
+    emoji_size: int,
+    *,
+    draw_it: bool = True,
+    canvas=None,
+) -> int:
+    """Draw/measure a line that may contain unicode/custom emojis. Returns width."""
+    x, y = xy
+    start_x = x
+    emoji_bytes = emoji_bytes or {}
+    for kind, val in tokenize_emojis(line):
+        if kind == "text":
+            if not val:
+                continue
+            if draw_it:
+                draw.text((x, y), val, fill=fill, font=font)
+            bb = draw.textbbox((0, 0), val, font=font)
+            x += max(1, bb[2] - bb[0])
+        else:
+            data = emoji_bytes.get(val)
+            size = emoji_size
+            if data:
+                try:
+                    em = _load_emoji_im(data, size)
+                    if draw_it and canvas is not None:
+                        fsize = getattr(font, "size", size) or size
+                        ey = y + max(0, (fsize - size) // 2)
+                        canvas.paste(em, (int(x), int(ey)), em)
+                        x += size + 2
+                        continue
+                    if not draw_it:
+                        x += size + 2
+                        continue
+                except Exception:
+                    pass
+            ph = _emoji_placeholder(val) if kind == "custom" else "?"
+            if draw_it:
+                draw.text((x, y), ph, fill=fill, font=font)
+            bb = draw.textbbox((0, 0), ph, font=font)
+            x += max(1, bb[2] - bb[0])
+    return max(1, x - start_x)
+
+
+def line_width_with_emojis(text: str, font, emoji_bytes: dict[str, bytes] | None, emoji_size: int) -> int:
+    from PIL import Image, ImageDraw
+    measure = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+    return measure_draw_emoji_line(measure, (0, 0), text, font, (0, 0, 0, 255), emoji_bytes, emoji_size, draw_it=False)
+
+
+def wrap_text_with_emojis(
+    text: str,
+    font,
+    max_width: int,
+    emoji_bytes: dict[str, bytes] | None,
+    emoji_size: int,
+) -> list[str]:
+    # wrap on spaces but keep emoji tokens intact
+    tokens: list[str] = []
+    for kind, val in tokenize_emojis(text.replace("\n", " \n ")):
+        if kind == "text":
+            for part in val.split(" "):
+                if part == "\n":
+                    tokens.append("\n")
+                elif part:
+                    tokens.append(part)
+                tokens.append(" ")
+            if tokens and tokens[-1] == " ":
+                tokens.pop()
+        else:
+            tokens.append(val)
+    lines: list[str] = []
+    current = ""
+    for tok in tokens:
+        if tok == "\n":
+            lines.append(current)
+            current = ""
+            continue
+        candidate = f"{current}{tok}" if current else tok
+        if current and line_width_with_emojis(candidate, font, emoji_bytes, emoji_size) > max_width:
+            lines.append(current.rstrip())
+            current = tok.lstrip() if isinstance(tok, str) else tok
+        else:
+            current = candidate
+    if current or not lines:
+        lines.append(current.rstrip() if current else "")
+    return lines or [""]
+
