@@ -187,59 +187,33 @@ class Owner(Package):
         description="List guilds the bot is in (page / search)",
         aliases=["servers"],
     )
-    async def guilds(self, ctx: Context, page: int = None, *, flags: str = None) -> None:
+    async def guilds(self, ctx: Context, *, query: str = None) -> None:
         """List guilds. Usage: ,guilds [page] [--search name]"""
-        search = None
-        raw = (flags or "").strip()
-        # Also allow: ,guilds --search name  (page omitted)
-        # and: ,guilds 2 --search name
-        # Parse page from first token if flags empty and page is actually search syntax via message
-        content = ""
-        if ctx.message and ctx.message.content:
-            # strip prefix + command name
-            content = ctx.message.content
-            for pref in (ctx.prefix or "",):
-                if content.startswith(pref):
-                    content = content[len(pref):]
-                    break
-            parts = content.split(None, 1)
-            rest = parts[1] if len(parts) > 1 else ""
-        else:
-            rest = ""
-            if page is not None and flags:
-                rest = f"{page} {flags}".strip()
-            elif page is not None:
-                rest = str(page)
-            elif flags:
-                rest = flags
-
-        # Prefer parsing from rest of message
-        if ctx.message and ctx.message.content:
+        rest = (query or "").strip()
+        if not rest and ctx.message and ctx.message.content:
             inv = (ctx.invoked_with or "guilds")
             full = ctx.message.content
-            # find command after prefix
             idx = full.lower().find(inv.lower())
-            rest = full[idx + len(inv):].strip() if idx >= 0 else rest
+            if idx >= 0:
+                rest = full[idx + len(inv) :].strip()
 
         start_page = 1
-        tokens = rest.split()
+        search = None
+        tokens = rest.split() if rest else []
         i = 0
         while i < len(tokens):
             tok = tokens[i]
             low = tok.lower()
             if low in ("--search", "-s", "--name", "--query"):
-                search = " ".join(tokens[i + 1:]).strip() or None
+                search = " ".join(tokens[i + 1 :]).strip() or None
                 break
-            if tok.isdigit() and search is None and start_page == 1 and i == 0:
+            if tok.isdigit() and i == 0 and search is None:
                 start_page = max(1, int(tok))
                 i += 1
                 continue
-            # bare search without flag: remaining text
-            if not tok.startswith("-"):
-                # if first non-page token and no --search, treat as search only if not pure int
-                if not tok.isdigit():
-                    search = " ".join(tokens[i:]).strip()
-                    break
+            if not tok.startswith("-") and not tok.isdigit():
+                search = " ".join(tokens[i:]).strip()
+                break
             i += 1
 
         guild_list = sorted(
@@ -289,7 +263,6 @@ class Owner(Package):
             embed.color = None
             pages.append(embed)
 
-        # Shared paginator; start at requested page
         start_index = min(max(start_page, 1), len(pages)) - 1
         return await send_pages(ctx, pages, start_index=start_index)
 

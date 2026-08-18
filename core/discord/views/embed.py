@@ -91,7 +91,7 @@ def reply_embed(
     return c2(color=None, message=message, footer=subtitle, timestamp=False)
 
 
-def panel_embed(
+def panel_container(
     *,
     color: int | None = None,
     title: str | None = None,
@@ -123,6 +123,8 @@ def panel_embed(
         embed.timestamp = discord.utils.utcnow()
     return embed
 
+
+panel_embed = panel_container
 
 class EmbedView(discord.ui.View):
     """embed with a delete button"""

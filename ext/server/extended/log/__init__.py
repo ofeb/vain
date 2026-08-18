@@ -157,30 +157,57 @@ class Log(LogEvents, Package):
         self,
         guild_id: int,
         event_type: str,
-        embed: discord.Embed,
+        payload,
         *,
         file_content: bytes | None = None,
         file_name: str | None = None,
     ) -> None:
-        embed.color = None
+        """Send a log entry. ``payload`` is a LayoutView/View (preferred) or Embed."""
         rows = await self.db.fetch(
             "SELECT channel_id FROM log_config WHERE guild_id = $1 AND $2 = ANY(events)",
             guild_id, event_type,
         )
         for row in rows:
             channel_id = row[0]
+            channel = self.bot.get_channel(channel_id)
+            file_kw = {}
+            if file_content is not None and file_name:
+                file_kw["file"] = discord.File(io.BytesIO(file_content), filename=file_name)
+
+            # Prefer bot channel send for Components V2; webhook embed fallback
+            is_layout = isinstance(payload, (discord.ui.LayoutView, discord.ui.View)) and not isinstance(
+                payload, discord.Embed
+            )
+            # detect LayoutView
+            try:
+                from discord.ui import LayoutView as _LV
+                is_layout = isinstance(payload, _LV)
+            except Exception:
+                is_layout = hasattr(payload, "add_item") and not isinstance(payload, discord.Embed)
+
+            if is_layout and channel is not None and hasattr(channel, "send"):
+                with contextlib.suppress(discord.HTTPException, discord.Forbidden):
+                    await channel.send(view=payload, silent=True, **file_kw)
+                    continue
+
+            # Embed path (legacy / color override / webhook)
+            embed = payload if isinstance(payload, discord.Embed) else None
+            if embed is None:
+                continue
+            embed.color = None
             custom_color = await self._get_event_color(guild_id, channel_id, event_type)
-            embed.color = custom_color if custom_color is not None else None
+            if custom_color is not None:
+                embed.color = custom_color
             wh = await self._get_webhook(channel_id)
             if wh:
                 with contextlib.suppress(discord.HTTPException):
-                    send_kwargs: dict = {"embed": embed, "username": "vain logs", "silent": True}
-                    if file_content is not None and file_name:
-                        send_kwargs["file"] = discord.File(
-                            io.BytesIO(file_content),
-                            filename=file_name,
-                        )
+                    send_kwargs = {"embed": embed, "username": "vain logs", "silent": True}
+                    send_kwargs.update(file_kw)
                     await wh.send(**send_kwargs)
+            elif channel is not None:
+                with contextlib.suppress(discord.HTTPException, discord.Forbidden):
+                    await channel.send(embed=embed, silent=True, **file_kw)
+
 
     @group(
         name="log",
