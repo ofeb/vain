@@ -901,7 +901,13 @@ class Utility(commands.Cog):
                 pass
             if name == "translate":
                 try:
-                    for param in getattr(cmd, "parameters", []) or []:
+                    params = list(getattr(cmd, "parameters", []) or [])
+                    # also walk HybridCommand.app_command if present
+                    hybrid_cmd = self.bot.get_command("translate")
+                    app = getattr(hybrid_cmd, "app_command", None) if hybrid_cmd else None
+                    if app is not None:
+                        params = list(getattr(app, "parameters", []) or params)
+                    for param in params:
                         pname = getattr(param, "name", None)
                         if pname == "text":
                             param.required = True
@@ -1127,7 +1133,7 @@ class Utility(commands.Cog):
     async def translate(
         self,
         ctx: Context,
-        text: str = None,
+        text: str,
         to: str = None,
         source: str = None,
     ) -> None:
@@ -1135,7 +1141,7 @@ class Utility(commands.Cog):
         from_lang = (source or "").strip().lower() or None
         if from_lang in {"auto", "detect", "none"}:
             from_lang = None
-        body_text = (text or "").strip() or None
+        body_text = (text or "").strip() or None  # required on slash; prefix may still pass langs in text
 
         # Prefix-style: ,tr es hello  /  ,tr es en hola  /  ,tr hello world
         # (rest of message lands in text)
