@@ -113,7 +113,7 @@ def _translate_layout(
     layout = ui.LayoutView(timeout=None)
     container = ui.Container()
 
-    title = "<a:messages:1539180118801383424> **Translation**"
+    title = "<a:messages:1539180118801383424>  **Translation**"
     direction = f"-# {from_label} → {to_label}"
     orig = (original or "").strip()
     if len(orig) > 1800:
@@ -123,11 +123,11 @@ def _translate_layout(
         trans = trans[:1797] + "..."
 
     # Title, direction, original — no separator between these
-    container.add_item(ui.TextDisplay(f"{title}\n{direction}\n\n{orig}"))
+    orig_block = f"```{orig}```"
+    container.add_item(ui.TextDisplay(f"{title}\n{direction}\n\n{orig_block}"))
     container.add_item(_make_separator(visible=True, spacing=1))
-    # Translation blockquote
-    quoted = "> " + trans.replace("\n", "\n> ")
-    container.add_item(ui.TextDisplay(quoted))
+    # Translation in a code block
+    container.add_item(ui.TextDisplay(f"```{trans}```"))
 
     url = _google_translate_url(original, source=source_code, target=target_code)
     try:
@@ -534,7 +534,7 @@ def _transcribe_embed(text: str):
     body = (text or "").strip() or "empty transcript"
     if len(body) > 1900:
         body = body[:1900]
-    return c2(message=f"```\n{body}\n```", footer=f" {_gemini_model()}")
+    return c2(message=f"```{body}```", footer=f" {_gemini_model()}")
 
 
 def _ask_embed(text: str, *, page: int | None = None, total: int | None = None):

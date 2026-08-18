@@ -55,9 +55,15 @@ def c2(
     ``color`` is accepted for call-site compatibility and ignored.
     Footer is set via ``set_footer`` so embed_to_layout inserts a divider
     between the body and the ``-#`` footer line.
+    Code fences are left unwrapped so OCR/transcribe bodies stay intact.
     """
     _ = color
-    embed = discord.Embed(description=body(message) or None)
+    raw = str(message or "")
+    if "```" in raw:
+        description = raw
+    else:
+        description = body(raw) or None
+    embed = discord.Embed(description=description)
     if title:
         embed.title = title
     if author:
