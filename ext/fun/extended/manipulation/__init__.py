@@ -800,12 +800,13 @@ class Manipulation(Package):
                             pass
             return sent
 
-    @quote_command.command(
+    @quote_command.group(
         name="channel",
         aliases=["set", "ch", "destination", "dest"],
-        description="Set the channel where quotes are also posted",
+        description="Set the channel or thread where quotes are also posted",
         example=",quote channel #quotes",
-        usage="[channel|none]",
+        usage="[channel or thread]",
+        invoke_without_command=True,
     )
     @has_permissions(manage_guild=True)
     async def quote_channel(self, ctx: Context, *, target: str = None) -> None:
@@ -816,22 +817,22 @@ class Manipulation(Package):
             return await ctx.normal(
                 f"Quote channel is {mention}\n"
                 f"> -# **set with:** {ctx.cmd('quote channel #channel')} · "
-                f"**clear with:** {ctx.cmd('quote channel none')}"
+                f"**clear with:** {ctx.cmd('quote channel reset')}"
             )
 
         raw = str(target).strip()
-        if raw.lower() in {"none", "off", "clear", "remove", "reset"}:
-            await self.db.execute(
-                "DELETE FROM quote_channels WHERE guild_id = $1",
-                ctx.guild.id,
-            )
-            return await ctx.success("Quote channel cleared")
-
         channel = None
         with contextlib.suppress(Exception):
             channel = await commands.TextChannelConverter().convert(ctx, raw)
         if channel is None:
-            return await ctx.warn("Provide a text channel or `none`")
+            with contextlib.suppress(Exception):
+                channel = await commands.ThreadConverter().convert(ctx, raw)
+        if channel is None:
+            return await ctx.warn(
+                "Provide a channel or thread\n"
+                f"> -# **usage:** {ctx.cmd('quote channel #channel')} · "
+                f"{ctx.cmd('quote channel reset')} to clear"
+            )
 
         await self.db.execute(
             """
@@ -843,6 +844,21 @@ class Manipulation(Package):
             channel.id,
         )
         return await ctx.success(f"Quotes will also post in {channel.mention}")
+
+    @quote_channel.command(
+        name="reset",
+        aliases=["rem", "remove", "delete", "del", "clear", "off"],
+        description="Remove the quote destination channel",
+        example=",quote channel reset",
+    )
+    @commands.has_permissions(manage_guild=True)
+    async def quote_channel_reset(self, ctx: Context) -> None:
+        await self._ensure_quote_schema()
+        await self.db.execute(
+            "DELETE FROM quote_channels WHERE guild_id = $1",
+            ctx.guild.id,
+        )
+        return await ctx.success("Quote channel cleared")
 
     @hybrid(
         name="imagetogif",

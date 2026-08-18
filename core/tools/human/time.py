@@ -88,27 +88,37 @@ def discord_ts(value, style: str = "R") -> str:
 
 
 def discord_footer_date(value, *, fallback: str = "Unknown") -> str:
-    """Format a timestamp like Discord message headers.
+    """Format a timestamp like Discord message headers in the *viewer's* local time.
 
-    - Same calendar day (UTC): ``Today at 14:32``
-    - Previous calendar day: ``Yesterday at 14:32``
-    - Older: ``09/08/2026, 00:30`` (DD/MM/YYYY, HH:MM)
+    Uses Discord timestamp markdown so each client renders the correct local clock
+    (fixes footers showing UTC and appearing an hour behind in BST, etc.).
+
+    - Same calendar day (UTC day used only for Today/Yesterday label choice):
+      ``Today at <t:UNIX:t>``
+    - Previous day: ``Yesterday at <t:UNIX:t>``
+    - Older: ``<t:UNIX:f>``
     """
     dt = parse_dt(value)
     if dt is None:
         if isinstance(value, str) and value.strip() and not _ISO_RE.match(value.strip()):
             return value.strip()
         return fallback
-    dt = dt.astimezone(datetime.timezone.utc)
+    # Aware UTC instant for Discord unix stamp
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=datetime.timezone.utc)
+    else:
+        dt = dt.astimezone(datetime.timezone.utc)
+    unix = int(dt.timestamp())
+    # Today/Yesterday labels use local-ish day: compare in UTC is imperfect for labels
+    # but the clock itself is always client-localized via <t:...:t>
     now = datetime.datetime.now(tz=datetime.timezone.utc)
     day = dt.date()
     today = now.date()
-    time_str = dt.strftime("%H:%M")
     if day == today:
-        return f"Today at {time_str}"
+        return f"Today at <t:{unix}:t>"
     if day == today - datetime.timedelta(days=1):
-        return f"Yesterday at {time_str}"
-    return dt.strftime("%d/%m/%Y, %H:%M")
+        return f"Yesterday at <t:{unix}:t>"
+    return f"<t:{unix}:f>"
 
 
 def duration(value: int, ms: bool = True) -> str:
