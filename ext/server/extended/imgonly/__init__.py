@@ -9,7 +9,7 @@ from core.managers.permissions import has_permissions
 class ImgonlyCommands(Package):
     """image-only channel management"""
 
-    async def cog_load(self) -> None:
+    async def _ensure_schema(self) -> None:
         await self.db.execute(
             """CREATE TABLE IF NOT EXISTS image_only (
                 guild_id BIGINT NOT NULL,
@@ -26,6 +26,9 @@ class ImgonlyCommands(Package):
                 PRIMARY KEY (guild_id, channel_id)
             )"""
         )
+
+    async def cog_load(self) -> None:
+        await self._ensure_schema()
 
     @hybrid(
         name="imgonly",
@@ -47,6 +50,7 @@ class ImgonlyCommands(Package):
     @has_permissions(manage_guild=True)
     async def imgonly_remove(self, ctx, channel: Optional[TextChannel] = None):
         """un-gallery a channel"""
+        await self._ensure_schema()
         channel = channel or (
             ctx.channel if isinstance(ctx.channel, TextChannel) else None
         )
@@ -72,6 +76,7 @@ class ImgonlyCommands(Package):
     @has_permissions(manage_guild=True)
     async def imgonly_add(self, ctx, channel: Optional[TextChannel] = None):
         """make a gallery channel"""
+        await self._ensure_schema()
         channel = channel or (
             ctx.channel if isinstance(ctx.channel, TextChannel) else None
         )
