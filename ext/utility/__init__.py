@@ -378,12 +378,20 @@ def _build_delete_container(snipe: dict, *, accent: int | None = None) -> ui.Con
     else:
         container.add_item(ui.TextDisplay("> -# no text"))
 
-    media = (snipe.get("attachments") or snipe.get("stickers") or [None])[0]
-    if media:
+    urls = []
+    for link in (snipe.get("attachments") or []):
+        if link:
+            urls.append(str(link))
+    for link in (snipe.get("stickers") or []):
+        if link and str(link) not in urls:
+            urls.append(str(link))
+    if urls:
         try:
-            container.add_item(ui.MediaGallery(discord.MediaGalleryItem(str(media))))
+            items = [discord.MediaGalleryItem(url) for url in urls[:10]]
+            container.add_item(ui.MediaGallery(*items))
         except Exception:
-            container.add_item(ui.TextDisplay(f"[attachment]({media})"))
+            for url in urls[:5]:
+                container.add_item(ui.TextDisplay(f"[attachment]({url})"))
     return container
 
 
