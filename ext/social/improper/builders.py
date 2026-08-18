@@ -15,6 +15,7 @@ from discord import ui
 
 from core.discord.ctx import Context
 from core.discord.hybrid import hybrid
+from core.managers.permissions import has_permissions
 
 if TYPE_CHECKING:
     from core.vain import Vain
@@ -1790,6 +1791,7 @@ async def register_builders(bot: "Vain") -> None:
         description="Interactive embed builder with live preview. Approve DMs the script.",
         example=",embedbuilder",
     )
+    @has_permissions(manage_messages=True)
     async def _run_eb(ctx: Context):
         accent = getattr(ctx.bot, "color", None) or 0x2B2D31
         builder = EmbedBuilderView(ctx.author.id, accent=int(accent))
@@ -1806,6 +1808,7 @@ async def register_builders(bot: "Vain") -> None:
         description="Interactive Components V2 container builder with live preview. Approve DMs the script.",
         example=",containerbuilder",
     )
+    @has_permissions(manage_messages=True)
     async def _run_cb(ctx: Context):
         
         accent = getattr(ctx.bot, "color", None) or 0x2B2D31
