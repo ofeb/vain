@@ -522,7 +522,7 @@ class Utility(commands.Cog):
             ("Translate this message", self.ctx_translate),
             ("Transcribe this message", self.ctx_transcribe),
             ("Extract Text (OCR)", self.ctx_ocr),
-            ("Ask this message", self.ctx_ask),
+            ("Ask AI about this message", self.ctx_ask),
         )
         for name, callback in specs:
             with contextlib.suppress(Exception):
@@ -533,7 +533,7 @@ class Utility(commands.Cog):
         self._ensure_hybrid_contexts()
 
     def _ensure_hybrid_contexts(self) -> None:
-        names = ("ask", "translate", "ocr", "transcribe")
+        names = ("ask", "translate", "ocr")
         for name in names:
             cmd = self.bot.tree.get_command(name)
             if cmd is None:
@@ -851,15 +851,11 @@ class Utility(commands.Cog):
         embed = panel_embed(lines=lines, timestamp=False)
         return await ctx.send(embed=embed)
 
-    @hybrid(
+    @commands.command(
         name="transcribe",
+        aliases=["ts", "transcript"],
         description="Transcribe a Discord voice message",
-        example=",transcribe",
-        guilds=True,
-        dms=True,
-        groupchats=True,
     )
-    @describe(message="Message with a voice attachment")
     async def transcribe(self, ctx: Context, message: discord.Message = None) -> None:
         voice = None
         source = None
