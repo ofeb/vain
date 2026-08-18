@@ -872,6 +872,7 @@ class Utility(commands.Cog):
     async def translate(
         self,
         ctx: Context,
+        *,
         text: str = None,
         to: str = None,
         source: str = None,
