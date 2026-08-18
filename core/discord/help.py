@@ -166,7 +166,6 @@ _COG_MAP: dict[str, str] = {
     "Fun":         "Fun",
     "Roleplay":    "Roleplay",
     "Manipulation":"Fun",
-    "AI":           "Fun",
     "Uwulock":     "Fun",
     
     "Misc":        "Fun",
