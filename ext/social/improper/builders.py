@@ -1782,7 +1782,7 @@ class ContainerBuilderView(_BaseBuilder):
     header = ""
 
 
-async def register_builders(bot: "Vain") -> None:
+async def register_builders(bot: "Vain", cog=None) -> None:
     """Register ,embedbuilder / ,containerbuilder hybrid commands on the bot."""
 
     @hybrid(
@@ -1828,5 +1828,8 @@ async def register_builders(bot: "Vain") -> None:
         if existing is not None:
             bot.remove_command(existing.name)
 
-    bot.add_command(_run_eb)
-    bot.add_command(_run_cb)
+    if cog is None:
+        cog = bot.get_cog("Snipe")
+    for cmd in (_run_eb, _run_cb):
+        cmd.cog = cog
+        bot.add_command(cmd)

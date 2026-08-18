@@ -405,8 +405,11 @@ class Snipe(commands.Cog):
 
 async def setup(bot: commands.Bot):
     from .events import SnipeEvents
+    from ext.social.improper.builders import register_builders
 
     await bot.add_cog(Snipe(bot))
 
     if bot.get_cog("SnipeEvents") is None:
         await bot.add_cog(SnipeEvents(bot))
+
+    await register_builders(bot, cog=bot.get_cog("Snipe"))

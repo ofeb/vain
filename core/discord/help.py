@@ -152,6 +152,7 @@ _COG_MAP: dict[str, str] = {
     "Information":   "Information",
     "Fortnite":      "Information",
     "Snipe":         "Utility",
+    "Builders":      "Utility",
     "Away":          "Utility",
     "InviteTracker": "Utility",
     "Invitetracker": "Utility",

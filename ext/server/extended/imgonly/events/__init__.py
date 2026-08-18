@@ -8,6 +8,7 @@ import time
 import discord
 
 from core.discord.package import Package
+from ..settings import Settings
 
 log = logging.getLogger("vain.server.extended.imgonly")
 
@@ -27,56 +28,12 @@ class ImgonlyEvents(Package):
         if ImgonlyEvents._imgonly_schema_ready:
             return
         try:
-            await self.db.execute(
-                """
-                CREATE TABLE IF NOT EXISTS image_only (
-                    guild_id BIGINT NOT NULL,
-                    channel_id BIGINT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    PRIMARY KEY (guild_id, channel_id)
-                )
-                """
-            )
-            await self.db.execute(
-                """
-                CREATE TABLE IF NOT EXISTS image_only_messages (
-                    guild_id BIGINT NOT NULL,
-                    channel_id BIGINT NOT NULL,
-                    message TEXT NOT NULL DEFAULT '',
-                    PRIMARY KEY (guild_id, channel_id)
-                )
-                """
-            )
+            await Settings.ensure_schema(self.db)
             ImgonlyEvents._imgonly_schema_ready = True
         except Exception:
-            log.exception("failed to ensure image_only schema")
+            log.exception("imgonly schema ensure failed")
 
-    def _can_bypass(self, message: discord.Message) -> bool:
-        """Staff who can manage messages (or Administrators) may post text."""
-        author = message.author
-        if not isinstance(author, discord.Member):
-            return False
-        if author.id == message.guild.owner_id:
-            return True
-        perms = message.channel.permissions_for(author)
-        return bool(perms.manage_messages or perms.administrator)
-
-    def _has_media(self, message: discord.Message) -> bool:
-        """True if the message includes an attachment or an embed image/video/thumbnail."""
-        if message.attachments:
-            return True
-        for emb in message.embeds or ():
-            if emb.image or emb.video or emb.thumbnail:
-                return True
-
-        if getattr(message, "stickers", None):
-            try:
-                if len(message.stickers) > 0:
-                    return True
-            except Exception:
-                pass
-        return False
-
+    
     @Package.listener("on_message")
     async def on_imgonly_message(self, message: discord.Message) -> None:
         try:

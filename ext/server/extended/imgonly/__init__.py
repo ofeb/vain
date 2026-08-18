@@ -6,26 +6,14 @@ from core.discord.package import Package
 from core.discord.hybrid import hybrid, describe
 
 from core.managers.permissions import has_permissions
+from .settings import Settings
+
+
 class ImgonlyCommands(Package):
     """image-only channel management"""
 
     async def _ensure_schema(self) -> None:
-        await self.db.execute(
-            """CREATE TABLE IF NOT EXISTS image_only (
-                guild_id BIGINT NOT NULL,
-                channel_id BIGINT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (guild_id, channel_id)
-            )"""
-        )
-        await self.db.execute(
-            """CREATE TABLE IF NOT EXISTS image_only_messages (
-                guild_id BIGINT NOT NULL,
-                channel_id BIGINT NOT NULL,
-                message TEXT NOT NULL DEFAULT '',
-                PRIMARY KEY (guild_id, channel_id)
-            )"""
-        )
+        await Settings.ensure_schema(self.db)
 
     async def cog_load(self) -> None:
         await self._ensure_schema()
@@ -56,14 +44,8 @@ class ImgonlyCommands(Package):
         )
         if channel is None:
             return await ctx.warn("Provide a **text channel** (or run this in one)")
-        await self.db.execute(
-            """DELETE FROM image_only WHERE guild_id = $1 AND channel_id = $2""",
-            ctx.guild.id, channel.id,
-        )
-        await self.db.execute(
-            """DELETE FROM image_only_messages WHERE guild_id = $1 AND channel_id = $2""",
-            ctx.guild.id, channel.id,
-        )
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        await settings.remove(channel.id)
         return await ctx.success(f"removed {channel.mention} from gallery channels")
 
     @imgonly.command(
@@ -82,10 +64,8 @@ class ImgonlyCommands(Package):
         )
         if channel is None:
             return await ctx.warn("Provide a **text channel** (or run this in one)")
-        await self.db.execute(
-            """INSERT INTO image_only (guild_id, channel_id) VALUES ($1, $2) ON CONFLICT(guild_id, channel_id) DO NOTHING""",
-            ctx.guild.id, channel.id,
-        )
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        await settings.add(channel.id)
         return await ctx.success(f"{channel.mention} is now a gallery channel")
 
     @imgonly.command(
@@ -104,20 +84,14 @@ class ImgonlyCommands(Package):
         if channel is None:
             return await ctx.warn("Provide a **text channel** (or run this in one)")
 
+        settings = await Settings.fetch(self.bot, ctx.guild)
         if message is None:
-            row = await self.db.fetchrow(
-                """SELECT message FROM image_only_messages WHERE guild_id = $1 AND channel_id = $2""",
-                ctx.guild.id, channel.id,
-            )
-            if row and row.message:
-                return await ctx.send(f"Current message for {channel.mention}:\n> {row.message}")
+            current = await settings.get_message(channel.id)
+            if current:
+                return await ctx.send(f"Current message for {channel.mention}:\n> {current}")
             return await ctx.warn(f"No custom message set for {channel.mention}")
 
-        await self.db.execute(
-            """INSERT INTO image_only_messages (guild_id, channel_id, message) VALUES ($1, $2, $3)
-               ON CONFLICT(guild_id, channel_id) DO UPDATE SET message = $3""",
-            ctx.guild.id, channel.id, message,
-        )
+        await settings.set_message(channel.id, message)
         return await ctx.success(f"Set message for {channel.mention}\n> {message}")
 
     @imgonly.command(
@@ -127,17 +101,16 @@ class ImgonlyCommands(Package):
     @has_permissions(manage_guild=True)
     async def imgonly_list(self, ctx):
         """show gallery channels"""
-        data = await self.db.fetch(
-            """SELECT channel_id FROM image_only WHERE guild_id = $1""", ctx.guild.id
-        )
+        settings = await Settings.fetch(self.bot, ctx.guild)
         dead = []
         lines = []
-        for row in data:
-            ch = ctx.guild.get_channel(row.channel_id)
+        for row in settings.rows:
+            cid = int(row["channel_id"])
+            ch = ctx.guild.get_channel(cid)
             if not ch:
-                dead.append(row.channel_id)
+                dead.append(cid)
                 continue
-            lines.append(f"{ch.mention} (`{row.channel_id}`)")
+            lines.append(f"{ch.mention} (`{cid}`)")
         numbered = [f"`{i}` {ln}" for i, ln in enumerate(lines, start=1)]
         embed = Embed(title="Image Only Channels").set_author(
             name=str(ctx.author), icon_url=ctx.author.display_avatar.url
