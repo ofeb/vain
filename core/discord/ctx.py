@@ -685,6 +685,8 @@ class Context(commands.Context):
         if should_container:
             try:
                 if embed is not None and not embeds:
+                    with contextlib.suppress(Exception):
+                        embed.color = None
                     layout = embed_to_layout(
                         embed,
                         view=view if isinstance(view, discord.ui.View) else None,

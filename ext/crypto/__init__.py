@@ -416,6 +416,7 @@ class Crypto(commands.Cog):
             )
             with contextlib.suppress(Exception):
                 from core.discord.ctx import embed_to_layout
+                embed.color = None
                 layout = embed_to_layout(embed)
                 await channel.send(view=layout)
         await ctx.success(
@@ -878,8 +879,9 @@ class Crypto(commands.Cog):
                     )
                     try:
                         from core.discord.ctx import embed_to_layout
-                layout = embed_to_layout(embed)
-                await channel.send(view=layout)
+                        embed.color = None
+                        layout = embed_to_layout(embed)
+                        await channel.send(view=layout)
                     except discord.HTTPException as exc:
                         if exc.status == 429:
                             retry = float(getattr(exc, "retry_after", 2.0) or 2.0)
