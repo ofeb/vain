@@ -6,6 +6,7 @@ from discord import Role, Color
 from core.discord.package import Package
 from core.tools.color import get_dominant_color
 from core.tools.checks import is_booster
+from core.discord.views.embed import c2
 from config import color, emojis
 import aiohttp
 import asyncio
@@ -13,8 +14,9 @@ import random
 
 
 def _confirm_embed(message: str) -> discord.Embed:
-    return discord.Embed(
-        description=f"> {message}",
+    return c2(
+        message=message or "Are you sure you want to do this?",
+        timestamp=False,
     )
 
 
