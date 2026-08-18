@@ -16,21 +16,21 @@ DEFAULT_INVOKE_DM: dict[str, str] = {
         "{description: > **Server:** {guild.name}\n"
         "> **Staff:** {moderator.mention}\n"
         "> **Reason:** {reason}\n"
-        "-# Case **#{case_id}**}$v{color: #E07A7A}"
+        "-# Case **#{case_id}**}"
     ),
     "kick": (
         "{embed}$v{title: You have been kicked}$v"
         "{description: > **Server:** {guild.name}\n"
         "> **Staff:** {moderator.mention}\n"
         "> **Reason:** {reason}\n"
-        "-# Case **#{case_id}**}$v{color: #F5D76E}"
+        "-# Case **#{case_id}**}"
     ),
     "softban": (
         "{embed}$v{title: You have been softbanned}$v"
         "{description: > **Server:** {guild.name}\n"
         "> **Staff:** {moderator.mention}\n"
         "> **Reason:** {reason}\n"
-        "-# Case **#{case_id}**}$v{color: #E07A7A}"
+        "-# Case **#{case_id}**}"
     ),
     "tempban": (
         "{embed}$v{title: You have been temporarily banned}$v"
@@ -38,138 +38,139 @@ DEFAULT_INVOKE_DM: dict[str, str] = {
         "> **Staff:** {moderator.mention}\n"
         "> **Reason:** {reason}\n"
         "> **Duration:** {duration}\n"
-        "-# Case **#{case_id}**}$v{color: #E07A7A}"
+        "-# Case **#{case_id}**}"
     ),
     "warn": (
         "{embed}$v{title: You received a warning}$v"
         "{description: > **Server:** {guild.name}\n"
         "> **Staff:** {moderator.mention}\n"
         "> **Reason:** {reason}\n"
-        "-# Case **#{case_id}**}$v{color: #F5D76E}"
+        "-# Case **#{case_id}**}"
     ),
     "jail": (
         "{embed}$v{title: You have been jailed}$v"
         "{description: > **Server:** {guild.name}\n"
         "> **Staff:** {moderator.mention}\n"
         "> **Reason:** {reason}\n"
-        "-# Case **#{case_id}**}$v{color: #F5D76E}"
+        "-# Case **#{case_id}**}"
     ),
     "unjail": (
         "{embed}$v{title: You have been unjailed}$v"
         "{description: > **Server:** {guild.name}\n"
         "> **Staff:** {moderator.mention}\n"
-        "> **Reason:** {reason}}$v{color: #A8D8A8}"
+        "> **Reason:** {reason}}"
     ),
     "mute": (
         "{embed}$v{title: You have been muted}$v"
         "{description: > **Server:** {guild.name}\n"
         "> **Staff:** {moderator.mention}\n"
         "> **Reason:** {reason}\n"
-        "-# Case **#{case_id}**}$v{color: #F5D76E}"
+        "-# Case **#{case_id}**}"
     ),
     "unmute": (
         "{embed}$v{title: You have been unmuted}$v"
         "{description: > **Server:** {guild.name}\n"
         "> **Staff:** {moderator.mention}\n"
-        "> **Reason:** {reason}}$v{color: #A8D8A8}"
+        "> **Reason:** {reason}}"
     ),
     "timeout": (
         "{embed}$v{title: You have been timed out}$v"
         "{description: > **Server:** {guild.name}\n"
         "> **Staff:** {moderator.mention}\n"
         "> **Reason:** {reason}\n"
-        "> **Duration:** {duration}}$v{color: #F5D76E}"
+        "> **Duration:** {duration}}"
     ),
     "untimeout": (
         "{embed}$v{title: Your timeout was removed}$v"
         "{description: > **Server:** {guild.name}\n"
         "> **Staff:** {moderator.mention}\n"
-        "> **Reason:** {reason}}$v{color: #A8D8A8}"
+        "> **Reason:** {reason}}"
     ),
     "unban": (
         "{embed}$v{title: You have been unbanned}$v"
         "{description: > **Server:** {guild.name}\n"
         "> **Staff:** {moderator.mention}\n"
-        "> **Reason:** {reason}}$v{color: #A8D8A8}"
+        "> **Reason:** {reason}}"
     ),
 }
 
 DEFAULT_INVOKE_RESPONSE: dict[str, str] = {
     "ban": (
         "{embed}$v{description: > -# **Banned** {user.mention}\n"
-        "> **Reason:** {reason}}$v{color: #A8D8A8}"
+        "> **Reason:** {reason}}"
     ),
     "kick": (
         "{embed}$v{description: > -# **Kicked** {user.mention}\n"
-        "> **Reason:** {reason}}$v{color: #A8D8A8}"
+        "> **Reason:** {reason}}"
     ),
     "softban": (
         "{embed}$v{description: > -# **Softbanned** {user.mention}\n"
-        "> **Reason:** {reason}}$v{color: #A8D8A8}"
+        "> **Reason:** {reason}}"
     ),
     "tempban": (
         "{embed}$v{description: > -# **Tempbanned** {user.mention}\n"
         "> **Duration:** {duration}\n"
-        "> **Reason:** {reason}}$v{color: #A8D8A8}"
+        "> **Reason:** {reason}}"
     ),
     "warn": (
         "{embed}$v{description: > -# **Warned** {user.mention}\n"
-        "> **Reason:** {reason}}$v{color: #A8D8A8}"
+        "> **Reason:** {reason}}"
     ),
     "jail": (
         "{embed}$v{description: > -# **Jailed** {user.mention}\n"
-        "> **Reason:** {reason}}$v{color: #A8D8A8}"
+        "> **Reason:** {reason}}"
     ),
     "unjail": (
         "{embed}$v{description: > -# **Unjailed** {user.mention}\n"
-        "> **Reason:** {reason}}$v{color: #A8D8A8}"
+        "> **Reason:** {reason}}"
     ),
     "mute": (
         "{embed}$v{description: > -# **Muted** {user.mention}\n"
-        "> **Reason:** {reason}}$v{color: #A8D8A8}"
+        "> **Reason:** {reason}}"
     ),
     "unmute": (
         "{embed}$v{description: > -# **Unmuted** {user.mention}\n"
-        "> **Reason:** {reason}}$v{color: #A8D8A8}"
+        "> **Reason:** {reason}}"
     ),
     "timeout": (
         "{embed}$v{description: > -# **Timed out** {user.mention}\n"
         "> **Duration:** {duration}\n"
-        "> **Reason:** {reason}}$v{color: #A8D8A8}"
+        "> **Reason:** {reason}}"
     ),
     "untimeout": (
         "{embed}$v{description: > -# **Timeout removed** {user.mention}\n"
-        "> **Reason:** {reason}}$v{color: #A8D8A8}"
+        "> **Reason:** {reason}}"
     ),
     "unban": (
         "{embed}$v{description: > -# **Unbanned** {user.mention}\n"
-        "> **Reason:** {reason}}$v{color: #A8D8A8}"
+        "> **Reason:** {reason}}"
     ),
     "hardban": (
         "{embed}$v{description: > -# **Hardbanned** {user.mention}\n"
-        "> **Reason:** {reason}}$v{color: #A8D8A8}"
+        "> **Reason:** {reason}}"
     ),
     "imute": (
         "{embed}$v{description: > -# **Image muted** {user.mention}\n"
-        "> **Reason:** {reason}}$v{color: #A8D8A8}"
+        "> **Reason:** {reason}}"
     ),
     "iunmute": (
         "{embed}$v{description: > -# **Image unmuted** {user.mention}\n"
-        "> **Reason:** {reason}}$v{color: #A8D8A8}"
+        "> **Reason:** {reason}}"
     ),
     "rmute": (
         "{embed}$v{description: > -# **Reaction muted** {user.mention}\n"
-        "> **Reason:** {reason}}$v{color: #A8D8A8}"
+        "> **Reason:** {reason}}"
     ),
     "runmute": (
         "{embed}$v{description: > -# **Reaction unmuted** {user.mention}\n"
-        "> **Reason:** {reason}}$v{color: #A8D8A8}"
+        "> **Reason:** {reason}}"
     ),
 }
 
+
 def build_modlog_embed(
     *,
-    color: int,
+    color: int | None = None,
     action: str,
     target_label: str,
     moderator_label: str,
@@ -177,6 +178,8 @@ def build_modlog_embed(
     case_id: int | None = None,
     extra: str | None = None,
 ) -> discord.Embed:
+    """Build a compact C2-style modlog embed (no colour)."""
+    _ = color
     lines = [
         f"**Action**: `{action}`",
         f"**Target**: {target_label}",
@@ -187,24 +190,57 @@ def build_modlog_embed(
         lines.append(extra)
     footer = f"Case **#{case_id}**" if case_id is not None else None
     return panel_embed(
-        color=color,
+        color=None,
         lines=lines,
         footer=footer,
     )
 
+
 def build_security_log_embed(
     *,
-    color: int,
+    color: int | None = None,
     title: str,
     lines: list[str],
     footer: str | None = None,
 ) -> discord.Embed:
+    """Build a compact C2-style security log embed (no colour)."""
+    _ = color
     return panel_embed(
-        color=color,
+        color=None,
         title=title,
         lines=lines,
         footer=footer,
     )
+
+
+async def send_c2_embed(
+    channel: discord.abc.Messageable,
+    embed: discord.Embed,
+    *,
+    content: str | None = None,
+    allowed_mentions: discord.AllowedMentions | None = None,
+) -> discord.Message | None:
+    """Send an embed as a Components V2 container (no accent colour).
+
+    Falls back to a classic embed if the channel rejects LayoutView.
+    """
+    from core.discord.ctx import embed_to_layout
+
+    mentions = allowed_mentions if allowed_mentions is not None else discord.AllowedMentions.none()
+    try:
+        layout = embed_to_layout(embed)
+        kwargs: dict = {"view": layout, "allowed_mentions": mentions}
+        if content is not None:
+            kwargs["content"] = content
+        return await channel.send(**kwargs)
+    except Exception:
+        kwargs = {"embed": embed, "allowed_mentions": mentions}
+        if content is not None:
+            kwargs["content"] = content
+        with contextlib.suppress(discord.Forbidden, discord.HTTPException):
+            return await channel.send(**kwargs)
+    return None
+
 
 async def fetch_invocation(db, guild_id: int, command: str):
     if getattr(db, "pool", None) is None:
@@ -215,6 +251,7 @@ async def fetch_invocation(db, guild_id: int, command: str):
         guild_id,
         command,
     )
+
 
 async def send_invoke_dm(
     bot: Vain,
@@ -247,6 +284,7 @@ async def send_invoke_dm(
         await bot.send_embed(member, script, **kwargs)
         return True
     return False
+
 
 async def send_invoke_response(
     bot: Vain,
