@@ -118,7 +118,7 @@ class Purge(Package):
         name="purge",
         aliases=["c", "clear", "p"],
         example=",purge 100",
-        description="Purge messages from chat",
+        description="Purge messages from chat (default 30, max 1000)",
         invoke_without_command=True,
     )
     @has_permissions(manage_messages=True)
@@ -546,10 +546,42 @@ class Purge(Package):
         deleted = await self.delete_messages(to_delete)
         return await self._success(ctx, purge_type="upto", amount=deleted)
 
+    async def _do_selfpurge(self, ctx: Context, search: Optional[int] = None):
+        amount = self._clamp_amount(search)
+        author_id = ctx.author.id
+
+        def check(message: Message) -> bool:
+            return message.author.id == author_id
+
+        messages = await self._collect(ctx, check, amount)
+        if not messages:
+            raise CommandError("No purgable messages found")
+        to_delete = self._with_invoke(ctx, messages)
+        deleted = await self.delete_messages(to_delete)
+        return await self._success(ctx, purge_type="self", amount=deleted)
+
+    @purge.command(
+        name="self",
+        aliases=["me", "own"],
+        example=",purge self 30",
+        description="Purge your own messages (default 30, no permission required)",
+    )
+    async def purge_self(self, ctx: Context, search: Optional[int] = None):
+        return await self._do_selfpurge(ctx, search)
+
+    @command(
+        name="selfpurge",
+        aliases=["sme", "me"],
+        description="Purge your own messages (default 30, no permission required)",
+        example=",selfpurge 30",
+    )
+    async def selfpurge(self, ctx: Context, search: Optional[int] = None):
+        return await self._do_selfpurge(ctx, search)
+
     @command(
         name="botclear",
         aliases=["botpurge", "bc", "bp"],
-        description="Clear recent messages sent by any bots (default 30)",
+        description="Clear recent messages sent by any bots (default 30, max 1000)",
         example=",botclear 30",
     )
     @has_permissions(manage_messages=True)
