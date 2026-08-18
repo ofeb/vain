@@ -445,26 +445,41 @@ class Utility(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self._menus: list[app_commands.ContextMenu] = []
-        self._register_menus()
 
-    def _register_menus(self) -> None:
-        menus = [
-            app_commands.ContextMenu(name="Quote this message", callback=self.ctx_quote),
-            app_commands.ContextMenu(name="Translate this message", callback=self.ctx_translate),
-            app_commands.ContextMenu(name="Transcribe this message", callback=self.ctx_transcribe),
-            app_commands.ContextMenu(name="Extract Text (OCR)", callback=self.ctx_ocr),
-        ]
-        for menu in menus:
-            try:
-                self.bot.tree.add_command(menu)
-                self._menus.append(menu)
-            except Exception:
-                pass
+    def _make_menu(self, name: str, callback) -> app_commands.ContextMenu:
+        menu = app_commands.ContextMenu(
+            name=name,
+            callback=callback,
+            type=discord.AppCommandType.message,
+        )
+        try:
+            app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)(menu)
+        except Exception:
+            pass
+        try:
+            app_commands.allowed_installs(guilds=True, users=True)(menu)
+        except Exception:
+            pass
+        return menu
+
+    async def cog_load(self) -> None:
+        specs = (
+            ("Quote this message", self.ctx_quote),
+            ("Translate this message", self.ctx_translate),
+            ("Transcribe this message", self.ctx_transcribe),
+            ("Extract Text (OCR)", self.ctx_ocr),
+        )
+        for name, callback in specs:
+            with contextlib.suppress(Exception):
+                self.bot.tree.remove_command(name, type=discord.AppCommandType.message)
+            menu = self._make_menu(name, callback)
+            self.bot.tree.add_command(menu)
+            self._menus.append(menu)
 
     async def cog_unload(self) -> None:
         for menu in self._menus:
             with contextlib.suppress(Exception):
-                self.bot.tree.remove_command(menu.name, type=menu.type)
+                self.bot.tree.remove_command(menu.name, type=discord.AppCommandType.message)
         self._menus.clear()
 
     def _gemini(self) -> GeminiClient:
