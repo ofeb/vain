@@ -732,7 +732,7 @@ class Utility(commands.Cog):
             return
         if _is_gif(data, filename):
             await interaction.followup.send(
-                "you **can't** OCR a **gif**\n> -# use an **image** instead of a gif",
+                "you **can't** OCR a **gif**\n> -# try using an **image** instead of a gif",
                 ephemeral=True,
             )
             return
@@ -985,7 +985,7 @@ class Utility(commands.Cog):
             return await ctx.warn(msg)
 
         if _is_gif(data, filename):
-            return await ctx.warn("you **can't** OCR a **gif**\n> -# use an **image** instead of a gif")
+            return await ctx.warn("you **can't** OCR a **gif**\n> -# try using an **image** instead of a gif")
 
         async with ctx.typing():
             try:
