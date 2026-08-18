@@ -985,7 +985,7 @@ class Utility(commands.Cog):
             return await ctx.warn(msg)
 
         if _is_gif(data, filename):
-            return await ctx.warn("you **can't** OCR a **gif**, please try using an image!")
+            return await ctx.warn("you **can't** OCR a **gif**\n> -# use an **image** instead of a gif")
 
         async with ctx.typing():
             try:
