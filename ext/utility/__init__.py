@@ -123,11 +123,11 @@ def _translate_layout(
         trans = trans[:1797] + "..."
 
 
-    orig_block = f"```{orig}```"
+    orig_block = f"`{orig}`"
     container.add_item(ui.TextDisplay(f"{title}\n{direction}\n\n{orig_block}"))
     container.add_item(_make_separator(visible=True, spacing=1))
 
-    container.add_item(ui.TextDisplay(f"```{trans}```"))
+    container.add_item(ui.TextDisplay(f"`{trans}`"))
 
     url = _google_translate_url(original, source=source_code, target=target_code)
     try:
@@ -532,6 +532,7 @@ def _ocr_embed(text: str):
 
 def _transcribe_embed(text: str):
     body = (text or "").strip() or "empty transcript"
+    body = body.replace(">", "")
     if len(body) > 1900:
         body = body[:1900]
     return c2(message=f"```{body}```", footer=f" {_gemini_model()}")
@@ -1007,7 +1008,7 @@ class Utility(commands.Cog):
         if not body_text:
             return await ctx.warn(
                 f"Provide text or reply to a message\n"
-                f"> -# **usage:** {ctx.cmd('translate text:hola to:en')} · {ctx.cmd('tr es hello')}"
+                f"> -# **usage:** {ctx.cmd('translate <from> <to> <text>')} or {ctx.cmd('tr <to> hello')}"
             )
 
         text = body_text
