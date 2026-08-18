@@ -97,10 +97,20 @@ def _build_caption_strip(text: str, width: int, size: int, text_width: int, emoj
     from PIL import Image, ImageDraw, ImageFont
 
     text_value = (text or "...").strip() or "..."
-    font_path = _query_caption_font()
-    try:
-        font = ImageFont.truetype(str(font_path), size=size)
-    except Exception:
+    font = None
+    from pathlib import Path as _P
+    for path in (
+        _caption_font_path(),
+        _P("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
+        _P("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+        _P("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"),
+    ):
+        try:
+            font = ImageFont.truetype(str(path), size=size)
+            break
+        except Exception:
+            continue
+    if font is None:
         font = ImageFont.load_default()
 
     emoji_size = max(12, int(size * 0.95))
@@ -199,19 +209,19 @@ import re as _re
 _CUSTOM_EMOJI_RE = _re.compile(r"<(a?):([A-Za-z0-9_~]+):(\d+)>")
 # Broad unicode emoji coverage (Discord/Twemoji style)
 _UNICODE_EMOJI_RE = _re.compile(
-    "(?:"
-    r"[\U0001F1E6-\U0001F1FF]{2}"
-    r"|[\U0001F300-\U0001FAFF]"
-    r"|[\U00002600-\U000027BF]"
-    r"|[\U0001F900-\U0001F9FF]"
-    r"|[\U0001F600-\U0001F64F]"
-    r"|[\U0001F680-\U0001F6FF]"
-    r"|[\u2600-\u26FF]"
-    r"|[\u2700-\u27BF]"
-    r"|\u200D"
-    r"|\uFE0F"
-    r"|[\U0001F000-\U0001F02F]"
-    r")+"
+    r"(?:"
+    r"[🇦-🇿]{2}"  # flags
+    r"|[🌀-🫿]️?"
+    r"|[😀-🙏]️?"
+    r"|[🚀-🛿]️?"
+    r"|[🤀-🧿]️?"
+    r"|[☀-⛿]️?"
+    r"|[✀-➿]️?"
+    r"|[🀀-🀯]️?"
+    r")"
+    r"(?:‍"
+    r"(?:[🌀-🫿]|[☀-➿]|[🀀-🧿])️?"
+    r")*"
 )
 
 
@@ -260,6 +270,31 @@ def twemoji_url(seq: str) -> str:
     return f"https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/{cp}.png"
 
 
+def twemoji_urls(seq: str) -> list[str]:
+    """Candidate Twemoji URLs (with/without FE0F variants)."""
+    cps_full = []
+    cps_nofe0f = []
+    for ch in seq:
+        o = ord(ch)
+        cps_full.append(f"{o:x}")
+        if o != 0xFE0F:
+            cps_nofe0f.append(f"{o:x}")
+    urls = []
+    for cp in ( "-".join(cps_nofe0f), "-".join(cps_full) ):
+        if not cp:
+            continue
+        urls.append(f"https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/{cp}.png")
+        urls.append(f"https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/{cp}.png")
+    # dedupe
+    seen = set()
+    out = []
+    for u in urls:
+        if u not in seen:
+            seen.add(u)
+            out.append(u)
+    return out
+
+
 def custom_emoji_url(token: str) -> tuple[str, bool]:
     m = _CUSTOM_EMOJI_RE.match(token)
     if not m:
@@ -281,14 +316,14 @@ async def fetch_emoji_images(text: str, session=None) -> dict[str, bytes]:
     """Download Twemoji + Discord custom emoji assets used in text."""
     import aiohttp
 
-    needed: dict[str, str] = {}
+    needed: dict[str, list[str]] = {}
     for kind, val in tokenize_emojis(text):
         if kind == "unicode":
-            needed[val] = twemoji_url(val)
+            needed[val] = twemoji_urls(val)
         elif kind == "custom":
             url, _ = custom_emoji_url(val)
             if url:
-                needed[val] = url
+                needed[val] = [url]
     if not needed:
         return {}
 
@@ -301,18 +336,17 @@ async def fetch_emoji_images(text: str, session=None) -> dict[str, bytes]:
         )
     out: dict[str, bytes] = {}
     try:
-        for key, url in needed.items():
-            try:
-                async with session.get(url) as resp:
-                    if resp.status == 200:
-                        data = await resp.read()
-                        if data[:8] != b"\x89PNG\r\n\x1a\n" and data[:3] != b"GIF":
-                            # try twemoji without stripping FE0F failed - try with
-                            if key and key[0] and ord(key[0]) > 0xFF:
-                                pass
-                        out[key] = data
-            except Exception:
-                continue
+        for key, urls in needed.items():
+            for url in urls:
+                try:
+                    async with session.get(url) as resp:
+                        if resp.status == 200:
+                            data = await resp.read()
+                            if data and (data[:8] == b"\x89PNG\r\n\x1a\n" or data[:3] in (b"GIF", b"\xff\xd8")):
+                                out[key] = data
+                                break
+                except Exception:
+                    continue
     finally:
         if own:
             await session.close()

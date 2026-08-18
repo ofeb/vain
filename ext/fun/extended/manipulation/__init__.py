@@ -214,8 +214,10 @@ class Manipulation(Package):
         data = None
         if ctx.message and ctx.message.attachments:
             att = ctx.message.attachments[0]
-            if att.content_type and att.content_type.startswith(("image/", "video/")) or att.filename.lower().endswith(
-                (".png", ".jpg", ".jpeg", ".webp", ".gif")
+            name = (att.filename or "").lower()
+            ctype = (att.content_type or "").lower()
+            if ctype.startswith(("image/", "video/")) or name.endswith(
+                (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp")
             ):
                 data = await att.read()
         if data is None and ctx.message and ctx.message.reference:
@@ -247,8 +249,8 @@ class Manipulation(Package):
             try:
                 emoji_map = await image_ops.fetch_emoji_images(raw)
                 result = await asyncio.to_thread(image_ops.pil_caption, data, raw, emoji_map)
-            except Exception:
-                return await ctx.fail("Failed to caption that media")
+            except Exception as exc:
+                return await ctx.fail(f"Failed to caption that media\n> -# {exc}")
             await ctx.send(file=discord.File(BytesIO(result), filename="caption.gif"))
 
     async def _fetch_media_bytes(self, url: str) -> bytes | None:
