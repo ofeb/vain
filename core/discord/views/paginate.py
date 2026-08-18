@@ -49,6 +49,12 @@ def embed_to_container(
     """
     _ = _accent_from_embed(embed)  
     container = ui.Container()
+    for _attr in ("accent_color", "accent_colour"):
+        if hasattr(container, _attr):
+            try:
+                setattr(container, _attr, None)
+            except Exception:
+                pass
 
     author_name = embed.author.name if embed.author else None
     author_icon = embed.author.icon_url if embed.author else None

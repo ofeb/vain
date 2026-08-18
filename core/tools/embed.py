@@ -1200,6 +1200,13 @@ async def parse_container(raw: str, sendable: bool = False) -> dict:
             container.accent_color = accent
         except Exception:
             pass
+    else:
+        for _attr in ("accent_color", "accent_colour"):
+            if hasattr(container, _attr):
+                try:
+                    setattr(container, _attr, None)
+                except Exception:
+                    pass
 
     if buttons:
         children = list(getattr(container, "children", []) or [])
