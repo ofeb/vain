@@ -371,8 +371,20 @@ def _transcribe_embed(text: str):
     return c2(message=f"```\n{body}\n```", footer=f" {_gemini_model()}")
 
 
-def _ask_embed(text: str):
-    return c2(message=text, footer=f" {_gemini_model()}")
+def _ask_embed(text: str, *, page: int | None = None, total: int | None = None):
+    footer = f" {_gemini_model()}"
+    if page is not None and total is not None and total > 1:
+        footer = f" {_gemini_model()} · {page}/{total}"
+    return c2(message=text, footer=footer)
+
+
+def _ask_pages(answer: str) -> list:
+    chunks = _chunk_text(answer, 1800)
+    total = len(chunks) or 1
+    return [
+        _ask_embed(chunk, page=i + 1, total=total)
+        for i, chunk in enumerate(chunks or [""])
+    ]
 
 
 class Snipe(commands.Cog):
@@ -646,12 +658,9 @@ class Utility(commands.Cog):
         if not answer:
             await interaction.followup.send("No response from AI.", ephemeral=True)
             return
-        pages = _chunk_text(answer, 1800)
-        embeds = [_ask_embed(chunk) for chunk in pages]
-        if len(embeds) == 1:
-            await interaction.followup.send(embed=embeds[0])
-        else:
-            await interaction.followup.send(embeds=embeds[:10])
+        pages = _ask_pages(answer)
+        ctx = await self.bot.get_context(interaction, cls=Context)
+        await send_pages(ctx, pages)
 
     async def ctx_translate(self, interaction: discord.Interaction, message: discord.Message) -> None:
         await interaction.response.defer(thinking=True)
@@ -763,20 +772,8 @@ class Utility(commands.Cog):
                 return await ctx.fail(f"AI request failed\n> -# {exc}")
         if not answer:
             return await ctx.warn("No response from AI")
-        pages = _chunk_text(answer, 1800)
-        embeds = []
-        for i, chunk in enumerate(pages):
-            embeds.append(
-                panel_embed(
-                    title=f"**Q**: · `{qshow}`",
-                    lines=[chunk],
-                    footer=f"Powered by Gemini · {i + 1}/{len(pages)}" if len(pages) > 1 else "Gemini",
-                    timestamp=False,
-                )
-            )
-        if len(embeds) == 1:
-            return await ctx.send(embed=embeds[0])
-        return await ctx.paginate(embeds)
+        pages = _ask_pages(answer)
+        return await send_pages(ctx, pages)
 
     @hybrid(
         name="translate",
