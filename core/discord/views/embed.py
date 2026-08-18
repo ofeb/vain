@@ -47,7 +47,7 @@ def c2(
     title: str | None = None,
     footer: str | None = None,
     author: str | None = None,
-    timestamp: bool = True,
+    timestamp: bool = False,
 ) -> discord.Embed:
     """Build a compact embed that converts to a C2 lookalike on send.
 
@@ -86,7 +86,7 @@ def panel_embed(
     author_icon: str | None = None,
     lines: list[str] | None = None,
     footer: str | None = None,
-    timestamp: bool = True,
+    timestamp: bool = False,
     thumbnail: str | None = None,
     url: str | None = None,
 ) -> discord.Embed:

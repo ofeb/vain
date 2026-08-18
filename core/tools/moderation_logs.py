@@ -193,6 +193,7 @@ def build_modlog_embed(
         color=None,
         lines=lines,
         footer=footer,
+        timestamp=True,
     )
 
 
@@ -210,6 +211,7 @@ def build_security_log_embed(
         title=title,
         lines=lines,
         footer=footer,
+        timestamp=True,
     )
 
 

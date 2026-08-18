@@ -1535,6 +1535,8 @@ class VainHelp(commands.HelpCommand):
         return False
 
     async def _send(self, ctx: Context, embed: Embed, *, view: ui.View | None = None) -> discord.Message:
+        # Help embeds must not carry a timestamp footer when converted to C2
+        embed.timestamp = None
         kw: dict[str, Any] = {}
         if ctx.message and not ctx.interaction:
             kw["reference"] = ctx.message.to_reference(fail_if_not_exists=False)

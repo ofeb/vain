@@ -179,6 +179,7 @@ class ModerationEvents(Package):
             title="Role Changes",
             color=None,
             lines=lines,
+            timestamp=True,
         )
         await send_c2_embed(log_channel, embed)
 
@@ -203,7 +204,8 @@ class ModerationEvents(Package):
                     title="Member Banned",
                     color=None,
                     lines=lines,
-                )
+            timestamp=True,
+        )
                 await send_c2_embed(log_channel, embed)
                 break
 
@@ -225,6 +227,7 @@ class ModerationEvents(Package):
                     title="Member Unbanned",
                     color=None,
                     lines=[f"{user.name} was unbanned by {entry.user.mention}"],
-                )
+            timestamp=True,
+        )
                 await send_c2_embed(log_channel, embed)
                 break
