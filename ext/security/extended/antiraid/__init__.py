@@ -142,6 +142,8 @@ class Antiraid(AntiraidEvents, Package):
             return
         channel_id = await self.db.get_antiraid_log_channel(guild.id)
         if not channel_id:
+            channel_id = await self.db.get_modlog_channel(guild.id)
+        if not channel_id:
             return
         channel = guild.get_channel(channel_id)
         if not isinstance(channel, discord.TextChannel):

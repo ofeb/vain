@@ -32,14 +32,112 @@ def _bot_rules(guild: discord.Guild):
 
 
 def _find_rule(rules, *, name: str | None = None, trigger_type: int | None = None):
-    """find a bot-created rule by name prefix and/or trigger type"""
+    """find a bot-created rule by exact/prefix name and/or trigger type.
+
+    Prefer exact name match when ``name`` is given so keyword-type rules
+    (words / links / invites) do not collide with each other.
+    """
+    if name:
+        exact = None
+        prefix = None
+        for r in rules:
+            if r.name == name:
+                exact = r
+                break
+            if prefix is None and r.name.startswith(name):
+                if trigger_type is not None and r.trigger.type.value != trigger_type:
+                    continue
+                prefix = r
+        return exact or prefix
     for r in rules:
-        if name and not r.name.startswith(name):
-            continue
         if trigger_type is not None and r.trigger.type.value != trigger_type:
             continue
         return r
     return None
+
+
+WORDS_RULE = f"{BOT_RULE_PREFIX} - words"
+LINKS_RULE = f"{BOT_RULE_PREFIX} - links"
+INVITES_RULE = f"{BOT_RULE_PREFIX} - invites"
+SPAM_RULE = f"{BOT_RULE_PREFIX} - spam"
+MENTIONS_RULE = f"{BOT_RULE_PREFIX} - mentions"
+
+INVITE_KEYWORDS = [
+    "*discord.gg/*",
+    "*discord.com/invite/*",
+    "*discordapp.com/invite/*",
+    "*.gg/*",
+]
+
+
+def _normalize_invite_code(raw: str) -> str:
+    """Extract a bare invite code from a user-supplied token."""
+    s = (raw or "").strip()
+    if not s:
+        return ""
+    lower = s.lower()
+    for prefix in (
+        "https://discord.gg/",
+        "http://discord.gg/",
+        "discord.gg/",
+        "https://discord.com/invite/",
+        "http://discord.com/invite/",
+        "discord.com/invite/",
+        "https://discordapp.com/invite/",
+        "http://discordapp.com/invite/",
+        "discordapp.com/invite/",
+        ".gg/",
+        "/",
+    ):
+        if lower.startswith(prefix):
+            s = s[len(prefix):]
+            break
+    # strip trailing junk
+    s = s.split("?")[0].split("#")[0].strip().strip("/")
+    return s
+
+
+def _invite_allow_entries(code: str) -> list[str]:
+    """Build AutoMod allow_list entries that cover all invite forms for a code."""
+    code = _normalize_invite_code(code)
+    if not code:
+        return []
+    # Discord allow_list is substring-based; cover common shapes + wildcards
+    entries = {
+        code,
+        f"*{code}*",
+        f"discord.gg/{code}",
+        f"*discord.gg/{code}*",
+        f"discord.com/invite/{code}",
+        f"*discord.com/invite/{code}*",
+        f"discordapp.com/invite/{code}",
+        f"*discordapp.com/invite/{code}*",
+        f".gg/{code}",
+        f"*.gg/{code}*",
+        f"/{code}",
+        f"*/{code}*",
+    }
+    # AutoMod allow_list entries must be 1-60 chars
+    return [e for e in entries if 1 <= len(e) <= 60]
+
+
+def _link_allow_entries(raw: str) -> list[str]:
+    """Normalize a domain/url into AutoMod allow_list entries."""
+    s = (raw or "").strip()
+    if not s:
+        return []
+    lower = s.lower()
+    for prefix in ("https://", "http://"):
+        if lower.startswith(prefix):
+            s = s[len(prefix):]
+            lower = s.lower()
+            break
+    s = s.split("/")[0].split("?")[0].strip().strip(".")
+    if not s:
+        return []
+    entries = {s, f"*{s}*", f"*://{s}*", f"*://*.{s}*"}
+    return [e for e in entries if 1 <= len(e) <= 60]
+
 
 
 class FilterCommands(Package):
@@ -81,7 +179,7 @@ class FilterCommands(Package):
             return await ctx.warn("Cancelled\n> -# **no changes were made**")
 
         bot_rules = await self._get_bot_rules(ctx.guild)
-        rule = _find_rule(bot_rules, trigger_type=AutoModRuleTriggerType.keyword.value)
+        rule = _find_rule(bot_rules, name=WORDS_RULE)
 
         if not rule:
             raise CommandError("no word filter rule found")
@@ -107,18 +205,23 @@ class FilterCommands(Package):
         if any(len(w) > 60 or len(w) < 1 for w in word_list):
             raise CommandError("each word must be 1–60 characters")
 
-        bot_rules = await self._get_bot_rules(ctx.guild)
-        rule = _find_rule(bot_rules, trigger_type=AutoModRuleTriggerType.keyword.value)
+        word_list = [str(w).strip().lower() for w in word_list if str(w).strip()]
+        if not word_list:
+            raise CommandError("provide at least one word")
 
+        bot_rules = await self._get_bot_rules(ctx.guild)
+        rule = _find_rule(bot_rules, name=WORDS_RULE)
+
+        new_keywords = [f"*{w}*" for w in word_list]
         if not rule:
-            if len(word_list) > 1000:
+            if len(new_keywords) > 1000:
                 raise CommandError("can only filter 1000 words max")
             await ctx.guild.create_automod_rule(
-                name=f"{BOT_RULE_PREFIX} - words",
+                name=WORDS_RULE,
                 event_type=AutoModRuleEventType.message_send,
                 trigger=AutoModTrigger(
                     type=AutoModRuleTriggerType.keyword,
-                    keyword_filter=[f"*{w}*" for w in word_list],
+                    keyword_filter=new_keywords,
                 ),
                 enabled=True,
                 actions=[
@@ -130,15 +233,20 @@ class FilterCommands(Package):
             )
         else:
             kf = list(rule.trigger.keyword_filter or [])
-            new = [f"*{w}*" for w in word_list]
-            kf.extend(new)
+            existing_lower = {k.lower() for k in kf}
+            for kw in new_keywords:
+                if kw.lower() not in existing_lower:
+                    kf.append(kw)
+                    existing_lower.add(kw.lower())
             if len(kf) > 1000:
                 raise CommandError("hit the 1000 word limit")
             await rule.edit(
                 trigger=AutoModTrigger(
                     type=AutoModRuleTriggerType.keyword,
                     keyword_filter=kf,
+                    allow_list=list(rule.trigger.allow_list or []),
                 ),
+                enabled=True,
                 reason=f"filter updated by {ctx.author}",
             )
 
@@ -156,7 +264,7 @@ class FilterCommands(Package):
         word_list = words if isinstance(words, list) else [words]
 
         bot_rules = await self._get_bot_rules(ctx.guild)
-        rule = _find_rule(bot_rules, trigger_type=AutoModRuleTriggerType.keyword.value)
+        rule = _find_rule(bot_rules, name=WORDS_RULE)
 
         if not rule:
             raise CommandError("no word filter configured")
@@ -164,10 +272,13 @@ class FilterCommands(Package):
         kf = list(rule.trigger.keyword_filter or [])
         dropped = []
         for w in word_list:
-            target = f"*{w.lower()}*"
-            if target in kf:
-                kf.remove(target)
-                dropped.append(w.lower())
+            target = f"*{str(w).strip().lower()}*"
+            # case-insensitive remove
+            matched = [k for k in kf if k.lower() == target]
+            if matched:
+                for k in matched:
+                    kf.remove(k)
+                dropped.append(str(w).strip().lower())
 
         if not dropped:
             return await ctx.warn(f"none of those words are filtered")
@@ -176,6 +287,7 @@ class FilterCommands(Package):
             trigger=AutoModTrigger(
                 type=AutoModRuleTriggerType.keyword,
                 keyword_filter=kf,
+                allow_list=list(rule.trigger.allow_list or []),
             ),
             reason=f"filter edited by {ctx.author}",
         )
@@ -191,7 +303,7 @@ class FilterCommands(Package):
     @has_permissions(manage_guild=True)
     async def filter_list(self, ctx):
         bot_rules = await self._get_bot_rules(ctx.guild)
-        rule = _find_rule(bot_rules, trigger_type=AutoModRuleTriggerType.keyword.value)
+        rule = _find_rule(bot_rules, name=WORDS_RULE)
 
         if not rule:
             raise CommandError("no word filter configured")
@@ -220,14 +332,14 @@ class FilterCommands(Package):
     async def filter_links(self, ctx, setting: Optional[bool] = True, *, flags: FilterFlags = None):
         """toggle link filter using Discord AutoMod keyword rule"""
         bot_rules = await self._get_bot_rules(ctx.guild)
-        existing = _find_rule(bot_rules, name=f"{BOT_RULE_PREFIX} - links")
+        existing = _find_rule(bot_rules, name=LINKS_RULE)
 
         if setting:
             if existing:
                 return await ctx.warn("link filter is already **enabled**")
             try:
                 await ctx.guild.create_automod_rule(
-                    name=f"{BOT_RULE_PREFIX} - links",
+                    name=LINKS_RULE,
                     event_type=AutoModRuleEventType.message_send,
                     trigger=AutoModTrigger(
                         type=AutoModRuleTriggerType.keyword,
@@ -262,26 +374,48 @@ class FilterCommands(Package):
     @has_permissions(manage_guild=True)
     async def filter_links_whitelist(self, ctx, *, links):
         bot_rules = await self._get_bot_rules(ctx.guild)
-        rule = _find_rule(bot_rules, name=f"{BOT_RULE_PREFIX} - links")
+        rule = _find_rule(bot_rules, name=LINKS_RULE)
 
         if not rule:
             raise CommandError("link filter not configured, run `filter links on` first")
 
         link_list = links if isinstance(links, list) else [links]
+        domains = []
+        entries: list[str] = []
+        for raw in link_list:
+            for e in _link_allow_entries(str(raw)):
+                entries.append(e)
+            label = str(raw).strip()
+            for prefix in ("https://", "http://"):
+                if label.lower().startswith(prefix):
+                    label = label[len(prefix):]
+            label = label.split("/")[0].strip()
+            if label:
+                domains.append(label)
+
+        if not entries:
+            raise CommandError("provide at least one domain (e.g. `youtube.com`)")
+
         current_allow = list(rule.trigger.allow_list or [])
-        current_allow.extend(link_list)
-        current_allow = list(set(current_allow))
+        existing = {a.lower() for a in current_allow}
+        for e in entries:
+            if e.lower() not in existing:
+                current_allow.append(e)
+                existing.add(e.lower())
+        if len(current_allow) > 100:
+            current_allow = current_allow[:100]
 
         await rule.edit(
             trigger=AutoModTrigger(
                 type=AutoModRuleTriggerType.keyword,
-                keyword_filter=rule.trigger.keyword_filter,
+                keyword_filter=list(rule.trigger.keyword_filter or ["*://*"]),
                 allow_list=current_allow,
             ),
+            enabled=True,
             reason=f"link whitelist updated by {ctx.author}",
         )
         return await ctx.success(
-            f"whitelisted links\n> -# **{human_join(link_list, final='and')}**"
+            f"whitelisted links\n> -# **{human_join(domains or link_list, final='and', markdown='`')}**"
         )
 
     @filter_links.command(
@@ -292,32 +426,34 @@ class FilterCommands(Package):
     @has_permissions(manage_guild=True)
     async def filter_links_unwhitelist(self, ctx, *, links):
         bot_rules = await self._get_bot_rules(ctx.guild)
-        rule = _find_rule(bot_rules, name=f"{BOT_RULE_PREFIX} - links")
+        rule = _find_rule(bot_rules, name=LINKS_RULE)
 
         if not rule:
             raise CommandError("link filter not configured")
 
         link_list = links if isinstance(links, list) else [links]
+        drop_set: set[str] = set()
+        labels = []
+        for raw in link_list:
+            for e in _link_allow_entries(str(raw)):
+                drop_set.add(e.lower())
+            drop_set.add(str(raw).strip().lower())
+            labels.append(str(raw).strip())
+
         current_allow = list(rule.trigger.allow_list or [])
-        removed = []
-        for link in link_list:
-            if link in current_allow:
-                current_allow.remove(link)
-                removed.append(link)
+        kept = [a for a in current_allow if a.lower() not in drop_set]
 
         await rule.edit(
             trigger=AutoModTrigger(
                 type=AutoModRuleTriggerType.keyword,
-                keyword_filter=rule.trigger.keyword_filter,
-                allow_list=current_allow,
+                keyword_filter=list(rule.trigger.keyword_filter or ["*://*"]),
+                allow_list=kept,
             ),
             reason=f"link whitelist updated by {ctx.author}",
         )
         return await ctx.success(
-            f"removed from whitelist: {human_join(removed or link_list, final='and', markdown='`')}"
+            f"removed from whitelist: {human_join(labels or link_list, final='and', markdown='`')}"
         )
-
-    
 
     @filter_.group(
         name="invites",
@@ -330,22 +466,18 @@ class FilterCommands(Package):
     async def filter_invites(self, ctx, setting: Optional[bool] = True, *, flags: FilterFlags = None):
         """toggle invite filter using Discord AutoMod keyword rule"""
         bot_rules = await self._get_bot_rules(ctx.guild)
-        existing = _find_rule(bot_rules, name=f"{BOT_RULE_PREFIX} - invites")
+        existing = _find_rule(bot_rules, name=INVITES_RULE)
 
         if setting:
             if existing:
                 return await ctx.warn("invite filter is already **enabled**")
             try:
                 await ctx.guild.create_automod_rule(
-                    name=f"{BOT_RULE_PREFIX} - invites",
+                    name=INVITES_RULE,
                     event_type=AutoModRuleEventType.message_send,
                     trigger=AutoModTrigger(
                         type=AutoModRuleTriggerType.keyword,
-                        keyword_filter=[
-                            "*discord.gg/*",
-                            "*discord.com/invite/*",
-                            "*discordapp.com/invite/*",
-                        ],
+                        keyword_filter=list(INVITE_KEYWORDS),
                     ),
                     enabled=True,
                     actions=[
@@ -375,26 +507,46 @@ class FilterCommands(Package):
     @has_permissions(manage_guild=True)
     async def filter_invites_whitelist(self, ctx, *, invites):
         bot_rules = await self._get_bot_rules(ctx.guild)
-        rule = _find_rule(bot_rules, name=f"{BOT_RULE_PREFIX} - invites")
+        rule = _find_rule(bot_rules, name=INVITES_RULE)
 
         if not rule:
             raise CommandError("invite filter not configured, run `filter invites on` first")
 
         inv_list = invites if isinstance(invites, list) else [invites]
+        codes = []
+        entries: list[str] = []
+        for raw in inv_list:
+            code = _normalize_invite_code(str(raw))
+            if not code:
+                continue
+            codes.append(code)
+            entries.extend(_invite_allow_entries(code))
+
+        if not codes:
+            raise CommandError("provide at least one invite code (e.g. `bars` or `discord.gg/bars`)")
+
         current_allow = list(rule.trigger.allow_list or [])
-        current_allow.extend(inv_list)
-        current_allow = list(set(current_allow))
+        existing = {a.lower() for a in current_allow}
+        for e in entries:
+            if e.lower() not in existing:
+                current_allow.append(e)
+                existing.add(e.lower())
+
+        # Discord allow_list max 100
+        if len(current_allow) > 100:
+            current_allow = current_allow[:100]
 
         await rule.edit(
             trigger=AutoModTrigger(
                 type=AutoModRuleTriggerType.keyword,
-                keyword_filter=rule.trigger.keyword_filter,
+                keyword_filter=list(rule.trigger.keyword_filter or INVITE_KEYWORDS),
                 allow_list=current_allow,
             ),
+            enabled=True,
             reason=f"invite whitelist updated by {ctx.author}",
         )
         return await ctx.success(
-            f"whitelisted invites\n> -# **{human_join(inv_list, final='and')}**"
+            f"whitelisted invites\n> -# **{human_join(codes, final='and', markdown='`')}**"
         )
 
     @filter_invites.command(
@@ -405,29 +557,38 @@ class FilterCommands(Package):
     @has_permissions(manage_guild=True)
     async def filter_invites_unwhitelist(self, ctx, *, invites):
         bot_rules = await self._get_bot_rules(ctx.guild)
-        rule = _find_rule(bot_rules, name=f"{BOT_RULE_PREFIX} - invites")
+        rule = _find_rule(bot_rules, name=INVITES_RULE)
 
         if not rule:
             raise CommandError("invite filter not configured")
 
         inv_list = invites if isinstance(invites, list) else [invites]
+        codes = []
+        drop_set: set[str] = set()
+        for raw in inv_list:
+            code = _normalize_invite_code(str(raw))
+            if not code:
+                continue
+            codes.append(code)
+            for e in _invite_allow_entries(code):
+                drop_set.add(e.lower())
+            drop_set.add(code.lower())
+            drop_set.add(str(raw).strip().lower())
+
         current_allow = list(rule.trigger.allow_list or [])
-        removed = []
-        for inv in inv_list:
-            if inv in current_allow:
-                current_allow.remove(inv)
-                removed.append(inv)
+        kept = [a for a in current_allow if a.lower() not in drop_set]
+        removed = codes or [str(x) for x in inv_list]
 
         await rule.edit(
             trigger=AutoModTrigger(
                 type=AutoModRuleTriggerType.keyword,
-                keyword_filter=rule.trigger.keyword_filter,
-                allow_list=current_allow,
+                keyword_filter=list(rule.trigger.keyword_filter or INVITE_KEYWORDS),
+                allow_list=kept,
             ),
             reason=f"invite whitelist updated by {ctx.author}",
         )
         return await ctx.success(
-            f"removed from whitelist: {human_join(removed or inv_list, final='and', markdown='`')}"
+            f"removed from whitelist: {human_join(removed, final='and', markdown='`')}"
         )
 
     
@@ -443,7 +604,7 @@ class FilterCommands(Package):
     async def filter_spam(self, ctx, setting: Optional[bool] = True, *, flags: SpamFilterFlags = None):
         """toggle spam filter using Discord AutoMod spam trigger"""
         bot_rules = await self._get_bot_rules(ctx.guild)
-        existing = _find_rule(bot_rules, name=f"{BOT_RULE_PREFIX} - spam")
+        existing = _find_rule(bot_rules, name=SPAM_RULE)
 
         threshold = flags.threshold if flags else 5
 
@@ -452,7 +613,7 @@ class FilterCommands(Package):
                 return await ctx.warn("spam filter is already **enabled**")
             try:
                 await ctx.guild.create_automod_rule(
-                    name=f"{BOT_RULE_PREFIX} - spam",
+                    name=SPAM_RULE,
                     event_type=AutoModRuleEventType.message_send,
                     trigger=AutoModTrigger(
                         type=AutoModRuleTriggerType.spam,
@@ -709,7 +870,7 @@ class FilterCommands(Package):
     async def filter_massmention(self, ctx, setting: Optional[bool] = True, *, flags: SpamFilterFlags = None):
         """toggle mass mention filter using Discord AutoMod mention_spam trigger"""
         bot_rules = await self._get_bot_rules(ctx.guild)
-        existing = _find_rule(bot_rules, name=f"{BOT_RULE_PREFIX} - mentions")
+        existing = _find_rule(bot_rules, name=MENTIONS_RULE)
 
         threshold = flags.threshold if flags else 5
 
@@ -718,7 +879,7 @@ class FilterCommands(Package):
                 return await ctx.warn("mass mention filter is already **enabled**")
             try:
                 await ctx.guild.create_automod_rule(
-                    name=f"{BOT_RULE_PREFIX} - mentions",
+                    name=MENTIONS_RULE,
                     event_type=AutoModRuleEventType.message_send,
                     trigger=AutoModTrigger(
                         type=AutoModRuleTriggerType.mention_spam,

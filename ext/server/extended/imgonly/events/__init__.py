@@ -12,9 +12,10 @@ class ImgonlyEvents(Package):
 
     def __init__(self, bot):
         super().__init__(bot)
+        # (channel_id, user_id) -> last warning timestamp
         self._imgonly_last_sent: dict[tuple[int, int], float] = {}
-        self._imgonly_delete_queue: dict[int, list[discord.Message]] = {}
-        self._imgonly_delete_tasks: dict[int, asyncio.Task] = {}
+        # per-channel scheduled delete tasks
+        self._imgonly_delete_tasks: dict[int, set[asyncio.Task]] = {}
 
     @Package.listener("on_message")
     async def on_imgonly_message(self, message: discord.Message) -> None:
@@ -22,6 +23,12 @@ class ImgonlyEvents(Package):
             return
         if not isinstance(message.channel, discord.TextChannel):
             return
+
+        # members with manage_messages can post text freely
+        if isinstance(message.author, discord.Member):
+            perms = message.channel.permissions_for(message.author)
+            if perms.manage_messages or perms.administrator:
+                return
 
         row = await self.db.fetchrow(
             "SELECT 1 FROM image_only WHERE guild_id = $1 AND channel_id = $2",
@@ -31,6 +38,7 @@ class ImgonlyEvents(Package):
         if not row:
             return
 
+        # allow messages that include at least one attachment (image/video/file)
         if message.attachments:
             return
 
@@ -42,7 +50,8 @@ class ImgonlyEvents(Package):
         now = time.time()
         key = (channel_id, user_id)
 
-        last_sent = self._imgonly_last_sent.get(key, 0)
+        # rate-limit the warning to once per 60s per user per channel
+        last_sent = self._imgonly_last_sent.get(key, 0.0)
         if now - last_sent < 60:
             return
 
@@ -55,35 +64,37 @@ class ImgonlyEvents(Package):
         )
         if msg_row and msg_row.message:
             text = msg_row.message
+            # allow {user} / {channel} placeholders in custom scripts
+            text = (
+                text.replace("{user}", message.author.mention)
+                .replace("{channel}", message.channel.mention)
+                .replace("{guild}", message.guild.name)
+            )
         else:
-            text = f"{message.author.mention} only **attachments** are allowed in {message.channel.mention}"
+            text = (
+                f"{message.author.mention} this is a **gallery** channel — "
+                f"only **attachments** are allowed in {message.channel.mention}"
+            )
 
         with contextlib.suppress(discord.HTTPException, discord.Forbidden):
             sent = await message.channel.send(text)
-            self._queue_for_deletion(sent, 180)
+            self._schedule_delete(sent, delay=15.0)
 
-    def _queue_for_deletion(self, message: discord.Message, delay: float) -> None:
+    def _schedule_delete(self, message: discord.Message, delay: float) -> None:
+        """Delete the warning message after `delay` seconds (does not block)."""
         channel_id = message.channel.id
-        if channel_id not in self._imgonly_delete_queue:
-            self._imgonly_delete_queue[channel_id] = []
-        self._imgonly_delete_queue[channel_id].append(message)
-        self._process_queue(channel_id)
 
-    def _process_queue(self, channel_id: int) -> None:
-        if channel_id in self._imgonly_delete_tasks:
-            return
-        self._imgonly_delete_tasks[channel_id] = asyncio.create_task(
-            self._delete_queue_loop(channel_id)
-        )
+        async def _later() -> None:
+            try:
+                await asyncio.sleep(delay)
+                with contextlib.suppress(discord.HTTPException, discord.NotFound, discord.Forbidden):
+                    await message.delete()
+            finally:
+                tasks = self._imgonly_delete_tasks.get(channel_id)
+                if tasks is not None:
+                    tasks.discard(asyncio.current_task())
+                    if not tasks:
+                        self._imgonly_delete_tasks.pop(channel_id, None)
 
-    async def _delete_queue_loop(self, channel_id: int) -> None:
-        while True:
-            queue = self._imgonly_delete_queue.get(channel_id, [])
-            if not queue:
-                break
-            msg = queue.pop(0)
-            with contextlib.suppress(discord.HTTPException, discord.NotFound):
-                await msg.delete()
-            await asyncio.sleep(1)
-        self._imgonly_delete_tasks.pop(channel_id, None)
-        self._imgonly_delete_queue.pop(channel_id, None)
+        task = asyncio.create_task(_later())
+        self._imgonly_delete_tasks.setdefault(channel_id, set()).add(task)
