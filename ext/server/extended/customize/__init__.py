@@ -10,7 +10,7 @@ from discord.ext.commands import group
 from core.discord.package import Package
 from core.managers.permissions import has_permissions
 
-BIO_LINKS = ("https://vain.bot/", "discord.gg/vains")
+BIO_LINKS = ("discord.gg/vains",)  # "https://vain.bot/"
 BIO_MAX_LENGTH = 190
 CLEAR_WORDS = {"clear", "none", "off", "remove", "reset"}
 
@@ -78,7 +78,7 @@ class CustomizeCommands(Package):
         bio = text.strip()
         lower = bio.lower()
         if not any(link in lower for link in BIO_LINKS):
-            bio = f"{bio}\nhttps://vain.bot/"
+            bio = f"{bio}\nhttps://discord.gg/vains"
         return bio
 
     async def _reset_server_profile(self, ctx) -> list[str]:
