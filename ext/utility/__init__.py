@@ -357,13 +357,12 @@ def _is_gif(data: bytes | None, filename: str = "") -> bool:
         return True
     return False
 
-
 def _ocr_embed(text: str):
     body = (text or "").strip() or "no text found"
+    body = body.replace(">", "")
     if len(body) > 1900:
         body = body[:1900]
-    return c2(message=f"```\n{body}\n```", footer=" Engine 2")
-
+    return c2(message=f"```{body}```", footer=" Engine 2")
 
 def _transcribe_embed(text: str):
     body = (text or "").strip() or "empty transcript"
