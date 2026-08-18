@@ -20,7 +20,7 @@ from discord.ext import commands
 from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe
 from core.discord.views.paginate import PaginateView, layout_from_items, send_pages
-from config import color, emojis
+from config import api, color, emojis
 from core.managers.permissions import has_permissions
 from core.tools.snipe import SnipeError
 from core.tools import image_ops
@@ -344,6 +344,38 @@ async def _last_channel_image(channel) -> tuple[bytes | None, str]:
     return None, "image.png"
 
 
+
+def _gemini_model() -> str:
+    return getattr(api, "gemini_model", None) or getattr(api, "llm", None) or "Gemini"
+
+
+def _is_gif(data: bytes | None, filename: str = "") -> bool:
+    name = (filename or "").lower()
+    if name.endswith(".gif"):
+        return True
+    if data and data[:6] in (b"GIF87a", b"GIF89a"):
+        return True
+    return False
+
+
+def _ocr_embed(text: str):
+    body = (text or "").strip() or "no text found"
+    if len(body) > 1900:
+        body = body[:1900]
+    return c2(message=f"```\n{body}\n```", footer=" Engine 2")
+
+
+def _transcribe_embed(text: str):
+    body = (text or "").strip() or "empty transcript"
+    if len(body) > 1900:
+        body = body[:1900]
+    return c2(message=f"```\n{body}\n```", footer=f" {_gemini_model()}")
+
+
+def _ask_embed(text: str):
+    return c2(message=text)
+
+
 class Snipe(commands.Cog):
     """Message sniping system."""
 
@@ -616,17 +648,7 @@ class Utility(commands.Cog):
             await interaction.followup.send("No response from AI.", ephemeral=True)
             return
         pages = _chunk_text(answer, 1800)
-        embeds = []
-        qshow = text if len(text) <= 80 else text[:77] + "..."
-        for i, chunk in enumerate(pages):
-            embeds.append(
-                panel_embed(
-                    title=f"**Q**: `{qshow}`",
-                    lines=[chunk],
-                    footer=f"Powered by Gemini · {i + 1}/{len(pages)}" if len(pages) > 1 else "Gemini",
-                    timestamp=False,
-                )
-            )
+        embeds = [_ask_embed(chunk) for chunk in pages]
         if len(embeds) == 1:
             await interaction.followup.send(embed=embeds[0])
         else:
@@ -647,15 +669,13 @@ class Utility(commands.Cog):
         detected = (result.get("lang") if isinstance(result, dict) else None) or "Unknown"
         orig = text.replace("`", "'")[:900]
         trans = (out or "*empty*").replace("`", "'")[:1800]
-        embed = panel_embed(
-            lines=[
-                f"**Detected Language**: (`{detected}`)",
-                f"> -# `{orig}`",
-                "",
-                f"**Translated to**: `English`",
-                f"> -# `{trans}`",
-            ],
-            timestamp=False,
+        embed = c2(
+            message=(
+                f"> **Detected Language**: (`{detected}`)\n"
+                f"> -# `{orig}`\n\n"
+                f"> **Translated to**: `English`\n"
+                f"> -# `{trans}`"
+            )
         )
         await interaction.followup.send(embed=embed)
 
@@ -677,12 +697,7 @@ class Utility(commands.Cog):
         except Exception as exc:
             await interaction.followup.send(f"Transcribe failed: {exc}", ephemeral=True)
             return
-        embed = panel_embed(
-            title="Transcript",
-            lines=[text[:3500] or "*empty transcript*"],
-            footer="voice message",
-            timestamp=False,
-        )
+        embed = _transcribe_embed(text)
         await interaction.followup.send(embed=embed)
 
     async def ctx_ocr(self, interaction: discord.Interaction, message: discord.Message) -> None:
@@ -715,17 +730,18 @@ class Utility(commands.Cog):
         if not data:
             await interaction.followup.send("No image found on that message.", ephemeral=True)
             return
+        if _is_gif(data, filename):
+            await interaction.followup.send(
+                "you **can't** OCR a **gif**, please try using an image!",
+                ephemeral=True,
+            )
+            return
         try:
             text = await ocr_net.ocr_image(data, filename=filename)
         except Exception as exc:
             await interaction.followup.send(f"OCR failed: {exc}", ephemeral=True)
             return
-        embed = panel_embed(
-            title="Extracted text",
-            lines=[text[:3500] or "*no text found*"],
-            footer="OCR",
-            timestamp=False,
-        )
+        embed = _ocr_embed(text)
         await interaction.followup.send(embed=embed)
 
     @hybrid(
@@ -748,9 +764,6 @@ class Utility(commands.Cog):
                 return await ctx.fail(f"AI request failed\n> -# {exc}")
         if not answer:
             return await ctx.warn("No response from AI")
-        qshow = question.strip()
-        if len(qshow) > 80:
-            qshow = qshow[:77] + "..."
         pages = _chunk_text(answer, 1800)
         embeds = []
         for i, chunk in enumerate(pages):
@@ -848,7 +861,7 @@ class Utility(commands.Cog):
             f"> **Translated to**: `{to_name}`",
             f"> -# `{trans}`",
         ]
-        embed = panel_embed(lines=lines, timestamp=False)
+        embed = c2(message="\n".join(lines))
         return await ctx.send(embed=embed)
 
     @commands.command(
@@ -912,12 +925,7 @@ class Utility(commands.Cog):
             except Exception as exc:
                 return await ctx.fail(f"Transcribe failed\n> -# {exc}")
 
-        embed = panel_embed(
-            title="Transcript",
-            lines=[text[:3500] or "*empty transcript*"],
-            footer="voice message",
-            timestamp=False,
-        )
+        embed = _transcribe_embed(text)
         try:
             return await ctx.reply(embed=embed, mention_author=False)
         except Exception:
@@ -976,18 +984,16 @@ class Utility(commands.Cog):
             )
             return await ctx.warn(msg)
 
+        if _is_gif(data, filename):
+            return await ctx.warn("you **can't** OCR a **gif**, please try using an image!")
+
         async with ctx.typing():
             try:
                 text = await ocr_net.ocr_image(data, filename=filename)
             except Exception as exc:
                 return await ctx.fail(f"OCR failed\n> -# {exc}")
 
-        embed = panel_embed(
-            title="Extracted text",
-            lines=[text[:3500] or "*no text found*"],
-            footer="OCR",
-            timestamp=False,
-        )
+        embed = _ocr_embed(text)
         return await ctx.send(embed=embed)
 
 
