@@ -49,6 +49,101 @@ _FROM_CHOICES = [app_commands.Choice(name="Auto-detect", value="auto")] + [
     app_commands.Choice(name=n, value=v) for n, v in _LANG_CHOICES
 ]
 
+_LANG_NAME_BY_CODE = {code: name for name, code in _LANG_CHOICES}
+_LANG_CODE_BY_NAME = {name.lower(): code for name, code in _LANG_CHOICES}
+
+
+def _lang_display(code_or_name: str | None) -> str:
+    if not code_or_name:
+        return "Unknown"
+    raw = str(code_or_name).strip()
+    low = raw.lower()
+    if low in _LANG_NAME_BY_CODE:
+        return _LANG_NAME_BY_CODE[low]
+    for n, c in _LANG_CHOICES:
+        if n.lower() == low:
+            return n
+    if low in _LANG_CODE_BY_NAME:
+        return next(n for n, c in _LANG_CHOICES if c == _LANG_CODE_BY_NAME[low])
+    return raw.title() if len(raw) > 3 else raw.upper()
+
+
+def _lang_code(code_or_name: str | None, default: str = "auto") -> str:
+    if not code_or_name:
+        return default
+    raw = str(code_or_name).strip()
+    low = raw.lower()
+    if low in {"auto", "detect", "none", "unknown"}:
+        return default
+    if low in _LANG_NAME_BY_CODE:
+        return low
+    for n, c in _LANG_CHOICES:
+        if n.lower() == low:
+            return c
+    if low in _LANG_CODE_BY_NAME:
+        return _LANG_CODE_BY_NAME[low]
+    if len(low) <= 3 and low.isalpha():
+        return low
+    return default
+
+
+def _google_translate_url(text: str, *, source: str, target: str) -> str:
+    from urllib.parse import quote
+
+    sl = _lang_code(source, "auto")
+    tl = _lang_code(target, "en")
+    return (
+        "https://translate.google.com/details?"
+        f"sl={quote(sl)}&tl={quote(tl)}&op=translate&text={quote(text or '', safe='')}"
+    )
+
+
+def _translate_layout(
+    *,
+    original: str,
+    translated: str,
+    from_label: str,
+    to_label: str,
+    source_code: str,
+    target_code: str,
+):
+    from discord import ui
+    from core.tools.embed import _make_separator
+
+    layout = ui.LayoutView(timeout=None)
+    container = ui.Container()
+
+    title = "<a:messages:1539180118801383424> **Translation**"
+    direction = f"-# {from_label} → {to_label}"
+    orig = (original or "").strip()
+    if len(orig) > 1800:
+        orig = orig[:1797] + "..."
+    trans = (translated or "").strip()
+    if len(trans) > 1800:
+        trans = trans[:1797] + "..."
+
+    # Title, direction, original — no separator between these
+    container.add_item(ui.TextDisplay(f"{title}\n{direction}\n\n{orig}"))
+    container.add_item(_make_separator(visible=True, spacing=1))
+    # Translation blockquote
+    quoted = "> " + trans.replace("\n", "\n> ")
+    container.add_item(ui.TextDisplay(quoted))
+
+    url = _google_translate_url(original, source=source_code, target=target_code)
+    try:
+        btn = ui.Button(
+            label="Open in Google Translate",
+            style=discord.ButtonStyle.link,
+            url=url[:512],
+        )
+        container.add_item(ui.ActionRow(btn))
+    except Exception:
+        container.add_item(ui.TextDisplay(f"[Open in Google Translate]({url})"))
+
+    layout.add_item(container)
+    return layout
+
+
 from discord.ext import commands
 
 from core.discord.ctx import Context
@@ -753,17 +848,19 @@ class Utility(commands.Cog):
             return
         out = (result.get("text") if isinstance(result, dict) else str(result or "")).strip()
         detected = (result.get("lang") if isinstance(result, dict) else None) or "Unknown"
-        orig = text.replace("`", "'")[:900]
-        trans = (out or "*empty*").replace("`", "'")[:1800]
-        embed = c2(
-            message=(
-                f"**Detected Language**: (`{detected}`)\n"
-                f"> -# `{orig}`\n\n"
-                f"**Translated to**: `English`\n"
-                f"> -# `{trans}`"
-            )
+        if not out:
+            await interaction.followup.send("Empty translation.", ephemeral=True)
+            return
+        from_name = _lang_display(detected)
+        view = _translate_layout(
+            original=text,
+            translated=out,
+            from_label=from_name,
+            to_label="English",
+            source_code=_lang_code(detected, "auto"),
+            target_code="en",
         )
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(view=view)
 
     async def ctx_transcribe(self, interaction: discord.Interaction, message: discord.Message) -> None:
         await interaction.response.defer(thinking=True)
@@ -926,36 +1023,19 @@ class Utility(commands.Cog):
         if not out:
             return await ctx.warn("Empty translation")
 
-        to_label = (to_lang or "en").lower()
-        LANG_NAMES = {
-            "en": "English", "es": "Spanish", "fr": "French", "de": "German",
-            "it": "Italian", "pt": "Portuguese", "ru": "Russian", "ja": "Japanese",
-            "ko": "Korean", "zh": "Chinese", "ar": "Arabic", "hi": "Hindi",
-            "tr": "Turkish", "nl": "Dutch", "pl": "Polish", "sv": "Swedish",
-        }
-        to_name = LANG_NAMES.get(
-            to_label,
-            to_lang.upper() if to_lang and len(to_lang) <= 3 else str(to_lang).title(),
+        to_name = _lang_display(to_lang or "en")
+        from_name = _lang_display(from_lang or detected)
+        source_code = _lang_code(from_lang or detected, "auto")
+        target_code = _lang_code(to_lang or "en", "en")
+        view = _translate_layout(
+            original=text,
+            translated=out,
+            from_label=from_name,
+            to_label=to_name,
+            source_code=source_code,
+            target_code=target_code,
         )
-        if from_lang:
-            from_name = LANG_NAMES.get(
-                from_lang.lower(),
-                from_lang.upper() if len(from_lang) <= 3 else from_lang.title(),
-            )
-            head = f"**{from_name}**"
-        else:
-            head = f"**Detected Language**: (`{detected}`)"
-        orig = text.replace("`", "'")[:900]
-        trans = out.replace("`", "'")[:1800]
-        lines = [
-            head,
-            f"> -# `{orig}`",
-            "",
-            f"**Translated to**: `{to_name}`",
-            f"> -# `{trans}`",
-        ]
-        embed = c2(message="\n".join(lines))
-        return await ctx.send(embed=embed)
+        return await ctx.send(view=view)
 
     @commands.command(
         name="transcribe",
