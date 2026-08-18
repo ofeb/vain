@@ -68,7 +68,7 @@ class ImgonlyEvents(Package):
         for emb in message.embeds or ():
             if emb.image or emb.video or emb.thumbnail:
                 return True
-        # stickers count as media for gallery channels
+
         if getattr(message, "stickers", None):
             try:
                 if len(message.stickers) > 0:
@@ -89,7 +89,7 @@ class ImgonlyEvents(Package):
 
             await self._ensure_imgonly_schema()
 
-            # resolve parent channel id for threads
+
             channel = message.channel
             channel_id = channel.id
             if isinstance(channel, discord.Thread):
@@ -111,11 +111,11 @@ class ImgonlyEvents(Package):
             if self._has_media(message):
                 return
 
-            # delete the text-only message
+
             with contextlib.suppress(discord.HTTPException, discord.Forbidden, discord.NotFound):
                 await message.delete()
 
-            # rate-limit the warning: once per 15s per user per channel
+
             user_id = message.author.id
             now = time.time()
             key = (channel_id, user_id)
@@ -146,7 +146,7 @@ class ImgonlyEvents(Package):
 
         custom = None
         if msg_row is not None:
-            # support both Record attribute and mapping access
+
             custom = msg_row["message"] if "message" in msg_row else getattr(msg_row, "message", None)
 
         if custom and str(custom).strip():
@@ -158,8 +158,8 @@ class ImgonlyEvents(Package):
             )
 
         return (
-            f"{message.author.mention} this is a **gallery** channel - "
-            f"only **images / attachments** are allowed in {message.channel.mention}"
+            f"{message.author.mention} this is a **gallery** channel"
+            f"only **images or attachments** are allowed in {message.channel.mention}"
         )
 
     def _schedule_delete(self, message: discord.Message, delay: float) -> None:
