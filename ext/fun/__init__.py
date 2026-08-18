@@ -493,21 +493,6 @@ class Fun(Package):
         await ctx.send(embed=embed)
 
     @hybrid(
-        name="tenor",
-        description="Search Tenor for gif results",
-    )
-    @describe(keyword="Search keyword")
-    async def tenor(self, ctx: Context, *, keyword: str) -> None:
-        query = urllib.parse.quote(keyword)
-        embed = c2(
-            title="Tenor Search",
-            color=color.base,
-            message=f"[Search for **{keyword}** on Tenor](https://tenor.com/search/{query})",
-            timestamp=False,
-        )
-        await ctx.send(embed=embed)
-
-    @hybrid(
         name="wikihow",
         description="How to...?",
         aliases=["whow"],

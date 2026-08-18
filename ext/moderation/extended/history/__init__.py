@@ -163,6 +163,7 @@ class History(Package):
         name="history",
         description="View moderation history for a user",
         group=True,
+        guild_only=True,
     )
     @has_permissions(manage_messages=True)
     @describe(target="User ID, mention, or username to check", command="Filter by action type")

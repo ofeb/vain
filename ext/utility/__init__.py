@@ -932,21 +932,21 @@ class Utility(commands.Cog):
         dms=True,
         groupchats=True,
     )
-    @describe(attachment="Image to extract text from", url="Image URL")
+    @describe(image="Image to extract text from", url="Image URL")
     async def ocr(
         self,
         ctx: Context,
-        attachment: discord.Attachment = None,
-        url: str = None,
+        image: discord.Attachment | None = None,
+        url: str | None = None,
     ) -> None:
         data = None
         filename = "image.png"
         slash = bool(getattr(ctx, "interaction", None))
 
-        if attachment is not None:
+        if image is not None:
             try:
-                data = await attachment.read()
-                filename = attachment.filename or filename
+                data = await image.read()
+                filename = image.filename or filename
             except Exception:
                 data = None
         if data is None and url:
