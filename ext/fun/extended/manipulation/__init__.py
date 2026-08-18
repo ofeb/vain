@@ -115,7 +115,10 @@ class _QuoteChannelView(discord.ui.View):
             perms = member.guild_permissions
             allowed = bool(perms.manage_messages or perms.administrator)
         if not allowed:
-            await interaction.response.send_message("You can't delete this quote.", ephemeral=True)
+            await interaction.response.send_message(
+                "Only the person who quoted this (or staff with **Manage Messages**) can delete it.",
+                ephemeral=True,
+            )
             return
         with contextlib.suppress(Exception):
             await interaction.message.delete()

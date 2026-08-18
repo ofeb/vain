@@ -77,8 +77,19 @@ def _error_text(payload: dict[str, Any], status: int | None = None) -> str:
     return "OCR failed with an empty error from the provider"
 
 
-async def ocr_image(data: bytes, *, filename: str = "image.png") -> str:
-    """OCR.space free endpoint (Engine 2)."""
+async def ocr_image(
+    data: bytes,
+    *,
+    filename: str = "image.png",
+    language: str | None = None,
+) -> str:
+    """OCR.space Engine 2 with optional language hint.
+
+    Engine 2 auto-detects script for most languages (Arabic, CJK, etc.).
+    Pass ``language`` only when you want Engine 1-style codes (eng, ara, jpn…).
+    """
+    import asyncio
+
     key = (getattr(api_cfg, "ocr_space_api_key", "") or "").strip()
     if not key:
         raise RuntimeError("OCR.space API key is not configured")
@@ -87,49 +98,67 @@ async def ocr_image(data: bytes, *, filename: str = "image.png") -> str:
 
     data, filename, ctype = _prepare_image(data, filename)
 
-    form = aiohttp.FormData()
-    form.add_field("apikey", key)
-    form.add_field("language", "eng")
-    form.add_field("isOverlayRequired", "false")
-    form.add_field("OCREngine", "2")
-    form.add_field("scale", "true")
-    form.add_field("detectOrientation", "true")
-    form.add_field(
-        "file",
-        data,
-        filename=filename,
-        content_type=ctype,
-    )
+    last_err: str | None = None
+    for attempt in range(3):
+        form = aiohttp.FormData()
+        form.add_field("apikey", key)
+        form.add_field("isOverlayRequired", "false")
+        form.add_field("OCREngine", "2")
+        form.add_field("scale", "true")
+        form.add_field("detectOrientation", "true")
+        # Engine 2 works best without forcing eng — keeps Arabic/CJK etc.
+        if language and language.lower() not in {"auto", "none", "detect"}:
+            form.add_field("language", language)
+        form.add_field(
+            "file",
+            data,
+            filename=filename,
+            content_type=ctype,
+        )
 
-    timeout = aiohttp.ClientTimeout(total=90)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.post("https://api.ocr.space/parse/image", data=form) as resp:
-            status = resp.status
-            try:
-                payload = await resp.json(content_type=None)
-            except Exception:
-                body = await resp.text()
-                raise RuntimeError(
-                    f"OCR returned non-JSON (HTTP {status}): {body[:180]}"
-                ) from None
+        timeout = aiohttp.ClientTimeout(total=90)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post("https://api.ocr.space/parse/image", data=form) as resp:
+                status = resp.status
+                try:
+                    payload = await resp.json(content_type=None)
+                except Exception:
+                    body = await resp.text()
+                    last_err = f"OCR returned non-JSON (HTTP {status}): {body[:180]}"
+                    if status in (429, 503) and attempt < 2:
+                        await asyncio.sleep(2 + attempt * 2)
+                        continue
+                    raise RuntimeError(last_err) from None
 
-    if not isinstance(payload, dict):
-        raise RuntimeError("OCR failed: invalid response")
-
-    errored = bool(payload.get("IsErroredOnProcessing"))
-    exit_code = payload.get("OCRExitCode")
-    if errored or (isinstance(exit_code, int) and exit_code not in (1, 2)):
-        raise RuntimeError(_error_text(payload, status))
-
-    results = payload.get("ParsedResults") or []
-    texts: list[str] = []
-    for item in results:
-        if not isinstance(item, dict):
+        if not isinstance(payload, dict):
+            last_err = "OCR failed: invalid response"
             continue
-        # per-result errors
-        if item.get("ErrorMessage"):
-            continue
-        t = (item.get("ParsedText") or "").strip()
-        if t:
-            texts.append(t)
-    return "\n".join(texts).strip()
+
+        # Throttle / overload
+        err_blob = str(payload.get("error") or payload.get("ErrorMessage") or "")
+        if status in (429, 503) or "E571" in err_blob or "throttled" in err_blob.lower() or "overloaded" in err_blob.lower():
+            last_err = "OCR is busy right now — try again in a minute"
+            if attempt < 2:
+                await asyncio.sleep(2 + attempt * 2)
+                continue
+            raise RuntimeError(last_err)
+
+        errored = bool(payload.get("IsErroredOnProcessing"))
+        exit_code = payload.get("OCRExitCode")
+        if errored or (isinstance(exit_code, int) and exit_code not in (1, 2)):
+            last_err = _error_text(payload, status)
+            raise RuntimeError(last_err)
+
+        results = payload.get("ParsedResults") or []
+        texts: list[str] = []
+        for item in results:
+            if not isinstance(item, dict):
+                continue
+            if item.get("ErrorMessage"):
+                continue
+            t = (item.get("ParsedText") or "").strip()
+            if t:
+                texts.append(t)
+        return "\n".join(texts).strip()
+
+    raise RuntimeError(last_err or "OCR failed")
