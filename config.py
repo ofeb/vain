@@ -139,6 +139,7 @@ class api:
     twitch_client_secret: str = ""
     llm: str = "gemini-2.5-flash-lite"
     gemini_api_key: str = "AQ.Ab8RN6KgI2bxOLtU7XQFkqJ8Q_XPtlEmExj4LPruvSlOQtP6WA"
+    groq_api_key: str = "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"
     gemini_model: str = "gemini-2.5-flash-lite"
     gemini_project: str = "projects/268591218263"
     ocr_space_api_key: str = "K85711694388957"
