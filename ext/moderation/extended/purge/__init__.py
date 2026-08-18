@@ -108,7 +108,7 @@ class Purge(Package):
         *,
         purge_type: str,
         amount: int,
-        delete_after: float = 5.0,
+        delete_after: float = 10.0,
     ):
         return await ctx.success(
             f"**purge** complete!\n"
@@ -620,5 +620,5 @@ class Purge(Package):
             f"**botclear** complete!\n"
             f"> -# **type**: bot\n"
             f"> -# **amount**: {len(messages)}",
-            delete_after=2.0,
+            delete_after=10.0,
         )
