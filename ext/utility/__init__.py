@@ -649,10 +649,10 @@ class Utility(commands.Cog):
         trans = (out or "*empty*").replace("`", "'")[:1800]
         embed = panel_embed(
             lines=[
-                f"> **Detected Language**: (`{detected}`)",
+                f"**Detected Language**: (`{detected}`)",
                 f"> -# `{orig}`",
                 "",
-                f"> **Translated to**: `English`",
+                f"**Translated to**: `English`",
                 f"> -# `{trans}`",
             ],
             timestamp=False,
