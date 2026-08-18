@@ -561,7 +561,7 @@ class Utility(commands.Cog):
             )
             gif_data = await asyncio.to_thread(image_ops.pil_to_gif, image_data)
             file = discord.File(io.BytesIO(gif_data), filename="quote.gif")
-            await interaction.followup.send(file=file, ephemeral=True)
+            await interaction.followup.send(file=file)
             image_data = gif_data
             if interaction.guild is not None and hasattr(cog, "_get_quote_channel"):
                 dest_id = await cog._get_quote_channel(interaction.guild.id)
@@ -608,7 +608,7 @@ class Utility(commands.Cog):
             footer="→ English",
             timestamp=False,
         )
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=embed)
 
     async def ctx_transcribe(self, interaction: discord.Interaction, message: discord.Message) -> None:
         await interaction.response.defer(thinking=True)
@@ -636,7 +636,7 @@ class Utility(commands.Cog):
             footer="voice message",
             timestamp=False,
         )
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=embed)
 
     async def ctx_ocr(self, interaction: discord.Interaction, message: discord.Message) -> None:
         await interaction.response.defer(thinking=True)
@@ -668,7 +668,7 @@ class Utility(commands.Cog):
                                         footer="OCR",
                                         timestamp=False,
                                     )
-                                    await interaction.followup.send(embed=embed, ephemeral=True)
+                                    await interaction.followup.send(embed=embed)
                                     return
                     except Exception as exc:
                         await interaction.followup.send(f"OCR failed: {exc}", ephemeral=True)
@@ -689,7 +689,7 @@ class Utility(commands.Cog):
             footer="OCR",
             timestamp=False,
         )
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=embed)
 
     @hybrid(
         name="ask",
