@@ -1,17 +1,20 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import io
 import os
 import re
 import tempfile
 import textwrap
 import urllib.parse
+import urllib.request
 from pathlib import Path
 from typing import Any, Optional, TYPE_CHECKING
 
 import aiohttp
 import discord
+from discord.ext import commands
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from core.discord.package import Package
@@ -90,6 +93,39 @@ def _ytdlp_download_sync(url: str, output_dir: str) -> dict:
             "uploader": info.get("uploader", ""),
             "thumbnail": info.get("thumbnail", ""),
         }
+
+
+
+class _QuoteChannelView(discord.ui.View):
+    def __init__(self, *, jump_url: str, author_id: int) -> None:
+        super().__init__(timeout=None)
+        self.author_id = author_id
+        self.add_item(
+            discord.ui.Button(
+                label="Jump to message",
+                style=discord.ButtonStyle.link,
+                url=jump_url,
+            )
+        )
+
+    @discord.ui.button(label="Delete", style=discord.ButtonStyle.danger, emoji="🗑️")
+    async def delete_quote(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        member = interaction.user
+        allowed = False
+        if member.id == self.author_id:
+            allowed = True
+        elif isinstance(member, discord.Member):
+            perms = member.guild_permissions
+            if perms.manage_messages or perms.administrator:
+                allowed = True
+        if not allowed:
+            await interaction.response.send_message("You can't delete this quote.", ephemeral=True)
+            return
+        with contextlib.suppress(Exception):
+            await interaction.message.delete()
+        if not interaction.response.is_done():
+            with contextlib.suppress(Exception):
+                await interaction.response.defer()
 
 
 class Socials(Package):
@@ -1937,124 +1973,268 @@ class Socials(Package):
                 raise
 
 
+
+    def _quote_font(self, size: int):
+        candidates = [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+            "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+            FONT_PATH,
+        ]
+        for path in candidates:
+            try:
+                return ImageFont.truetype(path, size)
+            except Exception:
+                continue
+        return ImageFont.load_default()
+
+    def _quote_mark_font(self, size: int):
+        candidates = [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            FONT_PATH,
+        ]
+        for path in candidates:
+            try:
+                return ImageFont.truetype(path, size)
+            except Exception:
+                continue
+        return self._quote_font(size)
+
+    def _quote_wrap(self, text: str, font, max_width: int) -> list[str]:
+        words = (text or "").replace("\n", " ").split()
+        if not words:
+            return [""]
+        lines: list[str] = []
+        current = ""
+        for word in words:
+            test = f"{current} {word}".strip()
+            bbox = font.getbbox(test)
+            if bbox[2] - bbox[0] <= max_width:
+                current = test
+                continue
+            if current:
+                lines.append(current)
+            wb = font.getbbox(word)
+            if wb[2] - wb[0] <= max_width:
+                current = word
+                continue
+            chunk = ""
+            for ch in word:
+                trial = chunk + ch
+                tb = font.getbbox(trial)
+                if tb[2] - tb[0] <= max_width:
+                    chunk = trial
+                else:
+                    if chunk:
+                        lines.append(chunk)
+                    chunk = ch
+            current = chunk
+        if current:
+            lines.append(current)
+        return lines or [""]
+
+    def _quote_text_color(self, rgb: tuple[int, int, int]) -> tuple[int, int, int]:
+        r, g, b = rgb
+        luma = 0.2126 * r + 0.7152 * g + 0.0722 * b
+        if luma < 95:
+            return (245, 245, 245)
+        if luma > 230:
+            return (max(r - 40, 30), max(g - 40, 30), max(b - 40, 30))
+        return (r, g, b)
+
+    def _quote_dominant_rgb(self, avatar: Image.Image) -> tuple[int, int, int]:
+        try:
+            from colorthief import ColorThief
+            buf = io.BytesIO()
+            avatar.convert("RGB").save(buf, format="PNG")
+            buf.seek(0)
+            ct = ColorThief(buf)
+            dominant = ct.get_color(quality=1)
+            try:
+                palette = ct.get_palette(color_count=6, quality=1) or []
+            except Exception:
+                palette = []
+            colors = [dominant, *palette]
+            best = dominant
+            best_score = -1.0
+            for c in colors:
+                if not c or len(c) < 3:
+                    continue
+                r, g, b = int(c[0]), int(c[1]), int(c[2])
+                luma = 0.2126 * r + 0.7152 * g + 0.0722 * b
+                sat = max(r, g, b) - min(r, g, b)
+                if luma < 25 or luma > 245:
+                    continue
+                score = sat * 1.4 + (130 - abs(luma - 140)) * 0.35
+                if score > best_score:
+                    best_score = score
+                    best = (r, g, b)
+            return (int(best[0]), int(best[1]), int(best[2]))
+        except Exception:
+            return (220, 220, 220)
+
     async def _generate_quote_image(
         self,
         content: str,
         display_name: str,
         username: str,
         avatar_url: str,
+        avatar_bytes: bytes | None = None,
     ) -> bytes:
-        """Generate a quote image locally using PIL."""
+        """Guilt-inspired quote card: avatar fade + dominant-colour text."""
         loop = asyncio.get_running_loop()
 
+        if avatar_bytes is None and avatar_url:
+            try:
+                timeout = aiohttp.ClientTimeout(total=12)
+                headers = {
+                    "User-Agent": (
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+                    ),
+                    "Accept": "image/*,*/*;q=0.8",
+                }
+                async with aiohttp.ClientSession(headers=headers, timeout=timeout) as session:
+                    async with session.get(str(avatar_url), allow_redirects=True) as resp:
+                        if resp.status == 200:
+                            avatar_bytes = await resp.read()
+            except Exception:
+                avatar_bytes = None
+
         def _build() -> bytes:
-            W, H = 857, 450
-            font_size = 50
+            W, H = 1000, 520
+            AV_W = 480
+            canvas = Image.new("RGB", (W, H), (0, 0, 0))
 
-            try:
-                font = ImageFont.truetype(FONT_PATH, font_size)
-                name_font = ImageFont.truetype(FONT_PATH, 32)
-                user_font = ImageFont.truetype(FONT_PATH, 22)
-            except Exception:
-                font = ImageFont.load_default()
-                name_font = font
-                user_font = font
+            if avatar_bytes:
+                try:
+                    avatar = Image.open(io.BytesIO(avatar_bytes)).convert("RGBA")
+                except Exception:
+                    avatar = Image.new("RGBA", (AV_W, H), (70, 70, 70, 255))
+            else:
+                avatar = Image.new("RGBA", (AV_W, H), (70, 70, 70, 255))
 
-            blank = Image.new("RGB", (W, H), color=(0, 0, 0))
+            side = max(avatar.size)
+            square = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+            ox = (side - avatar.size[0]) // 2
+            oy = (side - avatar.size[1]) // 2
+            square.paste(avatar, (ox, oy), avatar if avatar.mode == "RGBA" else None)
+            avatar = square.resize((AV_W, H), Image.LANCZOS)
 
-            
-            try:
-                resp = urllib.request.urlopen(avatar_url)
-                avatar_raw = resp.read()
-                avatar = Image.open(io.BytesIO(avatar_raw)).convert("RGBA")
-                avatar = avatar.resize((450, 450), Image.LANCZOS)
-            except Exception:
-                avatar = Image.new("RGBA", (450, 450), (80, 80, 80, 255))
+            dominant = self._quote_dominant_rgb(avatar)
+            text_rgb = self._quote_text_color(dominant)
+            mute_rgb = tuple(max(0, min(255, int(c * 0.55))) for c in text_rgb)
 
-            
-            gradient = Image.new("RGBA", (450, 450), (0, 0, 0, 0))
-            draw_grad = ImageDraw.Draw(gradient)
-            for y in range(450):
-                alpha = int(255 * (y / 450) * 0.7)
-                draw_grad.line([(0, y), (450, y)], fill=(0, 0, 0, alpha))
-
-            
-            avatar.paste(Image.alpha_composite(avatar, gradient), (0, 0), avatar)
-            avatar_rgb = avatar.convert("RGB")
-
-            blank.paste(avatar_rgb, (0, 0))
-
-            
-            max_chars = 20
-            words = content.split()
-            lines = []
-            current_line = ""
-            for word in words:
-                test = f"{current_line} {word}".strip()
-                if len(test) <= max_chars:
-                    current_line = test
+            fade = Image.new("L", (AV_W, H), 255)
+            fade_draw = ImageDraw.Draw(fade)
+            fade_start = int(AV_W * 0.42)
+            for x in range(AV_W):
+                if x < fade_start:
+                    alpha = 255
                 else:
-                    if current_line:
-                        lines.append(current_line)
-                    current_line = word
-            if current_line:
-                lines.append(current_line)
-            wrapped = "\n".join(lines)
+                    t = (x - fade_start) / max(AV_W - fade_start, 1)
+                    alpha = int(255 * (1.0 - t) ** 1.35)
+                fade_draw.line([(x, 0), (x, H)], fill=alpha)
+            avatar.putalpha(fade)
 
-            
-            text_x = 550
-            max_text_w = W - text_x - 30
-            max_text_h = H - 120
-            while font_size > 12:
-                test_font = ImageFont.truetype(FONT_PATH, font_size)
-                bbox = test_font.getbbox(wrapped)
-                tw = bbox[2] - bbox[0]
-                th = bbox[3] - bbox[1]
-                if tw <= max_text_w and th <= max_text_h:
-                    font = test_font
-                    break
-                font_size -= 2
+            base = Image.new("RGBA", (W, H), (0, 0, 0, 255))
+            base.paste(avatar, (0, 0), avatar)
+            canvas = base.convert("RGB")
+            draw = ImageDraw.Draw(canvas)
 
-            
-            draw = ImageDraw.Draw(blank)
-            text_bbox = font.getbbox(wrapped)
-            text_h = text_bbox[3] - text_bbox[1]
-            text_y = (H - text_h) // 2 - 20
-            draw.text((text_x, text_y), wrapped, fill=(255, 255, 255), font=font)
+            text_left = AV_W + 36
+            text_right = W - 40
+            max_text_w = text_right - text_left
 
-            
-            name_y = text_y + text_h + 15
-            draw.text((text_x, name_y), f"- {display_name}", fill=(255, 255, 255), font=name_font)
+            quote_font = self._quote_mark_font(110)
+            body_size = 40
+            body_font = self._quote_font(body_size)
+            attr_font = self._quote_font(24)
+            mark_font = self._quote_font(18)
 
-            
-            user_y = name_y + 40
-            draw.text((text_x, user_y), f"@{username}", fill=(89, 89, 89), font=user_font)
+            clean = " ".join((content or "").split())
+            if len(clean) > 320:
+                clean = clean[:317].rstrip() + "..."
 
-            
-            draw.text((W - 100, H - 30), "vain", fill=(89, 89, 89), font=user_font)
+            lines = self._quote_wrap(clean, body_font, max_text_w)
+            while body_size > 22 and len(lines) > 7:
+                body_size -= 2
+                body_font = self._quote_font(body_size)
+                lines = self._quote_wrap(clean, body_font, max_text_w)
 
-            buf = io.BytesIO()
-            blank.save(buf, format="PNG", quality=95)
-            return buf.getvalue()
+            line_gap = int(body_size * 1.28)
+            block_h = line_gap * len(lines)
+            quote_mark = "\u201C"
+            qm_bbox = quote_font.getbbox(quote_mark)
+            qm_h = qm_bbox[3] - qm_bbox[1]
+
+            total_h = qm_h + 12 + block_h + 36 + 28
+            top = max(36, (H - total_h) // 2)
+
+            draw.text((text_left - 6, top - 8), quote_mark, fill=text_rgb, font=quote_font)
+
+            y = top + qm_h + 4
+            for line in lines:
+                draw.text((text_left, y), line, fill=text_rgb, font=body_font)
+                y += line_gap
+
+            attr = f"\u2014  @{username}" if username else f"\u2014  {display_name}"
+            draw.text((text_left, y + 18), attr, fill=mute_rgb, font=attr_font)
+
+            brand = "vain"
+            bb = mark_font.getbbox(brand)
+            draw.text((W - (bb[2] - bb[0]) - 28, H - 34), brand, fill=(70, 70, 70), font=mark_font)
+
+            out = io.BytesIO()
+            canvas.save(out, format="PNG", optimize=True)
+            return out.getvalue()
 
         return await loop.run_in_executor(None, _build)
+
+    async def _ensure_quote_schema(self) -> None:
+        await self.db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS quote_channels (
+                guild_id BIGINT PRIMARY KEY,
+                channel_id BIGINT NOT NULL
+            )
+            """
+        )
+
+    async def _get_quote_channel(self, guild_id: int):
+        await self._ensure_quote_schema()
+        row = await self.db.fetchrow(
+            "SELECT channel_id FROM quote_channels WHERE guild_id = $1",
+            guild_id,
+        )
+        if not row:
+            return None
+        return int(row["channel_id"] if isinstance(row, dict) else row[0])
 
     @hybrid(
         name="quote",
         description="Quote a message as an image",
         aliases=["qm", "quotemessage"],
+        group=True,
+        invoke_without_command=True,
     )
     @describe(message="Message to quote (or reply to one)")
     async def quote_command(self, ctx: Context, message: discord.Message = None) -> None:
-        if not message and ctx.message.reference:
+        if ctx.invoked_subcommand is not None:
+            return
+        if not message and ctx.message and ctx.message.reference:
             message = ctx.message.reference.resolved
-        if not message:
-            return await ctx.warn("Please reply to a message to quote it.")
-        if not message.content:
+        if not message or not isinstance(message, discord.Message):
+            return await ctx.warn(
+                f"Reply to a message or pass a message link\n> -# **usage:** {ctx.cmd('quote')} (reply)"
+            )
+        if not (message.content or "").strip():
             return await ctx.warn("You can't quote this message (no text content).")
 
         async with ctx.typing():
-            avatar_url = str(message.author.display_avatar.url)
+            avatar_url = str(message.author.display_avatar.with_size(512).url)
             image_data = await self._generate_quote_image(
                 message.clean_content,
                 message.author.display_name,
@@ -2062,7 +2242,74 @@ class Socials(Package):
                 avatar_url,
             )
             file = discord.File(io.BytesIO(image_data), filename="quote.png")
-            await ctx.send(file=file)
+            sent = await ctx.send(file=file)
+
+            if ctx.guild is not None:
+                dest_id = await self._get_quote_channel(ctx.guild.id)
+                if dest_id and dest_id != ctx.channel.id:
+                    dest = ctx.guild.get_channel(dest_id)
+                    if dest is not None and hasattr(dest, "send"):
+                        view = _QuoteChannelView(
+                            jump_url=message.jump_url,
+                            author_id=ctx.author.id,
+                        )
+                        try:
+                            await dest.send(
+                                content=(
+                                    f"{message.author.mention} · "
+                                    f"[Jump to message]({message.jump_url})"
+                                ),
+                                file=discord.File(io.BytesIO(image_data), filename="quote.png"),
+                                view=view,
+                                allowed_mentions=discord.AllowedMentions(users=False),
+                            )
+                        except Exception:
+                            pass
+            return sent
+
+    @quote_command.command(
+        name="channel",
+        aliases=["set", "ch", "destination", "dest"],
+        description="Set the channel where quotes are also posted",
+        example=",quote channel #quotes",
+        usage="[channel|none]",
+    )
+    @has_permissions(manage_guild=True)
+    async def quote_channel(self, ctx: Context, channel: discord.TextChannel = None) -> None:
+        await self._ensure_quote_schema()
+        if channel is None:
+            current = await self._get_quote_channel(ctx.guild.id)
+            if current:
+                mention = f"<#{current}>"
+            else:
+                mention = "not set"
+            return await ctx.normal(
+                f"Quote channel is {mention}\n"
+                f"> -# **set with:** {ctx.cmd('quote channel #channel')} · "
+                f"**clear with:** {ctx.cmd('quote channel none')}"
+            )
+
+        name = getattr(channel, "name", "")
+        if str(channel).lower() in {"none", "off", "clear", "remove", "reset"} or name.lower() in {
+            "none", "off", "clear", "remove", "reset"
+        }:
+            await self.db.execute(
+                "DELETE FROM quote_channels WHERE guild_id = $1",
+                ctx.guild.id,
+            )
+            return await ctx.success("Quote channel cleared")
+
+        await self.db.execute(
+            """
+            INSERT INTO quote_channels (guild_id, channel_id)
+            VALUES ($1, $2)
+            ON CONFLICT (guild_id) DO UPDATE SET channel_id = EXCLUDED.channel_id
+            """,
+            ctx.guild.id,
+            channel.id,
+        )
+        return await ctx.success(f"Quotes will also post in {channel.mention}")
+
 
 async def setup(bot: Vain):
     from .extended.roblox import Roblox
