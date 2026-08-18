@@ -2066,8 +2066,6 @@ class Socials(Package):
 
 async def setup(bot: Vain):
     from .extended.roblox import Roblox
-    from .improper.builders import register_builders
     cog = Socials(bot)
-    await register_builders(bot, cog=bot.get_cog('Snipe'))
     await bot.add_cog(cog)
     await bot.add_cog(Roblox(bot))

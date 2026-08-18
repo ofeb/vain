@@ -403,13 +403,57 @@ class Snipe(commands.Cog):
             await ctx.fail(f"No snipe found at that index\n> -# **index:** `{index}` — try a smaller number")
 
 
+class Utility(commands.Cog):
+    """Utility builders and extras."""
+
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
+
+    @hybrid(
+        name="embedbuilder",
+        aliases=["eb"],
+        description="Interactive embed builder with live preview. Approve DMs the script.",
+        example=",embedbuilder",
+    )
+    @has_permissions(manage_messages=True)
+    async def embedbuilder(self, ctx: Context):
+        from .improper.builders import EmbedBuilderView
+        accent = getattr(ctx.bot, "color", None) or 0x2B2D31
+        builder = EmbedBuilderView(ctx.author.id, accent=int(accent))
+        m = await ctx.send(
+            embed=builder._preview_embed(),
+            view=builder._embed_preview_view(),
+            raw_embed=True,
+        )
+        builder.message = m
+
+    @hybrid(
+        name="containerbuilder",
+        aliases=["cb"],
+        description="Interactive Components V2 container builder with live preview. Approve DMs the script.",
+        example=",containerbuilder",
+    )
+    @has_permissions(manage_messages=True)
+    async def containerbuilder(self, ctx: Context):
+        from .improper.builders import ContainerBuilderView
+        accent = getattr(ctx.bot, "color", None) or 0x2B2D31
+        builder = ContainerBuilderView(ctx.author.id, accent=int(accent))
+        preview_content, preview_layout = builder._preview_container()
+        await builder._refresh_content_message(preview_content, ctx.channel)
+        m = await ctx.send(view=builder._controls())
+        builder.message = m
+        try:
+            preview = await ctx.send(content=None, view=preview_layout)
+            builder.preview_message = preview
+        except Exception:
+            builder.preview_message = None
+
+
 async def setup(bot: commands.Bot):
     from .events import SnipeEvents
-    from ext.social.improper.builders import register_builders
 
     await bot.add_cog(Snipe(bot))
+    await bot.add_cog(Utility(bot))
 
     if bot.get_cog("SnipeEvents") is None:
         await bot.add_cog(SnipeEvents(bot))
-
-    await register_builders(bot, cog=bot.get_cog("Snipe"))

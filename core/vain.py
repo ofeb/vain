@@ -887,6 +887,18 @@ class Vain(commands.AutoShardedBot):
                 )
             return
 
+        if isinstance(err, commands.NotOwner):
+            return
+        cog = getattr(ctx.command, "cog", None) if ctx.command else None
+        cog_name = type(cog).__name__ if cog is not None else ""
+        qn = (getattr(ctx.command, "qualified_name", None) or "").lower()
+        if isinstance(err, commands.CheckFailure) and (
+            cog_name in {"Owner", "Jishaku", "Developer", "Manager"}
+            or qn.startswith("jsk")
+            or qn.startswith("jishaku")
+        ):
+            return
+
         if isinstance(err, commands.CommandError):
             msg = str(err).strip() or "you **can't** do that"
             with contextlib.suppress(discord.HTTPException, Exception):

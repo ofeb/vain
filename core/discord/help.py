@@ -152,6 +152,9 @@ _COG_MAP: dict[str, str] = {
     "Information":   "Information",
     "Fortnite":      "Information",
     "Snipe":         "Utility",
+    "Utility":       "Utility",
+    "AFK":           "Utility",
+    "Afk":           "Utility",
     "Builders":      "Utility",
     "Away":          "Utility",
     "InviteTracker": "Utility",
@@ -1523,15 +1526,19 @@ class VainHelp(commands.HelpCommand):
 
     def _build_cats(self, bot: Vain, owner: bool) -> dict[str, list[Command]]:
         cats: dict[str, list[Command]] = {}
-        for cog in bot.cogs.values():
-            if _hidden(cog, owner=owner):
+        seen: set[int] = set()
+        for cmd in bot.walk_commands():
+            if cmd.parent is not None:
                 continue
-            cmds = [
-                c for c in cog.get_commands()
-                if not c.hidden and family_root(c) is None
-            ]
-            if cmds:
-                cats.setdefault(_category(cog), []).extend(cmds)
+            if cmd.hidden or _cmd_hidden(cmd, owner=owner):
+                continue
+            if family_root(cmd) is not None:
+                continue
+            ident = id(cmd)
+            if ident in seen:
+                continue
+            seen.add(ident)
+            cats.setdefault(_category(cmd.cog), []).append(cmd)
         return cats
 
     def _dedup(self, ctx: Context) -> bool:
