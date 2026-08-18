@@ -757,9 +757,9 @@ class Utility(commands.Cog):
         trans = (out or "*empty*").replace("`", "'")[:1800]
         embed = c2(
             message=(
-                f"> **Detected Language**: (`{detected}`)\n"
+                f"**Detected Language**: (`{detected}`)\n"
                 f"> -# `{orig}`\n\n"
-                f"> **Translated to**: `English`\n"
+                f"**Translated to**: `English`\n"
                 f"> -# `{trans}`"
             )
         )
@@ -942,16 +942,16 @@ class Utility(commands.Cog):
                 from_lang.lower(),
                 from_lang.upper() if len(from_lang) <= 3 else from_lang.title(),
             )
-            head = f"> **{from_name}**"
+            head = f"**{from_name}**"
         else:
-            head = f"> **Detected Language**: (`{detected}`)"
+            head = f"**Detected Language**: (`{detected}`)"
         orig = text.replace("`", "'")[:900]
         trans = out.replace("`", "'")[:1800]
         lines = [
             head,
             f"> -# `{orig}`",
             "",
-            f"> **Translated to**: `{to_name}`",
+            f"**Translated to**: `{to_name}`",
             f"> -# `{trans}`",
         ]
         embed = c2(message="\n".join(lines))
