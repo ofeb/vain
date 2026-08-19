@@ -154,6 +154,14 @@ def _discover_extensions(ext_dir: str = "ext") -> tuple[str, ...]:
     return tuple(unique)
 
 
+
+class Blacklisted(commands.CheckFailure):
+    """User or guild is blacklisted — handlers must stay silent."""
+    def __init__(self, reason: str | None = None):
+        self.reason = reason
+        super().__init__("blacklisted")
+
+
 _BLACKLIST_SQL = """
     SELECT reason FROM blacklist
     WHERE user_id = $1 OR guild_id = $2
@@ -510,17 +518,34 @@ class Vain(commands.AutoShardedBot):
         if ctx.command is not None:
             is_help = ctx.command.qualified_name.lower() == "help"
 
-        if ctx.guild is not None and not owner:
-            blacklisted = await self.remember(
-                f"blacklist:{ctx.guild.id}:{ctx.author.id}",
+        if not owner:
+            uid = ctx.author.id
+            gid = ctx.guild.id if ctx.guild is not None else None
+            user_bl = await self.remember(
+                f"blacklist:user:{uid}",
                 _ACCESS_TTL,
-                lambda: self.db.fetchval(_BLACKLIST_SQL, ctx.author.id, ctx.guild.id),
+                lambda: self.db.fetchval(
+                    "SELECT COALESCE(reason, '') FROM blacklist WHERE user_id = $1 LIMIT 1",
+                    uid,
+                ),
             )
-            if blacklisted:
-                reason = blacklisted if isinstance(blacklisted, str) else None
-                if reason:
-                    raise commands.CheckFailure(f"you have been **blacklisted**\n> -# **reason**: {reason}")
-                raise commands.CheckFailure("you have been **blacklisted**")
+            guild_bl = None
+            if gid is not None:
+                guild_bl = await self.remember(
+                    f"blacklist:guild:{gid}",
+                    _ACCESS_TTL,
+                    lambda: self.db.fetchval(
+                        "SELECT COALESCE(reason, '') FROM blacklist WHERE guild_id = $1 LIMIT 1",
+                        gid,
+                    ),
+                )
+            if user_bl is not None or guild_bl is not None:
+                reason = None
+                if isinstance(user_bl, str) and user_bl:
+                    reason = user_bl
+                elif isinstance(guild_bl, str) and guild_bl:
+                    reason = guild_bl
+                raise Blacklisted(reason)
 
         if (
             ctx.command is not None
@@ -688,6 +713,8 @@ class Vain(commands.AutoShardedBot):
             ctx.command = cmd
         try:
             await self._global_check(ctx)
+        except Blacklisted:
+            return False
         except commands.CommandOnCooldown as e:
             cd = getattr(e, "cooldown", None) or app_commands.Cooldown(rate=2, per=2.4)
             raise app_commands.CommandOnCooldown(cd, float(e.retry_after)) from e
@@ -791,6 +818,8 @@ class Vain(commands.AutoShardedBot):
     ) -> None:
         """handle slash command errors"""
         orig = getattr(err, "original", err)
+        if isinstance(orig, Blacklisted) or isinstance(err, Blacklisted):
+            return
         if isinstance(orig, discord.NotFound):
             return
         send = (
@@ -894,7 +923,7 @@ class Vain(commands.AutoShardedBot):
 
     async def on_command_error(self, ctx: Context, err: Exception) -> None:
         err = self._unwrap(err)
-        if isinstance(err, commands.CommandNotFound):
+        if isinstance(err, (Blacklisted, commands.CommandNotFound)):
             return
         if isinstance(err, commands.MissingRequiredArgument):
             with contextlib.suppress(discord.HTTPException):

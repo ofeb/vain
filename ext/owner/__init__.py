@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import contextlib
+
 import io
 import logging
 import textwrap
@@ -59,6 +61,22 @@ if TYPE_CHECKING:
     from core.vain import Vain
 
 log = logging.getLogger("vain/owner")
+
+
+def _blacklist_since(dt) -> str:
+    if dt is None:
+        return "unknown"
+    if hasattr(dt, "timestamp"):
+        pass
+    else:
+        return str(dt)
+    day = dt.day
+    if 11 <= day <= 13:
+        suf = "th"
+    else:
+        suf = {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
+    return dt.strftime(f"%A, {day}{suf} %B %Y")
+
 
 class Owner(Package):
     """Bot owner tools, reload, management, debug, and traceback."""
@@ -620,33 +638,72 @@ class Owner(Package):
         description="Blacklist a user or guild from using the bot",
         invoke_without_command=True,
     )
-    @describe(target="User ID/mention or guild ID to blacklist", reason="Reason for blacklisting")
+    @describe(target="User ID/mention or guild ID", reason="Reason for blacklisting")
     async def blacklist(self, ctx: Context, target: str, *, reason: str = None) -> None:
-        resolved = self.bot.get_guild(int(target)) if target.isdigit() else None
-        if resolved:
+        from core.discord.ctx import layout_from_items
+
+        guild = None
+        if target.isdigit():
+            guild = self.bot.get_guild(int(target))
+
+        if guild is not None:
+            await self.bot.db.execute("DELETE FROM blacklist WHERE guild_id = $1", guild.id)
             await self.bot.db.execute(
                 "INSERT INTO blacklist (user_id, guild_id, reason) VALUES (NULL, $1, $2)",
-                resolved.id, reason,
+                guild.id, reason,
             )
-            await ctx.success(
-                f"Blacklisted guild **{resolved.name}** (`{resolved.id}`)"
-            )
+            await self.bot.forget(f"blacklist:guild:{guild.id}")
+            lines = [
+                f"-# **target**: **{guild.name}** (`{guild.id}`)",
+                f"-# **type**: guild",
+            ]
+            if reason:
+                lines.append(f"-# **reason**: {reason}")
+            lines.append(f"-# **blacklisted since**: {_blacklist_since(discord.utils.utcnow())}")
+            container = ui.Container()
+            for attr in ("accent_color", "accent_colour"):
+                if hasattr(container, attr):
+                    with contextlib.suppress(Exception):
+                        setattr(container, attr, None)
+            container.add_item(ui.TextDisplay("**Blacklisted**"))
+            container.add_item(ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small))
+            container.add_item(ui.TextDisplay("\n".join(lines)))
+            await ctx.send(view=layout_from_items([container], timeout=None))
             await self._log_devlog(
-                f"**{ctx.author}** blacklisted guild **{resolved.name}** (`{resolved.id}`){f' — reason: {reason}' if reason else ''}"
+                f"**{ctx.author}** blacklisted guild **{guild.name}** (`{guild.id}`)"
+                + (f" — reason: {reason}" if reason else "")
             )
             return
 
         user = await self._resolve_user(target)
+        await self.bot.db.execute("DELETE FROM blacklist WHERE user_id = $1", user.id)
         await self.bot.db.execute(
             "INSERT INTO blacklist (user_id, guild_id, reason) VALUES ($1, NULL, $2)",
             user.id, reason,
         )
-        await self.bot.forget(
-            f"blacklist:{ctx.guild.id if ctx.guild else 0}:{user.id}"
+        await self.bot.forget(f"blacklist:user:{user.id}")
+        lines = [
+            f"-# **target**: {user.mention} (`{user.id}`)",
+            f"-# **type**: user",
+        ]
+        if reason:
+            lines.append(f"-# **reason**: {reason}")
+        lines.append(f"-# **blacklisted since**: {_blacklist_since(discord.utils.utcnow())}")
+        container = ui.Container()
+        for attr in ("accent_color", "accent_colour"):
+            if hasattr(container, attr):
+                with contextlib.suppress(Exception):
+                    setattr(container, attr, None)
+        container.add_item(ui.TextDisplay("**Blacklisted**"))
+        container.add_item(ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small))
+        container.add_item(ui.TextDisplay("\n".join(lines)))
+        await ctx.send(
+            view=layout_from_items([container], timeout=None),
+            allowed_mentions=discord.AllowedMentions.none(),
         )
-        await ctx.success(f"Blacklisted **{user}**")
         await self._log_devlog(
-            f"**{ctx.author}** blacklisted **{user}** (`{user.id}`){f' — reason: {reason}' if reason else ''}"
+            f"**{ctx.author}** blacklisted **{user}** (`{user.id}`)"
+            + (f" — reason: {reason}" if reason else "")
         )
 
     @blacklist.command(
@@ -655,28 +712,56 @@ class Owner(Package):
         description="View all blacklisted users and guilds",
     )
     async def blacklist_list(self, ctx: Context) -> None:
+        from core.discord.ctx import layout_from_items
+        import math
+
         rows = await self.bot.db.fetch(
             "SELECT user_id, guild_id, reason, created_at FROM blacklist ORDER BY created_at DESC"
         )
         if not rows:
-            raise CommandError("No blacklisted users or guilds")
+            return await ctx.warn("No blacklisted users or guilds")
 
-        values = []
+        entries = []
         for row in rows:
             if row["user_id"]:
-                entry = f"User: <@{row['user_id']}> (`{row['user_id']}`)"
+                head = f"<@{row['user_id']}> (`{row['user_id']}`)"
+                kind = "user"
             elif row["guild_id"]:
-                entry = f"Guild: `{row['guild_id']}`"
+                g = self.bot.get_guild(row["guild_id"])
+                name = g.name if g else "unknown guild"
+                head = f"**{name}** (`{row['guild_id']}`)"
+                kind = "guild"
             else:
                 continue
-            if row["reason"]:
-                entry += f"\n> -# **reason**: {row['reason']}"
-            values.append(entry)
+            reason = row["reason"] or "none"
+            since = _blacklist_since(row["created_at"])
+            entries.append((head, kind, reason, since))
 
-        embed = panel_embed(title="Blacklist", color=color.base, lines=[], timestamp=False)
-        return await ctx.paginate(embed, values)
-
-    
+        page_size = 10
+        total_pages = max(1, math.ceil(len(entries) / page_size))
+        pages = []
+        for page_number, start in enumerate(range(0, len(entries), page_size), start=1):
+            chunk = entries[start : start + page_size]
+            container = ui.Container()
+            for attr in ("accent_color", "accent_colour"):
+                if hasattr(container, attr):
+                    with contextlib.suppress(Exception):
+                        setattr(container, attr, None)
+            container.add_item(ui.TextDisplay("**Blacklist**"))
+            container.add_item(
+                ui.TextDisplay(
+                    f"-# {len(entries)} entr{'y' if len(entries) == 1 else 'ies'} · Page {page_number}/{total_pages}"
+                )
+            )
+            container.add_item(ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small))
+            lines = []
+            for i, (head, kind, reason, since) in enumerate(chunk, start=start + 1):
+                lines.append(f"-# `{i}.` {head}")
+                lines.append(f"-# type · `{kind}` · reason · {reason}")
+                lines.append(f"-# blacklisted since {since}")
+            container.add_item(ui.TextDisplay("\n".join(lines)))
+            pages.append(layout_from_items([container], timeout=None))
+        return await send_pages(ctx, pages)
 
     @group(
         name="whitelist",
@@ -686,14 +771,32 @@ class Owner(Package):
     )
     @describe(target="User ID/mention or guild ID to whitelist")
     async def whitelist(self, ctx: Context, *, target: str) -> None:
-        resolved = self.bot.get_guild(int(target)) if target.isdigit() else None
-        if resolved:
+        from core.discord.ctx import layout_from_items
+
+        guild = None
+        if target.isdigit():
+            guild = self.bot.get_guild(int(target))
+
+        if guild is not None:
             await self.bot.db.execute(
-                "DELETE FROM blacklist WHERE guild_id = $1", resolved.id
+                "DELETE FROM blacklist WHERE guild_id = $1", guild.id
             )
-            await ctx.success(f"Whitelisted guild **{resolved.name}** (`{resolved.id}`)")
+            await self.bot.forget(f"blacklist:guild:{guild.id}")
+            lines = [
+                f"-# **target**: **{guild.name}** (`{guild.id}`)",
+                f"-# **type**: guild",
+            ]
+            container = ui.Container()
+            for attr in ("accent_color", "accent_colour"):
+                if hasattr(container, attr):
+                    with contextlib.suppress(Exception):
+                        setattr(container, attr, None)
+            container.add_item(ui.TextDisplay("**Whitelisted**"))
+            container.add_item(ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small))
+            container.add_item(ui.TextDisplay("\n".join(lines)))
+            await ctx.send(view=layout_from_items([container], timeout=None))
             await self._log_devlog(
-                f"**{ctx.author}** whitelisted guild **{resolved.name}** (`{resolved.id}`)"
+                f"**{ctx.author}** whitelisted guild **{guild.name}** (`{guild.id}`)"
             )
             return
 
@@ -701,10 +804,23 @@ class Owner(Package):
         await self.bot.db.execute(
             "DELETE FROM blacklist WHERE user_id = $1", user.id
         )
-        await self.bot.forget(
-            f"blacklist:{ctx.guild.id if ctx.guild else 0}:{user.id}"
+        await self.bot.forget(f"blacklist:user:{user.id}")
+        lines = [
+            f"-# **target**: {user.mention} (`{user.id}`)",
+            f"-# **type**: user",
+        ]
+        container = ui.Container()
+        for attr in ("accent_color", "accent_colour"):
+            if hasattr(container, attr):
+                with contextlib.suppress(Exception):
+                    setattr(container, attr, None)
+        container.add_item(ui.TextDisplay("**Whitelisted**"))
+        container.add_item(ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small))
+        container.add_item(ui.TextDisplay("\n".join(lines)))
+        await ctx.send(
+            view=layout_from_items([container], timeout=None),
+            allowed_mentions=discord.AllowedMentions.none(),
         )
-        await ctx.success(f"Whitelisted **{user}**")
         await self._log_devlog(
             f"**{ctx.author}** whitelisted **{user}** (`{user.id}`)"
         )
@@ -714,9 +830,7 @@ class Owner(Package):
         description="View all whitelisted users and guilds",
     )
     async def whitelist_list(self, ctx: Context) -> None:
-        await ctx.fail("Whitelisting removes entries - use `blacklist list` to see current entries")
-
-    
+        await ctx.warn("Whitelisting removes entries — use `blacklist list` to see current entries")
 
     @command(
         name="portal",
