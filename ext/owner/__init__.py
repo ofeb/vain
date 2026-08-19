@@ -17,6 +17,7 @@ from discord.ext.commands import CommandError
 
 from core.discord.package import Package
 from core.discord.views.paginate import send_pages
+from core.tools.human.time import human_date
 from core.discord.ctx import Context
 from core.discord.hybrid import group, command, describe
 from config import color
@@ -785,9 +786,15 @@ class Owner(Package):
         for nr in note_rows:
             notes_map.setdefault(nr["history_hash"], []).append(nr)
 
-        page_size = 5
+        page_size = 3
         total_pages = max(1, math.ceil(len(rows) / page_size))
         pages = []
+        title_kind = "history"
+        if show_bl and not show_wl:
+            title_kind = "blacklist history"
+        elif show_wl and not show_bl:
+            title_kind = "whitelist history"
+
         for page_number, start in enumerate(range(0, len(rows), page_size), start=1):
             chunk = rows[start : start + page_size]
             container = ui.Container()
@@ -795,33 +802,34 @@ class Owner(Package):
                 if hasattr(container, attr):
                     with contextlib.suppress(Exception):
                         setattr(container, attr, None)
-            title_kind = "history"
-            if show_bl and not show_wl:
-                title_kind = "blacklist history"
-            elif show_wl and not show_bl:
-                title_kind = "whitelist history"
-            container.add_item(ui.TextDisplay(f"**Devlogs · {title_kind}** · {user.mention}"))
+            container.add_item(ui.TextDisplay(f"**Devlogs · {title_kind}** - {user}"))
             container.add_item(
                 ui.TextDisplay(
-                    f"-# {len(rows)} entr{'y' if len(rows) == 1 else 'ies'} · Page {page_number}/{total_pages}"
+                    f"-# {len(rows)} entr{'y' if len(rows) == 1 else 'ies'} · page {page_number}/{total_pages}"
                 )
             )
             container.add_item(ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small))
             lines = []
-            for i, row in enumerate(chunk, start=start + 1):
+            for idx, row in enumerate(chunk):
                 mod = f"<@{row['moderator_id']}>" if row["moderator_id"] else "unknown"
-                since = _blacklist_since(row["created_at"])
-                lines.append(f"-# `{i}.` **{row['action']}** · `{row['hash']}`")
-                lines.append(f"-# by {mod} · {since}")
-                if row["reason"]:
-                    lines.append(f"-# reason · {row['reason']}")
+                try:
+                    when = human_date(row.get("created_at"), fallback="unknown")
+                except Exception:
+                    when = _blacklist_since(row["created_at"])
+                reason = (row["reason"] or "").strip() or "no reason provided"
+                lines.append(f"**`{row['hash']}`** - `{row['action']}`")
+                lines.append(f"-# **moderator**: {mod}")
+                lines.append(f"-# **when**: {when}")
+                lines.append(f"-# **reason**: {reason}")
                 nlist = notes_map.get(row["hash"]) or []
                 if nlist:
-                    for ni, n in enumerate(nlist, start=1):
-                        lines.append(f"-# note `#{n['id']}` · {n['content'][:180]}")
+                    for n in nlist:
+                        lines.append(f"-# **note** `#{n['id']}`: {(n['content'] or '')[:180]}")
                 else:
-                    lines.append("-# notes · none")
-                if i < start + len(chunk):
+                    lines.append(
+                        f"-# **note**: unavailable *(add with `{ctx.prefix}devlogs notes add {row['hash']} <text>`)*"
+                    )
+                if idx < len(chunk) - 1:
                     lines.append("\u200b")
             container.add_item(ui.TextDisplay("\n".join(lines)))
             pages.append(layout_from_items([container], timeout=None))
@@ -983,8 +991,7 @@ class Owner(Package):
                 f"-# **type**: guild",
                 f"-# **id**: `{entry_hash}`",
             ]
-            if reason:
-                lines.append(f"-# **reason**: {reason}")
+            lines.append(f"-# **reason**: {(reason or '').strip() or 'no reason provided'}")
             lines.append(f"-# **blacklisted since**: {_blacklist_since(discord.utils.utcnow())}")
             container = ui.Container()
             for attr in ("accent_color", "accent_colour"):
@@ -1020,8 +1027,7 @@ class Owner(Package):
             f"-# **type**: user",
             f"-# **id**: `{entry_hash}`",
         ]
-        if reason:
-            lines.append(f"-# **reason**: {reason}")
+        lines.append(f"-# **reason**: {(reason or '').strip() or 'no reason provided'}")
         lines.append(f"-# **blacklisted since**: {_blacklist_since(discord.utils.utcnow())}")
         container = ui.Container()
         for attr in ("accent_color", "accent_colour"):
@@ -1090,9 +1096,10 @@ class Owner(Package):
             container.add_item(ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small))
             lines = []
             for i, (head, kind, reason, since) in enumerate(chunk, start=start + 1):
-                lines.append(f"-# `{i}.` {head}")
-                lines.append(f"-# type · `{kind}` · reason · {reason}")
-                lines.append(f"-# blacklisted since {since}")
+                lines.append(f"**`{i}`** - `{kind}`")
+                lines.append(f"-# **target**: {head}")
+                lines.append(f"-# **reason**: {reason}")
+                lines.append(f"-# **when**: {since}")
             container.add_item(ui.TextDisplay("\n".join(lines)))
             pages.append(layout_from_items([container], timeout=None))
         return await send_pages(ctx, pages)
@@ -1103,8 +1110,8 @@ class Owner(Package):
         description="Remove a user or guild from blacklist",
         invoke_without_command=True,
     )
-    @describe(target="User ID/mention or guild ID to whitelist")
-    async def whitelist(self, ctx: Context, *, target: str) -> None:
+    @describe(target="User ID/mention or guild ID", reason="Optional reason for the whitelist")
+    async def whitelist(self, ctx: Context, target: str, *, reason: str = None) -> None:
         from core.discord.ctx import layout_from_items
 
         guild = None
@@ -1120,12 +1127,14 @@ class Owner(Package):
                 self.bot.db,
                 action="whitelist",
                 guild_id=guild.id,
+                reason=reason,
                 moderator_id=ctx.author.id,
             )
             lines = [
                 f"-# **target**: **{guild.name}** (`{guild.id}`)",
                 f"-# **type**: guild",
                 f"-# **id**: `{entry_hash}`",
+                f"-# **reason**: {(reason or '').strip() or 'no reason provided'}",
             ]
             container = ui.Container()
             for attr in ("accent_color", "accent_colour"):
@@ -1150,12 +1159,14 @@ class Owner(Package):
             self.bot.db,
             action="whitelist",
             user_id=user.id,
+            reason=reason,
             moderator_id=ctx.author.id,
         )
         lines = [
             f"-# **target**: {user.mention} (`{user.id}`)",
             f"-# **type**: user",
             f"-# **id**: `{entry_hash}`",
+            f"-# **reason**: {(reason or '').strip() or 'no reason provided'}",
         ]
         container = ui.Container()
         for attr in ("accent_color", "accent_colour"):
