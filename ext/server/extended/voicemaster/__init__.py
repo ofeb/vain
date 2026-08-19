@@ -316,12 +316,12 @@ class VoiceMaster(VoiceMasterEvents, Package):
             raise commands.CommandError("you **don't** own this **voice channel**!")
         return True
 
-    @group(name="voicemaster", description="manage temporary voice channels in your server", guild_only=True, invoke_without_command=True)
+    @group(name="voicemaster", aliases=["vm", "voicechannels"], description="manage temporary voice channels in your server", guild_only=True, invoke_without_command=True)
     async def voicemaster(self, ctx: Context) -> None:
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    @voicemaster.command(name="setup")
+    @voicemaster.command(name="setup", aliases=["set", "setme"])
     @has_permissions(manage_guild=True)
     @commands.cooldown(1, 30, commands.BucketType.guild)
     async def voicemaster_setup(self, ctx: Context) -> None:
