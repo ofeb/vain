@@ -3506,7 +3506,7 @@ class ModerationCommands(Package):
 
     @command(
         name="setup",
-        aliases=["setup", "setme"],
+        aliases=["setme","setmod"],
         description="start process for setting up the moderation system",
     )
     async def setup(self, ctx):
@@ -3545,7 +3545,7 @@ class ModerationCommands(Package):
 
     @command(
         name="unsetup",
-        aliases=["unsetme", "reset", "unset"],
+        aliases=["unset", "unsetme", "unsetmod", "reset"],
         description="remove moderation system setup (categories and channels)",
     )
     @has_permissions(administrator=True)
