@@ -1681,8 +1681,8 @@ class Utility(Remind):
         if not any_ok:
             if any(k.startswith("avatar:") for k, _ in sources):
                 return await ctx.warn(
-                    "Could not read **avatar** color data
-> -# the avatar may be unavailable — try again in a moment"
+                    "Could not read **avatar** color data\n"
+                    "> -# the avatar may be unavailable — try again in a moment"
                 )
             return await ctx.warn(
                 "Attachments or URLs **must** be **GIFs** or **Images**"
