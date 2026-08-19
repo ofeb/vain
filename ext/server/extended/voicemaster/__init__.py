@@ -73,9 +73,7 @@ class VoiceMaster(VoiceMasterEvents, Package):
         if server_icon:
             container.add_item(discord.ui.Section(
                 discord.ui.TextDisplay(header_text),
-                accessory=discord.ui.ActionRow(
-                    discord.ui.Thumbnail(media=server_icon),
-                ),
+                accessory=discord.ui.Thumbnail(media=server_icon),
             ))
         else:
             container.add_item(discord.ui.TextDisplay(header_text))

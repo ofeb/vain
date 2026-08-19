@@ -1117,7 +1117,7 @@ async def parse_container(raw: str, sendable: bool = False) -> dict:
                     container.add_item(
                         ui.Section(
                             ui.TextDisplay(str(text)),
-                            accessory=ui.ActionRow(ui.Thumbnail(media=thumb)),
+                            accessory=ui.Thumbnail(thumb),
                         )
                     )
                 except Exception:
@@ -1170,7 +1170,7 @@ async def parse_container(raw: str, sendable: bool = False) -> dict:
                     container.add_item(
                         ui.Section(
                             ui.TextDisplay(f"**{name}**"),
-                            accessory=ui.ActionRow(ui.Thumbnail(media=icon)),
+                            accessory=ui.Thumbnail(icon),
                         )
                     )
                 except Exception:
@@ -1224,7 +1224,7 @@ async def parse_container(raw: str, sendable: bool = False) -> dict:
                     container.add_item(
                         ui.Section(
                             ui.TextDisplay(body),
-                            accessory=ui.ActionRow(ui.Thumbnail(media=payload)),
+                            accessory=ui.Thumbnail(payload),
                         )
                     )
                 except Exception:

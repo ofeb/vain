@@ -86,7 +86,7 @@ def build_giveaway_panel(
             container.add_item(
                 ui.Section(
                     ui.TextDisplay(body),
-                    accessory=ui.ActionRow(ui.Thumbnail(media=str(guild_icon))),
+                    accessory=ui.Thumbnail(str(guild_icon)),
                 )
             )
         except Exception:
