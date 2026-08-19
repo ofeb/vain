@@ -424,6 +424,9 @@ class Vain(commands.AutoShardedBot):
         if self.get_cog("PaginationReactionListener") is None:
             await self.add_cog(PaginationReactionListener(self))
 
+        log.info("ensuring hybrid commands on tree")
+        with contextlib.suppress(Exception):
+            self.ensure_hybrid_tree()
         log.info("syncing global slash commands")
         sync_started = time.perf_counter()
         await self._sync_global_commands()
@@ -501,6 +504,38 @@ class Vain(commands.AutoShardedBot):
         except Exception as e:
             return False, f"{type(e).__name__}: {e}"
 
+
+    def ensure_hybrid_tree(self) -> int:
+        """Re-register every top-level HybridCommand/HybridGroup app_command onto the tree."""
+        from discord.ext.commands import HybridCommand, HybridGroup
+        added = 0
+        seen: set[str] = set()
+        for cmd in list(self.walk_commands()):
+            if cmd.parent is not None:
+                continue
+            if not isinstance(cmd, (HybridCommand, HybridGroup)):
+                continue
+            app = getattr(cmd, "app_command", None)
+            if app is None:
+                log.warning("hybrid /%s has no app_command", cmd.qualified_name)
+                continue
+            name = getattr(app, "name", None) or cmd.name
+            if name in seen:
+                continue
+            seen.add(name)
+            with contextlib.suppress(Exception):
+                self.tree.remove_command(name)
+            try:
+                self.tree.add_command(app, override=True)
+                added += 1
+            except TypeError:
+                with contextlib.suppress(Exception):
+                    self.tree.add_command(app)
+                    added += 1
+            except Exception as e:
+                log.warning("could not tree-add /%s: %s", name, e)
+        log.info("ensure_hybrid_tree registered %s slash commands", added)
+        return added
 
     async def _sync_global_commands(self) -> None:
         try:

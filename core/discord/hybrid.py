@@ -343,17 +343,21 @@ def _hybrid_command(name: str | None = None, **attrs: Any):
     def deco(fn: Callable[..., Any]) -> commands.HybridCommand:
         
         prepared = _inject_descriptions(fn, params)
+        try:
+            prepared = app_commands.allowed_contexts(
+                guilds=guilds, dms=_dms, private_channels=_gcs
+            )(prepared)
+            prepared = app_commands.allowed_installs(guilds=True, users=True)(prepared)
+        except Exception as e:
+            log.debug("pre-context failed for %s: %s", name or getattr(fn, "__name__", "?"), e)
+        if guilds and not _dms and not _gcs:
+            prepared = commands.guild_only()(prepared)
+
         cmd = _try_register(commands.hybrid_command, prepared, name=name, attrs=attrs)
         _apply_aliases(cmd, aliases)
         _copy_link_meta(cmd, fn)
         cmd.example = example
         cmd.parameters = params
-        
-        try:
-            original = cmd.callback
-            cmd.callback = _wrap_callback(original, guilds=guilds, dms=_dms, groupchats=_gcs)
-        except Exception as e:
-            log.debug("callback wrap failed for /%s: %s", getattr(cmd, "name", name), e)
         _bind_app_contexts(cmd, guilds=guilds, dms=_dms, groupchats=_gcs)
         return cmd
 
@@ -366,15 +370,19 @@ def _hybrid_group(name: str | None = None, **attrs: Any):
 
     def deco(fn: Callable[..., Any]) -> commands.HybridGroup:
         prepared = _inject_descriptions(fn, params)
+        try:
+            prepared = app_commands.allowed_contexts(
+                guilds=guilds, dms=_dms, private_channels=_gcs
+            )(prepared)
+            prepared = app_commands.allowed_installs(guilds=True, users=True)(prepared)
+        except Exception as e:
+            log.debug("group pre-context failed for %s: %s", name or "?", e)
+        if guilds and not _dms and not _gcs:
+            prepared = commands.guild_only()(prepared)
         grp = _try_register(commands.hybrid_group, prepared, name=name, attrs=attrs)
         _apply_aliases(grp, aliases)
         grp.example = example
         grp.parameters = params
-        try:
-            original = grp.callback
-            grp.callback = _wrap_callback(original, guilds=guilds, dms=_dms, groupchats=_gcs)
-        except Exception as e:
-            log.debug("group callback wrap failed for /%s: %s", getattr(grp, "name", name), e)
         _bind_app_contexts(grp, guilds=guilds, dms=_dms, groupchats=_gcs)
         _orig_command = grp.command
 
@@ -446,10 +454,14 @@ def _hybrid_group(name: str | None = None, **attrs: Any):
                 )
 
                 def sub_deco(sub_fn):
-                    sub_prepared = _inject_descriptions(
-                        _wrap_callback(sub_fn, guilds=sg, dms=sd, groupchats=sc),
-                        sub_params,
-                    )
+                    sub_prepared = _inject_descriptions(sub_fn, sub_params)
+                    try:
+                        sub_prepared = app_commands.allowed_contexts(
+                            guilds=sg, dms=sd, private_channels=sc
+                        )(sub_prepared)
+                        sub_prepared = app_commands.allowed_installs(guilds=True, users=True)(sub_prepared)
+                    except Exception:
+                        pass
                     gname = kw.get("name") or sub_fn.__name__
                     try:
                         nested = _orig_group(*args, **kw)(sub_prepared)
