@@ -393,18 +393,23 @@ def _aliases(cmd: Command) -> str:
 
 
 def _description(cmd: Command) -> str:
-    
+    def _norm(text: str) -> str:
+        text = str(text or "").strip()
+        while text.endswith("."):
+            text = text[:-1].rstrip()
+        return text.lower() if text else ""
+
     if isinstance(cmd, Group):
         for value in (cmd.description, cmd.help, cmd.short_doc):
-            text = str(value or "").strip()
+            text = _norm(value)
             if text:
-                return text[:1].upper() + text[1:]
-        return f"Use subcommands under {cmd.qualified_name}"
+                return text
+        return f"use subcommands under {cmd.qualified_name}".lower()
     for value in (cmd.help, cmd.description, cmd.short_doc):
-        text = str(value or "").strip()
+        text = _norm(value)
         if text:
-            return text[:1].upper() + text[1:]
-    return f"Run the {cmd.qualified_name} command"
+            return text
+    return f"run the {cmd.qualified_name} command".lower()
 
 
 def _command_name_variants(cmd: Command) -> list[str]:
@@ -1059,7 +1064,7 @@ def _detail_text(
     
     is_grp = bool(group_title and isinstance(cmd, Group))
     name = command_display_name(cmd)
-    desc = _description(cmd) or "No description provided."
+    desc = _description(cmd) or "no description provided"
     aliases = _aliases(cmd)
     if aliases == "n/a":
         aliases = "None"
