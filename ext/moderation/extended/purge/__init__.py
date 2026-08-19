@@ -56,6 +56,17 @@ class Purge(Package):
             bulkable = [m for m in messages if (now - m.created_at) < BULK_DELETE_LIMIT]
             non_bulk = [m for m in messages if (now - m.created_at) >= BULK_DELETE_LIMIT]
 
+            
+            try:
+                pending = getattr(self.bot, "_pending_bulk_deletes", None)
+                if pending is None:
+                    pending = {}
+                    self.bot._pending_bulk_deletes = pending
+                ch_id = channel.id
+                pending[ch_id] = list(messages)
+            except Exception:
+                pass
+
             if bulkable:
                 if len(bulkable) > 100:
                     for chunk in discord.utils.chunk_list(bulkable, 100):

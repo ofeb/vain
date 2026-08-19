@@ -300,17 +300,27 @@ class LogEvents:
         import time as _time
         from datetime import datetime as _dt, timezone as _tz
 
+        
+        pending = getattr(self.bot, "_pending_bulk_deletes", None) or {}
+        snap = pending.pop(getattr(channel, "id", None), None)
+        if snap:
+            
+            by_id = {m.id: m for m in snap if getattr(m, "id", None)}
+            for m in messages:
+                if getattr(m, "id", None) not in by_id:
+                    by_id[m.id] = m
+            messages = list(by_id.values())
+
         authors: dict[int, discord.abc.User] = {}
         ordered = sorted(
             messages,
-            key=lambda m: m.created_at or discord.utils.utcnow(),
+            key=lambda m: (m.created_at or discord.utils.utcnow()),
         )
         uncached = 0
         file_blocks: list[str] = []
 
         for msg in ordered:
             author = msg.author
-            
             if author is None:
                 uncached += 1
                 file_blocks.append(f"[unknown] (message id {msg.id})")
@@ -346,7 +356,6 @@ class LogEvents:
             if att_urls:
                 file_blocks.append("attachments: " + ", ".join(att_urls))
 
-            
             stickers = list(getattr(msg, "stickers", None) or [])
             if stickers:
                 names = ", ".join(getattr(s, "name", str(s)) for s in stickers)
@@ -356,6 +365,8 @@ class LogEvents:
 
         
         now_ts = int(_time.time())
+        now_dt = _dt.utcfromtimestamp(now_ts).replace(tzinfo=_tz.utc)
+        
         now_dt = _dt.fromtimestamp(now_ts, tz=_tz.utc)
         time_24 = now_dt.strftime("%H:%M")
         day = now_dt.day
