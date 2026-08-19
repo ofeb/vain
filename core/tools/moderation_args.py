@@ -155,6 +155,39 @@ async def _resolve_member(ctx, token: str) -> tuple[discord.Member | None, disco
     raise CommandError(f"**can't** find member **{token}**")
 
 
+async def _target_from_reply(ctx) -> tuple[discord.Member | None, discord.User | None]:
+    """Resolve the replied-to message author as a mod target, if any."""
+    msg = getattr(ctx, "message", None)
+    if msg is None or not getattr(msg, "reference", None):
+        return None, None
+    ref = msg.reference
+    resolved = getattr(ref, "resolved", None)
+    author = None
+    if isinstance(resolved, discord.Message):
+        author = resolved.author
+    else:
+        mid = getattr(ref, "message_id", None)
+        channel = getattr(ctx, "channel", None)
+        if mid and channel is not None:
+            try:
+                fetched = await channel.fetch_message(mid)
+                author = fetched.author
+            except Exception:
+                author = None
+    if author is None or getattr(author, "bot", False):
+        return None, None
+    if ctx.guild is not None:
+        member = ctx.guild.get_member(author.id)
+        if member is None:
+            try:
+                member = await ctx.guild.fetch_member(author.id)
+            except discord.HTTPException:
+                member = None
+        if member is not None:
+            return member, member
+    return None, author
+
+
 async def parse_moderation_args(
     ctx,
     *,
@@ -162,21 +195,23 @@ async def parse_moderation_args(
     allow_duration: bool = True,
     allow_delete_days: bool = False,
 ) -> ParsedModerationArgs:
+    """Parse ``[member] [duration] [reason…]`` or reply-target + ``[duration] [reason…]``.
+
+    - Target: reply to their message, or username / id / mention
+    - Duration (when allowed): optional token like ``2d`` / ``30m`` — first duration wins
+    - Reason: optional remainder after target + duration
+    - Jail / timeout with no duration → ``duration_seconds is None`` (indefinite)
+    """
     tail = _command_tail(ctx, command_names)
-    if not tail:
-        raise CommandError("you must specify a member")
-
     try:
-        tokens = shlex.split(tail)
+        tokens = shlex.split(tail) if tail else []
     except ValueError:
-        tokens = tail.split()
-
-    if not tokens:
-        raise CommandError("you must specify a member")
+        tokens = tail.split() if tail else []
 
     member: discord.Member | None = None
     user: discord.User | None = None
     member_index: int | None = None
+
     for index, token in enumerate(tokens):
         if is_duration_token(token):
             continue
@@ -188,7 +223,10 @@ async def parse_moderation_args(
             continue
 
     if member is None and user is None:
-        raise CommandError("could not find that member")
+        member, user = await _target_from_reply(ctx)
+
+    if member is None and user is None:
+        raise CommandError("you must specify a member (mention, id, name, or reply)")
 
     duration_seconds: int | None = None
     delete_days: int | None = None
@@ -202,12 +240,13 @@ async def parse_moderation_args(
             seconds = parse_duration_seconds(token)
             if seconds is None:
                 continue
-            before_member = index < (member_index or 0)
-            if allow_duration and _duration_implies_tempban(token, before_member=before_member):
-                duration_seconds = seconds
-                duration_before_member = before_member
-                consumed.add(index)
-            elif allow_delete_days and not duration_seconds:
+            before_member = member_index is not None and index < member_index
+            if allow_duration:
+                if duration_seconds is None:
+                    duration_seconds = seconds
+                    duration_before_member = before_member
+                    consumed.add(index)
+            elif allow_delete_days and delete_days is None:
                 delete_days = duration_to_delete_days(seconds)
                 consumed.add(index)
 
