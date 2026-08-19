@@ -1658,6 +1658,11 @@ async def setup(bot: commands.Bot):
 
     await bot.add_cog(Snipe(bot))
     await bot.add_cog(Utility(bot))
+    try:
+        from .extended.remind import Remind
+        await bot.add_cog(Remind(bot))
+    except Exception as _e:
+        print(f"failed to load Remind: {_e}")
 
     if bot.get_cog("SnipeEvents") is None:
         await bot.add_cog(SnipeEvents(bot))

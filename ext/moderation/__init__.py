@@ -3973,7 +3973,6 @@ from core.discord.mixin import _Meta
 from .extended.nuke import Nuke
 from .extended.thread import Thread
 from .extended.lockdown import Lockdown
-from .extended.remind import Remind
 from .extended.role import Role
 from .extended.purge import Purge
 from .extended.history import History
@@ -3992,7 +3991,6 @@ class Moderation(
     Nuke,
     Thread,
     Lockdown,
-    Remind,
     Role,
     Purge,
     History,
