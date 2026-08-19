@@ -323,19 +323,18 @@ class Owner(Package):
     )
     @describe(guild_id="Guild ID to sync to (leave empty for global)")
     async def sync(self, ctx: Context, guild_id: str = None) -> None:
+        with contextlib.suppress(Exception):
+            self.bot.ensure_hybrid_tree()
         if guild_id:
             guild = discord.Object(id=int(guild_id))
-            with contextlib.suppress(Exception):
-            self.bot.ensure_hybrid_tree()
-        synced = await self.bot.tree.sync(guild=guild)
+            synced = await self.bot.tree.sync(guild=guild)
             await ctx.success(
                 f"Synced **{len(synced)}** commands to guild `{guild_id}`"
             )
         else:
-            with contextlib.suppress(Exception):
-            self.bot.ensure_hybrid_tree()
-        synced = await self.bot.tree.sync()
+            synced = await self.bot.tree.sync()
             await ctx.success(f"Synced **{len(synced)}** commands globally")
+
 
     @command(
         name="guilds",
