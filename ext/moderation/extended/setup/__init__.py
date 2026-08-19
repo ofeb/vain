@@ -13,8 +13,8 @@ if TYPE_CHECKING:
 
 LOADING = "<a:loading:1534646618693963807>"
 BOT_NAME = "vain"
-SETUP_TIMEOUT = 300  # 5 minutes — buttons expire after this
-SETUP_COOLDOWN = 120  # 2 minutes between setup / revert actions
+SETUP_TIMEOUT = 300
+SETUP_COOLDOWN = 120
 
 _setup_cooldown: dict[int, float] = {}
 
@@ -70,7 +70,7 @@ class SetupView(ui.LayoutView):
         prefix: str = ",",
         message: discord.Message | None = None,
     ) -> None:
-        # We manage phase timeouts ourselves so each stage gets a full 5 minutes.
+
         super().__init__(timeout=None)
         self.bot = bot
         self.guild = guild
@@ -85,7 +85,6 @@ class SetupView(ui.LayoutView):
         ] = "intro"
         self._build_intro()
 
-    # ── phase timeout (5 minutes per interactive panel) ──────────────────────
 
     def _cancel_expire(self) -> None:
         if self._expire_task is not None and not self._expire_task.done():
@@ -109,7 +108,6 @@ class SetupView(ui.LayoutView):
         except RuntimeError:
             self._expire_task = None
 
-    # ── builders ─────────────────────────────────────────────────────────────
 
     def _build_intro(self) -> None:
         self._phase = "intro"
@@ -167,11 +165,13 @@ class SetupView(ui.LayoutView):
         lines = [f"> -# `{i}.` {n}" for i, n in enumerate(notes, start=1)]
         lines.append("")
         lines.append(
-            f"> -# learn to reconfigure with `{self.prefix}help antinuke` and `{self.prefix}help antiraid`"
+            f"> -# learn to reconfigure antinuke and antiraid with `{self.prefix}help antinuke` and `{self.prefix}help antiraid`"
         )
+        lines.append("")
         lines.append(
             f"> -# create embeds and containers use `embedbuilder` and `containerbuilder`"
         )
+        lines.append("")
         lines.append(
             f"> -# run `{self.prefix}unsetup` to revert all configurations done by {BOT_NAME}"
         )
@@ -289,7 +289,7 @@ class SetupView(ui.LayoutView):
         )
         self.add_item(container)
 
-    # ── lifecycle ────────────────────────────────────────────────────────────
+
 
     async def on_timeout(self) -> None:
         if self._phase == "intro":
@@ -351,7 +351,6 @@ class SetupView(ui.LayoutView):
                 await interaction.followup.send(msg, ephemeral=True)
         return False
 
-    # ── button callbacks ─────────────────────────────────────────────────────
 
     async def _on_setup(self, interaction: discord.Interaction) -> None:
         if not await self._check_cooldown(interaction):
@@ -401,7 +400,6 @@ class SetupView(ui.LayoutView):
         self._build_reverted()
         await self._edit()
 
-    # ── ensure helpers ───────────────────────────────────────────────────────
 
     async def _ensure_role(
         self, name: str, *, colour: discord.Colour | None = None
@@ -475,7 +473,6 @@ class SetupView(ui.LayoutView):
         self._created.append(("channel", ch.id))
         return ch
 
-    # ── setup / revert logic ─────────────────────────────────────────────────
 
     async def _run_setup(self) -> None:
         guild = self.guild
@@ -495,7 +492,7 @@ class SetupView(ui.LayoutView):
                 overwrites_logs[role] = discord.PermissionOverwrite(view_channel=True)
 
         logs_cat = await self._ensure_category("logs", overwrites_logs)
-        # Order: antinuke-logs, antiraid-logs, jail-logs, modlogs, logs
+
         antinuke_logs = await self._ensure_text(
             "antinuke-logs",
             logs_cat,
@@ -540,7 +537,7 @@ class SetupView(ui.LayoutView):
                 antinuke_channel_id=antinuke_logs.id,
                 antiraid_channel_id=antiraid_logs.id,
             )
-        # Event logging (`,log list` reads log_config — same path as `,log add`)
+
         log_events = [
             "messages",
             "members",
@@ -567,7 +564,7 @@ class SetupView(ui.LayoutView):
             except Exception:
                 continue
         if not log_cfg_ok:
-            # Last resort: set all events in one row
+
             with contextlib.suppress(Exception):
                 await self.bot.db.execute(
                     """INSERT INTO log_config (guild_id, channel_id, events)
