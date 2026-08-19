@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import secrets
 
 import io
 import logging
@@ -76,6 +77,75 @@ def _blacklist_since(dt) -> str:
     else:
         suf = {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
     return dt.strftime(f"%A, {day}{suf} %B %Y")
+
+
+async def _ensure_blacklist_history(db) -> None:
+    await db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS blacklist_history (
+            hash TEXT PRIMARY KEY,
+            user_id BIGINT,
+            guild_id BIGINT,
+            action TEXT NOT NULL,
+            reason TEXT,
+            moderator_id BIGINT,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+        """
+    )
+    await db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS blacklist_history_notes (
+            id SERIAL PRIMARY KEY,
+            history_hash TEXT NOT NULL,
+            content TEXT NOT NULL,
+            moderator_id BIGINT,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+        """
+    )
+
+
+def _gen_bl_hash() -> str:
+    return secrets.token_hex(3)[:5]
+
+
+async def _record_blacklist_history(
+    db,
+    *,
+    action: str,
+    user_id: int | None = None,
+    guild_id: int | None = None,
+    reason: str | None = None,
+    moderator_id: int | None = None,
+) -> str:
+    await _ensure_blacklist_history(db)
+    for _ in range(12):
+        h = _gen_bl_hash()
+        try:
+            await db.execute(
+                """
+                INSERT INTO blacklist_history
+                    (hash, user_id, guild_id, action, reason, moderator_id)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                """,
+                h, user_id, guild_id, action, reason, moderator_id,
+            )
+            return h
+        except Exception:
+            continue
+    h = secrets.token_hex(4)
+    await db.execute(
+        """
+        INSERT INTO blacklist_history
+            (hash, user_id, guild_id, action, reason, moderator_id)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        """,
+        h, user_id, guild_id, action, reason, moderator_id,
+    )
+    return h
+
+
 
 
 class Owner(Package):
@@ -574,39 +644,188 @@ class Owner(Package):
     @group(
         name="devlogs",
         aliases=["botlogs"],
-        description="Configure dev logging channel",
+        description="Dev logging channel + blacklist/whitelist history",
         invoke_without_command=True,
     )
-    @describe(channel="Channel to log bot events")
-    async def devlogs(
-        self, ctx: Context, channel: discord.TextChannel = None
-    ) -> None:
-        if channel is None:
+    async def devlogs(self, ctx: Context, *, query: str = None) -> None:
+        """Set channel, or view a user's blacklist/whitelist history.
+
+        Usage:
+          ,devlogs #channel
+          ,devlogs @user [--blacklist|--whitelist|--type blacklist|whitelist]
+        """
+        from core.discord.ctx import layout_from_items
+        import math
+        import re as _re
+
+        rest = (query or "").strip()
+        if not rest and ctx.message and ctx.message.content:
+            inv = ctx.invoked_with or "devlogs"
+            full = ctx.message.content
+            idx = full.lower().find(inv.lower())
+            if idx >= 0:
+                rest = full[idx + len(inv) :].strip()
+
+        if ctx.invoked_subcommand is not None:
+            return
+
+        
+        if rest and not rest.lstrip("-").startswith(("type", "blacklist", "whitelist", "bl", "wl")):
+            
+            ch = None
+            m = _re.search(r"<#(\d+)>", rest)
+            if m:
+                ch = self.bot.get_channel(int(m.group(1)))
+            elif rest.isdigit():
+                ch = self.bot.get_channel(int(rest))
+            if ch is not None and hasattr(ch, "send"):
+                await self.bot.db.execute(
+                    """
+                    INSERT INTO devlog_config (bot_id, channel_id)
+                        VALUES ($1, $2)
+                    ON CONFLICT (bot_id)
+                        DO UPDATE SET channel_id = $2
+                    """,
+                    self.bot.user.id,
+                    ch.id,
+                )
+                return await ctx.success(f"Devlog channel set to {ch.mention}")
+
+        
+        show_bl = True
+        show_wl = True
+        tokens = rest.split() if rest else []
+        cleaned = []
+        i = 0
+        while i < len(tokens):
+            low = tokens[i].lower().strip(",")
+            if low in ("--blacklist", "--bl", "--blist"):
+                show_bl, show_wl = True, False
+                i += 1
+                continue
+            if low in ("--whitelist", "--wl", "--wlist"):
+                show_bl, show_wl = False, True
+                i += 1
+                continue
+            if low in ("--type", "-t"):
+                if i + 1 < len(tokens):
+                    tval = tokens[i + 1].lower().strip(",")
+                    if tval in ("blacklist", "bl", "blist"):
+                        show_bl, show_wl = True, False
+                    elif tval in ("whitelist", "wl", "wlist"):
+                        show_bl, show_wl = False, True
+                    i += 2
+                    continue
+                i += 1
+                continue
+            if low.startswith("--type="):
+                tval = low.split("=", 1)[1]
+                if tval in ("blacklist", "bl", "blist"):
+                    show_bl, show_wl = True, False
+                elif tval in ("whitelist", "wl", "wlist"):
+                    show_bl, show_wl = False, True
+                i += 1
+                continue
+            cleaned.append(tokens[i])
+            i += 1
+        target = " ".join(cleaned).strip()
+
+        if not target:
             current = await self.bot.db.fetchval(
                 "SELECT channel_id FROM devlog_config WHERE bot_id = $1",
                 self.bot.user.id,
             )
             if current:
                 ch = self.bot.get_channel(current)
-                await ctx.send(
-                    f"Current devlog channel: {ch.mention if ch else f'<#{current}>'}"
+                return await ctx.send(
+                    f"Current devlog channel: {ch.mention if ch else f'<#{current}>'}\n"
+                    f"> -# usage: `{ctx.prefix}devlogs @user` · `{ctx.prefix}devlogs #channel`"
                 )
-            else:
-                await ctx.fail(
-                    "No devlog channel set. Usage: `devlogs #channel`"
-                )
-            return
-        await self.bot.db.execute(
+            return await ctx.warn(
+                f"No devlog channel set\n> -# **usage:** `{ctx.prefix}devlogs #channel`"
+            )
+
+        user = await self._resolve_user(target)
+        await _ensure_blacklist_history(self.bot.db)
+        actions = []
+        if show_bl:
+            actions.append("blacklist")
+        if show_wl:
+            actions.append("whitelist")
+        rows = await self.bot.db.fetch(
             """
-            INSERT INTO devlog_config (bot_id, channel_id)
-                VALUES ($1, $2)
-            ON CONFLICT (bot_id)
-                DO UPDATE SET channel_id = $2
+            SELECT hash, action, reason, moderator_id, created_at
+            FROM blacklist_history
+            WHERE user_id = $1 AND action = ANY($2::text[])
+            ORDER BY created_at DESC
             """,
-            self.bot.user.id,
-            channel.id,
+            user.id,
+            actions,
         )
-        await ctx.success(f"Devlog channel set to {channel.mention}")
+        if not rows:
+            kind = "blacklist/whitelist"
+            if show_bl and not show_wl:
+                kind = "blacklist"
+            elif show_wl and not show_bl:
+                kind = "whitelist"
+            return await ctx.warn(f"No {kind} history for **{user}**")
+
+        
+        hashes = [r["hash"] for r in rows]
+        note_rows = await self.bot.db.fetch(
+            """
+            SELECT id, history_hash, content, moderator_id, created_at
+            FROM blacklist_history_notes
+            WHERE history_hash = ANY($1::text[])
+            ORDER BY created_at ASC
+            """,
+            hashes,
+        )
+        notes_map: dict[str, list] = {}
+        for nr in note_rows:
+            notes_map.setdefault(nr["history_hash"], []).append(nr)
+
+        page_size = 5
+        total_pages = max(1, math.ceil(len(rows) / page_size))
+        pages = []
+        for page_number, start in enumerate(range(0, len(rows), page_size), start=1):
+            chunk = rows[start : start + page_size]
+            container = ui.Container()
+            for attr in ("accent_color", "accent_colour"):
+                if hasattr(container, attr):
+                    with contextlib.suppress(Exception):
+                        setattr(container, attr, None)
+            title_kind = "history"
+            if show_bl and not show_wl:
+                title_kind = "blacklist history"
+            elif show_wl and not show_bl:
+                title_kind = "whitelist history"
+            container.add_item(ui.TextDisplay(f"**Devlogs · {title_kind}** · {user.mention}"))
+            container.add_item(
+                ui.TextDisplay(
+                    f"-# {len(rows)} entr{'y' if len(rows) == 1 else 'ies'} · Page {page_number}/{total_pages}"
+                )
+            )
+            container.add_item(ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small))
+            lines = []
+            for i, row in enumerate(chunk, start=start + 1):
+                mod = f"<@{row['moderator_id']}>" if row["moderator_id"] else "unknown"
+                since = _blacklist_since(row["created_at"])
+                lines.append(f"-# `{i}.` **{row['action']}** · `{row['hash']}`")
+                lines.append(f"-# by {mod} · {since}")
+                if row["reason"]:
+                    lines.append(f"-# reason · {row['reason']}")
+                nlist = notes_map.get(row["hash"]) or []
+                if nlist:
+                    for ni, n in enumerate(nlist, start=1):
+                        lines.append(f"-# note `#{n['id']}` · {n['content'][:180]}")
+                else:
+                    lines.append("-# notes · none")
+                if i < start + len(chunk):
+                    lines.append("\u200b")
+            container.add_item(ui.TextDisplay("\n".join(lines)))
+            pages.append(layout_from_items([container], timeout=None))
+        return await send_pages(ctx, pages)
 
     @devlogs.command(name="remove", description="Remove devlog channel")
     async def devlogs_remove(self, ctx: Context) -> None:
@@ -628,9 +847,108 @@ class Owner(Package):
                 f"Devlog channel: {ch.mention if ch else f'<#{current}>'}"
             )
         else:
-            await ctx.fail("No devlog channel set")
+            await ctx.warn("No devlog channel set")
 
-    
+    @devlogs.group(
+        name="notes",
+        aliases=["note"],
+        description="Notes on blacklist/whitelist history entries",
+        invoke_without_command=True,
+    )
+    async def devlogs_notes(self, ctx: Context, *, query: str = None) -> None:
+        if ctx.invoked_subcommand is not None:
+            return
+        await ctx.warn(
+            f"Usage: `{ctx.prefix}devlogs notes add <hash|@user> <note>` · "
+            f"`remove` · `modify`"
+        )
+
+    @devlogs_notes.command(name="add", description="Add a note to a history entry")
+    async def devlogs_notes_add(self, ctx: Context, target: str, *, note: str) -> None:
+        await _ensure_blacklist_history(self.bot.db)
+        note_body = (note or "").strip()
+        if not note_body:
+            return await ctx.warn("Provide note content")
+
+        history_hash = None
+        token = target.strip().strip("`")
+        row = await self.bot.db.fetchrow(
+            "SELECT hash, user_id FROM blacklist_history WHERE hash = $1",
+            token,
+        )
+        if row:
+            history_hash = row["hash"]
+        else:
+            user = await self._resolve_user(target)
+            row = await self.bot.db.fetchrow(
+                """
+                SELECT hash FROM blacklist_history
+                WHERE user_id = $1
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                user.id,
+            )
+            if not row:
+                return await ctx.warn("No history entry found for that user")
+            history_hash = row["hash"]
+
+        note_id = await self.bot.db.fetchval(
+            """
+            INSERT INTO blacklist_history_notes (history_hash, content, moderator_id)
+            VALUES ($1, $2, $3)
+            RETURNING id
+            """,
+            history_hash,
+            note_body[:1000],
+            ctx.author.id,
+        )
+        return await ctx.success(
+            f"Added note `#{note_id}` on history `{history_hash}`"
+        )
+
+    @devlogs_notes.command(name="remove", aliases=["del", "delete", "rm"], description="Remove a history note")
+    async def devlogs_notes_remove(self, ctx: Context, note_ref: str) -> None:
+        await _ensure_blacklist_history(self.bot.db)
+        ref = note_ref.strip().lstrip("#").strip("`")
+        if not ref.isdigit():
+            return await ctx.warn("Provide a note id like `#1` or `12`")
+        note_id = int(ref)
+        row = await self.bot.db.fetchrow(
+            "SELECT id, history_hash FROM blacklist_history_notes WHERE id = $1",
+            note_id,
+        )
+        if not row:
+            return await ctx.warn(f"No note `#{note_id}`")
+        await self.bot.db.execute(
+            "DELETE FROM blacklist_history_notes WHERE id = $1", note_id
+        )
+        return await ctx.success(
+            f"Removed note `#{note_id}` from `{row['history_hash']}`"
+        )
+
+    @devlogs_notes.command(name="modify", aliases=["edit"], description="Modify a history note")
+    async def devlogs_notes_modify(self, ctx: Context, note_ref: str, *, note: str) -> None:
+        await _ensure_blacklist_history(self.bot.db)
+        ref = note_ref.strip().lstrip("#").strip("`")
+        if not ref.isdigit():
+            return await ctx.warn("Provide a note id like `#1` or `12`")
+        note_id = int(ref)
+        body = (note or "").strip()
+        if not body:
+            return await ctx.warn("Provide the new note content")
+        row = await self.bot.db.fetchrow(
+            "SELECT id FROM blacklist_history_notes WHERE id = $1",
+            note_id,
+        )
+        if not row:
+            return await ctx.warn(f"No note `#{note_id}`")
+        await self.bot.db.execute(
+            "UPDATE blacklist_history_notes SET content = $2 WHERE id = $1",
+            note_id,
+            body[:1000],
+        )
+        return await ctx.success(f"Updated note `#{note_id}`")
 
     @group(
         name="blacklist",
@@ -653,9 +971,17 @@ class Owner(Package):
                 guild.id, reason,
             )
             await self.bot.forget(f"blacklist:guild:{guild.id}")
+            entry_hash = await _record_blacklist_history(
+                self.bot.db,
+                action="blacklist",
+                guild_id=guild.id,
+                reason=reason,
+                moderator_id=ctx.author.id,
+            )
             lines = [
                 f"-# **target**: **{guild.name}** (`{guild.id}`)",
                 f"-# **type**: guild",
+                f"-# **id**: `{entry_hash}`",
             ]
             if reason:
                 lines.append(f"-# **reason**: {reason}")
@@ -682,9 +1008,17 @@ class Owner(Package):
             user.id, reason,
         )
         await self.bot.forget(f"blacklist:user:{user.id}")
+        entry_hash = await _record_blacklist_history(
+            self.bot.db,
+            action="blacklist",
+            user_id=user.id,
+            reason=reason,
+            moderator_id=ctx.author.id,
+        )
         lines = [
             f"-# **target**: {user.mention} (`{user.id}`)",
             f"-# **type**: user",
+            f"-# **id**: `{entry_hash}`",
         ]
         if reason:
             lines.append(f"-# **reason**: {reason}")
@@ -782,9 +1116,16 @@ class Owner(Package):
                 "DELETE FROM blacklist WHERE guild_id = $1", guild.id
             )
             await self.bot.forget(f"blacklist:guild:{guild.id}")
+            entry_hash = await _record_blacklist_history(
+                self.bot.db,
+                action="whitelist",
+                guild_id=guild.id,
+                moderator_id=ctx.author.id,
+            )
             lines = [
                 f"-# **target**: **{guild.name}** (`{guild.id}`)",
                 f"-# **type**: guild",
+                f"-# **id**: `{entry_hash}`",
             ]
             container = ui.Container()
             for attr in ("accent_color", "accent_colour"):
@@ -805,9 +1146,16 @@ class Owner(Package):
             "DELETE FROM blacklist WHERE user_id = $1", user.id
         )
         await self.bot.forget(f"blacklist:user:{user.id}")
+        entry_hash = await _record_blacklist_history(
+            self.bot.db,
+            action="whitelist",
+            user_id=user.id,
+            moderator_id=ctx.author.id,
+        )
         lines = [
             f"-# **target**: {user.mention} (`{user.id}`)",
             f"-# **type**: user",
+            f"-# **id**: `{entry_hash}`",
         ]
         container = ui.Container()
         for attr in ("accent_color", "accent_colour"):

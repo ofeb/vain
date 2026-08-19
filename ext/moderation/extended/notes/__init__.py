@@ -198,6 +198,45 @@ class Notes(Package):
         return await ctx.success(f"Removed note **#{id}** from **{label}**")
 
     @notes.command(
+        name="modify",
+        aliases=["edit", "update"],
+        description="Modify an existing staff note",
+        example=",notes modify @member 3 updated text",
+    )
+    @has_permissions(manage_messages=True)
+    async def notes_modify(self, ctx, target: str, note_id: int, *, note: str):
+        """Modify note content. Usage: ,notes modify <user> <id> <new text>"""
+        note_body = (note or "").strip()
+        if not note_body:
+            return await ctx.warn("Provide the new note content")
+
+        try:
+            user_id, label = await self._resolve_user(ctx, target)
+        except CommandError as e:
+            return await ctx.warn(str(e))
+
+        row = await self.db.fetchrow(
+            """SELECT id FROM notes
+               WHERE guild_id = $1 AND user_id = $2 AND id = $3""",
+            ctx.guild.id,
+            user_id,
+            note_id,
+        )
+        if not row:
+            return await ctx.warn(f"No note `#{note_id}` on **{label}**")
+
+        await self.db.execute(
+            """UPDATE notes SET content = $4
+               WHERE guild_id = $1 AND user_id = $2 AND id = $3""",
+            ctx.guild.id,
+            user_id,
+            note_id,
+            note_body[:2000],
+        )
+        return await ctx.success(f"Updated note `#{note_id}` on **{label}**")
+
+
+    @notes.command(
         name="clear",
         description="Clear all notes for a member",
         example=",notes clear @member",
