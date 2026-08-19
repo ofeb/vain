@@ -24,6 +24,8 @@ class ModuleConfig:
     punishment: str | None = None
     threshold: int = 3
     command: bool = False
+    within: int | None = None
+    punishment_duration: int | None = None
 
     @classmethod
     def from_value(cls, value: Any) -> "ModuleConfig":
@@ -33,11 +35,23 @@ class ModuleConfig:
             threshold = int(threshold)
         except (TypeError, ValueError):
             threshold = 3
+        within = data.get("within")
+        try:
+            within = int(within) if within is not None else None
+        except (TypeError, ValueError):
+            within = None
+        pd = data.get("punishment_duration")
+        try:
+            pd = int(pd) if pd is not None else None
+        except (TypeError, ValueError):
+            pd = None
         return cls(
             status=bool(data.get("status", False)),
             punishment=str(data["punishment"]).lower() if data.get("punishment") else None,
             threshold=threshold,
             command=bool(data.get("command", False)),
+            within=within,
+            punishment_duration=pd,
         )
 
 

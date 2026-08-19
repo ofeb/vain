@@ -43,9 +43,12 @@ MODULE_NAMES = {
 SEVERITY_RANK = {
     "warn": 1,
     "stripstaff": 2,
-    "jail": 3,
-    "kick": 4,
-    "ban": 5,
+    "timeout": 3,
+    "jail": 4,
+    "kick": 5,
+    "softban": 6,
+    "ban": 7,
+    "hardban": 8,
 }
 
 RECENT_CMD_WINDOW = 20
@@ -130,6 +133,43 @@ class Antinuke(AntinukeEvents, Package):
             return parts[0]
         return f"{', '.join(parts[:-1])} and {parts[-1]}"
 
+    def _parse_punishment_flag(self, raw: Any) -> tuple[str, int | None]:
+        """Parse `--punishment jail 5m` / `hardban` / `timeout 1h`."""
+        from core.tools.moderation_args import is_duration_token, parse_duration_seconds
+        text = str(raw or "kick").strip()
+        parts = text.split()
+        if not parts:
+            return "kick", None
+        action = parts[0].lower()
+        aliases = {"hard": "hardban", "mute": "timeout", "silence": "timeout"}
+        action = aliases.get(action, action)
+        allowed = {
+            "ban", "hardban", "softban", "timeout", "jail",
+            "kick", "warn", "stripstaff",
+        }
+        if action not in allowed:
+            raise CommandError(
+                "punishment must be `ban`, `hardban`, `softban`, `timeout <time>`, "
+                "`jail <time>`, `kick`, `warn`, or `stripstaff`"
+            )
+        duration = None
+        if len(parts) > 1 and is_duration_token(parts[1]):
+            duration = parse_duration_seconds(parts[1])
+        return action, duration
+
+    def _parse_within_flag(self, raw: Any) -> int | None:
+        from core.tools.moderation_args import is_duration_token, parse_duration_seconds
+        if raw is None or raw is False:
+            return None
+        text = str(raw).strip()
+        if not text or text.lower() in {"none", "indefinite", "forever"}:
+            return None
+        if is_duration_token(text):
+            return parse_duration_seconds(text)
+        if text.isdigit():
+            return max(1, int(text))
+        raise CommandError("within must be a duration like `5m`, `1h`, or `30s`")
+
     def _build_module_payload(
         self,
         *,
@@ -138,21 +178,22 @@ class Antinuke(AntinukeEvents, Package):
         with_command: bool,
         flags: dict[str, Any],
     ) -> dict[str, Any]:
-        penalty = str(flags.get("punishment") or "kick").lower()
-        if penalty not in {"ban", "kick", "stripstaff", "warn", "jail"}:
-            raise CommandError(
-                "punishment must be `ban`, `kick`, `jail`, `warn`, or `stripstaff`"
-            )
+        penalty, pun_duration = self._parse_punishment_flag(flags.get("punishment") or "kick")
 
         payload: dict[str, Any] = {
             "status": status,
             "punishment": penalty,
         }
+        if pun_duration is not None:
+            payload["punishment_duration"] = pun_duration
         if with_threshold:
             limit = int(flags.get("threshold") or 3)
             if limit < 1 or limit > 6:
                 raise CommandError("threshold must be between **1** and **6**")
             payload["threshold"] = limit
+            within = self._parse_within_flag(flags.get("within"))
+            if within is not None:
+                payload["within"] = within
         if with_command:
             payload["command"] = bool(flags.get("command"))
         return payload
@@ -200,7 +241,11 @@ class Antinuke(AntinukeEvents, Package):
         if with_threshold:
             parts.append(f"threshold: **{payload['threshold']}**")
         if with_command:
-            parts.append(f"command detection: **{'on' if payload['command'] else 'off'}**")
+            parts.append(f"command detection: **{'on' if payload.get('command') else 'off'}**")
+        if payload.get("within"):
+            parts.append(f"within: **{payload['within']}s**")
+        if payload.get("punishment_duration"):
+            parts.append(f"punish for: **{payload['punishment_duration']}s**")
         return await ctx.success(
             f"{verb} **{label}**\n> -# {', '.join(parts)}"
         )
@@ -507,16 +552,37 @@ class Antinuke(AntinukeEvents, Package):
         penalty: str | None,
         *,
         reason: str,
+        duration: int | None = None,
     ) -> bool:
         action = (penalty or "kick").lower()
         if action == "ban":
             await member.ban(reason=reason)
             return True
+        if action == "hardban":
+            await member.ban(reason=reason)
+            with contextlib.suppress(Exception):
+                await self.db.add_hardban(
+                    member.guild.id, member.id,
+                    getattr(self.bot.user, "id", 0) or 0,
+                    reason,
+                )
+            return True
+        if action == "softban":
+            await member.ban(reason=reason, delete_message_days=1)
+            await member.guild.unban(member, reason=f"{reason} (softban unban)")
+            return True
+        if action == "timeout":
+            secs = duration or (60 * 60)
+            secs = max(60, min(secs, 28 * 86400))
+            until = discord.utils.utcnow() + timedelta(seconds=secs)
+            await member.timeout(until, reason=reason)
+            return True
         if action == "kick":
             await member.kick(reason=reason)
             return True
         if action == "warn":
-            await member.send(f"you were warned in **{member.guild.name}**: {reason}")
+            with contextlib.suppress(discord.Forbidden, discord.HTTPException):
+                await member.send(f"you were warned in **{member.guild.name}**: {reason}")
             return True
         if action == "jail":
             return await self._confine_member(member, reason=reason)
@@ -528,9 +594,12 @@ class Antinuke(AntinukeEvents, Package):
         penalty: str | None,
         *,
         reason: str,
+        duration: int | None = None,
     ) -> bool:
         with contextlib.suppress(discord.Forbidden, discord.HTTPException):
-            return await self._execute_penalty(member, penalty, reason=reason)
+            return await self._execute_penalty(
+                member, penalty, reason=reason, duration=duration
+            )
         return False
 
     async def _evaluate_module_trigger(
@@ -558,11 +627,12 @@ class Antinuke(AntinukeEvents, Package):
         window_tag: str | None = None
         if not instant:
             await self.db.log_antinuke_action(guild.id, actor.id, module_name)
+            window = getattr(module, "within", None) or SHORT_WINDOW
             short_count = await self.db.get_antinuke_action_count(
                 guild.id,
                 actor.id,
                 module_name,
-                SHORT_WINDOW,
+                window,
             )
             long_count = await self.db.get_antinuke_action_count(
                 guild.id,
@@ -590,6 +660,7 @@ class Antinuke(AntinukeEvents, Package):
             actor,
             module.punishment,
             reason=base_reason,
+            duration=getattr(module, "punishment_duration", None),
         )
         case_id = None
         if sanctioned:
@@ -1187,6 +1258,31 @@ class Antinuke(AntinukeEvents, Package):
         )
 
     @antinuke.command(
+        name="setup",
+        aliases=["init"],
+        description="enable antinuke with recommended settings",
+        example=",antinuke setup",
+    )
+    async def antinuke_setup(self, ctx):
+        """Enable all antinuke modules with best recommended settings."""
+        defaults = {
+            "ban":     {"punishment": "ban", "threshold": 3, "command": True, "within": 300},
+            "kick":    {"punishment": "kick", "threshold": 3, "command": True, "within": 300},
+            "channel": {"punishment": "ban", "threshold": 3, "within": 300},
+            "role":    {"punishment": "ban", "threshold": 3, "command": True, "within": 300},
+            "webhook": {"punishment": "ban", "threshold": 3, "within": 300},
+            "emoji":   {"punishment": "kick", "threshold": 3, "within": 300},
+            "vanity":  {"punishment": "ban"},
+            "botadd":  {"punishment": "ban"},
+        }
+        for module, payload in defaults.items():
+            await self._commit_module(ctx.guild.id, module, {**payload, "status": True})
+        await self._load_config(ctx.guild.id)
+        return await ctx.success(
+            "Antinuke **setup complete**\n> -# Recommended settings applied"
+        )
+
+    @antinuke.command(
         name="enable",
         usage="[--recommended]",
         example="--recommended",
@@ -1198,12 +1294,12 @@ class Antinuke(AntinukeEvents, Package):
 
         if recommended:
             defaults = {
-                "ban":     {"punishment": "ban", "threshold": 3, "command": True},
-                "kick":    {"punishment": "kick", "threshold": 3, "command": True},
-                "channel": {"punishment": "ban", "threshold": 3},
-                "role":    {"punishment": "ban", "threshold": 3, "command": True},
-                "webhook": {"punishment": "ban", "threshold": 3},
-                "emoji":   {"punishment": "kick", "threshold": 3},
+                "ban":     {"punishment": "ban", "threshold": 3, "command": True, "within": 300},
+                "kick":    {"punishment": "kick", "threshold": 3, "command": True, "within": 300},
+                "channel": {"punishment": "ban", "threshold": 3, "within": 300},
+                "role":    {"punishment": "ban", "threshold": 3, "command": True, "within": 300},
+                "webhook": {"punishment": "ban", "threshold": 3, "within": 300},
+                "emoji":   {"punishment": "kick", "threshold": 3, "within": 300},
                 "vanity":  {"punishment": "ban"},
                 "botadd":  {"punishment": "ban"},
             }

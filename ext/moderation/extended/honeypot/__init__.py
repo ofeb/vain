@@ -216,6 +216,16 @@ class Honeypot(Package):
                     await member.ban(delete_message_seconds=0, reason=reason)
                     applied.append("ban")
                     break
+                if action == "hardban":
+                    await member.ban(delete_message_seconds=0, reason=reason)
+                    with contextlib.suppress(Exception):
+                        await self.db.add_hardban(
+                            member.guild.id, member.id,
+                            getattr(self.bot.user, "id", 0) or 0,
+                            reason,
+                        )
+                    applied.append("hardban")
+                    break
                 if action == "softban":
                     await member.ban(delete_message_seconds=86400, reason=reason)
                     await member.guild.unban(
@@ -228,6 +238,16 @@ class Honeypot(Package):
                     until = discord.utils.utcnow() + timedelta(seconds=_TIMEOUT_SECONDS)
                     await member.timeout(until, reason=reason)
                     applied.append("timeout")
+                    break
+                if action == "jail":
+                    settings = await self.db.get_server_settings(member.guild.id)
+                    jail_role_id = getattr(settings, "jail_role_id", None) if settings else None
+                    if jail_role_id:
+                        role = member.guild.get_role(int(jail_role_id))
+                        if role is not None:
+                            await member.add_roles(role, reason=reason)
+                            applied.append("jail")
+                    break
             except (discord.Forbidden, discord.HTTPException):
                 continue
         return applied
@@ -521,7 +541,7 @@ class Honeypot(Package):
     @honeypot.command(
         name="punishment",
         aliases=["action", "punish"],
-        description="set the punishment(s). choose one or more of: kick, ban, softban, timeout",
+        description="set the punishment(s). choose one or more of: kick, ban, hardban, softban, timeout, jail",
         example=",honeypot punishment softban",
     )
     @has_permissions(manage_guild=True)
@@ -541,7 +561,7 @@ class Honeypot(Package):
                     title="Honeypot Punishment",
                     lines=[
                         f"**Current**: {_punishment_phrase(current)}",
-                        "> -# Options: `kick`, `ban`, `softban`, `timeout`",
+                        "> -# Options: `kick`, `ban`, `hardban`, `softban`, `timeout`, `jail`",
                         f"> -# Example: `{ctx.clean_prefix}honeypot punishment ban timeout`",
                     ],
                     timestamp=False,
@@ -556,18 +576,51 @@ class Honeypot(Package):
         if any(tok in {"clear", "reset", "default"} for tok in tokens):
             tokens = list(_DEFAULT_PUNISHMENTS)
 
-        invalid = [
-            t
-            for t in tokens
-            if t not in _VALID_PUNISHMENTS and t not in {"hardban", "hard"}
-        ]
+        invalid = [t for t in tokens if t not in _VALID_PUNISHMENTS and t not in {"hard"}]
         if invalid:
             return await ctx.warn(
                 f"Invalid punishment(s): {', '.join(f'`{t}`' for t in invalid)} - "
-                f"use `kick`, `ban`, `softban`, or `timeout`"
+                f"use `kick`, `ban`, `hardban`, `softban`, `timeout`, or `jail`"
             )
 
         punishments = _normalize_punishments(tokens)
+        if "hardban" in punishments:
+            
+            try:
+                an_row = await self.db.fetchrow(
+                    "SELECT admins, ban, kick, channel, role, webhook, emoji, vanity, botadd FROM antinuke WHERE guild_id = $1",
+                    ctx.guild.id,
+                )
+            except Exception:
+                an_row = None
+            enabled = False
+            if an_row:
+                import json
+                for key in ("ban", "kick", "channel", "role", "webhook", "emoji", "vanity", "botadd"):
+                    val = an_row[key] if not hasattr(an_row, "get") else an_row.get(key)
+                    if isinstance(val, str):
+                        try:
+                            val = json.loads(val)
+                        except Exception:
+                            val = {}
+                    if isinstance(val, dict) and val.get("status"):
+                        enabled = True
+                        break
+            if not enabled:
+                return await ctx.warn(
+                    "antinuke isn't enabled in this guild\n"
+                    "> -# **enable it using** `antinuke setup`"
+                )
+            is_admin = ctx.author.id == ctx.guild.owner_id
+            if not is_admin and an_row is not None:
+                admins = an_row["admins"] if not hasattr(an_row, "get") else an_row.get("admins")
+                admins = list(admins or [])
+                is_admin = ctx.author.id in admins
+            if not is_admin:
+                return await ctx.warn(
+                    "You are missing permissions to set it to this punishment\n"
+                    "> -# **Permission Needed: Antinuke Admin**"
+                )
         updated = await upsert(self.bot, ctx.guild.id, punishments=punishments)
 
         

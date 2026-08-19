@@ -4,7 +4,7 @@ from typing import Any, Iterable, TypedDict
 
 from config import emojis
 
-_VALID_PUNISHMENTS = ("kick", "ban", "softban", "timeout")
+_VALID_PUNISHMENTS = ("kick", "ban", "hardban", "softban", "timeout", "jail")
 _DEFAULT_PUNISHMENTS = ["softban"]
 _TIMEOUT_SECONDS = 7 * 24 * 60 * 60
 _MISSING: Any = object()
@@ -32,8 +32,8 @@ def _normalize_punishments(raw: Iterable[str] | None) -> list[str]:
     seen: set[str] = set()
     for item in raw or []:
         value = str(item or "").strip().lower()
-        if value in {"hardban", "hard"}:
-            value = "ban"
+        if value in {"hard"}:
+            value = "hardban"
         if value not in _VALID_PUNISHMENTS or value in seen:
             continue
         seen.add(value)
@@ -47,6 +47,7 @@ _PUNISHMENT_PAST = {
     "hardban": "hardbanned",
     "softban": "softbanned",
     "timeout": "timed out",
+    "jail": "jailed",
     "mute": "muted",
 }
 

@@ -651,7 +651,33 @@ class Vain(commands.AutoShardedBot):
             if rewritten is not None:
                 origin = copy.copy(origin)
                 origin._update({"content": rewritten})
-        return await super().get_context(origin, cls=cls)
+        ctx = await super().get_context(origin, cls=cls)
+        
+        try:
+            if (
+                isinstance(origin, discord.Message)
+                and ctx.prefix
+                and origin.content
+                and not ctx.command
+            ):
+                rest = origin.content[len(str(ctx.prefix)) :].lstrip()
+                if rest:
+                    name = rest.split(None, 1)[0].lower()
+                    row = await self.db.fetchrow(
+                        "SELECT invoke FROM selfaliases WHERE user_id = $1 AND name = $2",
+                        origin.author.id,
+                        name,
+                    )
+                    if row:
+                        inv = row["invoke"] if hasattr(row, "keys") else row[0]
+                        tail = rest[len(name) :].lstrip()
+                        new_content = f"{ctx.prefix}{inv}" + (f" {tail}" if tail else "")
+                        origin = copy.copy(origin)
+                        origin._update({"content": new_content})
+                        ctx = await super().get_context(origin, cls=cls)
+        except Exception:
+            pass
+        return ctx
 
     @staticmethod
     def _blocked_ids(raw) -> set[int]:

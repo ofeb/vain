@@ -64,21 +64,37 @@ class AliasCommands(Package):
     async def alias_list(self, ctx):
         """list all server aliases"""
         entries = await self.db.fetch(
-            """SELECT alias, command_name FROM aliases WHERE guild_id = $1""",
+            """SELECT alias, command_name FROM aliases WHERE guild_id = $1 ORDER BY alias ASC""",
             ctx.guild.id,
         )
         if not entries:
-            raise CommandError("no aliases have been added")
-        lines = [
-            f"`{i}` **{e.alias}** runs `{e.command_name}`"
-            for i, e in enumerate(entries, start=1)
-        ]
-        return await ctx.paginate(
-            Embed(color=self.bot.color, title="Aliases").set_author(
-                name=str(ctx.author), icon_url=ctx.author.display_avatar.url
-            ),
-            lines,
-        )
+            return await ctx.warn("No aliases have been added")
+        from discord import ui as _ui
+        from core.discord.ctx import layout_from_items
+
+        pages = []
+        chunk = 10
+        total = len(entries)
+        page_count = max(1, (total + chunk - 1) // chunk)
+        for start in range(0, total, chunk):
+            batch = entries[start : start + chunk]
+            lines = []
+            for i, e in enumerate(batch, start=start + 1):
+                alias = e["alias"] if hasattr(e, "keys") else getattr(e, "alias", e[0])
+                cmd = e["command_name"] if hasattr(e, "keys") else getattr(e, "command_name", e[1])
+                lines.append(f"> **`{alias}`** · `{cmd}`")
+            body = chr(10).join(lines) + chr(10) + chr(10) + f"> -# page {start // chunk + 1}/{page_count}"
+            container = _ui.Container()
+            for attr in ("accent_color", "accent_colour"):
+                if hasattr(container, attr):
+                    try:
+                        setattr(container, attr, None)
+                    except Exception:
+                        pass
+            container.add_item(_ui.TextDisplay("**Server aliases**"))
+            container.add_item(_ui.TextDisplay(body))
+            pages.append(layout_from_items([container], timeout=None))
+        return await ctx.paginate(pages)
 
     @alias.command(
         name="add",

@@ -469,6 +469,40 @@ class ModerationCommands(Package):
 
         return "\n".join(lines)
 
+
+    async def _antinuke_enabled(self, guild_id: int) -> bool:
+        try:
+            row = await self.db.fetchrow(
+                "SELECT ban, kick, channel, role, webhook, emoji, vanity, botadd FROM antinuke WHERE guild_id = $1",
+                guild_id,
+            )
+        except Exception:
+            return False
+        if not row:
+            return False
+        import json
+        for key in ("ban", "kick", "channel", "role", "webhook", "emoji", "vanity", "botadd"):
+            val = row.get(key) if hasattr(row, "get") else row[key]
+            if isinstance(val, str):
+                try:
+                    val = json.loads(val)
+                except Exception:
+                    val = {}
+            if isinstance(val, dict) and val.get("status"):
+                return True
+        return False
+
+    async def _require_antinuke_for_hardban(self, ctx) -> bool:
+        """Return True if hardban is allowed; otherwise warn and return False."""
+        enabled = await self._antinuke_enabled(ctx.guild.id)
+        if not enabled:
+            await ctx.warn(
+                "antinuke isn't enabled in this guild\n"
+                "> -# **enable it using** `antinuke setup`"
+            )
+            return False
+        return True
+
     async def _action_c2(self, ctx, message: str):
         """Colorless C2 confirm for mod actions (jailed / banned / etc.)."""
         from discord import ui as _ui
@@ -2116,6 +2150,8 @@ class ModerationCommands(Package):
     @has_permissions(ban_members=True)
     async def hardban(self, ctx):
         """hardban a member"""
+        if not await self._require_antinuke_for_hardban(ctx):
+            return
         parsed = await parse_moderation_args(ctx, command_names=("hardban",), allow_duration=False)
         member = parsed.member
         user = parsed.user
@@ -2366,20 +2402,28 @@ class ModerationCommands(Package):
         except discord.HTTPException as e:
             return await ctx.fail(f"Unban failed\n> -# **{user}**: {e}")
 
+        was_hardbanned = False
         if getattr(self.db, "pool", None) is not None:
             with contextlib.suppress(Exception):
                 await self.db.remove_tempban(ctx.guild.id, user.id)
+            with contextlib.suppress(Exception):
+                was_hardbanned = await self.db.is_hardbanned(ctx.guild.id, user.id)
+            if was_hardbanned:
+                with contextlib.suppress(Exception):
+                    await self.db.remove_hardban(ctx.guild.id, user.id)
 
+        action_name = "unhardban" if was_hardbanned else "unban"
         await self._send_modlog(
             ctx,
-            action="unban",
+            action=action_name,
             target=user,
             case_id=case_id,
             reason=reason,
         )
         if await self._invoke_response(ctx, "unban", user=user, reason=reason, case_id=case_id):
             return
-        return await self._action_c2(ctx, f"Unbanned **{user}** - {self._default_reason(reason)}")
+        verb = "Unhardbanned" if was_hardbanned else "Unbanned"
+        return await self._action_c2(ctx, f"{verb} **{user}** - {self._default_reason(reason)}")
 
     @unban.group(name="invoke", description="customize unban messages", invoke_without_command=True)
     @has_permissions(manage_guild=True)
