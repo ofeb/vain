@@ -140,17 +140,44 @@ def _wrap_callback(
 
 
 def _try_register(factory, prepared, *, name, attrs):
-    """register hybrid command, fallback to prefix-only on error"""
+    """Register a hybrid command/group. Prefer keeping an app_command always."""
+    attrs = dict(attrs)
+    attrs.setdefault("with_app_command", True)
     try:
         cmd = factory(name=name, **attrs)(prepared)
-        if not getattr(cmd, "app_command", None) and attrs.get("with_app_command", True):
-            log.warning("hybrid /%s registered prefix-only (no app_command)", cmd.name)
-        return cmd
     except (TypeError, ValueError, AttributeError) as e:
-        
-        log.warning("hybrid /%s slash failed (%s), prefix-only", name, e)
-        attrs = {**attrs, "with_app_command": False}
-        return factory(name=name, **attrs)(prepared)
+        log.warning("hybrid /%s factory failed (%s); retrying minimal attrs", name or "?", e)
+        minimal = {
+            k: v
+            for k, v in attrs.items()
+            if k
+            in {
+                "with_app_command",
+                "description",
+                "aliases",
+                "extras",
+                "help",
+                "brief",
+                "usage",
+                "hidden",
+                "enabled",
+                "parent",
+                "invoke_without_command",
+                "case_insensitive",
+            }
+        }
+        minimal["with_app_command"] = True
+        try:
+            cmd = factory(name=name, **minimal)(prepared)
+        except Exception as e2:
+            log.warning("hybrid /%s slash failed (%s), prefix-only", name or "?", e2)
+            minimal["with_app_command"] = False
+            cmd = factory(name=name, **minimal)(prepared)
+            return cmd
+    if not getattr(cmd, "app_command", None) and attrs.get("with_app_command", True):
+        log.warning("hybrid /%s has no app_command after register", getattr(cmd, "name", name))
+    return cmd
+
 
 
 class BotCommand(commands.Command):
@@ -291,17 +318,43 @@ def hybrid(name: str | None = None, *, aliases: Iterable[str] | str | None = Non
     return _hybrid_command(name, **attrs)
 
 
+def _bind_app_contexts(cmd: commands.Command, *, guilds: bool, dms: bool, groupchats: bool) -> None:
+    """Attach allowed contexts/installs to the app command object itself."""
+    app = getattr(cmd, "app_command", None)
+    if app is None:
+        return
+    try:
+        app = app_commands.allowed_contexts(
+            guilds=guilds, dms=dms, private_channels=groupchats
+        )(app)
+        app = app_commands.allowed_installs(guilds=True, users=True)(app)
+        try:
+            cmd.app_command = app
+        except Exception:
+            object.__setattr__(cmd, "app_command", app)
+    except Exception as e:
+        log.debug("context bind failed for /%s: %s", getattr(cmd, "name", "?"), e)
+
+
 def _hybrid_command(name: str | None = None, **attrs: Any):
     example, params, guild_only, guilds, dms, groupchats, _, _, aliases = _pop_hybrid_attrs(attrs)
     guilds, _dms, _gcs = _resolve_contexts(guild_only=guild_only, guilds=guilds, dms=dms, groupchats=groupchats)
 
     def deco(fn: Callable[..., Any]) -> commands.HybridCommand:
-        prepared = _inject_descriptions(_wrap_callback(fn, guilds=guilds, dms=_dms, groupchats=_gcs), params)
+        
+        prepared = _inject_descriptions(fn, params)
         cmd = _try_register(commands.hybrid_command, prepared, name=name, attrs=attrs)
         _apply_aliases(cmd, aliases)
         _copy_link_meta(cmd, fn)
         cmd.example = example
         cmd.parameters = params
+        
+        try:
+            original = cmd.callback
+            cmd.callback = _wrap_callback(original, guilds=guilds, dms=_dms, groupchats=_gcs)
+        except Exception as e:
+            log.debug("callback wrap failed for /%s: %s", getattr(cmd, "name", name), e)
+        _bind_app_contexts(cmd, guilds=guilds, dms=_dms, groupchats=_gcs)
         return cmd
 
     return deco
@@ -312,11 +365,17 @@ def _hybrid_group(name: str | None = None, **attrs: Any):
     guilds, _dms, _gcs = _resolve_contexts(guild_only=guild_only, guilds=guilds, dms=dms, groupchats=groupchats)
 
     def deco(fn: Callable[..., Any]) -> commands.HybridGroup:
-        prepared = _inject_descriptions(_wrap_callback(fn, guilds=guilds, dms=_dms, groupchats=_gcs), params)
+        prepared = _inject_descriptions(fn, params)
         grp = _try_register(commands.hybrid_group, prepared, name=name, attrs=attrs)
         _apply_aliases(grp, aliases)
         grp.example = example
         grp.parameters = params
+        try:
+            original = grp.callback
+            grp.callback = _wrap_callback(original, guilds=guilds, dms=_dms, groupchats=_gcs)
+        except Exception as e:
+            log.debug("group callback wrap failed for /%s: %s", getattr(grp, "name", name), e)
+        _bind_app_contexts(grp, guilds=guilds, dms=_dms, groupchats=_gcs)
         _orig_command = grp.command
 
         def sub_command(*args: Any, **kw: Any):

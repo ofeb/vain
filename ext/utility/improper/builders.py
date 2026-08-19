@@ -1785,7 +1785,7 @@ class ContainerBuilderView(_BaseBuilder):
 async def register_builders(bot: "Vain", cog=None) -> None:
     """Register ,embedbuilder / ,containerbuilder hybrid commands on the bot."""
 
-    @hybrid(
+    @command(
         name="embedbuilder",
         aliases=["eb"],
         description="Interactive embed builder with live preview. Approve DMs the script.",
@@ -1802,7 +1802,7 @@ async def register_builders(bot: "Vain", cog=None) -> None:
         )
         builder.message = m
 
-    @hybrid(
+    @command(
         name="containerbuilder",
         aliases=["cb"],
         description="Interactive Components V2 container builder with live preview. Approve DMs the script.",

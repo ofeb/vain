@@ -227,7 +227,9 @@ class InformationCommands(Package):
         name="inviteinfo",
         description="View information about an invite",
         aliases=["ii"],
-        guild_only=True,
+        guilds=True,
+        dms=True,
+        groupchats=True,
     )
     @describe(invite="Invite code or URL")
     async def inviteinfo(self, ctx: Context, invite: str) -> None:
@@ -539,7 +541,9 @@ class InformationCommands(Package):
         name="define",
         description="Get the definition of a word",
         example=",define vet",
-        **_CONTEXTS,
+        guilds=True,
+        dms=True,
+        groupchats=True,
     )
     @describe(word="Word to define")
     async def define(self, ctx: Context, *, word: str) -> None:
@@ -557,7 +561,9 @@ class InformationCommands(Package):
         description="Get the definition of a word or slang from Urban Dictionary",
         aliases=["ud", "urbandictionary"],
         example=",urban chav",
-        **_CONTEXTS,
+        guilds=True,
+        dms=True,
+        groupchats=True,
     )
     @describe(word="Word or slang to look up")
     async def urban(self, ctx: Context, *, word: str) -> None:

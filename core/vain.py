@@ -363,10 +363,23 @@ class Vain(commands.AutoShardedBot):
         commands.GroupMixin.add_command(self, cmd)
         if not self._is_slash(cmd):
             return
-        with contextlib.suppress(
-            app_commands.CommandAlreadyRegistered, app_commands.CommandLimitReached
-        ):
-            self.tree.add_command(cmd.app_command)
+        app = cmd.app_command
+        name = getattr(app, "name", None) or cmd.name
+        with contextlib.suppress(Exception):
+            self.tree.remove_command(name)
+        try:
+            self.tree.add_command(app)
+        except app_commands.CommandAlreadyRegistered:
+            with contextlib.suppress(Exception):
+                self.tree.remove_command(name)
+            with contextlib.suppress(app_commands.CommandLimitReached):
+                self.tree.add_command(app, override=True)
+        except TypeError:
+            
+            with contextlib.suppress(app_commands.CommandAlreadyRegistered, app_commands.CommandLimitReached):
+                self.tree.add_command(app)
+        except app_commands.CommandLimitReached:
+            log.warning("slash command limit reached; could not add /%s", name)
 
     async def setup_hook(self) -> None:
         """connect db redis and load all extensions"""

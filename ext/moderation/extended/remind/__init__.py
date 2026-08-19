@@ -90,25 +90,31 @@ class Remind(Package):
         await super().cog_load()
 
     def _force_reminder_contexts(self) -> None:
-        """Ensure /reminder is installable in guilds, DMs, and group DMs."""
+        """Ensure /reminder is on the tree and installable in guilds, DMs, and group DMs."""
+        from discord import app_commands as _ac
         cmd = getattr(self, "reminder", None)
         if cmd is None:
             return
-        for target in (cmd, getattr(cmd, "app_command", None)):
-            if target is None:
+        app = getattr(cmd, "app_command", None)
+        if app is not None:
+            with contextlib.suppress(Exception):
+                app = _ac.allowed_contexts(guilds=True, dms=True, private_channels=True)(app)
+                app = _ac.allowed_installs(guilds=True, users=True)(app)
+                try:
+                    cmd.app_command = app
+                except Exception:
+                    object.__setattr__(cmd, "app_command", app)
+            with contextlib.suppress(Exception):
+                self.bot.tree.remove_command(app.name)
+            with contextlib.suppress(Exception):
+                self.bot.tree.add_command(app)
+        for child in list(getattr(cmd, "commands", []) or []):
+            capp = getattr(child, "app_command", None)
+            if capp is None:
                 continue
             with contextlib.suppress(Exception):
-                from discord import app_commands as _ac
-                _ac.allowed_contexts(guilds=True, dms=True, private_channels=True)(target)
-                _ac.allowed_installs(guilds=True, users=True)(target)
-            for child in getattr(cmd, "commands", []) or []:
-                app = getattr(child, "app_command", None)
-                if app is None:
-                    continue
-                with contextlib.suppress(Exception):
-                    from discord import app_commands as _ac
-                    _ac.allowed_contexts(guilds=True, dms=True, private_channels=True)(app)
-                    _ac.allowed_installs(guilds=True, users=True)(app)
+                capp = _ac.allowed_contexts(guilds=True, dms=True, private_channels=True)(capp)
+                capp = _ac.allowed_installs(guilds=True, users=True)(capp)
 
     async def cog_unload(self) -> None:
         for menu in self._menus:

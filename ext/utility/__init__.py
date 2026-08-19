@@ -288,7 +288,7 @@ def _translate_layout(
 from discord.ext import commands
 
 from core.discord.ctx import Context
-from core.discord.hybrid import hybrid, describe
+from core.discord.hybrid import command, describe, hybrid
 from core.discord.views.paginate import PaginateView, layout_from_items, send_pages
 from config import api, color, emojis
 from core.managers.permissions import has_permissions
@@ -1371,7 +1371,7 @@ class Utility(commands.Cog):
         return await ctx.send(embed=embed)
 
 
-    @hybrid(
+    @command(
         name="embedbuilder",
         aliases=["eb"],
         description="Interactive embed builder with live preview. Approve DMs the script.",
@@ -1389,7 +1389,7 @@ class Utility(commands.Cog):
         )
         builder.message = m
 
-    @hybrid(
+    @command(
         name="containerbuilder",
         aliases=["cb"],
         description="Interactive Components V2 container builder with live preview. Approve DMs the script.",
