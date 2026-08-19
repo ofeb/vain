@@ -219,7 +219,7 @@ class BoosterroleCommands(Package):
     @boosterrole.command(
         name="create",
         aliases=["color", "colour"],
-        description="create your booster role — solid: <hex> [name] · gradient (boost lvl 3): <hex>, <hex2> [name]",
+        description="create your booster role - solid: <hex> [name] · gradient (boost lvl 3): <hex>, <hex2> [name]",
         example=",boosterrole create ff0000, 00ff00 coolname",
     )
     @is_booster()
@@ -668,7 +668,7 @@ class BoosterroleCommands(Package):
     @boosterrole.command(
         name="modify",
         aliases=["edit", "update", "mod"],
-        description="modify your booster role — solid: <name> <hex> · gradient (boost lvl 3): <name> <hex> <hex2>",
+        description="modify your booster role - solid: <name> <hex> · gradient (boost lvl 3): <name> <hex> <hex2>",
         example=",boosterrole modify coolname ff0000 00ff00",
     )
     @is_booster()
@@ -980,7 +980,7 @@ class BoosterroleCommands(Package):
         ]
         valid = [r for r in all_roles if ctx.guild.get_member(r.user_id)]
         lines = [
-            f"> {ctx.guild.get_member(r.user_id).mention} — {ctx.guild.get_role(r.role_id).mention}"
+            f"> {ctx.guild.get_member(r.user_id).mention} - {ctx.guild.get_role(r.role_id).mention}"
             for r in valid
         ]
         if stale:

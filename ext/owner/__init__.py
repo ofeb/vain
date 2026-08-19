@@ -144,10 +144,10 @@ class Owner(Package):
             return matches[0]
         if len(matches) > 1:
             raise CommandError(
-                f"Multiple users match `{argument}` — use a mention or ID"
+                f"Multiple users match `{argument}` - use a mention or ID"
             )
         raise CommandError(
-            f"Could not resolve `{argument}` as a user — use a mention, ID, or username"
+            f"Could not resolve `{argument}` as a user - use a mention, ID, or username"
         )
 
     def _resolve_ext(self, name: str) -> str:
@@ -261,7 +261,7 @@ class Owner(Package):
 
         lines: list[str] = []
         now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-        lines.append(f"vain slash sync report — {now}")
+        lines.append(f"vain slash sync report - {now}")
         lines.append("=" * 60)
 
         report: dict = {}
@@ -276,7 +276,7 @@ class Owner(Package):
         lines.append("-" * 60)
         hybrids = report.get("hybrids_found") or []
         if not hybrids:
-            lines.append("(none found via report — dumping walk_commands)")
+            lines.append("(none found via report - dumping walk_commands)")
             for cmd in sorted(self.bot.walk_commands(), key=lambda c: c.qualified_name):
                 if cmd.parent:
                     continue
@@ -450,8 +450,8 @@ class Owner(Package):
                 else f"Unknown (`{guild.owner_id}`)"
             )
             entries.append(
-                f"`{i}.` **{guild.name}** (`{guild.id}`) — "
-                f"`{guild.member_count or 0}` members — Owner: {owner_name}"
+                f"`{i}.` **{guild.name}** (`{guild.id}`) - "
+                f"`{guild.member_count or 0}` members - Owner: {owner_name}"
             )
 
         per_page = 10
@@ -1063,7 +1063,7 @@ class Owner(Package):
             await ctx.send(view=layout_from_items([container], timeout=None))
             await self._log_devlog(
                 f"**{ctx.author}** blacklisted guild **{guild.name}** (`{guild.id}`)"
-                + (f" — reason: {reason}" if reason else "")
+                + (f" - reason: {reason}" if reason else "")
             )
             return
 
@@ -1099,7 +1099,7 @@ class Owner(Package):
         )
         await self._log_devlog(
             f"**{ctx.author}** blacklisted **{user}** (`{user.id}`)"
-            + (f" — reason: {reason}" if reason else "")
+            + (f" - reason: {reason}" if reason else "")
         )
 
     @blacklist.command(
@@ -1242,7 +1242,7 @@ class Owner(Package):
         description="view all whitelisted users and guilds",
     )
     async def whitelist_list(self, ctx: Context) -> None:
-        await ctx.warn("Whitelisting removes entries — use `blacklist list` to see current entries")
+        await ctx.warn("Whitelisting removes entries - use `blacklist list` to see current entries")
 
     @command(
         name="portal",

@@ -198,7 +198,7 @@ async def parse_moderation_args(
     """Parse ``[member] [duration] [reason…]`` or reply-target + ``[duration] [reason…]``.
 
     - Target: reply to their message, or username / id / mention
-    - Duration (when allowed): optional token like ``2d`` / ``30m`` — first duration wins
+    - Duration (when allowed): optional token like ``2d`` / ``30m`` - first duration wins
     - Reason: optional remainder after target + duration
     - Jail / timeout with no duration → ``duration_seconds is None`` (indefinite)
     """

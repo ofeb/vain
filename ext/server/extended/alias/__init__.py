@@ -133,7 +133,7 @@ class AliasCommands(Package):
     )
     @has_permissions(manage_guild=True)
     async def alias_add(self, ctx, *, payload: str):
-        """add a command alias — format: <alias>, <command>"""
+        """add a command alias - format: <alias>, <command>"""
         if "," not in (payload or ""):
             return await ctx.warn(
                 "A **comma** is required between the alias and command\n"

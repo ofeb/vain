@@ -112,7 +112,7 @@ PERMISSION_NAMES = {
 
 
 def _log_container(title: str, lines: list[str]) -> "discord.ui.LayoutView":
-    """Colorless C2 log card — title, separator, history-style rows."""
+    """Colorless C2 log card - title, separator, history-style rows."""
     from discord import ui as _ui
     from core.discord.ctx import layout_from_items
     container = _ui.Container()

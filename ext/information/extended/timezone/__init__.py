@@ -532,10 +532,10 @@ class Timezone(Package):
                     period = _time_period(current_time.hour)
                     time_str = current_time.strftime("%I:%M").lstrip("0")
                     lines.append(
-                        f"> {member.mention} — {time_str} {period} ({tz['timezone']})"
+                        f"> {member.mention} - {time_str} {period} ({tz['timezone']})"
                     )
                 except pytz.exceptions.UnknownTimeZoneError:
-                    lines.append(f"> {member.mention} — invalid ({tz['timezone']})")
+                    lines.append(f"> {member.mention} - invalid ({tz['timezone']})")
 
         await ctx.send(
             embed=c2(

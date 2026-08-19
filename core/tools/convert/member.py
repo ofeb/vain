@@ -4,7 +4,7 @@ Tries id / mention first (never name-match a snowflake), then smart
 username / display-name / nick matching via regex token scoring
 (``own`` → decorative nicks, partials, etc.).
 
-Fuzzy closest-match is disabled for members — it was resolving
+Fuzzy closest-match is disabled for members - it was resolving
 ``nafim0509`` to unrelated users.
 """
 

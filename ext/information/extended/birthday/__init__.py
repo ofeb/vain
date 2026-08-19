@@ -292,7 +292,7 @@ class Birthday(Package):
                 member = ctx.guild.get_member(birthday['user_id'])
             bday = _coerce_date(birthday['birthday_date'])
             if member and bday:
-                lines.append(f"> {member.mention} — {_format_date(bday)}")
+                lines.append(f"> {member.mention} - {_format_date(bday)}")
 
         await ctx.send(
             embed=c2(

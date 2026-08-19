@@ -866,7 +866,7 @@ class Snipe(commands.Cog):
             await self.bot.snipes.delete_entry(ctx.channel, "snipe", index)
             await ctx.success(f"Deleted snipe at index `{index}`")
         except SnipeError:
-            await ctx.fail(f"No snipe found at that index\n> -# **index:** `{index}` — try a smaller number")
+            await ctx.fail(f"No snipe found at that index\n> -# **index:** `{index}` - try a smaller number")
 
 
 class Utility(Remind):
@@ -1696,7 +1696,7 @@ class Utility(Remind):
             if any(k.startswith("avatar:") for k, _ in sources):
                 return await ctx.warn(
                     "Could not read **avatar** color data\n"
-                    "> -# the avatar may be unavailable — try again in a moment"
+                    "> -# the avatar may be unavailable - try again in a moment"
                 )
             return await ctx.warn(
                 "Attachments or URLs **must** be **GIFs** or **Images**"

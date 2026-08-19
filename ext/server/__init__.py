@@ -72,11 +72,11 @@ class ServerCommands(Package):
                 await ctx.warn("Invalid file type\n> -# **provide an image (png, jpg, gif, etc.)**")
                 return None
             if attachment.size and attachment.size > _MAX_GUILD_MEDIA_BYTES:
-                await ctx.warn("File too large\n> -# **max size is 10MB — try compressing the image**")
+                await ctx.warn("File too large\n> -# **max size is 10MB - try compressing the image**")
                 return None
             data = await attachment.read()
             if len(data) > _MAX_GUILD_MEDIA_BYTES:
-                await ctx.warn("File too large\n> -# **max size is 10MB — try compressing the image**")
+                await ctx.warn("File too large\n> -# **max size is 10MB - try compressing the image**")
                 return None
             return data
 
@@ -101,7 +101,7 @@ class ServerCommands(Package):
                         return None
                     data = await response.read()
                     if len(data) > _MAX_GUILD_MEDIA_BYTES:
-                        await ctx.warn("File too large\n> -# **max size is 10MB — try compressing the image**")
+                        await ctx.warn("File too large\n> -# **max size is 10MB - try compressing the image**")
                         return None
                     return data
         except (aiohttp.ClientError, asyncio.TimeoutError, ValueError):
@@ -162,7 +162,7 @@ class ServerCommands(Package):
             if "):" in message:
                 message = message.split("):", 1)[-1].strip()
             return await ctx.fail(
-                f"Failed to update {label}\n> -# **{message or 'something went wrong — try again later'}**"
+                f"Failed to update {label}\n> -# **{message or 'something went wrong - try again later'}**"
             )
 
         if clear:

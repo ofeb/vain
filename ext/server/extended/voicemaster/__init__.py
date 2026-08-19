@@ -64,24 +64,50 @@ class VoiceMaster(VoiceMasterEvents, Package):
             if hasattr(container, attr):
                 with contextlib.suppress(Exception):
                     setattr(container, attr, None)
-        container.add_item(discord.ui.TextDisplay(
-            f"## voice control\n"
-            f"-# manage temporary channels in **{guild.name}**"
+
+        server_icon = guild.icon.url if guild.icon else None
+        if server_icon:
+            header = discord.ui.Section(
+                discord.ui.TextDisplay(
+                    f"# {guild.name}\n"
+                    f"-# Temporary voice channel controls"
+                ),
+                accessory=discord.ui.Thumbnail(media=server_icon),
+            )
+        else:
+            header = discord.ui.TextDisplay(
+                f"# {guild.name}\n"
+                f"-# Temporary voice channel controls"
+            )
+        container.add_item(header)
+        container.add_item(discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small))
+
+        left_col = (
+            f"{VM['claim']} — claim ownership\n"
+            f"{VM['delete']} — remove the channel\n"
+            f"{VM['disconnect']} — evict a member\n"
+            f"{VM['hide']} — hide from channel list\n"
+            f"{VM['reveal']} — show in channel list"
+        )
+        right_col = (
+            f"{VM['limit']} — set member cap\n"
+            f"{VM['lock']} — restrict access\n"
+            f"{VM['unlock']} — allow access\n"
+            f"{VM['rename']} — change name\n"
+            f"{VM['status']} — set channel status"
+        )
+        container.add_item(discord.ui.Section(
+            discord.ui.TextDisplay(
+                f">>> **Controls**\n"
+                f"{left_col}"
+            ),
+            accessory=discord.ui.TextDisplay(
+                f"**Actions**\n"
+                f"{right_col}"
+            ),
         ))
         container.add_item(discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small))
-        container.add_item(discord.ui.TextDisplay(
-            f"> {VM['claim']} — **claim** the channel\n"
-            f"> {VM['delete']} — **delete** the channel\n"
-            f"> {VM['disconnect']} — **disconnect** members\n"
-            f"> {VM['hide']} — **hide** from the list\n"
-            f"> {VM['reveal']} — **reveal** in the list\n"
-            f"> {VM['limit']} — set a **user limit**\n"
-            f"> {VM['lock']} — **lock** the channel\n"
-            f"> {VM['unlock']} — **unlock** the channel\n"
-            f"> {VM['rename']} — **rename** the channel\n"
-            f"> {VM['status']} — set a **status**"
-        ))
-        container.add_item(discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small))
+
         row1 = discord.ui.ActionRow(
             discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=VM["claim"], custom_id="voicemaster:claim"),
             discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=VM["delete"], custom_id="voicemaster:delete"),
@@ -98,7 +124,7 @@ class VoiceMaster(VoiceMasterEvents, Package):
             discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=VM["status"], custom_id="voicemaster:status"),
         )
         container.add_item(row2)
-        container.add_item(discord.ui.TextDisplay("-# you must own the voice channel to use these controls"))
+        container.add_item(discord.ui.TextDisplay("-# you must own a voice channel to use these controls"))
         return layout_from_items([container], timeout=None)
 
     async def cog_load(self) -> None:
@@ -625,7 +651,7 @@ class VoiceMaster(VoiceMasterEvents, Package):
             f"> **bitrate**: `{channel.bitrate // 1000}kbps`\n"
             f"> **limit**: `{channel.user_limit or 'unlimited'}`"
         )
-        await ctx.send(view=_vm_container(f"{ctx.author.mention} — **{channel.name}**\n{lines}"))
+        await ctx.send(view=_vm_container(f"{ctx.author.mention} - **{channel.name}**\n{lines}"))
 
     @voicemaster.command(name="join2unmute")
     @has_permissions(manage_guild=True)

@@ -156,7 +156,7 @@ def _discover_extensions(ext_dir: str = "ext") -> tuple[str, ...]:
 
 
 class Blacklisted(commands.CheckFailure):
-    """User or guild is blacklisted — handlers must stay silent."""
+    """User or guild is blacklisted - handlers must stay silent."""
     def __init__(self, reason: str | None = None):
         self.reason = reason
         super().__init__("blacklisted")
@@ -1160,7 +1160,7 @@ class Vain(commands.AutoShardedBot):
         except Exception:
             with contextlib.suppress(Exception):
                 await channel.send(
-                    f"**vain** joined — run `,setup` to configure VoiceMaster, jail, mute, logs, antinuke and antiraid."
+                    f"**vain** joined - run `,setup` to configure VoiceMaster, jail, mute, logs, antinuke and antiraid."
                 )
 
     async def on_message(self, msg: discord.Message) -> None:

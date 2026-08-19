@@ -211,7 +211,7 @@ class Embedcode(Package):
             
             preview = code if len(code) <= 1800 else code[:1800] + "…"
             await ctx.success(
-                f"{title} (couldn't DM you — check privacy settings)\n```\n{preview}\n```",
+                f"{title} (couldn't DM you - check privacy settings)\n```\n{preview}\n```",
                 view=view,
             )
 

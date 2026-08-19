@@ -3493,7 +3493,7 @@ class ModerationCommands(Package):
         description="start process for setting up the moderation system",
     )
     async def setup(self, ctx):
-        """interactive automatic setup for vain — guild owner only"""
+        """interactive automatic setup for vain - guild owner only"""
         from .extended.setup import (
             SetupView,
             format_cooldown_left,

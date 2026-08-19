@@ -9,7 +9,7 @@ __all__: list[str] = ["Settings"]
 
 
 class Settings:
-    """DB helpers for the setup cog — writes to modlog_config, log_config, server_settings."""
+    """DB helpers for the setup cog - writes to modlog_config, log_config, server_settings."""
 
     @staticmethod
     async def set_modlog_channel(db: Any, guild_id: int, channel_id: int) -> None:

@@ -137,7 +137,7 @@ async def ocr_image(
         
         err_blob = str(payload.get("error") or payload.get("ErrorMessage") or "")
         if status in (429, 503) or "E571" in err_blob or "throttled" in err_blob.lower() or "overloaded" in err_blob.lower():
-            last_err = "OCR is busy right now — try again in a minute"
+            last_err = "OCR is busy right now - try again in a minute"
             if attempt < 2:
                 await asyncio.sleep(2 + attempt * 2)
                 continue

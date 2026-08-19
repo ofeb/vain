@@ -62,7 +62,7 @@ class Notes(Package):
     )
     @has_permissions(manage_messages=True)
     async def notes(self, ctx, target: str):
-        """View notes for a user (mention, id, or name — works offline)."""
+        """View notes for a user (mention, id, or name - works offline)."""
         from ext.moderation.extended.notes.settings import Settings
 
         await Settings.ensure_schema(self.db)

@@ -483,7 +483,7 @@ class InformationCommands(Package):
         from config import api
 
         if not api.openweathermap.strip():
-            return await ctx.warn("Weather API key is not configured\n> -# **service:** OpenWeatherMap — set `api.openweathermap` in config")
+            return await ctx.warn("Weather API key is not configured\n> -# **service:** OpenWeatherMap - set `api.openweathermap` in config")
         try:
             async with aiohttp.ClientSession() as session:
                 data = await fetch_weather(session, location)
