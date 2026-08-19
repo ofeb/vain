@@ -9,7 +9,7 @@ import discord
 
 from core.discord.package import Package
 from core.discord.views.embed import c2
-from .settings import Settings
+from ..settings import Settings
 
 if TYPE_CHECKING:
     from core.vain import Vain

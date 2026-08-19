@@ -214,3 +214,67 @@ class OpeningButtonAddModal(discord.ui.Modal, title="Add ticket opening button")
             style=str(self.style.value or "green").strip().lower(),
             identifier=str(self.identifier.value or "").strip() or None,
         )
+
+
+STYLE_MAP = {
+    "blurple": discord.ButtonStyle.primary,
+    "primary": discord.ButtonStyle.primary,
+    "grey": discord.ButtonStyle.secondary,
+    "gray": discord.ButtonStyle.secondary,
+    "secondary": discord.ButtonStyle.secondary,
+    "green": discord.ButtonStyle.success,
+    "success": discord.ButtonStyle.success,
+    "red": discord.ButtonStyle.danger,
+    "danger": discord.ButtonStyle.danger,
+}
+
+
+class TicketOpenView(discord.ui.View):
+    """Persistent panel view that registers opening buttons/dropdowns for bot.add_view()."""
+
+    def __init__(self, cog: Any, panel_id: int, options: list[dict], panel_type: str) -> None:
+        super().__init__(timeout=None)
+        self.cog = cog
+        self.panel_id = panel_id
+        self.options = options
+        self.panel_type = panel_type
+
+        if panel_type == "dropdown":
+            select = discord.ui.Select(
+                custom_id=f"ticket.create:{panel_id}",
+                placeholder="Select an option to open a ticket…",
+                min_values=1,
+                max_values=1,
+                options=[
+                    discord.SelectOption(
+                        label=(str(opt.get("label") or opt.get("id") or "Option"))[:100],
+                        value=(str(opt.get("id") or opt.get("label")))[:100],
+                        description=((opt.get("description") or "")[:100]) or None,
+                        emoji=_parse_emoji(opt.get("emoji")),
+                    )
+                    for opt in options[:25]
+                ],
+            )
+            select.callback = self._dropdown_callback
+            self.add_item(select)
+        else:
+            for opt in options:
+                label = str(opt.get("label") or opt.get("id") or "Open Ticket")[:80]
+                emoji = _parse_emoji(opt.get("emoji"))
+                style_str = str(opt.get("style") or "green").lower()
+                style = STYLE_MAP.get(style_str, discord.ButtonStyle.success)
+                identifier = str(opt.get("id") or label).lower().replace(" ", "_")
+                button = discord.ui.Button(
+                    label=label,
+                    style=style,
+                    custom_id=f"ticket.create:{identifier}",
+                    emoji=emoji,
+                )
+                button.callback = self._button_callback
+                self.add_item(button)
+
+    async def _button_callback(self, interaction: discord.Interaction) -> None:
+        pass
+
+    async def _dropdown_callback(self, interaction: discord.Interaction) -> None:
+        pass
