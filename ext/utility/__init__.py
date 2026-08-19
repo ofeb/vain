@@ -1573,8 +1573,7 @@ class Utility(Remind):
         if not sources:
             if rest:
                 return await ctx.warn(
-                    "Could not resolve that **user**, **URL**, or **attachment**
-"
+                    "Could not resolve that **user**, **URL**, or **attachment**\n"
                     "> -# try a mention, user id, image url, or attach a file"
                 )
             _add(
