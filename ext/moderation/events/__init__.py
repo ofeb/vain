@@ -55,6 +55,41 @@ class ModerationEvents(Package):
             )
 
     @Package.listener("on_member_join")
+    async def on_jail_restore(self, member: discord.Member) -> None:
+        """Re-apply jail role if the member is still recorded as jailed."""
+        if getattr(self.bot, "db", None) is None:
+            return
+        try:
+            row = await self.bot.db.fetchrow(
+                "SELECT 1 FROM jailed WHERE guild_id = $1 AND user_id = $2",
+                member.guild.id,
+                member.id,
+            )
+        except Exception:
+            return
+        if not row:
+            return
+        try:
+            settings = await self.bot.db.fetchrow(
+                "SELECT jail_role_id FROM server_settings WHERE guild_id = $1",
+                member.guild.id,
+            )
+        except Exception:
+            settings = None
+        role_id = None
+        if settings:
+            role_id = settings["jail_role_id"] if hasattr(settings, "keys") else settings[0]
+        role = member.guild.get_role(role_id) if role_id else None
+        if role is None:
+            role = discord.utils.get(member.guild.roles, name="Jailed")
+        if role is None or role in member.roles:
+            return
+        if role >= member.guild.me.top_role:
+            return
+        with contextlib.suppress(discord.Forbidden, discord.HTTPException):
+            await member.add_roles(role, reason="jail restore on rejoin")
+
+    @Package.listener("on_member_join")
     async def on_mute_restore(self, member: discord.Member):
         mute_data = await self.bot.db.fetchrow(
             "SELECT * FROM mutes WHERE user_id = $1 AND guild_id = $2",

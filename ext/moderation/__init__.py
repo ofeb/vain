@@ -3510,80 +3510,18 @@ class ModerationCommands(Package):
     )
     @has_permissions(administrator=True)
     async def setup(self, ctx):
-        """setup moderation system"""
-        async with ctx.typing():
-            overwrites_logs = {
-                ctx.guild.default_role: discord.PermissionOverwrite(read_messages=False),
-                ctx.guild.me: discord.PermissionOverwrite(read_messages=True),
-            }
-            for role in ctx.guild.roles:
-                if role.permissions.administrator:
-                    overwrites_logs[role] = discord.PermissionOverwrite(read_messages=True)
+        """interactive automatic setup for vain"""
+        from .extended.setup import SetupView
 
-            logs_cat = await self._ensure_category(ctx, "logs")
-            await logs_cat.edit(overwrites=overwrites_logs)
-
-            jail_config = await self._ensure_jail_ready(ctx)
-            jail_role_id = jail_config["jail_role_id"] if jail_config else None
-
-            overwrites_jail = {
-                ctx.guild.default_role: discord.PermissionOverwrite(read_messages=False, send_messages=False),
-                ctx.guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True, manage_messages=True),
-            }
-            for role in ctx.guild.roles:
-                if role.permissions.administrator:
-                    overwrites_jail[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
-            if jail_role_id:
-                jail_role = ctx.guild.get_role(jail_role_id)
-                if jail_role:
-                    overwrites_jail[jail_role] = discord.PermissionOverwrite(
-                        read_messages=True,
-                        send_messages=True,
-                    )
-
-            jail_cat = await self._ensure_category(ctx, "jail")
-            await jail_cat.edit(overwrites=overwrites_jail)
-
-            antinuke_ch = await self._ensure_channel(
-                ctx, "antinuke-logs", logs_cat, "Antinuke moderation events"
-            )
-            antiraid_ch = await self._ensure_channel(
-                ctx, "antiraid-logs", logs_cat, "Antiraid moderation events"
-            )
-            jail_logs_ch = await self._ensure_channel(
-                ctx, "jail-logs", logs_cat, "Jail moderation events"
-            )
-            modlog_ch = await self._ensure_channel(
-                ctx, "modlogs", logs_cat, "Modlog channel"
-            )
-
-            jailed_overwrites = dict(overwrites_jail)
-            jailed_ch = await self._ensure_channel(
-                ctx, "jailed", jail_cat, "Jail channel for muted members"
-            )
-            await jailed_ch.edit(overwrites=jailed_overwrites)
-
-            await self.bot.db.execute(
-                """INSERT INTO modlog_config (guild_id, channel_id)
-                   VALUES ($1, $2)
-                   ON CONFLICT (guild_id) DO UPDATE SET channel_id = $2""",
-                ctx.guild.id, modlog_ch.id,
-            )
-            await self.bot.db.set_security_log_channels(
-                ctx.guild.id,
-                antinuke_channel_id=antinuke_ch.id,
-                antiraid_channel_id=antiraid_ch.id,
-            )
-            await self.bot.db.execute(
-                """INSERT INTO server_settings (guild_id, jail_channel_id)
-                   VALUES ($1, $2)
-                   ON CONFLICT (guild_id) DO UPDATE SET jail_channel_id = $2""",
-                ctx.guild.id, jailed_ch.id,
-            )
-
-        await ctx.success(
-                f"Moderation system set up has been completed. Please make sure that all of your channels and roles have been configured properly."
-            )
+        prefix = getattr(ctx, "clean_prefix", None) or getattr(ctx, "prefix", None) or ","
+        view = SetupView(
+            self.bot,
+            guild=ctx.guild,
+            author_id=ctx.author.id,
+            prefix=str(prefix),
+        )
+        msg = await ctx.send(view=view)
+        view.message = msg
 
     @command(
         name="unsetup",

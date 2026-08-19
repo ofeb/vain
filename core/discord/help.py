@@ -1070,10 +1070,14 @@ async def _fetch_custom_aliases(ctx: Context, cmd: Command) -> tuple[list[str], 
                 ctx.guild.id,
             )
             for r in rows or []:
-                alias = r["alias"] if hasattr(r, "keys") else r[0]
-                target = (r["command_name"] if hasattr(r, "keys") else r[1] or "").lower()
-                if target in names or target.split()[0] in names:
-                    guild_aliases.append(str(alias))
+                alias = str(r["alias"] if hasattr(r, "keys") else r[0]).strip().rstrip(",")
+                target = (r["command_name"] if hasattr(r, "keys") else r[1] or "").lower().strip()
+                root = target.split()[0] if target else ""
+                if not alias:
+                    continue
+                if target in names or root in names or any(n == root or n.endswith(" " + root) or n == target for n in names):
+                    if alias not in guild_aliases:
+                        guild_aliases.append(alias)
         rows = await db.fetch(
             "SELECT name, invoke, command FROM selfaliases WHERE user_id = $1",
             ctx.author.id,
@@ -1316,11 +1320,15 @@ class GroupHelpMenu(ui.LayoutView):
             isinstance(cmd, Group)
             and not getattr(cmd, "invoke_without_command", False)
         )
+        cache = getattr(self, "_alias_cache", {}) or {}
+        guild_a, self_a = cache.get(id(cmd), ([], []))
         return _detail_text(
             cmd,
             self.ctx,
             group_title=is_shell,
             page_info=self._page_info(),
+            guild_aliases=guild_a,
+            self_aliases=self_a,
         )
 
     def _cmd_label(self, cmd: Command) -> str:
@@ -1445,6 +1453,12 @@ class GroupHelpMenu(ui.LayoutView):
             await self.msg.edit(view=bare)
 
     async def start(self) -> discord.Message:
+        self._alias_cache = {}
+        for cmd in self.pages:
+            try:
+                self._alias_cache[id(cmd)] = await _fetch_custom_aliases(self.ctx, cmd)
+            except Exception:
+                self._alias_cache[id(cmd)] = ([], [])
         self._rebuild()
         kw: dict[str, Any] = {"view": self}
         if self.ctx.message and not self.ctx.interaction:

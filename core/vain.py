@@ -1132,7 +1132,36 @@ class Vain(commands.AutoShardedBot):
         )
 
     async def on_guild_join(self, guild: discord.Guild) -> None:
-        pass
+        """Send setup intro in the first usable text channel."""
+        channel = None
+        if guild.system_channel and guild.system_channel.permissions_for(guild.me).send_messages:
+            channel = guild.system_channel
+        if channel is None:
+            for ch in guild.text_channels:
+                perms = ch.permissions_for(guild.me)
+                if perms.view_channel and perms.send_messages:
+                    channel = ch
+                    break
+        if channel is None:
+            return
+        prefix = ","
+        with contextlib.suppress(Exception):
+            row = await self.db.fetchrow(
+                "SELECT prefix FROM guilds WHERE guild_id = $1",
+                guild.id,
+            )
+            if row:
+                prefix = row["prefix"] if hasattr(row, "keys") else row[0] or ","
+        try:
+            from ext.moderation.extended.setup import SetupView
+            view = SetupView(self, guild=guild, author_id=None, prefix=str(prefix or ","))
+            msg = await channel.send(view=view)
+            view.message = msg
+        except Exception:
+            with contextlib.suppress(Exception):
+                await channel.send(
+                    f"**vain** joined — run `,setup` to configure VoiceMaster, jail, mute, logs, antinuke and antiraid."
+                )
 
     async def on_message(self, msg: discord.Message) -> None:
         if msg.author.bot or not self.is_ready():
