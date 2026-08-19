@@ -558,7 +558,7 @@ class InformationCommands(Package):
 
     @hybrid(
         name="urban",
-        description="get the definition of a word or slang from urban dictionary",
+        description="lookup a word on the urban dictionary",
         aliases=["ud", "urbandictionary"],
         example=",urban chav",
         guilds=True,
