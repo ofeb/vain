@@ -1491,7 +1491,7 @@ class Utility(Remind):
                 if m.bot and m.id == getattr(self.bot.user, "id", None):
                     continue
                 mention_ids.add(m.id)
-                _add(f"avatar:{m.id}", str(m.display_avatar.url))
+                _add(f"avatar:{m.id}", str(m.display_avatar.replace(size=256, format="png").url))
 
         url_re = _re.compile(r"https?://\S+", _re.I)
         mention_re = _re.compile(r"<@!?(\d{15,25})>")
@@ -1514,7 +1514,7 @@ class Utility(Remind):
             if user is None:
                 continue
             mention_ids.add(uid)
-            _add(f"avatar:{uid}", str(user.display_avatar.url))
+            _add(f"avatar:{uid}", str(user.display_avatar.replace(size=256, format="png").url))
 
         
         text = mention_re.sub(" ", rest or "")
@@ -1540,7 +1540,7 @@ class Utility(Remind):
                 if user is None:
                     continue
                 mention_ids.add(uid)
-                _add(f"avatar:{uid}", str(user.display_avatar.url))
+                _add(f"avatar:{uid}", str(user.display_avatar.replace(size=256, format="png").url))
                 continue
 
             
@@ -1568,25 +1568,57 @@ class Utility(Remind):
                 if user.id in mention_ids:
                     continue
                 mention_ids.add(user.id)
-                _add(f"avatar:{user.id}", str(user.display_avatar.url))
+                _add(f"avatar:{user.id}", str(user.display_avatar.replace(size=256, format="png").url))
 
         if not sources:
             if rest:
                 return await ctx.warn(
-                    "Attachments or URLs **must** be **GIFs** or **Images**"
+                    "Could not resolve that **user**, **URL**, or **attachment**
+"
+                    "> -# try a mention, user id, image url, or attach a file"
                 )
-            _add(f"avatar:{ctx.author.id}", str(ctx.author.display_avatar.url))
+            _add(
+                f"avatar:{ctx.author.id}",
+                str(ctx.author.display_avatar.replace(size=256, format="png").url),
+            )
 
         sources = sources[:10]
 
         async def _fetch_colors(url: str) -> list[str]:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (compatible; VainBot/1.0)",
+                "Accept": "image/png,image/webp,image/jpeg,image/gif,image/*;q=0.8",
+            }
+            # Prefer PNG for Discord CDN avatars
+            fetch_url = url
+            if "cdn.discordapp.com" in url or "media.discordapp.net" in url:
+                if "?" in fetch_url:
+                    if "format=" not in fetch_url:
+                        fetch_url += "&format=png&size=256"
+                else:
+                    fetch_url += "?format=png&size=256"
             try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(url, timeout=aiohttp.ClientTimeout(total=12)) as resp:
+                session = getattr(self.bot, "session", None)
+                own = False
+                if session is None or session.closed:
+                    session = aiohttp.ClientSession()
+                    own = True
+                try:
+                    async with session.get(
+                        fetch_url,
+                        headers=headers,
+                        timeout=aiohttp.ClientTimeout(total=15),
+                    ) as resp:
                         if resp.status != 200:
                             return []
                         data = await resp.read()
+                finally:
+                    if own:
+                        await session.close()
             except Exception:
+                return []
+
+            if not data or len(data) < 24:
                 return []
 
             def _extract() -> list[str]:
@@ -1594,7 +1626,15 @@ class Utility(Remind):
                     img = Image.open(BytesIO(data))
                     if getattr(img, "is_animated", False):
                         img.seek(0)
-                    img = img.convert("RGB")
+                    if img.mode not in ("RGB", "RGBA"):
+                        img = img.convert("RGBA")
+                    if img.mode == "RGBA":
+                        bg = Image.new("RGB", img.size, (255, 255, 255))
+                        bg.paste(img, mask=img.split()[-1])
+                        img = bg
+                    else:
+                        img = img.convert("RGB")
+                    # ColorThief needs a seekable file-like with a real name sometimes
                     buf = BytesIO()
                     img.save(buf, format="PNG")
                     buf.seek(0)
@@ -1602,11 +1642,14 @@ class Utility(Remind):
                     if color_count <= 1:
                         r, g, b = ct.get_color(quality=1)
                         return [f"#{r:02x}{g:02x}{b:02x}"]
-                    palette = ct.get_palette(color_count=color_count, quality=1) or []
+                    palette = ct.get_palette(color_count=min(color_count, 5), quality=1) or []
                     out = []
                     for rgb in palette[:color_count]:
                         r, g, b = rgb
                         out.append(f"#{r:02x}{g:02x}{b:02x}")
+                    if not out:
+                        r, g, b = ct.get_color(quality=1)
+                        out = [f"#{r:02x}{g:02x}{b:02x}"]
                     return out
                 except Exception:
                     return []
@@ -1637,6 +1680,12 @@ class Utility(Remind):
             blocks.append(f"-# {title}:\n{color_bits}")
 
         if not any_ok:
+            if any(k.startswith("avatar:") for k, _ in sources):
+                return await ctx.warn(
+                    "Could not read **avatar** color data
+"
+                    "> -# the avatar may be unavailable — try again in a moment"
+                )
             return await ctx.warn(
                 "Attachments or URLs **must** be **GIFs** or **Images**"
             )
