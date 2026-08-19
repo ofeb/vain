@@ -289,6 +289,7 @@ from discord.ext import commands
 
 from core.discord.ctx import Context
 from core.discord.hybrid import command, describe, hybrid
+from .extended.remind import Remind
 from core.discord.views.paginate import PaginateView, layout_from_items, send_pages
 from config import api, color, emojis
 from core.managers.permissions import has_permissions
@@ -868,11 +869,11 @@ class Snipe(commands.Cog):
             await ctx.fail(f"No snipe found at that index\n> -# **index:** `{index}` — try a smaller number")
 
 
-class Utility(commands.Cog):
-    """Utility builders, ask, translate, OCR."""
+class Utility(Remind):
+    """Utility builders, ask, translate, OCR, reminders."""
 
     def __init__(self, bot: commands.Bot):
-        self.bot = bot
+        super().__init__(bot)
         self._menus: list[app_commands.ContextMenu] = []
 
     def _make_menu(self, name: str, callback) -> app_commands.ContextMenu:
@@ -938,6 +939,8 @@ class Utility(commands.Cog):
                 except Exception:
                     pass
 
+        await super().cog_load()
+
     async def cog_unload(self) -> None:
         for menu in self._menus:
             with contextlib.suppress(Exception):
@@ -952,6 +955,8 @@ class Utility(commands.Cog):
 
     def _transcriber(self) -> WhisperTranscribeClient:
         return WhisperTranscribeClient(self.bot)
+
+        await super().cog_unload()
 
     async def _transcribe_bytes(self, audio: bytes, *, mime_type: str = "audio/ogg") -> str:
         try:
@@ -1658,11 +1663,6 @@ async def setup(bot: commands.Bot):
 
     await bot.add_cog(Snipe(bot))
     await bot.add_cog(Utility(bot))
-    try:
-        from .extended.remind import Remind
-        await bot.add_cog(Remind(bot))
-    except Exception as _e:
-        print(f"failed to load Remind: {_e}")
 
     if bot.get_cog("SnipeEvents") is None:
         await bot.add_cog(SnipeEvents(bot))

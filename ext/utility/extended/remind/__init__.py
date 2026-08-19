@@ -78,7 +78,7 @@ class Remind(Package):
 
     def __init__(self, bot):
         super().__init__(bot)
-        self._menus: list[app_commands.ContextMenu] = []
+        self._remind_menus: list[app_commands.ContextMenu] = []
 
     async def cog_load(self) -> None:
         await self._ensure_schema()
@@ -117,10 +117,10 @@ class Remind(Package):
                 capp = _ac.allowed_installs(guilds=True, users=True)(capp)
 
     async def cog_unload(self) -> None:
-        for menu in self._menus:
+        for menu in self._remind_menus:
             with contextlib.suppress(Exception):
                 self.bot.tree.remove_command(menu.name, type=discord.AppCommandType.message)
-        self._menus.clear()
+        self._remind_menus.clear()
         if self._remind_loop.is_running():
             self._remind_loop.cancel()
         await super().cog_unload()
@@ -183,10 +183,10 @@ class Remind(Package):
         return n
 
     def _register_menus(self) -> None:
-        for menu in list(self._menus):
+        for menu in list(self._remind_menus):
             with contextlib.suppress(Exception):
                 self.bot.tree.remove_command(menu.name, type=discord.AppCommandType.message)
-        self._menus.clear()
+        self._remind_menus.clear()
         menu = app_commands.ContextMenu(
             name="Remind me to do this",
             callback=self.ctx_remind,
@@ -198,7 +198,7 @@ class Remind(Package):
             app_commands.allowed_installs(guilds=True, users=True)(menu)
         with contextlib.suppress(Exception):
             self.bot.tree.add_command(menu, override=True)
-            self._menus.append(menu)
+            self._remind_menus.append(menu)
 
     def _format_duration(self, seconds: int) -> str:
         units = (
