@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 import asyncpg
@@ -73,13 +73,13 @@ class InformationEvents(Package):
         if not config or not config.get('join_info_enabled', False):
             return
         
-        self.joined_cache[member.id] = datetime.now()
+        self.joined_cache[member.id] = datetime.now(timezone.utc)
         
         info_channel = member.guild.get_channel(config.get('info_channel'))
         if not info_channel:
             return
         
-        account_age = (datetime.now() - member.created_at).days
+        account_age = (datetime.now(timezone.utc) - member.created_at).days
         embed = Embed(
             title="Member Joined",
             description=f"{member.mention} joined the server",
@@ -110,7 +110,7 @@ class InformationEvents(Package):
         join_time = self.joined_cache.get(member.id)
         duration = "Unknown"
         if join_time:
-            duration = str(datetime.now() - join_time).split('.')[0]
+            duration = str(datetime.now(timezone.utc) - join_time).split('.')[0]
         
         embed = Embed(
             title="Member Left",

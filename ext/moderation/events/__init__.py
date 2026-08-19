@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import contextlib
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 
 import discord
 from asyncio import Lock
@@ -29,7 +29,7 @@ class ModerationEvents(Package):
         if not mute_data:
             return False
         
-        if mute_data['expires_at'] and datetime.now() > mute_data['expires_at']:
+        if mute_data['expires_at'] and datetime.now(timezone.utc) > mute_data['expires_at']:
             await self.bot.db.execute(
                 "DELETE FROM mutes WHERE user_id = $1 AND guild_id = $2",
                 member.id, member.guild.id
@@ -63,7 +63,7 @@ class ModerationEvents(Package):
         if not mute_data:
             return
         
-        if mute_data['expires_at'] and datetime.now() > mute_data['expires_at']:
+        if mute_data['expires_at'] and datetime.now(timezone.utc) > mute_data['expires_at']:
             await self.bot.db.execute(
                 "DELETE FROM mutes WHERE user_id = $1 AND guild_id = $2",
                 member.id, member.guild.id

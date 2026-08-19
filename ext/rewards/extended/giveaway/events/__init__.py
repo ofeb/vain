@@ -37,7 +37,7 @@ DEFAULT_DM_SCRIPT = (
 
 def _now() -> datetime:
     """Local naive now - matches PostgreSQL ``NOW()`` for TIMESTAMP columns."""
-    return datetime.now()
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def _as_naive(dt: datetime | None) -> datetime | None:
@@ -45,7 +45,7 @@ def _as_naive(dt: datetime | None) -> datetime | None:
         return None
     if dt.tzinfo is not None:
         
-        return dt.astimezone().replace(tzinfo=None)
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
     return dt
 
 
@@ -1029,7 +1029,7 @@ class GiveawayEvents(Cog):
                 if row and row.get("joined_at"):
                     joined = row["joined_at"]
                     if getattr(joined, "tzinfo", None) is not None:
-                        joined = joined.astimezone().replace(tzinfo=None)
+                        joined = joined.astimezone(timezone.utc).replace(tzinfo=None)
                     delta = max(0, int((_now() - joined).total_seconds() // 60))
                     if delta > 0:
                         await self.bot.db.execute(

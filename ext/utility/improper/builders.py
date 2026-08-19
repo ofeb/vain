@@ -1022,17 +1022,16 @@ class _BaseBuilder:
             if self.data.get("footer"):
                 foot = _strip_subtext(self.data["footer"])
                 if self._truthy("footer_timestamp"):
-                    now = discord.utils.utcnow()
-                    foot = (
-                        f"{foot} · Today at {now.strftime('%H:%M')}"
-                        if foot
-                        else f"Today at {now.strftime('%H:%M')}"
-                    )
+                    import time as _time
+                    _ts = int(_time.time())
+                    stamp = f"Today at <t:{_ts}:t>"
+                    foot = f"{foot} · {stamp}" if foot else stamp
                 if foot:
                     lines.append(f"> -# {foot}")
             elif self._truthy("footer_timestamp"):
-                now = discord.utils.utcnow()
-                lines.append(f"> -# Today at {now.strftime('%H:%M')}")
+                import time as _time
+                _ts = int(_time.time())
+                lines.append(f"> -# Today at <t:{_ts}:t>")
 
             body = "\n".join(lines) if lines else "​"
             accessory = (
@@ -1125,8 +1124,8 @@ class _BaseBuilder:
                     if (block.get("timestamp") or "") == "1" or self._truthy(
                         "footer_timestamp"
                     ):
-                        now = discord.utils.utcnow()
-                        stamp = f"Today at {now.strftime('%H:%M')}"
+                        import time as _time
+                        stamp = f"Today at <t:{int(_time.time())}:t>"
                         foot = f"{foot} · {stamp}" if foot else stamp
                     if foot:
                         pending_lines.append(f"> -# {foot}")

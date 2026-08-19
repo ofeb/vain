@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 import discord
@@ -638,7 +638,7 @@ class Giveaway(commands.Cog):
 
         
         secs = int(duration)
-        end_time = datetime.now() + timedelta(seconds=secs)
+        end_time = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=secs)
         try:
             await self.bot.db.execute(
                 "UPDATE giveaways SET expiration = $1 WHERE message_id = $2",
@@ -711,7 +711,7 @@ class Giveaway(commands.Cog):
             await ctx.warn(str(exc))
             return
 
-        end_time = datetime.now() + timedelta(seconds=seconds)
+        end_time = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=seconds)
         requirements = requirements or empty_requirements()
 
         events = self._events()
@@ -778,7 +778,7 @@ class Giveaway(commands.Cog):
                 [],
                 min_level,
                 roles,
-                datetime.now(),
+                datetime.now(timezone.utc).replace(tzinfo=None),
             )
             inserted = False
             
