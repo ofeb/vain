@@ -164,7 +164,7 @@ class Fortnite(Package):
 
     @hybrid(
         name="fortnite",
-        description="Fortnite shop and cosmetic lookup",
+        description="fortnite shop and cosmetic lookup",
         group=True,
         aliases=["fn"],
     )
@@ -173,7 +173,7 @@ class Fortnite(Package):
 
     @fortnite.command(
         name="itemshop",
-        description="View the current Fortnite item shop",
+        description="view the current fortnite item shop",
         aliases=["shop", "item-shop"],
     )
     async def fortnite_itemshop(self, ctx: Context) -> None:
@@ -207,7 +207,7 @@ class Fortnite(Package):
 
     @fortnite.command(
         name="cosmetic",
-        description="Look up a Fortnite cosmetic",
+        description="look up a fortnite cosmetic",
         aliases=["item", "skin"],
     )
     @describe(name="Cosmetic name to search for")
@@ -228,7 +228,7 @@ class Fortnite(Package):
 
     @hybrid(
         name="fortniteshop",
-        description="View the current Fortnite item shop",
+        description="view the current fortnite item shop",
         aliases=["fnshop"],
     )
     async def fortniteshop(self, ctx: Context) -> None:

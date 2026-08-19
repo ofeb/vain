@@ -227,7 +227,7 @@ class FilterCommands(Package):
     @group(
         name="filter",
         aliases=["automod"],
-        description="View a variety of options to help clean chat",
+        description="view a variety of options to help clean chat",
         invoke_without_command=True,
     )
     async def filter_(self, ctx):
@@ -370,7 +370,7 @@ class FilterCommands(Package):
     @filter_.command(
         name="list",
         aliases=["ls", "show", "view"],
-        description="View a list of filtered words in guild",
+        description="view a list of filtered words in guild",
     )
     @has_permissions(manage_guild=True)
     async def filter_list(self, ctx):
@@ -399,7 +399,7 @@ class FilterCommands(Package):
     @filter_.group(
         name="links",
         aliases=["urls"],
-        description="Delete any message that contains a link",
+        description="delete any message that contains a link",
         example=",filter links on",
         invoke_without_command=True,
     )
@@ -443,7 +443,7 @@ class FilterCommands(Package):
     @filter_links.command(
         name="whitelist",
         aliases=["wl", "allow", "al"],
-        description="Whitelist domains from the link filter",
+        description="whitelist domains from the link filter",
         example=",filter links whitelist https://safe.com",
     )
     @has_permissions(manage_guild=True)
@@ -496,7 +496,7 @@ class FilterCommands(Package):
     @filter_links.command(
         name="unwhitelist",
         aliases=["uwl", "removeallow", "ral"],
-        description="Remove domains from the link whitelist",
+        description="remove domains from the link whitelist",
     )
     @has_permissions(manage_guild=True)
     async def filter_links_unwhitelist(self, ctx, *, links):
@@ -533,7 +533,7 @@ class FilterCommands(Package):
     @filter_.group(
         name="invites",
         aliases=["invite", "invs", "inv"],
-        description="Delete any message that contains a Discord invite",
+        description="delete any message that contains a discord invite",
         example=",filter invites on",
         invoke_without_command=True,
     )
@@ -577,7 +577,7 @@ class FilterCommands(Package):
     @filter_invites.command(
         name="whitelist",
         aliases=["wl", "allow", "al"],
-        description="Whitelist specific invite codes",
+        description="whitelist specific invite codes",
     )
     @has_permissions(manage_guild=True)
     async def filter_invites_whitelist(self, ctx, *, invites):
@@ -627,7 +627,7 @@ class FilterCommands(Package):
     @filter_invites.command(
         name="unwhitelist",
         aliases=["uwl", "removeallow", "ral"],
-        description="Remove invite codes from the whitelist",
+        description="remove invite codes from the whitelist",
     )
     @has_permissions(manage_guild=True)
     async def filter_invites_unwhitelist(self, ctx, *, invites):
@@ -671,7 +671,7 @@ class FilterCommands(Package):
     @filter_.group(
         name="spam",
         aliases=["antispam", "flood", "flooding"],
-        description="Delete messages from users that send messages too fast",
+        description="delete messages from users that send messages too fast",
         example=",filter spam on --threshold 5",
         invoke_without_command=True,
     )
@@ -719,7 +719,7 @@ class FilterCommands(Package):
 
     @filter_.group(
         name="caps",
-        description="Delete messages that contain too many uppercase characters",
+        description="delete messages that contain too many uppercase characters",
         example=",filter caps on --threshold 70",
     )
     @has_permissions(manage_guild=True)
@@ -747,7 +747,7 @@ class FilterCommands(Package):
     @filter_caps.group(
         name="exempt",
         aliases=["wl", "ex"],
-        description="Exempt roles from the caps filter",
+        description="exempt roles from the caps filter",
         invoke_without_command=True,
     )
     @has_permissions(manage_guild=True)
@@ -796,7 +796,7 @@ class FilterCommands(Package):
 
     @filter_.group(
         name="spoilers",
-        description="Delete any message exceeding the threshold for spoilers",
+        description="delete any message exceeding the threshold for spoilers",
         example=",filter spoilers on --threshold 2",
     )
     @has_permissions(manage_guild=True)
@@ -824,7 +824,7 @@ class FilterCommands(Package):
     @filter_spoilers.group(
         name="exempt",
         aliases=["wl", "ex"],
-        description="Exempt roles from the spoilers filter",
+        description="exempt roles from the spoilers filter",
         invoke_without_command=True,
     )
     @has_permissions(manage_guild=True)
@@ -868,7 +868,7 @@ class FilterCommands(Package):
 
     @filter_.group(
         name="musicfiles",
-        description="Delete any message that contains a music file",
+        description="delete any message that contains a music file",
         example=",filter musicfiles on",
     )
     @has_permissions(manage_guild=True)
@@ -892,7 +892,7 @@ class FilterCommands(Package):
     @filter_musicfile.group(
         name="exempt",
         aliases=["wl", "ex"],
-        description="Exempt roles from the music files filter",
+        description="exempt roles from the music files filter",
         invoke_without_command=True,
     )
     @has_permissions(manage_guild=True)
@@ -937,7 +937,7 @@ class FilterCommands(Package):
     @filter_.group(
         name="massmention",
         aliases=["mm", "mention"],
-        description="Delete any message exceeding the threshold for user mentions",
+        description="delete any message exceeding the threshold for user mentions",
         example=",filter massmention on --threshold 5",
         invoke_without_command=True,
     )
@@ -987,7 +987,7 @@ class FilterCommands(Package):
     @filter_.group(
         name="emoji",
         aliases=["emojis", "emote", "emotes"],
-        description="Delete any message exceeding the threshold for emojis",
+        description="delete any message exceeding the threshold for emojis",
         example=",filter emoji on --threshold 5",
         invoke_without_command=True,
     )
@@ -1016,7 +1016,7 @@ class FilterCommands(Package):
     @filter_emoji.group(
         name="exempt",
         aliases=["wl", "ex"],
-        description="Exempt roles from the emoji filter",
+        description="exempt roles from the emoji filter",
         invoke_without_command=True,
     )
     @has_permissions(manage_guild=True)

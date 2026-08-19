@@ -207,7 +207,7 @@ class BoosterroleCommands(Package):
     @group(
         name="boosterrole",
         aliases=["boostrole", "br"],
-        description="Create and customize your personal booster color role (gradient: ,br create <hex>, <hex2> <name>)",
+        description="create and customize your personal booster color role (gradient: ,br create <hex>, <hex2> <name>)",
         example=",boosterrole create ff0000, 00ff00 coolname",
         extras={"checks": "Boosters Only"},
         invoke_without_command=True,
@@ -219,7 +219,7 @@ class BoosterroleCommands(Package):
     @boosterrole.command(
         name="create",
         aliases=["color", "colour"],
-        description="Create your booster role — solid: <hex> [name] · gradient (boost lvl 3): <hex>, <hex2> [name]",
+        description="create your booster role — solid: <hex> [name] · gradient (boost lvl 3): <hex>, <hex2> [name]",
         example=",boosterrole create ff0000, 00ff00 coolname",
     )
     @is_booster()
@@ -391,7 +391,7 @@ class BoosterroleCommands(Package):
     @boosterrole.command(
         name="random",
         aliases=["rand", "randomhex"],
-        description="Set your role to a random hex color",
+        description="set your role to a random hex color",
     )
     @is_booster()
     async def boosterrole_random(self, ctx):
@@ -423,7 +423,7 @@ class BoosterroleCommands(Package):
     @boosterrole.group(
         name="icon",
         aliases=["image", "img"],
-        description="Set an icon for your booster role (emoji, URL, or attachment)",
+        description="set an icon for your booster role (emoji, url, or attachment)",
         example=",boosterrole icon https://example.com/img.png",
         invoke_without_command=True,
     )
@@ -477,7 +477,7 @@ class BoosterroleCommands(Package):
     @boosterrole_icon.command(
         name="remove",
         aliases=["delete", "del", "rm"],
-        description="Remove your booster role icon",
+        description="remove your booster role icon",
     )
     @is_booster()
     async def boosterrole_icon_remove(self, ctx):
@@ -627,7 +627,7 @@ class BoosterroleCommands(Package):
     @boosterrole.command(
         name="rename",
         aliases=["name"],
-        description="Change the name of your booster role",
+        description="change the name of your booster role",
         example=",boosterrole rename richgang",
     )
     @is_booster()
@@ -668,7 +668,7 @@ class BoosterroleCommands(Package):
     @boosterrole.command(
         name="modify",
         aliases=["edit", "update", "mod"],
-        description="Modify your booster role — solid: <name> <hex> · gradient (boost lvl 3): <name> <hex> <hex2>",
+        description="modify your booster role — solid: <name> <hex> · gradient (boost lvl 3): <name> <hex> <hex2>",
         example=",boosterrole modify coolname ff0000 00ff00",
     )
     @is_booster()
@@ -753,7 +753,7 @@ class BoosterroleCommands(Package):
     @boosterrole.command(
         name="remove",
         aliases=["delete", "del", "rm"],
-        description="Delete your booster role",
+        description="delete your booster role",
     )
     @is_booster()
     async def boosterrole_remove(self, ctx):
@@ -781,7 +781,7 @@ class BoosterroleCommands(Package):
     @boosterrole.group(
         name="award",
         aliases=["reward"],
-        description="Reward a member with a role when they boost",
+        description="reward a member with a role when they boost",
         example=",boosterrole award @rich",
         invoke_without_command=True,
     )
@@ -807,7 +807,7 @@ class BoosterroleCommands(Package):
     @boosterrole_award.command(
         name="view",
         aliases=["show"],
-        description="View the current award role",
+        description="view the current award role",
     )
     @has_permissions(manage_roles=True, manage_guild=True)
     async def boosterrole_award_view(self, ctx):
@@ -831,7 +831,7 @@ class BoosterroleCommands(Package):
     @boosterrole_award.command(
         name="unset",
         aliases=["delete", "remove", "clear"],
-        description="Remove the award role",
+        description="remove the award role",
     )
     @has_permissions(manage_roles=True, manage_guild=True)
     async def boosterrole_award_unset(self, ctx):
@@ -855,7 +855,7 @@ class BoosterroleCommands(Package):
     @boosterrole.command(
         name="base",
         aliases=["set", "baseid"],
-        description="Set the base role that booster roles are positioned under",
+        description="set the base role that booster roles are positioned under",
         example=",boosterrole base @brs",
     )
     @has_permissions(manage_guild=True)
@@ -899,7 +899,7 @@ class BoosterroleCommands(Package):
 
     @boosterrole.command(
         name="limit",
-        description="Set how many booster roles can exist (0 = unlimited)",
+        description="set how many booster roles can exist (0 = unlimited)",
         example=",boosterrole limit 30",
     )
     @has_permissions(manage_guild=True)
@@ -925,7 +925,7 @@ class BoosterroleCommands(Package):
     @boosterrole.command(
         name="cleanup",
         aliases=["clean", "prune", "purge", "truncate"],
-        description="Clean up booster roles that have no members",
+        description="clean up booster roles that have no members",
     )
     @has_permissions(manage_roles=True, manage_guild=True)
     async def boosterrole_cleanup(self, ctx):
@@ -960,7 +960,7 @@ class BoosterroleCommands(Package):
     @boosterrole.command(
         name="list",
         aliases=["all", "view"],
-        description="Show every booster role in this server",
+        description="show every booster role in this server",
     )
     @has_permissions(manage_guild=True)
     async def boosterrole_list(self, ctx):
@@ -1006,7 +1006,7 @@ class BoosterroleCommands(Package):
 
     @boosterrole.group(
         name="share",
-        description="Share your personal booster role with another member",
+        description="share your personal booster role with another member",
         invoke_without_command=True,
     )
     @is_booster()
@@ -1071,7 +1071,7 @@ class BoosterroleCommands(Package):
     @boosterrole_share.command(
         name="list",
         aliases=["members"],
-        description="List everyone in a booster role",
+        description="list everyone in a booster role",
     )
     @is_booster()
     async def boosterrole_share_list(self, ctx):
@@ -1108,7 +1108,7 @@ class BoosterroleCommands(Package):
     @boosterrole_share.command(
         name="remove",
         aliases=["kick"],
-        description="Remove someone from your booster role",
+        description="remove someone from your booster role",
     )
     @is_booster()
     async def boosterrole_share_remove(self, ctx, member: discord.Member):
@@ -1144,7 +1144,7 @@ class BoosterroleCommands(Package):
 
     @boosterrole_share.command(
         name="max",
-        description="Set the maximum number of members allowed in a shared role",
+        description="set the maximum number of members allowed in a shared role",
     )
     @has_permissions(manage_guild=True)
     async def boosterrole_share_max(self, ctx, limit: int):
@@ -1166,7 +1166,7 @@ class BoosterroleCommands(Package):
 
     @boosterrole.command(
         name="toggle",
-        description="Toggle the booster roles system in this server",
+        description="toggle the booster roles system in this server",
     )
     @has_permissions(manage_guild=True)
     async def boosterrole_toggle(self, ctx):

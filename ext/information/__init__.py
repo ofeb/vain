@@ -147,7 +147,7 @@ class InformationCommands(Package):
 
     @hybrid(
         name="botinfo",
-        description="View information about the bot, stats, uptime, shards and invite links",
+        description="view information about the bot, stats, uptime, shards and invite links",
         aliases=["bi", "stats"],
         usage="",
         example=",botinfo",
@@ -225,7 +225,7 @@ class InformationCommands(Package):
 
     @hybrid(
         name="inviteinfo",
-        description="View information about an invite",
+        description="view information about an invite",
         aliases=["ii"],
         guilds=True,
         dms=True,
@@ -269,7 +269,7 @@ class InformationCommands(Package):
 
     @hybrid(
         name="channelinfo",
-        description="View information about a channel",
+        description="view information about a channel",
         aliases=["ci"],
         guild_only=True,
     )
@@ -310,7 +310,7 @@ class InformationCommands(Package):
 
     @hybrid(
         name="roleinfo",
-        description="View information about a role",
+        description="view information about a role",
         aliases=["ri"],
         guild_only=True,
     )
@@ -321,7 +321,7 @@ class InformationCommands(Package):
 
     @hybrid(
         name="memberinfo",
-        description="View detailed information about a member",
+        description="view detailed information about a member",
         aliases=["mi"],
         guild_only=True,
     )
@@ -357,7 +357,7 @@ class InformationCommands(Package):
 
     @hybrid(
         name="userinfo",
-        description="View detailed information about a user",
+        description="view detailed information about a user",
         aliases=["ui"],
     )
     @describe(user="User to inspect")
@@ -440,7 +440,7 @@ class InformationCommands(Package):
 
     @hybrid(
         name="shardinfo",
-        description="View shard statistics",
+        description="view shard statistics",
         aliases=["shards"],
     )
     async def shardinfo(self, ctx: Context) -> None:
@@ -474,7 +474,7 @@ class InformationCommands(Package):
 
     @hybrid(
         name="weather",
-        description="Get weather information for a location",
+        description="get weather information for a location",
         example=",weather Cork",
         **_CONTEXTS,
     )
@@ -496,7 +496,7 @@ class InformationCommands(Package):
 
     @hybrid(
         name="cashapp",
-        description="Retrieve simple CashApp profile information",
+        description="retrieve simple cashapp profile information",
         example=",cashapp $jonathan",
         **_CONTEXTS,
     )
@@ -513,7 +513,7 @@ class InformationCommands(Package):
 
     @hybrid(
         name="github",
-        description="Gets profile information on the given Github user",
+        description="gets profile information on the given github user",
         aliases=["git", "gh"],
         example=",github jonathan",
         **_CONTEXTS,
@@ -539,7 +539,7 @@ class InformationCommands(Package):
 
     @hybrid(
         name="define",
-        description="Get the definition of a word",
+        description="get the definition of a word",
         example=",define vet",
         guilds=True,
         dms=True,
@@ -558,7 +558,7 @@ class InformationCommands(Package):
 
     @hybrid(
         name="urban",
-        description="Get the definition of a word or slang from Urban Dictionary",
+        description="get the definition of a word or slang from urban dictionary",
         aliases=["ud", "urbandictionary"],
         example=",urban chav",
         guilds=True,
@@ -584,7 +584,7 @@ class InformationCommands(Package):
 
     @hybrid(
         name="seen",
-        description="See when a member was last seen in the server",
+        description="see when a member was last seen in the server",
         example=",seen @member",
         guild_only=True,
     )

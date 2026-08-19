@@ -291,7 +291,7 @@ class Timezone(Package):
     @hybrid(
         name="timezone",
         aliases=["tz"],
-        description="View your current time or somebody elses",
+        description="view your current time or somebody elses",
         group=True,
     )
     @describe(member="The user to check timezone for")
@@ -382,7 +382,7 @@ class Timezone(Package):
 
     @timezone.command(
         name="set",
-        description="Set your timezone",
+        description="set your timezone",
     )
     async def timezone_set(self, ctx, *, location: str):
         """set timezone"""
@@ -407,7 +407,7 @@ class Timezone(Package):
     @timezone.command(
         name="remove",
         aliases=["delete", "del", "reset", "clear"],
-        description="Remove your timezone",
+        description="remove your timezone",
     )
     async def timezone_remove(self, ctx):
         """remove timezone"""
@@ -430,7 +430,7 @@ class Timezone(Package):
 
     @timezone.command(
         name="compare",
-        description="Compare your time with another member",
+        description="compare your time with another member",
     )
     async def timezone_compare(self, ctx, member: Member):
         """compare timezones"""

@@ -23,7 +23,7 @@ class WelcomeCommands(Package):
         name="welcome",
         aliases=["welc", "wlc"],
         invoke_without_command=True,
-        description="Manage messages sent when a member joins the server",
+        description="manage messages sent when a member joins the server",
         example=",welcome add #hi Hi {user.mention}! --self_destruct 10",
     )
     @has_permissions(manage_guild=True)
@@ -35,7 +35,7 @@ class WelcomeCommands(Package):
         name="add",
         aliases=["create", "set"],
         flags=Parameters,
-        description="Add a welcome message to a channel (defaults to current channel)",
+        description="add a welcome message to a channel (defaults to current channel)",
         usage="[channel] <script> [--self_destruct <time>]",
         example=",welcome add #hi Hi {user.mention}! --self_destruct 10",
     )
@@ -71,7 +71,7 @@ class WelcomeCommands(Package):
         name="edit",
         aliases=["change", "update"],
         flags=Parameters,
-        description="Edit the welcome script for a channel (defaults to current channel)",
+        description="edit the welcome script for a channel (defaults to current channel)",
         usage="[channel] <script> [--self_destruct <time>]",
         example=",welcome edit #hi Welcome back {user.mention}!",
     )
@@ -107,7 +107,7 @@ class WelcomeCommands(Package):
     @welcome.command(
         name="remove",
         aliases=["delete", "del"],
-        description="Remove a welcome message from a channel (defaults to current channel)",
+        description="remove a welcome message from a channel (defaults to current channel)",
         usage="[channel]",
         example=",welcome remove #general",
     )
@@ -127,7 +127,7 @@ class WelcomeCommands(Package):
     @welcome.command(
         name="view",
         aliases=["check"],
-        description="Preview the welcome message for a channel (defaults to current channel)",
+        description="preview the welcome message for a channel (defaults to current channel)",
         usage="[channel]",
         example=",welcome view #general",
     )
@@ -146,7 +146,7 @@ class WelcomeCommands(Package):
 
     @welcome.command(
         name="list",
-        description="List all welcome channels in this server",
+        description="list all welcome channels in this server",
         example=",welcome list",
     )
     @has_permissions(manage_guild=True)
@@ -168,7 +168,7 @@ class WelcomeCommands(Package):
     @welcome.command(
         name="variables",
         aliases=["vars"],
-        description="Show available template variables for welcome scripts",
+        description="show available template variables for welcome scripts",
         example=",welcome variables",
     )
     @has_permissions(manage_guild=True)

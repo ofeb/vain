@@ -274,7 +274,7 @@ class Honeypot(Package):
     @group(
         name="honeypot",
         aliases=["hp", "honeypots"],
-        description="Protect your server against malicious intent.",
+        description="protect your server against malicious intent",
         invoke_without_command=True,
     )
     @has_permissions(manage_guild=True)
@@ -285,7 +285,7 @@ class Honeypot(Package):
     @honeypot.command(
         name="setup",
         aliases=["set", "configure"],
-        description="Create the honeypot channel and arm the trap.",
+        description="create the honeypot channel and arm the trap",
     )
     @has_permissions(manage_guild=True)
     @cooldown(1, 10, BucketType.guild)
@@ -399,7 +399,7 @@ class Honeypot(Package):
     @honeypot.command(
         name="disable",
         aliases=["off", "disarm"],
-        description="Disable the honeypot without deleting configuration or the trap channel.",
+        description="disable the honeypot without deleting configuration or the trap channel",
     )
     @has_permissions(manage_guild=True)
     @cooldown(1, 10, BucketType.guild)
@@ -469,7 +469,7 @@ class Honeypot(Package):
     @honeypot.command(
         name="alerts",
         aliases=["alert", "log", "logs"],
-        description="Set or clear the alert channel for honeypot triggers.",
+        description="set or clear the alert channel for honeypot triggers",
         example=",honeypot alerts #mod-logs",
     )
     @has_permissions(manage_guild=True)
@@ -521,7 +521,7 @@ class Honeypot(Package):
     @honeypot.command(
         name="punishment",
         aliases=["action", "punish"],
-        description="Set the punishment(s). Choose one or more of: kick, ban, softban, timeout.",
+        description="set the punishment(s). choose one or more of: kick, ban, softban, timeout",
         example=",honeypot punishment softban",
     )
     @has_permissions(manage_guild=True)
@@ -581,7 +581,7 @@ class Honeypot(Package):
     @honeypot.command(
         name="settings",
         aliases=["setting", "view", "show"],
-        description="View the current honeypot configuration.",
+        description="view the current honeypot configuration",
     )
     @has_permissions(manage_guild=True)
     async def honeypot_settings(self, ctx):
@@ -631,7 +631,7 @@ class Honeypot(Package):
     @honeypot.command(
         name="embed",
         aliases=["message", "script", "trap"],
-        description="Set a custom embed/container script for the honeypot trap message.",
+        description="set a custom embed/container script for the honeypot trap message",
         example=",honeypot embed {container}$v{description: Do not post here}",
     )
     @has_permissions(manage_guild=True)

@@ -43,7 +43,7 @@ class Starboard(Package):
         name="starboard",
         aliases=["star", "board", "sb"],
         invoke_without_command=True,
-        description="Archive popular messages with custom emoji boards",
+        description="archive popular messages with custom emoji boards",
         example=",starboard add #stars ⭐ --threshold 3",
     )
     @has_permissions(manage_guild=True)

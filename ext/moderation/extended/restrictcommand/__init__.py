@@ -18,7 +18,7 @@ class Restrictcommand(Package):
     @group(
         name="restrictcommand",
         aliases=["restrictcmd", "cmdrestrict"],
-        description="Only allows people with a certain role to use a command",
+        description="only allows people with a certain role to use a command",
         invoke_without_command=True,
         example=",restrictcommand add ban @Staff",
     )
@@ -30,7 +30,7 @@ class Restrictcommand(Package):
     @restrictcommand.command(
         name="add",
         aliases=["set", "create"],
-        description="Allows the specified role exclusive permission to use a command",
+        description="allows the specified role exclusive permission to use a command",
         example=",restrictcommand add ban @Staff",
     )
     @has_permissions(manage_guild=True)
@@ -66,7 +66,7 @@ class Restrictcommand(Package):
     @restrictcommand.command(
         name="remove",
         aliases=["delete", "del", "rm"],
-        description="Removes the specified roles exclusive permission to use a command",
+        description="removes the specified roles exclusive permission to use a command",
         example=",restrictcommand remove ban @Staff",
     )
     @has_permissions(manage_guild=True)
@@ -90,7 +90,7 @@ class Restrictcommand(Package):
     @restrictcommand.command(
         name="list",
         aliases=["ls", "show", "view"],
-        description="View a list of every restricted command",
+        description="view a list of every restricted command",
         example=",restrictcommand list",
     )
     @has_permissions(manage_guild=True)

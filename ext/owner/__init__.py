@@ -223,7 +223,7 @@ class Owner(Package):
 
     @command(
         name="reload",
-        description="Reload all or a specific extension",
+        description="reload all or a specific extension",
         aliases=["rl"],
     )
     @describe(extension="Extension name to reload, or 'all'")
@@ -281,7 +281,7 @@ class Owner(Package):
 
     @command(
         name="load",
-        description="Load an extension",
+        description="load an extension",
         aliases=["extload"],
     )
     @describe(extension="Extension name to load (e.g. utility or utility.extended.afk)")
@@ -300,7 +300,7 @@ class Owner(Package):
 
     @command(
         name="unload",
-        description="Unload a loaded extension",
+        description="unload a loaded extension",
         aliases=["extunload"],
     )
     @describe(extension="Extension name to unload")
@@ -319,7 +319,7 @@ class Owner(Package):
 
     @command(
         name="sync",
-        description="Sync slash commands to a specific guild or globally",
+        description="sync slash commands to a specific guild or globally",
     )
     @describe(guild_id="Guild ID to sync to (leave empty for global)")
     async def sync(self, ctx: Context, guild_id: str = None) -> None:
@@ -335,7 +335,7 @@ class Owner(Package):
 
     @command(
         name="guilds",
-        description="List guilds the bot is in (page / search)",
+        description="list guilds the bot is in (page / search)",
         aliases=["servers"],
     )
     async def guilds(self, ctx: Context, *, query: str = None) -> None:
@@ -419,7 +419,7 @@ class Owner(Package):
 
     @command(
         name="leaveserver",
-        description="Leave a server by ID",
+        description="leave a server by id",
         aliases=["gleave", "guildleave"],
     )
     @describe(guild_id="ID of the server to leave")
@@ -434,7 +434,7 @@ class Owner(Package):
 
     @command(
         name="dm",
-        description="Send a DM to a user",
+        description="send a dm to a user",
     )
     @describe(user_id="User ID to message", message="Message content")
     async def dm(self, ctx: Context, user_id: str, *, message: str) -> None:
@@ -453,7 +453,7 @@ class Owner(Package):
 
     @command(
         name="eval",
-        description="Evaluate Python code",
+        description="evaluate python code",
         aliases=["exec", "pyeval"],
     )
     @describe(code="Python code to evaluate")
@@ -478,7 +478,7 @@ class Owner(Package):
 
     @command(
         name="shutdown",
-        description="Shut down the bot",
+        description="shut down the bot",
         aliases=["die", "kill"],
     )
     async def shutdown(self, ctx: Context) -> None:
@@ -487,7 +487,7 @@ class Owner(Package):
 
     @command(
         name="debug",
-        description="Run a command and capture logs into a file",
+        description="run a command and capture logs into a file",
     )
     @describe(command="Command to run (e.g. punch @user, help)")
     async def debug(self, ctx: Context, *, command: str = "") -> None:
@@ -616,7 +616,7 @@ class Owner(Package):
 
     @command(
         name="traceback",
-        description="View stored traceback by error ID or last error",
+        description="view stored traceback by error id or last error",
         aliases=["tb"],
     )
     @describe(error_id="Error ID to look up (leave empty for last error)")
@@ -640,13 +640,13 @@ class Owner(Package):
 
     @group(
         name="botedit",
-        description="Edit bot appearance",
+        description="edit bot appearance",
         invoke_without_command=True,
     )
     async def botedit(self, ctx: Context) -> None:
         await ctx.send_help(ctx.command)
 
-    @botedit.command(name="pfp", description="Change bot avatar")
+    @botedit.command(name="pfp", description="change bot avatar")
     @describe(url="Image URL or attachment")
     async def botedit_pfp(self, ctx: Context, url: str = None) -> None:
         if url is None and ctx.message.attachments:
@@ -660,7 +660,7 @@ class Owner(Package):
             await self.bot.user.edit(avatar=avatar_bytes)
         await ctx.success("Bot avatar updated")
 
-    @botedit.command(name="banner", description="Change bot banner")
+    @botedit.command(name="banner", description="change bot banner")
     @describe(url="Image URL or attachment")
     async def botedit_banner(self, ctx: Context, url: str = None) -> None:
         if url is None and ctx.message.attachments:
@@ -674,7 +674,7 @@ class Owner(Package):
             await self.bot.user.edit(banner=banner_bytes)
         await ctx.success("Bot banner updated")
 
-    @botedit.command(name="bio", description="Change bot bio/about me")
+    @botedit.command(name="bio", description="change bot bio/about me")
     @describe(text="New bio text (max 190 chars)")
     async def botedit_bio(self, ctx: Context, *, text: str) -> None:
         if len(text) > 190:
@@ -687,7 +687,7 @@ class Owner(Package):
     @botedit.command(
         name="customstatus",
         aliases=["status", "activity"],
-        description="Change bot custom status",
+        description="change bot custom status",
     )
     @describe(text="Status text (empty to clear)")
     async def botedit_customstatus(
@@ -707,7 +707,7 @@ class Owner(Package):
     @group(
         name="devlogs",
         aliases=["botlogs"],
-        description="Dev logging channel + blacklist/whitelist history",
+        description="dev logging channel + blacklist/whitelist history",
         invoke_without_command=True,
     )
     async def devlogs(self, ctx: Context, *, query: str = None) -> None:
@@ -895,7 +895,7 @@ class Owner(Package):
             pages.append(layout_from_items([container], timeout=None))
         return await send_pages(ctx, pages)
 
-    @devlogs.command(name="remove", description="Remove devlog channel")
+    @devlogs.command(name="remove", description="remove devlog channel")
     async def devlogs_remove(self, ctx: Context) -> None:
         await self.bot.db.execute(
             "DELETE FROM devlog_config WHERE bot_id = $1",
@@ -903,7 +903,7 @@ class Owner(Package):
         )
         await ctx.success("Devlog channel removed")
 
-    @devlogs.command(name="view", description="View current devlog channel")
+    @devlogs.command(name="view", description="view current devlog channel")
     async def devlogs_view(self, ctx: Context) -> None:
         current = await self.bot.db.fetchval(
             "SELECT channel_id FROM devlog_config WHERE bot_id = $1",
@@ -920,7 +920,7 @@ class Owner(Package):
     @devlogs.group(
         name="notes",
         aliases=["note"],
-        description="Notes on blacklist/whitelist history entries",
+        description="notes on blacklist/whitelist history entries",
         invoke_without_command=True,
     )
     async def devlogs_notes(self, ctx: Context, *, query: str = None) -> None:
@@ -931,7 +931,7 @@ class Owner(Package):
             f"`remove` · `modify`"
         )
 
-    @devlogs_notes.command(name="add", description="Add a note to a history entry")
+    @devlogs_notes.command(name="add", description="add a note to a history entry")
     async def devlogs_notes_add(self, ctx: Context, target: str, *, note: str) -> None:
         await _ensure_blacklist_history(self.bot.db)
         note_body = (note or "").strip()
@@ -979,7 +979,7 @@ class Owner(Package):
             f"Set note on history `{history_hash}`"
         )
 
-    @devlogs_notes.command(name="remove", aliases=["del", "delete", "rm"], description="Remove a history note")
+    @devlogs_notes.command(name="remove", aliases=["del", "delete", "rm"], description="remove a history note")
     async def devlogs_notes_remove(self, ctx: Context, note_ref: str) -> None:
         await _ensure_blacklist_history(self.bot.db)
         ref = note_ref.strip().lstrip("#").strip("`")
@@ -999,7 +999,7 @@ class Owner(Package):
             f"Removed note `#{note_id}` from `{row['history_hash']}`"
         )
 
-    @devlogs_notes.command(name="modify", aliases=["edit"], description="Modify a history note")
+    @devlogs_notes.command(name="modify", aliases=["edit"], description="modify a history note")
     async def devlogs_notes_modify(self, ctx: Context, note_ref: str, *, note: str) -> None:
         await _ensure_blacklist_history(self.bot.db)
         ref = note_ref.strip().lstrip("#").strip("`")
@@ -1025,7 +1025,7 @@ class Owner(Package):
     @group(
         name="blacklist",
         aliases=["bl"],
-        description="Blacklist a user or guild from using the bot",
+        description="blacklist a user or guild from using the bot",
         invoke_without_command=True,
     )
     @describe(target="User ID/mention or guild ID", reason="Reason for blacklisting")
@@ -1113,7 +1113,7 @@ class Owner(Package):
     @blacklist.command(
         name="list",
         aliases=["blacklists", "bls"],
-        description="View all blacklisted users and guilds",
+        description="view all blacklisted users and guilds",
     )
     async def blacklist_list(self, ctx: Context) -> None:
         from core.discord.ctx import layout_from_items
@@ -1171,7 +1171,7 @@ class Owner(Package):
     @group(
         name="whitelist",
         aliases=["unblacklist"],
-        description="Remove a user or guild from blacklist",
+        description="remove a user or guild from blacklist",
         invoke_without_command=True,
     )
     @describe(target="User ID/mention or guild ID", reason="Optional reason for the whitelist")
@@ -1250,14 +1250,14 @@ class Owner(Package):
 
     @whitelist.command(
         name="list",
-        description="View all whitelisted users and guilds",
+        description="view all whitelisted users and guilds",
     )
     async def whitelist_list(self, ctx: Context) -> None:
         await ctx.warn("Whitelisting removes entries — use `blacklist list` to see current entries")
 
     @command(
         name="portal",
-        description="Get an invite link for a server via DM",
+        description="get an invite link for a server via dm",
     )
     @describe(guild_id="Guild ID to get invite for")
     async def portal(self, ctx: Context, guild_id: str) -> None:

@@ -32,7 +32,7 @@ class Slowmode(Package):
     @group(
         name="slowmode",
         aliases=["sm", "slowmo", "slow", "cooldown"],
-        description="Restricts members to sending one message per interval",
+        description="restricts members to sending one message per interval",
         invoke_without_command=True,
         example=",slowmode 10s #general",
         usage="slowmode 10s #general",
@@ -78,7 +78,7 @@ class Slowmode(Package):
     @slowmode.command(
         name="off",
         aliases=["disable", "0", "remove", "delete", "del", "rm", "reset"],
-        description="Disables slowmode in a channel",
+        description="disables slowmode in a channel",
         example=",slowmode off",
     )
     @has_permissions(manage_channels=True)
@@ -103,7 +103,7 @@ class Slowmode(Package):
     @slowmode.command(
         name="on",
         aliases=["enable", "set"],
-        description="Enable slowmode in a channel",
+        description="enable slowmode in a channel",
         example=",slowmode on 10s",
     )
     @has_permissions(manage_channels=True)

@@ -163,7 +163,7 @@ class Roblox(Package):
     @hybrid(
         name="roblox",
         aliases=("rbx", "rblx"),
-        description="Roblox profile and item lookups",
+        description="roblox profile and item lookups",
         invoke_without_command=True,
         example=",roblox builderman",
         group=True,
@@ -186,7 +186,7 @@ class Roblox(Package):
     @roblox.command(
         name="user",
         aliases=("profile", "lookup", "get"),
-        description="Get profile information for a Roblox username",
+        description="get profile information for a roblox username",
         example=",roblox user builderman",
     )
     @describe(username="Roblox username")
@@ -196,7 +196,7 @@ class Roblox(Package):
     @roblox.command(
         name="id",
         aliases=("userid",),
-        description="Look up a Roblox user by numeric ID",
+        description="look up a roblox user by numeric id",
         example=",roblox id 1",
     )
     @describe(user_id="Roblox numeric user ID")
@@ -249,7 +249,7 @@ class Roblox(Package):
     @roblox.command(
         name="inventory",
         aliases=("collectibles", "limiteds"),
-        description="List public collectibles for a user (if inventory is public)",
+        description="list public collectibles for a user (if inventory is public)",
         example=",roblox inventory builderman",
     )
     @describe(username="Roblox username")
@@ -293,7 +293,7 @@ class Roblox(Package):
     @roblox.command(
         name="item",
         aliases=("catalog", "search"),
-        description="Search the Roblox catalog for an item",
+        description="search the roblox catalog for an item",
         example=",roblox item dominus",
     )
     @describe(query="Item name or keyword")
@@ -374,7 +374,7 @@ class Roblox(Package):
     @roblox.command(
         name="game",
         aliases=("place", "experience"),
-        description="Look up a Roblox experience by name or place id",
+        description="look up a roblox experience by name or place id",
         example=",roblox game adopt me",
     )
     @describe(query="Game name or place id")
@@ -485,7 +485,7 @@ class Roblox(Package):
     @roblox.command(
         name="check",
         aliases=("owns",),
-        description="Check if a user owns an asset (public inventories only)",
+        description="check if a user owns an asset (public inventories only)",
         example=",roblox check builderman 102611803",
     )
     @describe(username="Roblox username", asset_id="Asset ID to check")
@@ -522,7 +522,7 @@ class Roblox(Package):
 
     @roblox.command(
         name="devex",
-        description="Convert Robux to approximate USD via historical DevEx rate",
+        description="convert robux to approximate usd via historical devex rate",
         example=",roblox devex 100000",
     )
     @describe(robux="Amount of Robux")

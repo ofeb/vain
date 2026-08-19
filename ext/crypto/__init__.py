@@ -331,7 +331,7 @@ class Crypto(commands.Cog):
     @commands.group(
         name="crypto",
         aliases=["coin", "price"],
-        description="Cryptocurrency prices and channel price feeds",
+        description="cryptocurrency prices and channel price feeds",
         invoke_without_command=True,
         example=",crypto btc",
     )
@@ -358,7 +358,7 @@ class Crypto(commands.Cog):
     @crypto.group(
         name="feeds",
         aliases=["feed"],
-        description="Crypto price feed subscriptions",
+        description="crypto price feed subscriptions",
         invoke_without_command=True,
         example=",crypto feeds add #crypto eth",
     )
@@ -369,7 +369,7 @@ class Crypto(commands.Cog):
     @crypto_feeds.command(
         name="add",
         aliases=["set", "create", "subscribe"],
-        description="Post market updates for a coin in a channel",
+        description="post market updates for a coin in a channel",
         example=",crypto feeds add #crypto eth",
         usage="[channel] <coin>",
     )
@@ -427,7 +427,7 @@ class Crypto(commands.Cog):
     @crypto_feeds.command(
         name="remove",
         aliases=["delete", "del", "rm", "unsubscribe"],
-        description="Remove a crypto feed from a channel",
+        description="remove a crypto feed from a channel",
         example=",crypto feeds remove #crypto eth",
         usage="[channel] <coin>",
     )
@@ -476,7 +476,7 @@ class Crypto(commands.Cog):
     @crypto_feeds.command(
         name="list",
         aliases=["ls", "show"],
-        description="List crypto feeds in this server",
+        description="list crypto feeds in this server",
         example=",crypto feeds list",
     )
     @has_permissions(manage_guild=True)
@@ -514,7 +514,7 @@ class Crypto(commands.Cog):
     @crypto.command(
         name="unsubscribe",
         aliases=["unsub"],
-        description="Unsubscribe a crypto feed (channel + coin, or all in channel)",
+        description="unsubscribe a crypto feed (channel + coin, or all in channel)",
         example=",crypto unsubscribe #crypto eth",
         usage="[channel] [coin]",
     )
@@ -525,7 +525,7 @@ class Crypto(commands.Cog):
 
     @hybrid(
         name="unsubscribe",
-        description="Unsubscribe a crypto price feed",
+        description="unsubscribe a crypto price feed",
         guild_only=True,
         example=",unsubscribe #crypto eth",
     )
@@ -537,7 +537,7 @@ class Crypto(commands.Cog):
 
     @hybrid(
         name="btc",
-        description="Check the current Bitcoin price",
+        description="check the current bitcoin price",
         guild_only=True,
     )
     async def btc(self, ctx: Context) -> None:
@@ -558,7 +558,7 @@ class Crypto(commands.Cog):
 
     @hybrid(
         name="eth",
-        description="Check the current Ethereum price",
+        description="check the current ethereum price",
         guild_only=True,
     )
     async def eth(self, ctx: Context) -> None:
@@ -579,7 +579,7 @@ class Crypto(commands.Cog):
 
     @hybrid(
         name="sol",
-        description="Check the current Solana price",
+        description="check the current solana price",
         guild_only=True,
     )
     async def sol(self, ctx: Context) -> None:
@@ -600,7 +600,7 @@ class Crypto(commands.Cog):
 
     @hybrid(
         name="gas",
-        description="View the current ETH gas prices",
+        description="view the current eth gas prices",
         guild_only=True,
     )
     async def gas(self, ctx: Context) -> None:
@@ -761,7 +761,7 @@ class Crypto(commands.Cog):
 
     @hybrid(
         name="transaction",
-        description="Get information about a BTC, LTC or ETH transaction",
+        description="get information about a btc, ltc or eth transaction",
         aliases=["txid", "tx"],
         guild_only=True,
     )
@@ -781,7 +781,7 @@ class Crypto(commands.Cog):
 
     @hybrid(
         name="subscribe",
-        description="Subscribe to a bitcoin transaction for one confirmation",
+        description="subscribe to a bitcoin transaction for one confirmation",
         aliases=["sub"],
         guild_only=True,
     )

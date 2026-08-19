@@ -74,7 +74,7 @@ class Emoji(Package):
 
     @group(
         name="emoji",
-        description="Manage server emotes",
+        description="manage server emotes",
         invoke_without_command=True,
     )
     async def emoji(self, ctx):
@@ -84,7 +84,7 @@ class Emoji(Package):
     @emoji.command(
         name="enlarge",
         aliases=["large", "big", "show"],
-        description="Returns a large version of a custom emoji",
+        description="returns a large version of a custom emoji",
     )
     async def emoji_enlarge(self, ctx, *, emoji: str | None = None):
         f"Show a large custom emoji - {ctx.cmd('emoji enlarge <:name:id>')}."""
@@ -104,7 +104,7 @@ class Emoji(Package):
 
     @emoji.command(
         name="removemany",
-        description="Bulk remove emotes from the current server",
+        description="bulk remove emotes from the current server",
     )
     @has_permissions(manage_expressions=True)
     async def emoji_removemany(self, ctx, *, emotes: str):
@@ -134,7 +134,7 @@ class Emoji(Package):
 
     @emoji.command(
         name="removeduplicates",
-        description="Remove duplicates of emotes",
+        description="remove duplicates of emotes",
     )
     @has_permissions(manage_expressions=True)
     async def emoji_removeduplicates(self, ctx):
@@ -156,7 +156,7 @@ class Emoji(Package):
 
     @emoji.command(
         name="remove",
-        description="Removes emote from server",
+        description="removes emote from server",
     )
     @has_permissions(manage_expressions=True)
     async def emoji_remove(self, ctx, emoji: str):
@@ -178,7 +178,7 @@ class Emoji(Package):
 
     @emoji.command(
         name="stats",
-        description="Show top ten most used emotes",
+        description="show top ten most used emotes",
     )
     @has_permissions(manage_expressions=True)
     async def emoji_stats(self, ctx):
@@ -223,7 +223,7 @@ class Emoji(Package):
     @emoji.command(
         name="information",
         aliases=["info", "i"],
-        description="Show info about a custom emoji",
+        description="show info about a custom emoji",
         example=",emoji information <:name:id>",
     )
     async def emoji_information(self, ctx, *, emoji: str | None = None):
@@ -279,7 +279,7 @@ class Emoji(Package):
 
     @emoji.command(
         name="addmany",
-        description="Bulk add emotes to the current server",
+        description="bulk add emotes to the current server",
     )
     @has_permissions(manage_expressions=True)
     async def emoji_addmany(self, ctx, *, emotes: str):
@@ -312,7 +312,7 @@ class Emoji(Package):
 
     @emoji.command(
         name="rename",
-        description="Renames emote to the new name provided",
+        description="renames emote to the new name provided",
     )
     @has_permissions(manage_expressions=True)
     async def emoji_rename(self, ctx, emoji: str, *, new_name: str):
@@ -335,7 +335,7 @@ class Emoji(Package):
 
     @emoji.command(
         name="add",
-        description="Add an emote from emoji, image URL, attachment, or sticker",
+        description="add an emote from emoji, image url, attachment, or sticker",
     )
     @has_permissions(manage_expressions=True)
     async def emoji_add(self, ctx, *, args: str | None = None):

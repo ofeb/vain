@@ -27,7 +27,7 @@ class Thread(Package):
     @group(
         name="thread",
         aliases=["threads"],
-        description="Commands to manage threads and forum posts",
+        description="commands to manage threads and forum posts",
         invoke_without_command=True,
     )
     async def thread(self, ctx):
@@ -36,7 +36,7 @@ class Thread(Package):
 
     @thread.command(
         name="lock",
-        description="Lock a thread or forum post",
+        description="lock a thread or forum post",
         example=",thread lock #thread spam",
     )
     @has_permissions(manage_threads=True)
@@ -61,7 +61,7 @@ class Thread(Package):
 
     @thread.command(
         name="unlock",
-        description="Unlock a thread or forum post",
+        description="unlock a thread or forum post",
         example=",thread unlock #thread",
     )
     @has_permissions(manage_threads=True)
@@ -87,7 +87,7 @@ class Thread(Package):
     @thread.command(
         name="add",
         aliases=["invite"],
-        description="Add a member to a private thread",
+        description="add a member to a private thread",
         example=",thread add #thread @member",
     )
     @has_permissions(manage_threads=True)
@@ -104,7 +104,7 @@ class Thread(Package):
     @thread.command(
         name="remove",
         aliases=["kick"],
-        description="Remove a member from a private thread",
+        description="remove a member from a private thread",
         example=",thread remove #thread @member",
     )
     @has_permissions(manage_threads=True)
@@ -121,7 +121,7 @@ class Thread(Package):
     @thread.command(
         name="rename",
         aliases=["name"],
-        description="Rename a thread",
+        description="rename a thread",
         example=",thread rename #thread new-name",
     )
     @has_permissions(manage_threads=True)
@@ -141,7 +141,7 @@ class Thread(Package):
 
     @thread.command(
         name="archive",
-        description="Archive a thread",
+        description="archive a thread",
     )
     @has_permissions(manage_threads=True)
     async def thread_archive(self, ctx, thread: discord.Thread = None):
@@ -159,7 +159,7 @@ class Thread(Package):
 
     @thread.command(
         name="unarchive",
-        description="Unarchive a thread",
+        description="unarchive a thread",
     )
     @has_permissions(manage_threads=True)
     async def thread_unarchive(self, ctx, thread: discord.Thread = None):
@@ -177,7 +177,7 @@ class Thread(Package):
 
     @thread.command(
         name="watch",
-        description="Join / follow a thread (bot watches it)",
+        description="join / follow a thread (bot watches it)",
     )
     @has_permissions(manage_channels=True)
     async def thread_watch(self, ctx, thread: discord.Thread = None):
@@ -189,7 +189,7 @@ class Thread(Package):
 
     @thread.command(
         name="leave",
-        description="Leave a watched thread",
+        description="leave a watched thread",
     )
     @has_permissions(manage_channels=True)
     async def thread_leave(self, ctx, thread: discord.Thread = None):

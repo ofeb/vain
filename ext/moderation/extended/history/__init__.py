@@ -161,7 +161,7 @@ class History(Package):
 
     @hybrid(
         name="history",
-        description="View moderation history for a user",
+        description="view moderation history for a user",
         group=True,
         guild_only=True,
     )
@@ -198,7 +198,7 @@ class History(Package):
 
     @history.command(
         name="view",
-        description="View a case log",
+        description="view a case log",
     )
     @has_permissions(manage_messages=True)
     async def history_view(self, ctx, case_id: int):
@@ -280,7 +280,7 @@ class History(Package):
 
     @history.command(
         name="remove",
-        description="Remove a punishment from a member",
+        description="remove a punishment from a member",
     )
     @has_permissions(manage_messages=True)
     async def history_remove(self, ctx, target: str, case_id: int):
@@ -303,7 +303,7 @@ class History(Package):
 
     @history.command(
         name="removeall",
-        description="Remove all punishments from a member",
+        description="remove all punishments from a member",
     )
     @has_permissions(administrator=True)
     async def history_removeall(self, ctx, target: str):

@@ -538,7 +538,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
     @group(
         name="leveling",
         aliases=["lvlsys", "levels", "levelling"],
-        description="Configure the server leveling system",
+        description="configure the server leveling system",
         invoke_without_command=True,
         example=",leveling",
     )
@@ -549,7 +549,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
     @leveling.command(
         name="enable",
         aliases=["on"],
-        description="Turn the leveling system on for this server",
+        description="turn the leveling system on for this server",
         example=",leveling enable",
     )
     @has_permissions(manage_guild=True)
@@ -577,7 +577,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
     @leveling.command(
         name="disable",
         aliases=["off"],
-        description="Disable leveling without deleting configuration or XP",
+        description="disable leveling without deleting configuration or xp",
         example=",leveling disable",
     )
     @has_permissions(manage_guild=True)
@@ -602,7 +602,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
 
     @leveling.command(
         name="channel",
-        description="Set where level-up messages go (`any`, `dm`, or a channel)",
+        description="set where level-up messages go (`any`, `dm`, or a channel)",
         example=",leveling channel #levels",
         usage="<channel or any or dm>",
     )
@@ -710,7 +710,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
 
     @leveling.command(
         name="test",
-        description="Preview the level-up message in the configured channel",
+        description="preview the level-up message in the configured channel",
         example=",leveling test",
     )
     @has_permissions(manage_guild=True)
@@ -770,7 +770,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
     @leveling.command(
         name="multiplier",
         aliases=["multi"],
-        description="Set the global XP multiplier",
+        description="set the global xp multiplier",
         example=",leveling multiplier 1.5",
         usage="<0.25–3.00>",
     )
@@ -792,7 +792,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
 
     @leveling.command(
         name="booster",
-        description="Set the XP multiplier for server boosters",
+        description="set the xp multiplier for server boosters",
         example=",leveling booster 2",
         usage="<0.25–3.00>",
     )
@@ -937,7 +937,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
     @leveling.command(
         name="leaderboard",
         aliases=["lb", "top"],
-        description="Show the highest ranked members",
+        description="show the highest ranked members",
         example=",leveling leaderboard",
     )
     async def leveling_leaderboard(self, ctx):
@@ -970,7 +970,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
     @leveling.command(
         name="config",
         aliases=["settings", "status"],
-        description="View leveling configuration",
+        description="view leveling configuration",
         example=",leveling config",
     )
     @has_permissions(manage_guild=True)
@@ -1017,7 +1017,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
 
     @leveling.group(
         name="rewards",
-        description="Manage level role rewards",
+        description="manage level role rewards",
         invoke_without_command=True,
         example=",leveling rewards list",
     )
@@ -1027,7 +1027,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
 
     @leveling_rewards.command(
         name="add",
-        description="Assign a role reward at a level",
+        description="assign a role reward at a level",
         example=",leveling rewards add 10 @Legendary",
         usage="<level> <role>",
     )
@@ -1058,7 +1058,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
 
     @leveling_rewards.command(
         name="remove",
-        description="Remove a role reward",
+        description="remove a role reward",
         example=",leveling rewards remove @Legendary",
         usage="<role>",
     )
@@ -1084,7 +1084,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
 
     @leveling_rewards.command(
         name="list",
-        description="List all level rewards",
+        description="list all level rewards",
         example=",leveling rewards list",
     )
     async def leveling_rewards_list(self, ctx):
@@ -1103,7 +1103,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
 
     @leveling_rewards.command(
         name="stack",
-        description="Toggle stacking all reward roles vs highest only",
+        description="toggle stacking all reward roles vs highest only",
         example=",leveling rewards stack on",
         usage="<on or off>",
     )
@@ -1128,7 +1128,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
 
     @leveling.group(
         name="ignore",
-        description="Ignore users/roles/channels for XP",
+        description="ignore users/roles/channels for xp",
         invoke_without_command=True,
         example=",leveling ignore add #bots",
     )
@@ -1162,7 +1162,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
 
     @leveling_ignore.command(
         name="add",
-        description="Ignore a user, role, or channel for XP",
+        description="ignore a user, role, or channel for xp",
         example=",leveling ignore add #bots",
         usage="<user or role or channel>",
     )
@@ -1184,7 +1184,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
 
     @leveling_ignore.command(
         name="remove",
-        description="Remove someone from the XP ignore list",
+        description="remove someone from the xp ignore list",
         example=",leveling ignore remove #bots",
         usage="<user or role or channel>",
     )
@@ -1206,7 +1206,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
 
     @leveling_ignore.command(
         name="list",
-        description="View the XP ignore list",
+        description="view the xp ignore list",
         example=",leveling ignore list",
     )
     @has_permissions(manage_guild=True)

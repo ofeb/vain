@@ -285,7 +285,7 @@ class VoiceMaster(VoiceMasterEvents, Package):
 
     @hybrid(
         name="voicemaster",
-        description="Make temporary voice channels in your server!",
+        description="make temporary voice channels in your server!",
         guild_only=True,
         invoke_without_command=True,
     )

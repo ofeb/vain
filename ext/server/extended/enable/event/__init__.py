@@ -57,7 +57,7 @@ class EventEnableCommands(Package):
     @group(
         name="enableevent",
         aliases=["ee"],
-        description="Enable a bot event in a channel (defaults to current channel)",
+        description="enable a bot event in a channel (defaults to current channel)",
         example=",enableevent repost  or  ,enableevent #text repost",
         usage="[channel] <event>",
         invoke_without_command=True,
@@ -86,7 +86,7 @@ class EventEnableCommands(Package):
 
     @enableevent.command(
         name="all",
-        description="Enables a bot event in every channel",
+        description="enables a bot event in every channel",
         example=",enableevent all repost",
     )
     @has_permissions(manage_channels=True)
@@ -104,7 +104,7 @@ class EventEnableCommands(Package):
     @enableevent.command(
         name="list",
         aliases=["ls", "show", "view"],
-        description="View a list of enabled bot events in guild",
+        description="view a list of enabled bot events in guild",
     )
     @has_permissions(manage_channels=True)
     async def enableevent_list(self, ctx):

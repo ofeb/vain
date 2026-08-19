@@ -34,7 +34,7 @@ class Lockdown(Package):
     @group(
         name="lock",
         aliases=["ld", "lockdown"],
-        description="Lockdown a channel for everyone or a specific user/role",
+        description="lockdown a channel for everyone or a specific user/role",
         invoke_without_command=True,
         example=",lock #general raid",
     )
@@ -74,7 +74,7 @@ class Lockdown(Package):
 
     @lock.command(
         name="all",
-        description="Locks all channels",
+        description="locks all channels",
         example=",lock all raid",
     )
     @has_permissions(manage_guild=True)
@@ -176,7 +176,7 @@ class Lockdown(Package):
 
     @lock.command(
         name="role",
-        description="Allow a role to bypass lockdown",
+        description="allow a role to bypass lockdown",
         example=",lock role @Admins",
     )
     @has_permissions(manage_guild=True)
@@ -200,7 +200,7 @@ class Lockdown(Package):
 
     @lock.group(
         name="ignore",
-        description="Manage channels ignored from lockdown",
+        description="manage channels ignored from lockdown",
         invoke_without_command=True,
     )
     @has_permissions(manage_guild=True)
@@ -210,7 +210,7 @@ class Lockdown(Package):
 
     @lock_ignore.command(
         name="add",
-        description="Set an ignored lockdown channel",
+        description="set an ignored lockdown channel",
         example=",lock ignore add #bot-commands",
     )
     @has_permissions(manage_guild=True)
@@ -239,7 +239,7 @@ class Lockdown(Package):
 
     @lock_ignore.command(
         name="remove",
-        description="Remove an ignored lockdown channel",
+        description="remove an ignored lockdown channel",
         example=",lock ignore remove #bot-commands",
     )
     @has_permissions(manage_guild=True)
@@ -263,7 +263,7 @@ class Lockdown(Package):
     @lock_ignore.command(
         name="list",
         aliases=["ls", "show", "view"],
-        description="View all ignored lockdown channels",
+        description="view all ignored lockdown channels",
     )
     @has_permissions(manage_guild=True)
     async def lock_ignore_list(self, ctx):
@@ -292,7 +292,7 @@ class Lockdown(Package):
     @group(
         name="unlock",
         aliases=["uld", "unlockdown"],
-        description="Unlock a locked channel",
+        description="unlock a locked channel",
         invoke_without_command=True,
         example=",unlock #general",
     )
@@ -328,7 +328,7 @@ class Lockdown(Package):
 
     @unlock.command(
         name="all",
-        description="Unlocks all locked channels",
+        description="unlocks all locked channels",
         example=",unlock all",
     )
     @has_permissions(manage_guild=True)

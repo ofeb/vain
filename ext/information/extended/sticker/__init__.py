@@ -25,7 +25,7 @@ class Sticker(Package):
 
     @group(
         name="sticker",
-        description="Modify or add stickers to your server",
+        description="modify or add stickers to your server",
         invoke_without_command=True,
     )
     async def sticker(self, ctx):
@@ -34,7 +34,7 @@ class Sticker(Package):
 
     @sticker.command(
         name="tag",
-        description="Add server vanity to stickers",
+        description="add server vanity to stickers",
     )
     @has_permissions(manage_expressions=True, manage_guild=True)
     async def sticker_tag(self, ctx):
@@ -61,7 +61,7 @@ class Sticker(Package):
 
     @sticker.command(
         name="remove",
-        description="Removes sticker from server",
+        description="removes sticker from server",
     )
     @has_permissions(manage_expressions=True)
     async def sticker_remove(self, ctx, *, name: str):
@@ -91,7 +91,7 @@ class Sticker(Package):
 
     @sticker.command(
         name="cleanup",
-        description="Cleans server sticker names",
+        description="cleans server sticker names",
     )
     @has_permissions(manage_expressions=True, manage_guild=True)
     async def sticker_cleanup(self, ctx):
@@ -115,7 +115,7 @@ class Sticker(Package):
 
     @sticker.command(
         name="rename",
-        description="Rename the attached sticker to given new name",
+        description="rename the attached sticker to given new name",
     )
     @has_permissions(manage_expressions=True)
     async def sticker_rename(self, ctx, *, new_name: str):
@@ -149,7 +149,7 @@ class Sticker(Package):
 
     @sticker.command(
         name="add",
-        description="Add a sticker from URL, attachment, or another sticker",
+        description="add a sticker from url, attachment, or another sticker",
         example=",sticker add https://… coolname",
     )
     @has_permissions(manage_expressions=True)

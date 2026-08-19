@@ -271,7 +271,7 @@ class Remind(Package):
     @hybrid(
         name="reminder",
         aliases=["remind", "remindme"],
-        description="Set a personal reminder",
+        description="set a personal reminder",
         group=True,
         invoke_without_command=True,
         example=",reminder add 2h check tickets",
@@ -287,7 +287,7 @@ class Remind(Package):
     @reminder.command(
         name="add",
         aliases=["set", "create", "new"],
-        description="Add a personal reminder",
+        description="add a personal reminder",
         example=",reminder add 2h check tickets",
     )
     async def reminder_add(self, ctx, *, reminder: str = None):
@@ -339,7 +339,7 @@ class Remind(Package):
     @reminder.command(
         name="list",
         aliases=["ls", "all"],
-        description="List your active reminders",
+        description="list your active reminders",
         example=",reminder list",
         guilds=True,
         dms=True,
@@ -385,7 +385,7 @@ class Remind(Package):
     @reminder.command(
         name="remove",
         aliases=["rm", "delete", "del", "cancel"],
-        description="Remove a reminder by id",
+        description="remove a reminder by id",
         example=",reminder remove 1",
         guilds=True,
         dms=True,

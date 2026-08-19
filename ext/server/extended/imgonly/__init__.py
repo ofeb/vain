@@ -21,7 +21,7 @@ class ImgonlyCommands(Package):
     @hybrid(
         name="imgonly",
         aliases=["gallery", "imageonly"],
-        description="Set up image + caption only channels",
+        description="set up image + caption only channels",
         group=True,
     )
     async def imgonly(self, ctx):
@@ -31,7 +31,7 @@ class ImgonlyCommands(Package):
     @imgonly.command(
         name="remove",
         aliases=["delete", "del"],
-        description="Remove a gallery channel (defaults to current channel)",
+        description="remove a gallery channel (defaults to current channel)",
         example=",imageonly remove #img",
         usage="[channel]",
     )
@@ -51,7 +51,7 @@ class ImgonlyCommands(Package):
     @imgonly.command(
         name="add",
         aliases=["create"],
-        description="Set a gallery channel (defaults to current channel)",
+        description="set a gallery channel (defaults to current channel)",
         example=",imageonly add #img",
         usage="[channel]",
     )
@@ -71,7 +71,7 @@ class ImgonlyCommands(Package):
     @imgonly.command(
         name="message",
         aliases=["script", "msg", "template"],
-        description="Set the custom message for a gallery channel",
+        description="set the custom message for a gallery channel",
         example=",imageonly message #img Only images allowed here!",
         usage="[channel] <message>",
     )
@@ -96,7 +96,7 @@ class ImgonlyCommands(Package):
 
     @imgonly.command(
         name="list",
-        description="View all gallery channels",
+        description="view all gallery channels",
     )
     @has_permissions(manage_guild=True)
     async def imgonly_list(self, ctx):

@@ -265,7 +265,7 @@ class BumpReminder(BumpReminderEvents, Package):
     @group(
         name="bumpreminder",
         aliases=["bumpremind", "bumpr", "autobump", "bumper"],
-        description="Remind your guild members to promote the guild on Disboard.",
+        description="remind your guild members to promote the guild on disboard",
         guild_only=True,
         invoke_without_command=True,
     )
@@ -277,7 +277,7 @@ class BumpReminder(BumpReminderEvents, Package):
     @bumpreminder.command(
         name="enable",
         aliases=["setup", "on"],
-        description="Enable Disboard bump reminders so guild members get prompted to promote the guild.",
+        description="enable disboard bump reminders so guild members get prompted to promote the guild",
         guild_only=True,
         example=",bumpreminder enable #bump",
     )
@@ -397,7 +397,7 @@ class BumpReminder(BumpReminderEvents, Package):
 
     @bumpreminder.command(
         name="toggle",
-        description="Toggle Disboard bump reminders on or off for this guild.",
+        description="toggle disboard bump reminders on or off for this guild",
         guild_only=True,
     )
     @has_permissions(manage_guild=True)
@@ -425,7 +425,7 @@ class BumpReminder(BumpReminderEvents, Package):
     @bumpreminder.command(
         name="message",
         aliases=["reminder", "remindmessage"],
-        description="Set the message that reminds guild members to promote the guild on Disboard.",
+        description="set the message that reminds guild members to promote the guild on disboard",
         guild_only=True,
         usage="(script or text)",
         example=",bumpreminder message {container}$v{description: Time to /bump}",
@@ -489,7 +489,7 @@ class BumpReminder(BumpReminderEvents, Package):
     @bumpreminder.command(
         name="thankyou",
         aliases=["thanks", "thankmessage"],
-        description="Set the thank-you message sent after a guild member bumps on Disboard.",
+        description="set the thank-you message sent after a guild member bumps on disboard",
         guild_only=True,
         usage="(script or text)",
         example=",bumpreminder thankyou Thanks {bumper.mention}!",
@@ -551,7 +551,7 @@ class BumpReminder(BumpReminderEvents, Package):
 
     @bumpreminder.command(
         name="role",
-        description="Set (or clear) the role pinged when guild members should bump on Disboard.",
+        description="set (or clear) the role pinged when guild members should bump on disboard",
         guild_only=True,
         example=",bumpreminder role @Bumpers",
     )

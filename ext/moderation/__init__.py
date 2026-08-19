@@ -659,7 +659,7 @@ class ModerationCommands(Package):
         name="tempban",
         usage="(duration) (member) <reason>",
         example="3h @member spamming",
-        description="Temporarily ban a member",
+        description="temporarily ban a member",
         invoke_without_command=True,
     )
     @has_permissions(ban_members=True)
@@ -672,26 +672,26 @@ class ModerationCommands(Package):
 
     @tempban.group(
         name="invoke",
-        description="Customize tempban punishment messages",
+        description="customize tempban punishment messages",
         invoke_without_command=True,
     )
     @has_permissions(manage_guild=True)
     async def tempban_invoke(self, ctx):
         return await ctx.send_help(ctx.command)
 
-    @tempban_invoke.command(name="on", description="Enable tempban response")
+    @tempban_invoke.command(name="on", description="enable tempban response")
     @has_permissions(manage_guild=True)
     async def tempban_invoke_on(self, ctx):
         await self._set_invoke_enabled(ctx, "tempban", "message", True)
         return await ctx.success("tempban response **enabled**")
 
-    @tempban_invoke.command(name="off", description="Disable tempban response")
+    @tempban_invoke.command(name="off", description="disable tempban response")
     @has_permissions(manage_guild=True)
     async def tempban_invoke_off(self, ctx):
         await self._set_invoke_enabled(ctx, "tempban", "message", False)
         return await ctx.success("tempban response **disabled**")
 
-    @tempban_invoke.group(name="dm", description="Customize tempban DM", invoke_without_command=True)
+    @tempban_invoke.group(name="dm", description="customize tempban dm", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def tempban_invoke_dm(self, ctx, *, message=None):
         if message is None:
@@ -704,24 +704,24 @@ class ModerationCommands(Package):
             await self._set_invoke(ctx, "tempban", "dm", message)
         return await ctx.success("tempban DM updated")
 
-    @tempban_invoke_dm.command(name="on", description="Enable tempban DM")
+    @tempban_invoke_dm.command(name="on", description="enable tempban dm")
     @has_permissions(manage_guild=True)
     async def tempban_invoke_dm_on(self, ctx):
         await self._set_invoke_enabled(ctx, "tempban", "dm", True)
         return await ctx.success("tempban DM **enabled**")
 
-    @tempban_invoke_dm.command(name="off", description="Disable tempban DM")
+    @tempban_invoke_dm.command(name="off", description="disable tempban dm")
     @has_permissions(manage_guild=True)
     async def tempban_invoke_dm_off(self, ctx):
         await self._set_invoke_enabled(ctx, "tempban", "dm", False)
         return await ctx.success("tempban DM **disabled**")
 
-    @tempban_invoke_dm.command(name="view", description="View tempban DM")
+    @tempban_invoke_dm.command(name="view", description="view tempban dm")
     @has_permissions(manage_guild=True)
     async def tempban_invoke_dm_view(self, ctx):
         return await self._view_invoke(ctx, "tempban", "dm")
 
-    @tempban_invoke.group(name="message", aliases=["msg"], description="Customize tempban response", invoke_without_command=True)
+    @tempban_invoke.group(name="message", aliases=["msg"], description="customize tempban response", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def tempban_invoke_message(self, ctx, *, message=None):
         if message is None:
@@ -734,14 +734,14 @@ class ModerationCommands(Package):
             await self._set_invoke(ctx, "tempban", "message", message)
         return await ctx.success("tempban response updated")
 
-    @tempban_invoke_message.command(name="view", description="View tempban response")
+    @tempban_invoke_message.command(name="view", description="view tempban response")
     @has_permissions(manage_guild=True)
     async def tempban_invoke_message_view(self, ctx):
         return await self._view_invoke(ctx, "tempban", "message")
 
     @group(
         name="warn",
-        description="Warns the mentioned user and private messages them the warning",
+        description="warns the mentioned user and private messages them the warning",
         invoke_without_command=True,
     )
     @has_permissions(manage_messages=True)
@@ -772,26 +772,26 @@ class ModerationCommands(Package):
 
     @warn.group(
         name="invoke",
-        description="Customize warn punishment messages",
+        description="customize warn punishment messages",
         invoke_without_command=True,
     )
     @has_permissions(manage_guild=True)
     async def warn_invoke(self, ctx):
         return await ctx.send_help(ctx.command)
 
-    @warn_invoke.command(name="on", description="Enable warn response")
+    @warn_invoke.command(name="on", description="enable warn response")
     @has_permissions(manage_guild=True)
     async def warn_invoke_on(self, ctx):
         await self._set_invoke_enabled(ctx, "warn", "message", True)
         return await ctx.success("warn response **enabled**")
 
-    @warn_invoke.command(name="off", description="Disable warn response")
+    @warn_invoke.command(name="off", description="disable warn response")
     @has_permissions(manage_guild=True)
     async def warn_invoke_off(self, ctx):
         await self._set_invoke_enabled(ctx, "warn", "message", False)
         return await ctx.success("warn response **disabled**")
 
-    @warn_invoke.group(name="dm", description="Customize warn DM", invoke_without_command=True)
+    @warn_invoke.group(name="dm", description="customize warn dm", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def warn_invoke_dm(self, ctx, *, message=None):
         if message is None:
@@ -804,24 +804,24 @@ class ModerationCommands(Package):
             await self._set_invoke(ctx, "warn", "dm", message)
         return await ctx.success("warn DM updated")
 
-    @warn_invoke_dm.command(name="on", description="Enable warn DM")
+    @warn_invoke_dm.command(name="on", description="enable warn dm")
     @has_permissions(manage_guild=True)
     async def warn_invoke_dm_on(self, ctx):
         await self._set_invoke_enabled(ctx, "warn", "dm", True)
         return await ctx.success("warn DM **enabled**")
 
-    @warn_invoke_dm.command(name="off", description="Disable warn DM")
+    @warn_invoke_dm.command(name="off", description="disable warn dm")
     @has_permissions(manage_guild=True)
     async def warn_invoke_dm_off(self, ctx):
         await self._set_invoke_enabled(ctx, "warn", "dm", False)
         return await ctx.success("warn DM **disabled**")
 
-    @warn_invoke_dm.command(name="view", description="View warn DM")
+    @warn_invoke_dm.command(name="view", description="view warn dm")
     @has_permissions(manage_guild=True)
     async def warn_invoke_dm_view(self, ctx):
         return await self._view_invoke(ctx, "warn", "dm")
 
-    @warn_invoke.group(name="message", aliases=["msg"], description="Customize warn response", invoke_without_command=True)
+    @warn_invoke.group(name="message", aliases=["msg"], description="customize warn response", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def warn_invoke_message(self, ctx, *, message=None):
         if message is None:
@@ -834,14 +834,14 @@ class ModerationCommands(Package):
             await self._set_invoke(ctx, "warn", "message", message)
         return await ctx.success("warn response updated")
 
-    @warn_invoke_message.command(name="view", description="View warn response")
+    @warn_invoke_message.command(name="view", description="view warn response")
     @has_permissions(manage_guild=True)
     async def warn_invoke_message_view(self, ctx):
         return await self._view_invoke(ctx, "warn", "message")
 
     @command(
         name="moveall",
-        description="Move all members in your voice channel to another channel",
+        description="move all members in your voice channel to another channel",
     )
     @has_permissions(move_members=True)
     async def moveall(self, ctx, channel: discord.VoiceChannel):
@@ -876,7 +876,7 @@ class ModerationCommands(Package):
     @command(
         name="stripstaff",
         aliases=["strip"],
-        description="Remove all roles with dangerous permissions from a member",
+        description="remove all roles with dangerous permissions from a member",
     )
     @has_permissions(manage_roles=True)
     async def stripstaff(self, ctx, *, member: discord.Member):
@@ -919,7 +919,7 @@ class ModerationCommands(Package):
         name="jail",
         usage="[duration] (member) <reason>",
         example="2d @member spamming",
-        description="Jails the mentioned user",
+        description="jails the mentioned user",
         invoke_without_command=True,
     )
     @has_permissions(manage_messages=True)
@@ -1015,26 +1015,26 @@ class ModerationCommands(Package):
 
     @jail.group(
         name="invoke",
-        description="Customize jail punishment messages",
+        description="customize jail punishment messages",
         invoke_without_command=True,
     )
     @has_permissions(manage_guild=True)
     async def jail_invoke(self, ctx):
         return await ctx.send_help(ctx.command)
 
-    @jail_invoke.command(name="on", description="Enable jail response")
+    @jail_invoke.command(name="on", description="enable jail response")
     @has_permissions(manage_guild=True)
     async def jail_invoke_on(self, ctx):
         await self._set_invoke_enabled(ctx, "jail", "message", True)
         return await ctx.success("jail response **enabled**")
 
-    @jail_invoke.command(name="off", description="Disable jail response")
+    @jail_invoke.command(name="off", description="disable jail response")
     @has_permissions(manage_guild=True)
     async def jail_invoke_off(self, ctx):
         await self._set_invoke_enabled(ctx, "jail", "message", False)
         return await ctx.success("jail response **disabled**")
 
-    @jail_invoke.group(name="dm", description="Customize jail DM", invoke_without_command=True)
+    @jail_invoke.group(name="dm", description="customize jail dm", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def jail_invoke_dm(self, ctx, *, message=None):
         if message is None:
@@ -1047,24 +1047,24 @@ class ModerationCommands(Package):
             await self._set_invoke(ctx, "jail", "dm", message)
         return await ctx.success("jail DM updated")
 
-    @jail_invoke_dm.command(name="on", description="Enable jail DM")
+    @jail_invoke_dm.command(name="on", description="enable jail dm")
     @has_permissions(manage_guild=True)
     async def jail_invoke_dm_on(self, ctx):
         await self._set_invoke_enabled(ctx, "jail", "dm", True)
         return await ctx.success("jail DM **enabled**")
 
-    @jail_invoke_dm.command(name="off", description="Disable jail DM")
+    @jail_invoke_dm.command(name="off", description="disable jail dm")
     @has_permissions(manage_guild=True)
     async def jail_invoke_dm_off(self, ctx):
         await self._set_invoke_enabled(ctx, "jail", "dm", False)
         return await ctx.success("jail DM **disabled**")
 
-    @jail_invoke_dm.command(name="view", description="View jail DM")
+    @jail_invoke_dm.command(name="view", description="view jail dm")
     @has_permissions(manage_guild=True)
     async def jail_invoke_dm_view(self, ctx):
         return await self._view_invoke(ctx, "jail", "dm")
 
-    @jail_invoke.group(name="message", aliases=["msg"], description="Customize jail response", invoke_without_command=True)
+    @jail_invoke.group(name="message", aliases=["msg"], description="customize jail response", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def jail_invoke_message(self, ctx, *, message=None):
         if message is None:
@@ -1077,14 +1077,14 @@ class ModerationCommands(Package):
             await self._set_invoke(ctx, "jail", "message", message)
         return await ctx.success("jail response updated")
 
-    @jail_invoke_message.command(name="view", description="View jail response")
+    @jail_invoke_message.command(name="view", description="view jail response")
     @has_permissions(manage_guild=True)
     async def jail_invoke_message_view(self, ctx):
         return await self._view_invoke(ctx, "jail", "message")
 
     @group(
         name="unjail",
-        description="Unjails the mentioned user",
+        description="unjails the mentioned user",
         invoke_without_command=True,
     )
     @has_permissions(manage_messages=True)
@@ -1138,24 +1138,24 @@ class ModerationCommands(Package):
             return
         return await ctx.success(f"Unjailed **{member}**\n> -# **reason:** {self._default_reason(reason)}")
 
-    @unjail.group(name="invoke", description="Customize unjail messages", invoke_without_command=True)
+    @unjail.group(name="invoke", description="customize unjail messages", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def unjail_invoke(self, ctx):
         return await ctx.send_help(ctx.command)
 
-    @unjail_invoke.command(name="on", description="Enable unjail response")
+    @unjail_invoke.command(name="on", description="enable unjail response")
     @has_permissions(manage_guild=True)
     async def unjail_invoke_on(self, ctx):
         await self._set_invoke_enabled(ctx, "unjail", "message", True)
         return await ctx.success("unjail response **enabled**")
 
-    @unjail_invoke.command(name="off", description="Disable unjail response")
+    @unjail_invoke.command(name="off", description="disable unjail response")
     @has_permissions(manage_guild=True)
     async def unjail_invoke_off(self, ctx):
         await self._set_invoke_enabled(ctx, "unjail", "message", False)
         return await ctx.success("unjail response **disabled**")
 
-    @unjail_invoke.group(name="dm", description="Customize unjail DM", invoke_without_command=True)
+    @unjail_invoke.group(name="dm", description="customize unjail dm", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def unjail_invoke_dm(self, ctx, *, message=None):
         if message is None:
@@ -1168,24 +1168,24 @@ class ModerationCommands(Package):
             await self._set_invoke(ctx, "unjail", "dm", message)
         return await ctx.success("unjail DM updated")
 
-    @unjail_invoke_dm.command(name="on", description="Enable unjail DM")
+    @unjail_invoke_dm.command(name="on", description="enable unjail dm")
     @has_permissions(manage_guild=True)
     async def unjail_invoke_dm_on(self, ctx):
         await self._set_invoke_enabled(ctx, "unjail", "dm", True)
         return await ctx.success("unjail DM **enabled**")
 
-    @unjail_invoke_dm.command(name="off", description="Disable unjail DM")
+    @unjail_invoke_dm.command(name="off", description="disable unjail dm")
     @has_permissions(manage_guild=True)
     async def unjail_invoke_dm_off(self, ctx):
         await self._set_invoke_enabled(ctx, "unjail", "dm", False)
         return await ctx.success("unjail DM **disabled**")
 
-    @unjail_invoke_dm.command(name="view", description="View unjail DM")
+    @unjail_invoke_dm.command(name="view", description="view unjail dm")
     @has_permissions(manage_guild=True)
     async def unjail_invoke_dm_view(self, ctx):
         return await self._view_invoke(ctx, "unjail", "dm")
 
-    @unjail_invoke.group(name="message", aliases=["msg"], description="Customize unjail response", invoke_without_command=True)
+    @unjail_invoke.group(name="message", aliases=["msg"], description="customize unjail response", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def unjail_invoke_message(self, ctx, *, message=None):
         if message is None:
@@ -1198,14 +1198,14 @@ class ModerationCommands(Package):
             await self._set_invoke(ctx, "unjail", "message", message)
         return await ctx.success("unjail response updated")
 
-    @unjail_invoke_message.command(name="view", description="View unjail response")
+    @unjail_invoke_message.command(name="view", description="view unjail response")
     @has_permissions(manage_guild=True)
     async def unjail_invoke_message_view(self, ctx):
         return await self._view_invoke(ctx, "unjail", "message")
 
     @command(
         name="modstats",
-        description="No description given",
+        description="no description given",
     )
     @has_permissions(manage_messages=True)
     async def modstats(self, ctx, member: discord.Member):
@@ -1232,7 +1232,7 @@ class ModerationCommands(Package):
 
     @command(
         name="warnings",
-        description="View warnings for a member",
+        description="view warnings for a member",
     )
     @has_permissions(manage_messages=True)
     async def warnings(self, ctx, member: discord.Member):
@@ -1254,7 +1254,7 @@ class ModerationCommands(Package):
 
     @command(
         name="moderationhistory",
-        description="View moderation actions from a staff member",
+        description="view moderation actions from a staff member",
     )
     @has_permissions(manage_messages=True)
     async def moderationhistory(self, ctx, member: discord.Member, command: str | None = None):
@@ -1282,7 +1282,7 @@ class ModerationCommands(Package):
 
     @command(
         name="jaillist",
-        description="View a list of every current jailed member",
+        description="view a list of every current jailed member",
     )
     @has_permissions(manage_messages=True)
     async def jaillist(self, ctx):
@@ -1313,7 +1313,7 @@ class ModerationCommands(Package):
 
     @command(
         name="caselog",
-        description="View a case log",
+        description="view a case log",
     )
     @has_permissions(manage_messages=True)
     async def caselog(self, ctx, case_id: int):
@@ -1383,7 +1383,7 @@ class ModerationCommands(Package):
 
     @timeout.command(
         name="list",
-        description="View list of timed out members",
+        description="view list of timed out members",
     )
     @has_permissions(moderate_members=True)
     async def timeout_list(self, ctx):
@@ -1411,7 +1411,7 @@ class ModerationCommands(Package):
 
     @timeout.group(
         name="invoke",
-        description="Customize timeout punishment messages",
+        description="customize timeout punishment messages",
         invoke_without_command=True,
     )
     @has_permissions(manage_guild=True)
@@ -1420,7 +1420,7 @@ class ModerationCommands(Package):
 
     @timeout_invoke.command(
         name="on",
-        description="Enable timeout command response messages",
+        description="enable timeout command response messages",
     )
     @has_permissions(manage_guild=True)
     async def timeout_invoke_on(self, ctx):
@@ -1429,7 +1429,7 @@ class ModerationCommands(Package):
 
     @timeout_invoke.command(
         name="off",
-        description="Disable timeout command response messages",
+        description="disable timeout command response messages",
     )
     @has_permissions(manage_guild=True)
     async def timeout_invoke_off(self, ctx):
@@ -1438,7 +1438,7 @@ class ModerationCommands(Package):
 
     @timeout_invoke.group(
         name="dm",
-        description="Customize timeout Direct Message",
+        description="customize timeout direct message",
         invoke_without_command=True,
     )
     @has_permissions(manage_guild=True)
@@ -1456,7 +1456,7 @@ class ModerationCommands(Package):
 
     @timeout_invoke_dm.command(
         name="on",
-        description="Enable timeout DM notifications",
+        description="enable timeout dm notifications",
     )
     @has_permissions(manage_guild=True)
     async def timeout_invoke_dm_on(self, ctx):
@@ -1465,7 +1465,7 @@ class ModerationCommands(Package):
 
     @timeout_invoke_dm.command(
         name="off",
-        description="Disable timeout DM notifications",
+        description="disable timeout dm notifications",
     )
     @has_permissions(manage_guild=True)
     async def timeout_invoke_dm_off(self, ctx):
@@ -1474,7 +1474,7 @@ class ModerationCommands(Package):
 
     @timeout_invoke_dm.command(
         name="view",
-        description="View the timeout DM message",
+        description="view the timeout dm message",
     )
     @has_permissions(manage_guild=True)
     async def timeout_invoke_dm_view(self, ctx):
@@ -1483,7 +1483,7 @@ class ModerationCommands(Package):
     @timeout_invoke.group(
         name="message",
         aliases=["msg"],
-        description="Customize timeout command response",
+        description="customize timeout command response",
         invoke_without_command=True,
     )
     @has_permissions(manage_guild=True)
@@ -1501,7 +1501,7 @@ class ModerationCommands(Package):
 
     @timeout_invoke_message.command(
         name="view",
-        description="View the timeout response message",
+        description="view the timeout response message",
     )
     @has_permissions(manage_guild=True)
     async def timeout_invoke_message_view(self, ctx):
@@ -1510,7 +1510,7 @@ class ModerationCommands(Package):
     @group(
         name="untimeout",
         aliases=["unmute"],
-        description="Removes a timeout for a member",
+        description="removes a timeout for a member",
         example=",untimeout @member",
         invoke_without_command=True,
     )
@@ -1540,24 +1540,24 @@ class ModerationCommands(Package):
             f"Removed timeout for **{member}**\n> -# **reason:** {self._default_reason(reason)}"
         )
 
-    @untimeout.group(name="invoke", description="Customize untimeout messages", invoke_without_command=True)
+    @untimeout.group(name="invoke", description="customize untimeout messages", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def untimeout_invoke(self, ctx):
         return await ctx.send_help(ctx.command)
 
-    @untimeout_invoke.command(name="on", description="Enable untimeout response")
+    @untimeout_invoke.command(name="on", description="enable untimeout response")
     @has_permissions(manage_guild=True)
     async def untimeout_invoke_on(self, ctx):
         await self._set_invoke_enabled(ctx, "untimeout", "message", True)
         return await ctx.success("untimeout response **enabled**")
 
-    @untimeout_invoke.command(name="off", description="Disable untimeout response")
+    @untimeout_invoke.command(name="off", description="disable untimeout response")
     @has_permissions(manage_guild=True)
     async def untimeout_invoke_off(self, ctx):
         await self._set_invoke_enabled(ctx, "untimeout", "message", False)
         return await ctx.success("untimeout response **disabled**")
 
-    @untimeout_invoke.group(name="dm", description="Customize untimeout DM", invoke_without_command=True)
+    @untimeout_invoke.group(name="dm", description="customize untimeout dm", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def untimeout_invoke_dm(self, ctx, *, message=None):
         if message is None:
@@ -1570,24 +1570,24 @@ class ModerationCommands(Package):
             await self._set_invoke(ctx, "untimeout", "dm", message)
         return await ctx.success("untimeout DM updated")
 
-    @untimeout_invoke_dm.command(name="on", description="Enable untimeout DM")
+    @untimeout_invoke_dm.command(name="on", description="enable untimeout dm")
     @has_permissions(manage_guild=True)
     async def untimeout_invoke_dm_on(self, ctx):
         await self._set_invoke_enabled(ctx, "untimeout", "dm", True)
         return await ctx.success("untimeout DM **enabled**")
 
-    @untimeout_invoke_dm.command(name="off", description="Disable untimeout DM")
+    @untimeout_invoke_dm.command(name="off", description="disable untimeout dm")
     @has_permissions(manage_guild=True)
     async def untimeout_invoke_dm_off(self, ctx):
         await self._set_invoke_enabled(ctx, "untimeout", "dm", False)
         return await ctx.success("untimeout DM **disabled**")
 
-    @untimeout_invoke_dm.command(name="view", description="View untimeout DM")
+    @untimeout_invoke_dm.command(name="view", description="view untimeout dm")
     @has_permissions(manage_guild=True)
     async def untimeout_invoke_dm_view(self, ctx):
         return await self._view_invoke(ctx, "untimeout", "dm")
 
-    @untimeout_invoke.group(name="message", aliases=["msg"], description="Customize untimeout response", invoke_without_command=True)
+    @untimeout_invoke.group(name="message", aliases=["msg"], description="customize untimeout response", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def untimeout_invoke_message(self, ctx, *, message=None):
         if message is None:
@@ -1600,7 +1600,7 @@ class ModerationCommands(Package):
             await self._set_invoke(ctx, "untimeout", "message", message)
         return await ctx.success("untimeout response updated")
 
-    @untimeout_invoke_message.command(name="view", description="View untimeout response")
+    @untimeout_invoke_message.command(name="view", description="view untimeout response")
     @has_permissions(manage_guild=True)
     async def untimeout_invoke_message_view(self, ctx):
         return await self._view_invoke(ctx, "untimeout", "message")
@@ -1781,7 +1781,7 @@ class ModerationCommands(Package):
     @group(
         name="imagemute",
         aliases=["imute", "imgmute"],
-        description="Image mute a member or role",
+        description="image mute a member or role",
         example=",imagemute @member",
         invoke_without_command=True,
     )
@@ -1793,24 +1793,24 @@ class ModerationCommands(Package):
             return await ctx.warn(f"Not found\n> -# **no member or role matching** {target}")
         return await self._apply_special_mute(ctx, resolved, "i", reason=reason)
 
-    @imagemute.group(name="invoke", description="Customize imagemute messages", invoke_without_command=True)
+    @imagemute.group(name="invoke", description="customize imagemute messages", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def imagemute_invoke(self, ctx):
         return await ctx.send_help(ctx.command)
 
-    @imagemute_invoke.command(name="on", description="Enable imagemute response")
+    @imagemute_invoke.command(name="on", description="enable imagemute response")
     @has_permissions(manage_guild=True)
     async def imagemute_invoke_on(self, ctx):
         await self._set_invoke_enabled(ctx, "imagemute", "message", True)
         return await ctx.success("imagemute response **enabled**")
 
-    @imagemute_invoke.command(name="off", description="Disable imagemute response")
+    @imagemute_invoke.command(name="off", description="disable imagemute response")
     @has_permissions(manage_guild=True)
     async def imagemute_invoke_off(self, ctx):
         await self._set_invoke_enabled(ctx, "imagemute", "message", False)
         return await ctx.success("imagemute response **disabled**")
 
-    @imagemute_invoke.group(name="dm", description="Customize imagemute DM", invoke_without_command=True)
+    @imagemute_invoke.group(name="dm", description="customize imagemute dm", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def imagemute_invoke_dm(self, ctx, *, message=None):
         if message is None:
@@ -1823,24 +1823,24 @@ class ModerationCommands(Package):
             await self._set_invoke(ctx, "imagemute", "dm", message)
         return await ctx.success("imagemute DM updated")
 
-    @imagemute_invoke_dm.command(name="on", description="Enable imagemute DM")
+    @imagemute_invoke_dm.command(name="on", description="enable imagemute dm")
     @has_permissions(manage_guild=True)
     async def imagemute_invoke_dm_on(self, ctx):
         await self._set_invoke_enabled(ctx, "imagemute", "dm", True)
         return await ctx.success("imagemute DM **enabled**")
 
-    @imagemute_invoke_dm.command(name="off", description="Disable imagemute DM")
+    @imagemute_invoke_dm.command(name="off", description="disable imagemute dm")
     @has_permissions(manage_guild=True)
     async def imagemute_invoke_dm_off(self, ctx):
         await self._set_invoke_enabled(ctx, "imagemute", "dm", False)
         return await ctx.success("imagemute DM **disabled**")
 
-    @imagemute_invoke_dm.command(name="view", description="View imagemute DM")
+    @imagemute_invoke_dm.command(name="view", description="view imagemute dm")
     @has_permissions(manage_guild=True)
     async def imagemute_invoke_dm_view(self, ctx):
         return await self._view_invoke(ctx, "imagemute", "dm")
 
-    @imagemute_invoke.group(name="message", aliases=["msg"], description="Customize imagemute response", invoke_without_command=True)
+    @imagemute_invoke.group(name="message", aliases=["msg"], description="customize imagemute response", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def imagemute_invoke_message(self, ctx, *, message=None):
         if message is None:
@@ -1853,7 +1853,7 @@ class ModerationCommands(Package):
             await self._set_invoke(ctx, "imagemute", "message", message)
         return await ctx.success("imagemute response updated")
 
-    @imagemute_invoke_message.command(name="view", description="View imagemute response")
+    @imagemute_invoke_message.command(name="view", description="view imagemute response")
     @has_permissions(manage_guild=True)
     async def imagemute_invoke_message_view(self, ctx):
         return await self._view_invoke(ctx, "imagemute", "message")
@@ -1861,7 +1861,7 @@ class ModerationCommands(Package):
     @group(
         name="imageunmute",
         aliases=["iunmute", "unimagemute"],
-        description="Remove image mute from a member or role",
+        description="remove image mute from a member or role",
         example=",imageunmute @member",
         invoke_without_command=True,
     )
@@ -1875,24 +1875,24 @@ class ModerationCommands(Package):
             ctx, resolved, "i", reason=reason, remove=True
         )
 
-    @imageunmute.group(name="invoke", description="Customize imageunmute messages", invoke_without_command=True)
+    @imageunmute.group(name="invoke", description="customize imageunmute messages", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def imageunmute_invoke(self, ctx):
         return await ctx.send_help(ctx.command)
 
-    @imageunmute_invoke.command(name="on", description="Enable imageunmute response")
+    @imageunmute_invoke.command(name="on", description="enable imageunmute response")
     @has_permissions(manage_guild=True)
     async def imageunmute_invoke_on(self, ctx):
         await self._set_invoke_enabled(ctx, "imageunmute", "message", True)
         return await ctx.success("imageunmute response **enabled**")
 
-    @imageunmute_invoke.command(name="off", description="Disable imageunmute response")
+    @imageunmute_invoke.command(name="off", description="disable imageunmute response")
     @has_permissions(manage_guild=True)
     async def imageunmute_invoke_off(self, ctx):
         await self._set_invoke_enabled(ctx, "imageunmute", "message", False)
         return await ctx.success("imageunmute response **disabled**")
 
-    @imageunmute_invoke.group(name="dm", description="Customize imageunmute DM", invoke_without_command=True)
+    @imageunmute_invoke.group(name="dm", description="customize imageunmute dm", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def imageunmute_invoke_dm(self, ctx, *, message=None):
         if message is None:
@@ -1905,24 +1905,24 @@ class ModerationCommands(Package):
             await self._set_invoke(ctx, "imageunmute", "dm", message)
         return await ctx.success("imageunmute DM updated")
 
-    @imageunmute_invoke_dm.command(name="on", description="Enable imageunmute DM")
+    @imageunmute_invoke_dm.command(name="on", description="enable imageunmute dm")
     @has_permissions(manage_guild=True)
     async def imageunmute_invoke_dm_on(self, ctx):
         await self._set_invoke_enabled(ctx, "imageunmute", "dm", True)
         return await ctx.success("imageunmute DM **enabled**")
 
-    @imageunmute_invoke_dm.command(name="off", description="Disable imageunmute DM")
+    @imageunmute_invoke_dm.command(name="off", description="disable imageunmute dm")
     @has_permissions(manage_guild=True)
     async def imageunmute_invoke_dm_off(self, ctx):
         await self._set_invoke_enabled(ctx, "imageunmute", "dm", False)
         return await ctx.success("imageunmute DM **disabled**")
 
-    @imageunmute_invoke_dm.command(name="view", description="View imageunmute DM")
+    @imageunmute_invoke_dm.command(name="view", description="view imageunmute dm")
     @has_permissions(manage_guild=True)
     async def imageunmute_invoke_dm_view(self, ctx):
         return await self._view_invoke(ctx, "imageunmute", "dm")
 
-    @imageunmute_invoke.group(name="message", aliases=["msg"], description="Customize imageunmute response", invoke_without_command=True)
+    @imageunmute_invoke.group(name="message", aliases=["msg"], description="customize imageunmute response", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def imageunmute_invoke_message(self, ctx, *, message=None):
         if message is None:
@@ -1935,7 +1935,7 @@ class ModerationCommands(Package):
             await self._set_invoke(ctx, "imageunmute", "message", message)
         return await ctx.success("imageunmute response updated")
 
-    @imageunmute_invoke_message.command(name="view", description="View imageunmute response")
+    @imageunmute_invoke_message.command(name="view", description="view imageunmute response")
     @has_permissions(manage_guild=True)
     async def imageunmute_invoke_message_view(self, ctx):
         return await self._view_invoke(ctx, "imageunmute", "message")
@@ -1943,7 +1943,7 @@ class ModerationCommands(Package):
     @group(
         name="reactionmute",
         aliases=["rmute", "reactmute"],
-        description="Reaction mute a member or role",
+        description="reaction mute a member or role",
         example=",reactionmute @member",
         invoke_without_command=True,
     )
@@ -1955,24 +1955,24 @@ class ModerationCommands(Package):
             return await ctx.warn(f"Not found\n> -# **no member or role matching** {target}")
         return await self._apply_special_mute(ctx, resolved, "r", reason=reason)
 
-    @reactionmute.group(name="invoke", description="Customize reactionmute messages", invoke_without_command=True)
+    @reactionmute.group(name="invoke", description="customize reactionmute messages", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def reactionmute_invoke(self, ctx):
         return await ctx.send_help(ctx.command)
 
-    @reactionmute_invoke.command(name="on", description="Enable reactionmute response")
+    @reactionmute_invoke.command(name="on", description="enable reactionmute response")
     @has_permissions(manage_guild=True)
     async def reactionmute_invoke_on(self, ctx):
         await self._set_invoke_enabled(ctx, "reactionmute", "message", True)
         return await ctx.success("reactionmute response **enabled**")
 
-    @reactionmute_invoke.command(name="off", description="Disable reactionmute response")
+    @reactionmute_invoke.command(name="off", description="disable reactionmute response")
     @has_permissions(manage_guild=True)
     async def reactionmute_invoke_off(self, ctx):
         await self._set_invoke_enabled(ctx, "reactionmute", "message", False)
         return await ctx.success("reactionmute response **disabled**")
 
-    @reactionmute_invoke.group(name="dm", description="Customize reactionmute DM", invoke_without_command=True)
+    @reactionmute_invoke.group(name="dm", description="customize reactionmute dm", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def reactionmute_invoke_dm(self, ctx, *, message=None):
         if message is None:
@@ -1985,24 +1985,24 @@ class ModerationCommands(Package):
             await self._set_invoke(ctx, "reactionmute", "dm", message)
         return await ctx.success("reactionmute DM updated")
 
-    @reactionmute_invoke_dm.command(name="on", description="Enable reactionmute DM")
+    @reactionmute_invoke_dm.command(name="on", description="enable reactionmute dm")
     @has_permissions(manage_guild=True)
     async def reactionmute_invoke_dm_on(self, ctx):
         await self._set_invoke_enabled(ctx, "reactionmute", "dm", True)
         return await ctx.success("reactionmute DM **enabled**")
 
-    @reactionmute_invoke_dm.command(name="off", description="Disable reactionmute DM")
+    @reactionmute_invoke_dm.command(name="off", description="disable reactionmute dm")
     @has_permissions(manage_guild=True)
     async def reactionmute_invoke_dm_off(self, ctx):
         await self._set_invoke_enabled(ctx, "reactionmute", "dm", False)
         return await ctx.success("reactionmute DM **disabled**")
 
-    @reactionmute_invoke_dm.command(name="view", description="View reactionmute DM")
+    @reactionmute_invoke_dm.command(name="view", description="view reactionmute dm")
     @has_permissions(manage_guild=True)
     async def reactionmute_invoke_dm_view(self, ctx):
         return await self._view_invoke(ctx, "reactionmute", "dm")
 
-    @reactionmute_invoke.group(name="message", aliases=["msg"], description="Customize reactionmute response", invoke_without_command=True)
+    @reactionmute_invoke.group(name="message", aliases=["msg"], description="customize reactionmute response", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def reactionmute_invoke_message(self, ctx, *, message=None):
         if message is None:
@@ -2015,7 +2015,7 @@ class ModerationCommands(Package):
             await self._set_invoke(ctx, "reactionmute", "message", message)
         return await ctx.success("reactionmute response updated")
 
-    @reactionmute_invoke_message.command(name="view", description="View reactionmute response")
+    @reactionmute_invoke_message.command(name="view", description="view reactionmute response")
     @has_permissions(manage_guild=True)
     async def reactionmute_invoke_message_view(self, ctx):
         return await self._view_invoke(ctx, "reactionmute", "message")
@@ -2023,7 +2023,7 @@ class ModerationCommands(Package):
     @group(
         name="reactionunmute",
         aliases=["runmute", "unreactionmute"],
-        description="Remove reaction mute from a member or role",
+        description="remove reaction mute from a member or role",
         example=",reactionunmute @member",
         invoke_without_command=True,
     )
@@ -2037,24 +2037,24 @@ class ModerationCommands(Package):
             ctx, resolved, "r", reason=reason, remove=True
         )
 
-    @reactionunmute.group(name="invoke", description="Customize reactionunmute messages", invoke_without_command=True)
+    @reactionunmute.group(name="invoke", description="customize reactionunmute messages", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def reactionunmute_invoke(self, ctx):
         return await ctx.send_help(ctx.command)
 
-    @reactionunmute_invoke.command(name="on", description="Enable reactionunmute response")
+    @reactionunmute_invoke.command(name="on", description="enable reactionunmute response")
     @has_permissions(manage_guild=True)
     async def reactionunmute_invoke_on(self, ctx):
         await self._set_invoke_enabled(ctx, "reactionunmute", "message", True)
         return await ctx.success("reactionunmute response **enabled**")
 
-    @reactionunmute_invoke.command(name="off", description="Disable reactionunmute response")
+    @reactionunmute_invoke.command(name="off", description="disable reactionunmute response")
     @has_permissions(manage_guild=True)
     async def reactionunmute_invoke_off(self, ctx):
         await self._set_invoke_enabled(ctx, "reactionunmute", "message", False)
         return await ctx.success("reactionunmute response **disabled**")
 
-    @reactionunmute_invoke.group(name="dm", description="Customize reactionunmute DM", invoke_without_command=True)
+    @reactionunmute_invoke.group(name="dm", description="customize reactionunmute dm", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def reactionunmute_invoke_dm(self, ctx, *, message=None):
         if message is None:
@@ -2067,24 +2067,24 @@ class ModerationCommands(Package):
             await self._set_invoke(ctx, "reactionunmute", "dm", message)
         return await ctx.success("reactionunmute DM updated")
 
-    @reactionunmute_invoke_dm.command(name="on", description="Enable reactionunmute DM")
+    @reactionunmute_invoke_dm.command(name="on", description="enable reactionunmute dm")
     @has_permissions(manage_guild=True)
     async def reactionunmute_invoke_dm_on(self, ctx):
         await self._set_invoke_enabled(ctx, "reactionunmute", "dm", True)
         return await ctx.success("reactionunmute DM **enabled**")
 
-    @reactionunmute_invoke_dm.command(name="off", description="Disable reactionunmute DM")
+    @reactionunmute_invoke_dm.command(name="off", description="disable reactionunmute dm")
     @has_permissions(manage_guild=True)
     async def reactionunmute_invoke_dm_off(self, ctx):
         await self._set_invoke_enabled(ctx, "reactionunmute", "dm", False)
         return await ctx.success("reactionunmute DM **disabled**")
 
-    @reactionunmute_invoke_dm.command(name="view", description="View reactionunmute DM")
+    @reactionunmute_invoke_dm.command(name="view", description="view reactionunmute dm")
     @has_permissions(manage_guild=True)
     async def reactionunmute_invoke_dm_view(self, ctx):
         return await self._view_invoke(ctx, "reactionunmute", "dm")
 
-    @reactionunmute_invoke.group(name="message", aliases=["msg"], description="Customize reactionunmute response", invoke_without_command=True)
+    @reactionunmute_invoke.group(name="message", aliases=["msg"], description="customize reactionunmute response", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def reactionunmute_invoke_message(self, ctx, *, message=None):
         if message is None:
@@ -2097,14 +2097,14 @@ class ModerationCommands(Package):
             await self._set_invoke(ctx, "reactionunmute", "message", message)
         return await ctx.success("reactionunmute response updated")
 
-    @reactionunmute_invoke_message.command(name="view", description="View reactionunmute response")
+    @reactionunmute_invoke_message.command(name="view", description="view reactionunmute response")
     @has_permissions(manage_guild=True)
     async def reactionunmute_invoke_message_view(self, ctx):
         return await self._view_invoke(ctx, "reactionunmute", "message")
 
     @group(
         name="hardban",
-        description="Keep a member banned",
+        description="keep a member banned",
         invoke_without_command=True,
     )
     @has_permissions(ban_members=True)
@@ -2155,26 +2155,26 @@ class ModerationCommands(Package):
 
     @hardban.group(
         name="invoke",
-        description="Customize hardban punishment messages",
+        description="customize hardban punishment messages",
         invoke_without_command=True,
     )
     @has_permissions(manage_guild=True)
     async def hardban_invoke(self, ctx):
         return await ctx.send_help(ctx.command)
 
-    @hardban_invoke.command(name="on", description="Enable hardban response")
+    @hardban_invoke.command(name="on", description="enable hardban response")
     @has_permissions(manage_guild=True)
     async def hardban_invoke_on(self, ctx):
         await self._set_invoke_enabled(ctx, "hardban", "message", True)
         return await ctx.success("hardban response **enabled**")
 
-    @hardban_invoke.command(name="off", description="Disable hardban response")
+    @hardban_invoke.command(name="off", description="disable hardban response")
     @has_permissions(manage_guild=True)
     async def hardban_invoke_off(self, ctx):
         await self._set_invoke_enabled(ctx, "hardban", "message", False)
         return await ctx.success("hardban response **disabled**")
 
-    @hardban_invoke.group(name="message", aliases=["msg"], description="Customize hardban response", invoke_without_command=True)
+    @hardban_invoke.group(name="message", aliases=["msg"], description="customize hardban response", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def hardban_invoke_message(self, ctx, *, message=None):
         if message is None:
@@ -2187,14 +2187,14 @@ class ModerationCommands(Package):
             await self._set_invoke(ctx, "hardban", "message", message)
         return await ctx.success("hardban response updated")
 
-    @hardban_invoke_message.command(name="view", description="View hardban response")
+    @hardban_invoke_message.command(name="view", description="view hardban response")
     @has_permissions(manage_guild=True)
     async def hardban_invoke_message_view(self, ctx):
         return await self._view_invoke(ctx, "hardban", "message")
 
     @command(
         name="hardban list",
-        description="View list of hardbanned members",
+        description="view list of hardbanned members",
     )
     @has_permissions(administrator=True)
     async def hardban_list(self, ctx):
@@ -2219,7 +2219,7 @@ class ModerationCommands(Package):
 
     @command(
         name="clearinvites",
-        description="Remove all existing invites in guild",
+        description="remove all existing invites in guild",
     )
     @has_permissions(manage_guild=True)
     async def clearinvites(self, ctx, params: str | None = None):
@@ -2248,7 +2248,7 @@ class ModerationCommands(Package):
 
     @command(
         name="drag",
-        description="Drag member(s) to the specified Voice Channel",
+        description="drag member(s) to the specified voice channel",
     )
     @has_permissions(move_members=True)
     async def drag(
@@ -2273,7 +2273,7 @@ class ModerationCommands(Package):
 
     @command(
         name="unbanall",
-        description="Unbans every member in a guild",
+        description="unbans every member in a guild",
     )
     @has_permissions(ban_members=True)
     async def unbanall(self, ctx):
@@ -2315,7 +2315,7 @@ class ModerationCommands(Package):
 
     @command(
         name="unbanall cancel",
-        description="Cancels a unban all task running",
+        description="cancels a unban all task running",
     )
     @has_permissions(ban_members=True)
     async def unbanall_cancel(self, ctx):
@@ -2331,7 +2331,7 @@ class ModerationCommands(Package):
         name="unban",
         usage="(user id or mention) <reason>",
         example="1269433308945711135 appealed",
-        description="Unbans the mentioned user",
+        description="unbans the mentioned user",
         invoke_without_command=True,
     )
     @has_permissions(ban_members=True)
@@ -2379,24 +2379,24 @@ class ModerationCommands(Package):
             f"Unbanned **{user}** - {self._default_reason(reason)}"
         )
 
-    @unban.group(name="invoke", description="Customize unban messages", invoke_without_command=True)
+    @unban.group(name="invoke", description="customize unban messages", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def unban_invoke(self, ctx):
         return await ctx.send_help(ctx.command)
 
-    @unban_invoke.command(name="on", description="Enable unban response")
+    @unban_invoke.command(name="on", description="enable unban response")
     @has_permissions(manage_guild=True)
     async def unban_invoke_on(self, ctx):
         await self._set_invoke_enabled(ctx, "unban", "message", True)
         return await ctx.success("unban response **enabled**")
 
-    @unban_invoke.command(name="off", description="Disable unban response")
+    @unban_invoke.command(name="off", description="disable unban response")
     @has_permissions(manage_guild=True)
     async def unban_invoke_off(self, ctx):
         await self._set_invoke_enabled(ctx, "unban", "message", False)
         return await ctx.success("unban response **disabled**")
 
-    @unban_invoke.group(name="dm", description="Customize unban DM", invoke_without_command=True)
+    @unban_invoke.group(name="dm", description="customize unban dm", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def unban_invoke_dm(self, ctx, *, message=None):
         if message is None:
@@ -2409,24 +2409,24 @@ class ModerationCommands(Package):
             await self._set_invoke(ctx, "unban", "dm", message)
         return await ctx.success("unban DM updated")
 
-    @unban_invoke_dm.command(name="on", description="Enable unban DM")
+    @unban_invoke_dm.command(name="on", description="enable unban dm")
     @has_permissions(manage_guild=True)
     async def unban_invoke_dm_on(self, ctx):
         await self._set_invoke_enabled(ctx, "unban", "dm", True)
         return await ctx.success("unban DM **enabled**")
 
-    @unban_invoke_dm.command(name="off", description="Disable unban DM")
+    @unban_invoke_dm.command(name="off", description="disable unban dm")
     @has_permissions(manage_guild=True)
     async def unban_invoke_dm_off(self, ctx):
         await self._set_invoke_enabled(ctx, "unban", "dm", False)
         return await ctx.success("unban DM **disabled**")
 
-    @unban_invoke_dm.command(name="view", description="View unban DM")
+    @unban_invoke_dm.command(name="view", description="view unban dm")
     @has_permissions(manage_guild=True)
     async def unban_invoke_dm_view(self, ctx):
         return await self._view_invoke(ctx, "unban", "dm")
 
-    @unban_invoke.group(name="message", aliases=["msg"], description="Customize unban response", invoke_without_command=True)
+    @unban_invoke.group(name="message", aliases=["msg"], description="customize unban response", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def unban_invoke_message(self, ctx, *, message=None):
         if message is None:
@@ -2439,14 +2439,14 @@ class ModerationCommands(Package):
             await self._set_invoke(ctx, "unban", "message", message)
         return await ctx.success("unban response updated")
 
-    @unban_invoke_message.command(name="view", description="View unban response")
+    @unban_invoke_message.command(name="view", description="view unban response")
     @has_permissions(manage_guild=True)
     async def unban_invoke_message_view(self, ctx):
         return await self._view_invoke(ctx, "unban", "message")
 
     @group(
         name="softban",
-        description="Softbans the mentioned user and deleting 1 day of messages",
+        description="softbans the mentioned user and deleting 1 day of messages",
         invoke_without_command=True,
     )
     @has_permissions(ban_members=True)
@@ -2514,26 +2514,26 @@ class ModerationCommands(Package):
 
     @softban.group(
         name="invoke",
-        description="Customize softban punishment messages",
+        description="customize softban punishment messages",
         invoke_without_command=True,
     )
     @has_permissions(manage_guild=True)
     async def softban_invoke(self, ctx):
         return await ctx.send_help(ctx.command)
 
-    @softban_invoke.command(name="on", description="Enable softban response")
+    @softban_invoke.command(name="on", description="enable softban response")
     @has_permissions(manage_guild=True)
     async def softban_invoke_on(self, ctx):
         await self._set_invoke_enabled(ctx, "softban", "message", True)
         return await ctx.success("softban response **enabled**")
 
-    @softban_invoke.command(name="off", description="Disable softban response")
+    @softban_invoke.command(name="off", description="disable softban response")
     @has_permissions(manage_guild=True)
     async def softban_invoke_off(self, ctx):
         await self._set_invoke_enabled(ctx, "softban", "message", False)
         return await ctx.success("softban response **disabled**")
 
-    @softban_invoke.group(name="dm", description="Customize softban DM", invoke_without_command=True)
+    @softban_invoke.group(name="dm", description="customize softban dm", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def softban_invoke_dm(self, ctx, *, message=None):
         if message is None:
@@ -2546,24 +2546,24 @@ class ModerationCommands(Package):
             await self._set_invoke(ctx, "softban", "dm", message)
         return await ctx.success("softban DM updated")
 
-    @softban_invoke_dm.command(name="on", description="Enable softban DM")
+    @softban_invoke_dm.command(name="on", description="enable softban dm")
     @has_permissions(manage_guild=True)
     async def softban_invoke_dm_on(self, ctx):
         await self._set_invoke_enabled(ctx, "softban", "dm", True)
         return await ctx.success("softban DM **enabled**")
 
-    @softban_invoke_dm.command(name="off", description="Disable softban DM")
+    @softban_invoke_dm.command(name="off", description="disable softban dm")
     @has_permissions(manage_guild=True)
     async def softban_invoke_dm_off(self, ctx):
         await self._set_invoke_enabled(ctx, "softban", "dm", False)
         return await ctx.success("softban DM **disabled**")
 
-    @softban_invoke_dm.command(name="view", description="View softban DM")
+    @softban_invoke_dm.command(name="view", description="view softban dm")
     @has_permissions(manage_guild=True)
     async def softban_invoke_dm_view(self, ctx):
         return await self._view_invoke(ctx, "softban", "dm")
 
-    @softban_invoke.group(name="message", aliases=["msg"], description="Customize softban response", invoke_without_command=True)
+    @softban_invoke.group(name="message", aliases=["msg"], description="customize softban response", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def softban_invoke_message(self, ctx, *, message=None):
         if message is None:
@@ -2576,7 +2576,7 @@ class ModerationCommands(Package):
             await self._set_invoke(ctx, "softban", "message", message)
         return await ctx.success("softban response updated")
 
-    @softban_invoke_message.command(name="view", description="View softban response")
+    @softban_invoke_message.command(name="view", description="view softban response")
     @has_permissions(manage_guild=True)
     async def softban_invoke_message_view(self, ctx):
         return await self._view_invoke(ctx, "softban", "message")
@@ -2585,7 +2585,7 @@ class ModerationCommands(Package):
         name="ban",
         usage="[duration] (member) [delete history] <reason>",
         example="2d @member Threatening members",
-        description="Bans the mentioned user",
+        description="bans the mentioned user",
         invoke_without_command=True,
     )
     @has_permissions(ban_members=True)
@@ -2662,26 +2662,26 @@ class ModerationCommands(Package):
 
     @ban.group(
         name="invoke",
-        description="Customize ban punishment messages",
+        description="customize ban punishment messages",
         invoke_without_command=True,
     )
     @has_permissions(manage_guild=True)
     async def ban_invoke(self, ctx):
         return await ctx.send_help(ctx.command)
 
-    @ban_invoke.command(name="on", description="Enable ban response")
+    @ban_invoke.command(name="on", description="enable ban response")
     @has_permissions(manage_guild=True)
     async def ban_invoke_on(self, ctx):
         await self._set_invoke_enabled(ctx, "ban", "message", True)
         return await ctx.success("ban response **enabled**")
 
-    @ban_invoke.command(name="off", description="Disable ban response")
+    @ban_invoke.command(name="off", description="disable ban response")
     @has_permissions(manage_guild=True)
     async def ban_invoke_off(self, ctx):
         await self._set_invoke_enabled(ctx, "ban", "message", False)
         return await ctx.success("ban response **disabled**")
 
-    @ban_invoke.group(name="dm", description="Customize ban DM", invoke_without_command=True)
+    @ban_invoke.group(name="dm", description="customize ban dm", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def ban_invoke_dm(self, ctx, *, message=None):
         if message is None:
@@ -2694,24 +2694,24 @@ class ModerationCommands(Package):
             await self._set_invoke(ctx, "ban", "dm", message)
         return await ctx.success("ban DM updated")
 
-    @ban_invoke_dm.command(name="on", description="Enable ban DM")
+    @ban_invoke_dm.command(name="on", description="enable ban dm")
     @has_permissions(manage_guild=True)
     async def ban_invoke_dm_on(self, ctx):
         await self._set_invoke_enabled(ctx, "ban", "dm", True)
         return await ctx.success("ban DM **enabled**")
 
-    @ban_invoke_dm.command(name="off", description="Disable ban DM")
+    @ban_invoke_dm.command(name="off", description="disable ban dm")
     @has_permissions(manage_guild=True)
     async def ban_invoke_dm_off(self, ctx):
         await self._set_invoke_enabled(ctx, "ban", "dm", False)
         return await ctx.success("ban DM **disabled**")
 
-    @ban_invoke_dm.command(name="view", description="View ban DM")
+    @ban_invoke_dm.command(name="view", description="view ban dm")
     @has_permissions(manage_guild=True)
     async def ban_invoke_dm_view(self, ctx):
         return await self._view_invoke(ctx, "ban", "dm")
 
-    @ban_invoke.group(name="message", aliases=["msg"], description="Customize ban response", invoke_without_command=True)
+    @ban_invoke.group(name="message", aliases=["msg"], description="customize ban response", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def ban_invoke_message(self, ctx, *, message=None):
         if message is None:
@@ -2724,7 +2724,7 @@ class ModerationCommands(Package):
             await self._set_invoke(ctx, "ban", "message", message)
         return await ctx.success("ban response updated")
 
-    @ban_invoke_message.command(name="view", description="View ban response")
+    @ban_invoke_message.command(name="view", description="view ban response")
     @has_permissions(manage_guild=True)
     async def ban_invoke_message_view(self, ctx):
         return await self._view_invoke(ctx, "ban", "message")
@@ -2733,7 +2733,7 @@ class ModerationCommands(Package):
         name="kick",
         usage="(member) <reason>",
         example="@member spamming",
-        description="Kick the mentioned user",
+        description="kick the mentioned user",
         invoke_without_command=True,
     )
     @has_permissions(kick_members=True)
@@ -2792,26 +2792,26 @@ class ModerationCommands(Package):
 
     @kick.group(
         name="invoke",
-        description="Customize kick punishment messages",
+        description="customize kick punishment messages",
         invoke_without_command=True,
     )
     @has_permissions(manage_guild=True)
     async def kick_invoke(self, ctx):
         return await ctx.send_help(ctx.command)
 
-    @kick_invoke.command(name="on", description="Enable kick response")
+    @kick_invoke.command(name="on", description="enable kick response")
     @has_permissions(manage_guild=True)
     async def kick_invoke_on(self, ctx):
         await self._set_invoke_enabled(ctx, "kick", "message", True)
         return await ctx.success("kick response **enabled**")
 
-    @kick_invoke.command(name="off", description="Disable kick response")
+    @kick_invoke.command(name="off", description="disable kick response")
     @has_permissions(manage_guild=True)
     async def kick_invoke_off(self, ctx):
         await self._set_invoke_enabled(ctx, "kick", "message", False)
         return await ctx.success("kick response **disabled**")
 
-    @kick_invoke.group(name="dm", description="Customize kick DM", invoke_without_command=True)
+    @kick_invoke.group(name="dm", description="customize kick dm", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def kick_invoke_dm(self, ctx, *, message=None):
         if message is None:
@@ -2824,24 +2824,24 @@ class ModerationCommands(Package):
             await self._set_invoke(ctx, "kick", "dm", message)
         return await ctx.success("kick DM updated")
 
-    @kick_invoke_dm.command(name="on", description="Enable kick DM")
+    @kick_invoke_dm.command(name="on", description="enable kick dm")
     @has_permissions(manage_guild=True)
     async def kick_invoke_dm_on(self, ctx):
         await self._set_invoke_enabled(ctx, "kick", "dm", True)
         return await ctx.success("kick DM **enabled**")
 
-    @kick_invoke_dm.command(name="off", description="Disable kick DM")
+    @kick_invoke_dm.command(name="off", description="disable kick dm")
     @has_permissions(manage_guild=True)
     async def kick_invoke_dm_off(self, ctx):
         await self._set_invoke_enabled(ctx, "kick", "dm", False)
         return await ctx.success("kick DM **disabled**")
 
-    @kick_invoke_dm.command(name="view", description="View kick DM")
+    @kick_invoke_dm.command(name="view", description="view kick dm")
     @has_permissions(manage_guild=True)
     async def kick_invoke_dm_view(self, ctx):
         return await self._view_invoke(ctx, "kick", "dm")
 
-    @kick_invoke.group(name="message", aliases=["msg"], description="Customize kick response", invoke_without_command=True)
+    @kick_invoke.group(name="message", aliases=["msg"], description="customize kick response", invoke_without_command=True)
     @has_permissions(manage_guild=True)
     async def kick_invoke_message(self, ctx, *, message=None):
         if message is None:
@@ -2854,7 +2854,7 @@ class ModerationCommands(Package):
             await self._set_invoke(ctx, "kick", "message", message)
         return await ctx.success("kick response updated")
 
-    @kick_invoke_message.command(name="view", description="View kick response")
+    @kick_invoke_message.command(name="view", description="view kick response")
     @has_permissions(manage_guild=True)
     async def kick_invoke_message_view(self, ctx):
         return await self._view_invoke(ctx, "kick", "message")
@@ -2876,7 +2876,7 @@ class ModerationCommands(Package):
         name="ban recent",
         usage="(amount) <reason>",
         example="50 Threatening members",
-        description="Bans the most recently joined members",
+        description="bans the most recently joined members",
     )
     @has_permissions(ban_members=True)
     async def ban_recent(self, ctx):
@@ -2906,7 +2906,7 @@ class ModerationCommands(Package):
         name="ban purge",
         usage="(delete history)",
         example="7",
-        description="Bans all members and purges their recent messages",
+        description="bans all members and purges their recent messages",
     )
     @has_permissions(ban_members=True)
     async def ban_purge(self, ctx, delete_history: str):
@@ -2937,7 +2937,7 @@ class ModerationCommands(Package):
 
     @command(
         name="temprole",
-        description="No description given",
+        description="no description given",
     )
     @has_permissions(manage_roles=True)
     async def temprole(self, ctx, member: discord.Member, duration: str, role: discord.Role):
@@ -2965,7 +2965,7 @@ class ModerationCommands(Package):
 
     @command(
         name="temprole list",
-        description="No description given",
+        description="no description given",
     )
     @has_permissions(manage_roles=True)
     async def temprole_list(self, ctx):
@@ -2994,7 +2994,7 @@ class ModerationCommands(Package):
 
     @command(
         name="newmembers",
-        description="View list of recently joined members",
+        description="view list of recently joined members",
     )
     async def newmembers(self, ctx, count: int = 10):
         """view new members"""
@@ -3023,7 +3023,7 @@ class ModerationCommands(Package):
 
     @command(
         name="recentban",
-        description="Chunk ban recently joined members",
+        description="chunk ban recently joined members",
     )
     @has_permissions(ban_members=True)
     async def recentban(self, ctx, count: int, *, reason: str | None = None):
@@ -3048,7 +3048,7 @@ class ModerationCommands(Package):
 
     @command(
         name="talk",
-        description="Toggle a channel to text for a role",
+        description="toggle a channel to text for a role",
         example=",talk @Members  or  ,talk @Members #general",
     )
     @has_permissions(manage_channels=True)
@@ -3174,7 +3174,7 @@ class ModerationCommands(Package):
     @command(
         name="hide",
         brief="manage channels",
-        description="Hide a channel from everyone or a specific user/role",
+        description="hide a channel from everyone or a specific user/role",
         usage="hide [channel] [user or role]",
         example=",hide #general @role",
     )
@@ -3203,7 +3203,7 @@ class ModerationCommands(Package):
     @command(
         name="unhide",
         brief="manage roles",
-        description="Unhide a channel from everyone or a specific user/role",
+        description="unhide a channel from everyone or a specific user/role",
         usage="unhide [channel] [user or role]",
         example=",unhide #commands",
     )
@@ -3233,7 +3233,7 @@ class ModerationCommands(Package):
         name="hideall",
         aliases=["hide-all"],
         brief="manage channels",
-        description="Hide all channels from everyone or a specific user/role",
+        description="hide all channels from everyone or a specific user/role",
         usage="hideall [user or role]",
         example=",hideall @role",
     )
@@ -3307,7 +3307,7 @@ class ModerationCommands(Package):
         name="unhideall",
         aliases=["unhide-all"],
         brief="manage roles",
-        description="Unhide all channels from everyone or a specific user/role",
+        description="unhide all channels from everyone or a specific user/role",
         usage="unhideall [user or role]",
         example=",unhideall @role",
     )
@@ -3395,7 +3395,7 @@ class ModerationCommands(Package):
 
     @command(
         name="setup",
-        description="Start process for setting up the moderation system",
+        description="start process for setting up the moderation system",
     )
     @has_permissions(administrator=True)
     async def setup(self, ctx):
@@ -3477,7 +3477,7 @@ class ModerationCommands(Package):
     @command(
         name="unsetup",
         aliases=["unsetme", "reset"],
-        description="Remove moderation system setup (categories and channels)",
+        description="remove moderation system setup (categories and channels)",
     )
     @has_permissions(administrator=True)
     async def unsetup(self, ctx):
@@ -3520,7 +3520,7 @@ class ModerationCommands(Package):
 
     @command(
         name="setupjail",
-        description="Sets up the jail role, channel, and permissions",
+        description="sets up the jail role, channel, and permissions",
     )
     @has_permissions(manage_guild=True, manage_channels=True)
     async def setupjail(self, ctx):
@@ -3543,7 +3543,7 @@ class ModerationCommands(Package):
     @command(
         name="unsetupjail",
         aliases=["resetjail"],
-        description="Remove the jail system setup (channel, role and permissions)",
+        description="remove the jail system setup (channel, role and permissions)",
     )
     @has_permissions(manage_guild=True, manage_channels=True, manage_roles=True)
     async def unsetupjail(self, ctx):
@@ -3629,7 +3629,7 @@ class ModerationCommands(Package):
 
     @command(
         name="setupmute",
-        description="Sets up muted roles and channel permissions",
+        description="sets up muted roles and channel permissions",
     )
     @has_permissions(manage_guild=True, manage_channels=True)
     async def setupmute(self, ctx):
@@ -3686,7 +3686,7 @@ class ModerationCommands(Package):
     @command(
         name="unsetupmute",
         aliases=["resetmute"],
-        description="Remove the mute system setup (muted roles and permissions)",
+        description="remove the mute system setup (muted roles and permissions)",
     )
     @has_permissions(manage_guild=True, manage_roles=True)
     async def unsetupmute(self, ctx):
@@ -3750,7 +3750,7 @@ class ModerationCommands(Package):
 
     @command(
         name="rename",
-        description="Assigns the mentioned user a new nickname in the guild",
+        description="assigns the mentioned user a new nickname in the guild",
     )
     @has_permissions(manage_nicknames=True)
     async def rename(self, ctx, member: discord.Member, *, newnick: str):
@@ -3770,7 +3770,7 @@ class ModerationCommands(Package):
 
     @command(
         name="raid",
-        description="Remove all members that joined in the time provided in the event of a raid",
+        description="remove all members that joined in the time provided in the event of a raid",
     )
     @has_permissions(ban_members=True, kick_members=True)
     async def raid(self, ctx, time: str, action: str, *, reason: str | None = None):
@@ -3818,7 +3818,7 @@ class ModerationCommands(Package):
 
     @command(
         name="topic",
-        description="Change the current channel topic",
+        description="change the current channel topic",
     )
     @has_permissions(manage_channels=True)
     async def topic(self, ctx, *, text: str):
@@ -3833,7 +3833,7 @@ class ModerationCommands(Package):
         aliases=["nsfw"],
         usage="[duration] [channel]",
         example="30s  or  1d #channel",
-        description="Toggle NSFW on a channel (indefinitely or for a duration)",
+        description="toggle nsfw on a channel (indefinitely or for a duration)",
     )
     @has_permissions(manage_channels=True)
     async def naughty(self, ctx, duration: str = None, channel: discord.TextChannel = None):
@@ -3917,7 +3917,7 @@ class ModerationCommands(Package):
 
     @command(
         name="permissions",
-        description="Check permissions for member or myself",
+        description="check permissions for member or myself",
     )
     @has_permissions(manage_roles=True, manage_channels=True)
     async def permissions(

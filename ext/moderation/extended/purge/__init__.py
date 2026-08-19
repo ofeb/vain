@@ -121,7 +121,7 @@ class Purge(Package):
         name="purge",
         aliases=["c", "clear"],
         example=",purge 100",
-        description="Purge messages from chat (default 30, max 1000)",
+        description="purge messages from chat (default 30, max 1000)",
         invoke_without_command=True,
     )
     @has_permissions(manage_messages=True)
@@ -170,7 +170,7 @@ class Purge(Package):
         name="attachments",
         aliases=["files", "file", "a"],
         example=",purge attachments 50",
-        description="Purge messages with attachments",
+        description="purge messages with attachments",
     )
     @has_permissions(manage_messages=True)
     async def purge_attachments(self, ctx: Context, search: Optional[int] = None):
@@ -190,7 +190,7 @@ class Purge(Package):
         name="endswith",
         aliases=["es", "ends"],
         example=",purge endswith st 30",
-        description="Purge messages ending with a substring",
+        description="purge messages ending with a substring",
     )
     @has_permissions(manage_messages=True)
     async def purge_endswith(
@@ -215,7 +215,7 @@ class Purge(Package):
         name="mentions",
         aliases=["mention", "ping", "pings"],
         example=",purge mentions jonathan 100",
-        description="Purge messages that mention a member (or any mention)",
+        description="purge messages that mention a member (or any mention)",
     )
     @has_permissions(manage_messages=True)
     async def purge_mentions(
@@ -246,7 +246,7 @@ class Purge(Package):
         name="emoji",
         aliases=["emojis", "emote", "emotes"],
         example=",purge emoji 20",
-        description="Purge messages containing emoji",
+        description="purge messages containing emoji",
     )
     @has_permissions(manage_messages=True)
     async def purge_emoji(self, ctx: Context, search: Optional[int] = None):
@@ -268,7 +268,7 @@ class Purge(Package):
 
     @purge.command(
         name="before",
-        description="Purge messages before a given message",
+        description="purge messages before a given message",
     )
     @has_permissions(manage_messages=True)
     async def purge_before(
@@ -290,7 +290,7 @@ class Purge(Package):
         name="stickers",
         aliases=["sticker"],
         example=",purge stickers 30",
-        description="Purge messages with stickers",
+        description="purge messages with stickers",
     )
     @has_permissions(manage_messages=True)
     async def purge_stickers(self, ctx: Context, search: Optional[int] = None):
@@ -310,7 +310,7 @@ class Purge(Package):
         name="contains",
         aliases=["contain", "has"],
         example=",purge contains hello 30",
-        description="Purge messages containing a substring",
+        description="purge messages containing a substring",
     )
     @has_permissions(manage_messages=True)
     async def purge_contains(
@@ -333,7 +333,7 @@ class Purge(Package):
 
     @purge.command(
         name="between",
-        description="Purge messages between two messages",
+        description="purge messages between two messages",
     )
     @has_permissions(manage_messages=True)
     async def purge_between(
@@ -360,7 +360,7 @@ class Purge(Package):
         name="bots",
         aliases=["bot"],
         example=",purge bots 30",
-        description="Purge messages from bots",
+        description="purge messages from bots",
     )
     @has_permissions(manage_messages=True)
     async def purge_bots(self, ctx: Context, search: Optional[int] = None):
@@ -380,7 +380,7 @@ class Purge(Package):
         name="webhooks",
         aliases=["webhook", "wh"],
         example=",purge webhooks 30",
-        description="Purge messages sent by webhooks",
+        description="purge messages sent by webhooks",
     )
     @has_permissions(manage_messages=True)
     async def purge_webhooks(self, ctx: Context, search: Optional[int] = None):
@@ -400,7 +400,7 @@ class Purge(Package):
         name="reactions",
         aliases=["reacts", "reaction"],
         example=",purge reactions 30",
-        description="Purge messages that have reactions",
+        description="purge messages that have reactions",
     )
     @has_permissions(manage_messages=True)
     async def purge_reactions(self, ctx: Context, search: Optional[int] = None):
@@ -420,7 +420,7 @@ class Purge(Package):
         name="images",
         aliases=["image", "img", "pics", "pictures"],
         example=",purge images 30",
-        description="Purge messages with images",
+        description="purge messages with images",
     )
     @has_permissions(manage_messages=True)
     async def purge_images(self, ctx: Context, search: Optional[int] = None):
@@ -443,7 +443,7 @@ class Purge(Package):
 
     @purge.command(
         name="after",
-        description="Purge messages after a given message",
+        description="purge messages after a given message",
     )
     @has_permissions(manage_messages=True)
     async def purge_after(
@@ -465,7 +465,7 @@ class Purge(Package):
         name="links",
         aliases=["link", "urls", "url"],
         example=",purge links 30",
-        description="Purge messages containing links",
+        description="purge messages containing links",
     )
     @has_permissions(manage_messages=True)
     async def purge_links(self, ctx: Context, search: Optional[int] = None):
@@ -485,7 +485,7 @@ class Purge(Package):
         name="embeds",
         aliases=["embed"],
         example=",purge embeds 30",
-        description="Purge messages containing embeds",
+        description="purge messages containing embeds",
     )
     @has_permissions(manage_messages=True)
     async def purge_embeds(self, ctx: Context, search: Optional[int] = None):
@@ -505,7 +505,7 @@ class Purge(Package):
         name="startswith",
         aliases=["ss", "starts"],
         example=",purge startswith hi 30",
-        description="Purge messages starting with a substring",
+        description="purge messages starting with a substring",
     )
     @has_permissions(manage_messages=True)
     async def purge_startswith(
@@ -530,7 +530,7 @@ class Purge(Package):
         name="humans",
         aliases=["human", "users", "user"],
         example=",purge humans 30",
-        description="Purge messages from humans",
+        description="purge messages from humans",
     )
     @has_permissions(manage_messages=True)
     async def purge_humans(self, ctx: Context, search: Optional[int] = None):
@@ -548,7 +548,7 @@ class Purge(Package):
 
     @purge.command(
         name="upto",
-        description="Purge messages up to a given message",
+        description="purge messages up to a given message",
     )
     @has_permissions(manage_messages=True)
     async def purge_upto(
@@ -584,7 +584,7 @@ class Purge(Package):
         name="self",
         aliases=["me", "own"],
         example=",purge self 30",
-        description="Purge your own messages (default 30, no permission required)",
+        description="purge your own messages (default 30, no permission required)",
     )
     async def purge_self(self, ctx: Context, search: Optional[int] = None):
         return await self._do_selfpurge(ctx, search)
@@ -592,7 +592,7 @@ class Purge(Package):
     @command(
         name="selfpurge",
         aliases=["sme", "me"],
-        description="Purge your own messages (default 30, no permission required)",
+        description="purge your own messages (default 30, no permission required)",
         example=",selfpurge 30",
     )
     async def selfpurge(self, ctx: Context, search: Optional[int] = None):
@@ -601,7 +601,7 @@ class Purge(Package):
     @command(
         name="botclear",
         aliases=["botpurge", "bc", "bp"],
-        description="Clear recent messages sent by any bots (default 30, max 1000)",
+        description="clear recent messages sent by any bots (default 30, max 1000)",
         example=",botclear 30",
     )
     @has_permissions(manage_messages=True)

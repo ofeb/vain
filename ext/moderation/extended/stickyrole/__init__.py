@@ -22,7 +22,7 @@ class Stickyrole(Package):
     @group(
         name="stickyrole",
         aliases=["stickyroles", "srole"],
-        description="Reapplies a role on join",
+        description="reapplies a role on join",
         invoke_without_command=True,
         example=",stickyrole add @member @Role",
     )
@@ -34,7 +34,7 @@ class Stickyrole(Package):
     @stickyrole.command(
         name="add",
         aliases=["set", "create"],
-        description="Reapplies a role on join",
+        description="reapplies a role on join",
         example=",stickyrole add @member @Role",
     )
     @has_permissions(manage_roles=True)
@@ -82,7 +82,7 @@ class Stickyrole(Package):
     @stickyrole.command(
         name="remove",
         aliases=["delete", "del", "rm"],
-        description="Removes sticky role on join",
+        description="removes sticky role on join",
         example=",stickyrole remove @member @Role",
     )
     @has_permissions(manage_roles=True)
@@ -101,7 +101,7 @@ class Stickyrole(Package):
     @stickyrole.command(
         name="list",
         aliases=["ls", "show", "view"],
-        description="View a list of every sticky role",
+        description="view a list of every sticky role",
     )
     @has_permissions(manage_roles=True)
     async def stickyrole_list(self, ctx, member: discord.Member | None = None):
@@ -152,7 +152,7 @@ class Stickyrole(Package):
 
     @stickyrole.command(
         name="clear",
-        description="Clear all sticky roles for a member or the whole server",
+        description="clear all sticky roles for a member or the whole server",
         example=",stickyrole clear @member",
     )
     @has_permissions(manage_roles=True)

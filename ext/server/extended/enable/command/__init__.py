@@ -239,7 +239,7 @@ class CommandEnableCommands(Package):
     @enablecommand.command(
         name="list",
         aliases=["ls", "show", "view"],
-        description="View disabled commands that can still be re-enabled",
+        description="view disabled commands that can still be re-enabled",
     )
     @has_permissions(manage_channels=True)
     async def enablecommand_list(self, ctx):
@@ -294,7 +294,7 @@ class CommandEnableCommands(Package):
 
     @enablecommand.command(
         name="all",
-        description="Enable a command in every channel",
+        description="enable a command in every channel",
         usage="<command>",
         example=",enablecommand all snipe",
     )

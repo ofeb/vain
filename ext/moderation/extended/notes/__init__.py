@@ -56,7 +56,7 @@ class Notes(Package):
     @group(
         name="notes",
         aliases=["note"],
-        description="View and manage staff notes on a member",
+        description="view and manage staff notes on a member",
         invoke_without_command=True,
         example=",notes @member",
     )
@@ -115,7 +115,7 @@ class Notes(Package):
     @notes.command(
         name="add",
         aliases=["create", "new"],
-        description="Add a note. Pass a user (mention/id/name) or a case id, then the note text.",
+        description="add a note. pass a user (mention/id/name) or a case id, then the note text",
         example=",notes add @member warned for spam",
     )
     @has_permissions(manage_messages=True)
@@ -176,7 +176,7 @@ class Notes(Package):
     @notes.command(
         name="remove",
         aliases=["delete", "del"],
-        description="Remove a note by id",
+        description="remove a note by id",
         example=",notes remove @member 3",
     )
     @has_permissions(manage_messages=True)
@@ -200,7 +200,7 @@ class Notes(Package):
     @notes.command(
         name="modify",
         aliases=["edit", "update"],
-        description="Modify an existing staff note",
+        description="modify an existing staff note",
         example=",notes modify @member 3 updated text",
     )
     @has_permissions(manage_messages=True)
@@ -238,7 +238,7 @@ class Notes(Package):
 
     @notes.command(
         name="clear",
-        description="Clear all notes for a member",
+        description="clear all notes for a member",
         example=",notes clear @member",
     )
     @has_permissions(manage_messages=True)

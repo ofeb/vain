@@ -277,7 +277,7 @@ class Log(LogEvents, Package):
 
     @group(
         name="log",
-        description="Set up logging for your community",
+        description="set up logging for your community",
         invoke_without_command=True,
         aliases=["logging", "logger", "logs"],
     )
@@ -339,7 +339,7 @@ class Log(LogEvents, Package):
 
     @log.command(
         name="add",
-        description="Set up logging in a channel",
+        description="set up logging in a channel",
         example=",log add #logs messages  or  ,log add messages",
     )
     @has_permissions(manage_guild=True)
@@ -398,7 +398,7 @@ class Log(LogEvents, Package):
 
     @log.command(
         name="remove",
-        description="Remove events from a logging channel",
+        description="remove events from a logging channel",
         example=",log remove #logs messages  or  ,log remove messages",
     )
     @has_permissions(manage_guild=True)
@@ -438,7 +438,7 @@ class Log(LogEvents, Package):
 
     @log.group(
         name="color",
-        description="Customize embed color for an event (or `all` for every event)",
+        description="customize embed color for an event (or `all` for every event)",
         invoke_without_command=True,
         example=",log color #logs messages ff0000  or  ,log color all ff0000",
     )
@@ -517,7 +517,7 @@ class Log(LogEvents, Package):
 
     @log_color.command(
         name="list",
-        description="List embed color customization for events",
+        description="list embed color customization for events",
         example=",log color list #logs",
     )
     @has_permissions(manage_guild=True)
@@ -548,7 +548,7 @@ class Log(LogEvents, Package):
 
     @log.group(
         name="ignore",
-        description="Ignore a member or channel from being logged",
+        description="ignore a member or channel from being logged",
         invoke_without_command=True,
         example=",log ignore jonathan",
     )
@@ -573,7 +573,7 @@ class Log(LogEvents, Package):
 
     @log_ignore.command(
         name="remove",
-        description="Remove an ignored member or channel",
+        description="remove an ignored member or channel",
         example=",log ignore remove jonathan",
     )
     @has_permissions(manage_guild=True)
@@ -591,7 +591,7 @@ class Log(LogEvents, Package):
 
     @log_ignore.command(
         name="list",
-        description="View all ignored members and channels",
+        description="view all ignored members and channels",
         aliases=["ls", "show", "view"],
     )
     @has_permissions(manage_guild=True)
@@ -629,7 +629,7 @@ class Log(LogEvents, Package):
 
     @log.command(
         name="list",
-        description="View current logging configuration",
+        description="view current logging configuration",
         aliases=["config", "settings", "show"],
     )
     @has_permissions(manage_guild=True)

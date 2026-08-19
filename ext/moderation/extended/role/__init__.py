@@ -418,7 +418,7 @@ class Role(Package):
     @group(
         name="role",
         aliases=("r",),
-        description="Toggle a role on a member. Subcommands for add/remove/mass/etc.",
+        description="toggle a role on a member. subcommands for add/remove/mass/etc",
         invoke_without_command=True,
         example=",role @hroe developer",
     )
@@ -507,7 +507,7 @@ class Role(Package):
     @role.command(
         name="add",
         aliases=("grant",),
-        description="Adds role to a member",
+        description="adds role to a member",
         example=",role add @member @Role",
     )
     @has_permissions(manage_roles=True)
@@ -546,7 +546,7 @@ class Role(Package):
     @role.command(
         name="remove",
         aliases=("revoke", "rm"),
-        description="Removes role from a member",
+        description="removes role from a member",
         example=",role remove @member @Role",
     )
     @has_permissions(manage_roles=True)
@@ -625,7 +625,7 @@ class Role(Package):
     @role_restore.group(
         name="reassign",
         aliases=("rejoin", "auto"),
-        description="Toggle auto reassigning roles when members rejoin",
+        description="toggle auto reassigning roles when members rejoin",
         invoke_without_command=True,
         example=",role restore reassign",
     )
@@ -641,7 +641,7 @@ class Role(Package):
     @role_restore_reassign.group(
         name="exclude",
         aliases=("exempt", "ignore"),
-        description="Exclude a role from being re-assigned",
+        description="exclude a role from being re-assigned",
         invoke_without_command=True,
         example=",role restore reassign exclude @Role",
     )
@@ -665,7 +665,7 @@ class Role(Package):
     @role_restore_reassign_ignore.command(
         name="remove",
         aliases=("rm",),
-        description="Allow a role to be re-assigned",
+        description="allow a role to be re-assigned",
         example=",role restore reassign exclude remove @Role",
     )
     @has_permissions(manage_roles=True)
@@ -686,7 +686,7 @@ class Role(Package):
     @role_restore_reassign_ignore.command(
         name="clear",
         aliases=("reset",),
-        description="Remove all roles that are being excluded",
+        description="remove all roles that are being excluded",
         example=",role restore reassign exclude clear",
     )
     @has_permissions(manage_roles=True)
@@ -697,7 +697,7 @@ class Role(Package):
 
     @role_restore_reassign_ignore.command(
         name="list",
-        description="View all roles that are being excluded",
+        description="view all roles that are being excluded",
         example=",role restore reassign exclude list",
     )
     @has_permissions(manage_roles=True)
@@ -718,7 +718,7 @@ class Role(Package):
     @role.command(
         name="create",
         aliases=("make",),
-        description="Creates a role with optional color",
+        description="creates a role with optional color",
         example=",role create #ff0000 Staff",
     )
     @has_permissions(manage_roles=True)
@@ -753,7 +753,7 @@ class Role(Package):
     @role.command(
         name="duplicate",
         aliases=("copy",),
-        description="Duplicate a role with a new name",
+        description="duplicate a role with a new name",
         example=",role duplicate @Role New Name",
     )
     @has_permissions(manage_roles=True)
@@ -788,7 +788,7 @@ class Role(Package):
     @role.command(
         name="delete",
         aliases=("del",),
-        description="Deletes a role",
+        description="deletes a role",
         example=",role delete @Role",
     )
     @has_permissions(manage_roles=True)
@@ -847,7 +847,7 @@ class Role(Package):
     @role.command(
         name="color",
         aliases=("colour",),
-        description="Set a color for a role",
+        description="set a color for a role",
         example=",role color @Role #ff0000",
     )
     @has_permissions(manage_roles=True)
@@ -869,7 +869,7 @@ class Role(Package):
     @role.command(
         name="rename",
         aliases=("name", "edit"),
-        description="Change a role name",
+        description="change a role name",
         example=",role rename @Role New Name",
     )
     @has_permissions(manage_roles=True)
@@ -892,7 +892,7 @@ class Role(Package):
 
     @role.command(
         name="hoist",
-        description="Toggle hoisting a role",
+        description="toggle hoisting a role",
         example=",role hoist @Role",
     )
     @has_permissions(manage_roles=True)
@@ -909,7 +909,7 @@ class Role(Package):
 
     @role.command(
         name="mentionable",
-        description="Toggle mentioning a role",
+        description="toggle mentioning a role",
         example=",role mentionable @Role",
     )
     @has_permissions(manage_roles=True)
@@ -1021,7 +1021,7 @@ class Role(Package):
 
     @role.command(
         name="icon",
-        description="Set a role icon from an emoji, URL, or image",
+        description="set a role icon from an emoji, url, or image",
         example=",role icon @Role ⭐",
         usage="(role) [emoji or url or attachment]",
     )
@@ -1069,7 +1069,7 @@ class Role(Package):
 
     @role.command(
         name="topcolor",
-        description="Changes your highest roles color",
+        description="changes your highest roles color",
         example=",role topcolor #ff0000",
     )
     @has_permissions(manage_roles=True)
@@ -1109,7 +1109,7 @@ class Role(Package):
 
     @role.command(
         name="cancel",
-        description="Cancels a mass role task running",
+        description="cancels a mass role task running",
         example=",role cancel",
     )
     @has_permissions(manage_roles=True)
@@ -1126,7 +1126,7 @@ class Role(Package):
     @role.group(
         name="all",
         aliases=("everyone",),
-        description="Add a role to all members",
+        description="add a role to all members",
         invoke_without_command=True,
         max_concurrency=MASS_ROLE_CONCURRENCY,
         example=",role all @Role",
@@ -1143,7 +1143,7 @@ class Role(Package):
     @role_all.command(
         name="remove",
         aliases=("revoke", "rm"),
-        description="Remove a role from all members",
+        description="remove a role from all members",
         max_concurrency=MASS_ROLE_CONCURRENCY,
         example=",role all remove @Role",
     )
@@ -1163,7 +1163,7 @@ class Role(Package):
 
     @role.group(
         name="humans",
-        description="Add a role to all humans",
+        description="add a role to all humans",
         invoke_without_command=True,
         max_concurrency=MASS_ROLE_CONCURRENCY,
         example=",role humans @Role",
@@ -1180,7 +1180,7 @@ class Role(Package):
     @role_humans.command(
         name="remove",
         aliases=("revoke", "rm"),
-        description="Remove a role from all humans",
+        description="remove a role from all humans",
         max_concurrency=MASS_ROLE_CONCURRENCY,
         example=",role humans remove @Role",
     )
@@ -1200,7 +1200,7 @@ class Role(Package):
 
     @role.group(
         name="bots",
-        description="Add a role to all bots",
+        description="add a role to all bots",
         invoke_without_command=True,
         max_concurrency=MASS_ROLE_CONCURRENCY,
         example=",role bots @Role",
@@ -1217,7 +1217,7 @@ class Role(Package):
     @role_bots.command(
         name="remove",
         aliases=("revoke", "rm"),
-        description="Remove a role from all bots",
+        description="remove a role from all bots",
         max_concurrency=MASS_ROLE_CONCURRENCY,
         example=",role bots remove @Role",
     )
@@ -1238,7 +1238,7 @@ class Role(Package):
     @role.group(
         name="has",
         aliases=("with", "in"),
-        description="Add a role to members with a specific role",
+        description="add a role to members with a specific role",
         invoke_without_command=True,
         max_concurrency=MASS_ROLE_CONCURRENCY,
         example=",role has @HasRole @AssignRole",
@@ -1265,7 +1265,7 @@ class Role(Package):
     @role_has.command(
         name="remove",
         aliases=("revoke", "rm"),
-        description="Remove a role from members with a specific role",
+        description="remove a role from members with a specific role",
         max_concurrency=MASS_ROLE_CONCURRENCY,
         example=",role has remove @HasRole @RemoveRole",
     )

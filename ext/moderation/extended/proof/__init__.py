@@ -17,7 +17,7 @@ class Proof(Package):
 
     @group(
         name="proof",
-        description="Manage proof attachments for moderation cases",
+        description="manage proof attachments for moderation cases",
         invoke_without_command=True,
     )
     @has_permissions(manage_messages=True)
@@ -28,7 +28,7 @@ class Proof(Package):
     @proof.command(
         name="add",
         aliases=["attach", "create"],
-        description="Add proof media to a case",
+        description="add proof media to a case",
         example=",proof add 12 https://example.com/image.png",
     )
     @has_permissions(manage_messages=True)
@@ -61,7 +61,7 @@ class Proof(Package):
     @proof.command(
         name="list",
         aliases=["ls", "show"],
-        description="List proof for a case",
+        description="list proof for a case",
         example=",proof list 12",
     )
     @has_permissions(manage_messages=True)
@@ -99,7 +99,7 @@ class Proof(Package):
     @proof.command(
         name="view",
         aliases=["get"],
-        description="View proof for a case (sends URLs)",
+        description="view proof for a case (sends urls)",
         example=",proof view 12",
     )
     @has_permissions(manage_messages=True)
@@ -128,7 +128,7 @@ class Proof(Package):
     @proof.command(
         name="remove",
         aliases=["delete", "del"],
-        description="Remove a proof entry by id",
+        description="remove a proof entry by id",
         example=",proof remove 12 3",
     )
     @has_permissions(manage_messages=True)
@@ -149,7 +149,7 @@ class Proof(Package):
 
     @proof.command(
         name="set",
-        description="Set / replace the primary proof URL for a case",
+        description="set / replace the primary proof url for a case",
         example=",proof set 12 https://example.com/evidence.png",
     )
     @has_permissions(manage_messages=True)

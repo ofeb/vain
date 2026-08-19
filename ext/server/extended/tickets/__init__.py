@@ -372,7 +372,7 @@ class Tickets(Package):
     @group(
         name="ticket",
         aliases=["tickets", "tix", "tc"],
-        description="Configure and manage the ticket system",
+        description="configure and manage the ticket system",
         invoke_without_command=True,
         example=",ticket",
     )
@@ -384,7 +384,7 @@ class Tickets(Package):
 
     @ticket.command(
         name="panel",
-        description="Set an existing message as the ticket panel",
+        description="set an existing message as the ticket panel",
         example=",tc panel 123456789012345678",
         usage="<message id or message link>",
     )
@@ -408,7 +408,7 @@ class Tickets(Package):
     @ticket.group(
         name="inactivity",
         aliases=["timeout", "idle"],
-        description="Automatically close tickets after a period of silence",
+        description="automatically close tickets after a period of silence",
         invoke_without_command=True,
         example=",tc inactivity 2h",
     )
@@ -452,7 +452,7 @@ class Tickets(Package):
     @ticket_inactivity.command(
         name="disable",
         aliases=["off", "remove"],
-        description="Turn off automatic inactivity closing",
+        description="turn off automatic inactivity closing",
     )
     @has_permissions(manage_channels=True)
     async def ticket_inactivity_disable(self, ctx):
@@ -465,7 +465,7 @@ class Tickets(Package):
     @ticket.command(
         name="limit",
         aliases=["max"],
-        description="Set the maximum number of open tickets allowed at once",
+        description="set the maximum number of open tickets allowed at once",
         example=",tc limit 25",
         usage="<0-200>",
     )
@@ -486,7 +486,7 @@ class Tickets(Package):
     @ticket.group(
         name="staff",
         aliases=["support"],
-        description="Manage roles that can view and control tickets",
+        description="manage roles that can view and control tickets",
         invoke_without_command=True,
         example=",tc staff @Support",
     )
@@ -505,7 +505,7 @@ class Tickets(Package):
         await settings.upsert(staff_role_ids=ids)
         return await ctx.success(f"{role.mention} can now manage tickets.")
 
-    @ticket_staff.command(name="list", description="Show all ticket staff roles")
+    @ticket_staff.command(name="list", description="show all ticket staff roles")
     @has_permissions(manage_channels=True)
     async def ticket_staff_list(self, ctx):
         settings = await Settings.fetch(self.bot, ctx.guild)
@@ -524,7 +524,7 @@ class Tickets(Package):
     @ticket.group(
         name="blacklist",
         aliases=["block"],
-        description="Prevent members or roles from opening tickets",
+        description="prevent members or roles from opening tickets",
         invoke_without_command=True,
         example=",tc blacklist @user",
     )
@@ -548,7 +548,7 @@ class Tickets(Package):
         )
 
     @ticket_blacklist.command(
-        name="list", description="Show everyone currently blacklisted"
+        name="list", description="show everyone currently blacklisted"
     )
     @has_permissions(manage_channels=True)
     async def ticket_blacklist_list(self, ctx):
@@ -568,7 +568,7 @@ class Tickets(Package):
     @ticket.group(
         name="transcript",
         aliases=["logs", "transcripts"],
-        description="Where closed-ticket transcripts are sent",
+        description="where closed-ticket transcripts are sent",
         invoke_without_command=True,
     )
     @has_permissions(manage_channels=True)
@@ -577,7 +577,7 @@ class Tickets(Package):
 
     @ticket_transcript.command(
         name="add",
-        description="Add a channel (or DM) as a transcript destination",
+        description="add a channel (or dm) as a transcript destination",
         example=",tc transcript add #ticket-logs",
         usage="<channel or dm>",
     )
@@ -602,7 +602,7 @@ class Tickets(Package):
 
     @ticket_transcript.command(
         name="remove",
-        description="Remove a transcript destination",
+        description="remove a transcript destination",
         example=",tc transcript remove #ticket-logs",
     )
     @has_permissions(manage_channels=True)
@@ -625,7 +625,7 @@ class Tickets(Package):
         return await ctx.success(f"Removed {label} from transcript destinations.")
 
     @ticket_transcript.command(
-        name="list", description="Show current transcript destinations"
+        name="list", description="show current transcript destinations"
     )
     @has_permissions(manage_channels=True)
     async def ticket_transcript_list(self, ctx):
@@ -651,7 +651,7 @@ class Tickets(Package):
     @ticket.group(
         name="opening",
         aliases=["open", "welcome"],
-        description="Customize the ticket open message and opening buttons",
+        description="customize the ticket open message and opening buttons",
         invoke_without_command=True,
         example=",tc opening",
     )
@@ -662,7 +662,7 @@ class Tickets(Package):
     @ticket_opening.group(
         name="embed",
         aliases=["message", "msg"],
-        description="Customize the default ticket open embed/message",
+        description="customize the default ticket open embed/message",
         invoke_without_command=True,
         example=",tc opening embed {embed}{title: Ticket Created}{description: Staff will be with you shortly}",
     )
@@ -692,7 +692,7 @@ class Tickets(Package):
     @ticket_opening_embed.command(
         name="reset",
         aliases=["default", "clear", "remove"],
-        description="Reset the open message to the Vain default",
+        description="reset the open message to the vain default",
     )
     @has_permissions(manage_channels=True)
     async def ticket_opening_embed_reset(self, ctx):
@@ -706,7 +706,7 @@ class Tickets(Package):
     @ticket_opening_embed.command(
         name="test",
         aliases=["preview"],
-        description="Preview the current open message in this channel",
+        description="preview the current open message in this channel",
     )
     @has_permissions(manage_channels=True)
     async def ticket_opening_embed_test(self, ctx):
@@ -731,7 +731,7 @@ class Tickets(Package):
     @ticket_opening.group(
         name="button",
         aliases=["btn", "buttons"],
-        description="Add or edit ticket opening buttons on the panel",
+        description="add or edit ticket opening buttons on the panel",
         invoke_without_command=True,
         example=",tc opening button",
     )
@@ -742,7 +742,7 @@ class Tickets(Package):
     @ticket_opening_button.command(
         name="add",
         aliases=["create", "new"],
-        description="Add a ticket opening button (modal or quick flags)",
+        description="add a ticket opening button (modal or quick flags)",
         example=",tc opening button add support --style green --emoji 🎫",
         usage="[identifier] [label] [--style <color>] [--emoji <emoji>] [--category <category>]",
     )
@@ -791,7 +791,7 @@ class Tickets(Package):
     @ticket_opening_button.command(
         name="emoji",
         aliases=["emote", "icon"],
-        description="Change an opening button emoji via a select menu of all buttons",
+        description="change an opening button emoji via a select menu of all buttons",
         example=",tc opening button emoji",
     )
     @has_permissions(manage_channels=True)
@@ -821,7 +821,7 @@ class Tickets(Package):
         return await ctx.send(embed=embed, view=view)
 
     @ticket_opening_button.command(
-        name="list", description="List all ticket opening buttons"
+        name="list", description="list all ticket opening buttons"
     )
     @has_permissions(manage_channels=True)
     async def ticket_opening_button_list(self, ctx):
@@ -830,7 +830,7 @@ class Tickets(Package):
     @ticket_opening_button.command(
         name="remove",
         aliases=["delete", "rm"],
-        description="Remove an opening button",
+        description="remove an opening button",
         example=",tc opening button remove support",
         usage="<identifier>",
     )
@@ -843,7 +843,7 @@ class Tickets(Package):
     @ticket.group(
         name="button",
         aliases=["btn"],
-        description="Add or remove buttons on the ticket panel",
+        description="add or remove buttons on the ticket panel",
         invoke_without_command=True,
     )
     @has_permissions(manage_channels=True)
@@ -852,7 +852,7 @@ class Tickets(Package):
 
     @ticket_button.command(
         name="add",
-        description="Add a button that opens a ticket",
+        description="add a button that opens a ticket",
         example=",tc button add support --style green --emoji 🎫",
         usage="<identifier> [label] [--style <color>] [--emoji <emoji>] [--category <category>] [--topic <text>]",
     )
@@ -880,7 +880,7 @@ class Tickets(Package):
 
     @ticket_button.command(
         name="remove",
-        description="Remove a button from the panel",
+        description="remove a button from the panel",
         example=",tc button remove support",
         usage="<identifier>",
     )
@@ -902,7 +902,7 @@ class Tickets(Package):
 
         return await ctx.success(f"Button `{identifier}` removed.")
 
-    @ticket_button.command(name="list", description="List all buttons on the panel")
+    @ticket_button.command(name="list", description="list all buttons on the panel")
     @has_permissions(manage_channels=True)
     async def ticket_button_list(self, ctx):
         rows = await self.db.fetch(
@@ -924,7 +924,7 @@ class Tickets(Package):
     @ticket_button.command(
         name="emoji",
         aliases=["emote"],
-        description="Edit opening button emojis via select menu",
+        description="edit opening button emojis via select menu",
     )
     @has_permissions(manage_channels=True)
     async def ticket_button_emoji(self, ctx):
@@ -935,7 +935,7 @@ class Tickets(Package):
     @ticket.group(
         name="dropdown",
         aliases=["select", "menu"],
-        description="Manage dropdown menus on the ticket panel",
+        description="manage dropdown menus on the ticket panel",
         invoke_without_command=True,
     )
     @has_permissions(manage_channels=True)
@@ -944,7 +944,7 @@ class Tickets(Package):
 
     @ticket_dropdown.command(
         name="create",
-        description="Create a new dropdown on the panel",
+        description="create a new dropdown on the panel",
         example=",tc dropdown create categories",
         usage="<identifier> [placeholder]",
     )
@@ -978,7 +978,7 @@ class Tickets(Package):
 
     @ticket_dropdown.command(
         name="option",
-        description="Add an option to a dropdown",
+        description="add an option to a dropdown",
         example=",tc dropdown option categories billing Billing Support",
         usage="<dropdown-id> <option-id> <label> [--emoji] [--category] [--topic]",
     )
@@ -1037,7 +1037,7 @@ class Tickets(Package):
 
     @ticket_dropdown.command(
         name="remove",
-        description="Remove a dropdown entirely",
+        description="remove a dropdown entirely",
         example=",tc dropdown remove categories",
     )
     @has_permissions(manage_channels=True)
@@ -1062,7 +1062,7 @@ class Tickets(Package):
     @ticket.command(
         name="add",
         aliases=["permit", "allow"],
-        description="Add a member or role to the current ticket",
+        description="add a member or role to the current ticket",
         example=",tc add @user",
     )
     @in_ticket()
@@ -1080,7 +1080,7 @@ class Tickets(Package):
     @ticket.command(
         name="remove",
         aliases=["deny", "hide"],
-        description="Remove a member or role from the current ticket",
+        description="remove a member or role from the current ticket",
         example=",tc remove @user",
     )
     @in_ticket()
@@ -1096,7 +1096,7 @@ class Tickets(Package):
     @ticket.command(
         name="claim",
         aliases=["take"],
-        description="Claim the current ticket",
+        description="claim the current ticket",
         example=",tc claim",
     )
     @in_ticket()
@@ -1131,7 +1131,7 @@ class Tickets(Package):
     @ticket.command(
         name="close",
         aliases=["end", "delete", "resolve"],
-        description="Close the current ticket and send a transcript",
+        description="close the current ticket and send a transcript",
         example=",tc close",
     )
     @in_ticket()
@@ -1317,7 +1317,7 @@ class Tickets(Package):
                 transcript,
                 destinations,
                 channel_name=interaction.channel.name,
-                description="Manual transcript export (ticket still open).",
+                description="manual transcript export (ticket still open)",
             )
 
     

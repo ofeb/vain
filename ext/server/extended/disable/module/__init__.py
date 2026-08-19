@@ -65,7 +65,7 @@ class ModuleDisableCommands(Package):
 
     @group(
         name="disablemodule",
-        description="Disable a module in a channel/role/member/server (defaults to this channel)",
+        description="disable a module in a channel/role/member/server (defaults to this channel)",
         usage="[channel or member or role or server] <module>",
         example=",disablemodule #general server",
         invoke_without_command=True,
@@ -132,7 +132,7 @@ class ModuleDisableCommands(Package):
     @disablemodule.command(
         name="list",
         aliases=["ls", "show", "view"],
-        description="View a list of disabled modules in guild",
+        description="view a list of disabled modules in guild",
     )
     @has_permissions(manage_channels=True)
     async def disablemodule_list(self, ctx):
@@ -167,7 +167,7 @@ class ModuleDisableCommands(Package):
 
     @disablemodule.command(
         name="all",
-        description="Disable a module in every channel",
+        description="disable a module in every channel",
         usage="<module>",
         example=",disablemodule all server",
     )

@@ -175,28 +175,28 @@ class Manipulation(Package):
                 except Exception:
                     await ctx.fail("Failed to process image - flux/ffmpeg unavailable for this effect")
 
-    @hybrid(name="media", description="Apply effects to images and GIFs", group=True, guild_only=True)
+    @hybrid(name="media", description="apply effects to images and gifs", group=True, guild_only=True)
     async def media(self, ctx: Context) -> None:
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    @media.command(name="spin", description="Put a spin effect on an image")
+    @media.command(name="spin", description="put a spin effect on an image")
     async def media_spin(self, ctx: Context) -> None:
         await self._flux_command(ctx, "spin")
 
-    @media.command(name="rainbow", description="Put a rainbow effect on an image")
+    @media.command(name="rainbow", description="put a rainbow effect on an image")
     async def media_rainbow(self, ctx: Context) -> None:
         await self._flux_command(ctx, "rainbow")
 
-    @media.command(name="deepfry", description="Deep fry an image")
+    @media.command(name="deepfry", description="deep fry an image")
     async def media_deepfry(self, ctx: Context) -> None:
         await self._flux_command(ctx, "deepfry")
 
-    @media.command(name="pixelate", description="Pixelate an image")
+    @media.command(name="pixelate", description="pixelate an image")
     async def media_pixelate(self, ctx: Context) -> None:
         await self._flux_command(ctx, "pixelate", pil_fallback=image_ops.pil_pixelate)
 
-    @media.command(name="caption", description="Add a caption to an image")
+    @media.command(name="caption", description="add a caption to an image")
     @describe(text="Caption text")
     async def media_caption(self, ctx: Context, *, text: str) -> None:
         await self._flux_command(
@@ -208,7 +208,7 @@ class Manipulation(Package):
 
     @hybrid(
         name="caption",
-        description="Add a caption to the last image or gif in the channel",
+        description="add a caption to the last image or gif in the channel",
         aliases=["cap"],
         guild_only=True,
     )
@@ -309,7 +309,7 @@ class Manipulation(Package):
             return None
         return None
 
-    @media.command(name="blur", description="Blur an image")
+    @media.command(name="blur", description="blur an image")
     @describe(radius="Blur radius")
     async def media_blur(self, ctx: Context, radius: int = 5) -> None:
         await self._flux_command(
@@ -319,7 +319,7 @@ class Manipulation(Package):
             pil_fallback=lambda data: image_ops.pil_blur(data, radius),
         )
 
-    @media.command(name="grayscale", description="Convert an image to grayscale")
+    @media.command(name="grayscale", description="convert an image to grayscale")
     async def media_grayscale(self, ctx: Context) -> None:
         attachment = await PartialAttachment.imageonly_fallback(ctx)
         await self._process(
@@ -330,19 +330,19 @@ class Manipulation(Package):
             pil_fallback=image_ops.pil_grayscale,
         )
 
-    @media.command(name="invert", description="Invert image colors")
+    @media.command(name="invert", description="invert image colors")
     async def media_invert(self, ctx: Context) -> None:
         await self._flux_command(ctx, "invert", pil_fallback=image_ops.pil_invert)
 
-    @media.command(name="reverse", description="Reverse GIF frames")
+    @media.command(name="reverse", description="reverse gif frames")
     async def media_reverse(self, ctx: Context) -> None:
         await self._flux_command(ctx, "reverse")
 
-    @media.command(name="zoom", description="Create a zoom effect")
+    @media.command(name="zoom", description="create a zoom effect")
     async def media_zoom(self, ctx: Context) -> None:
         await self._flux_command(ctx, "zoom")
 
-    @media.command(name="speed", description="Change GIF speed")
+    @media.command(name="speed", description="change gif speed")
     @describe(factor="Speed multiplier")
     async def media_speed(self, ctx: Context, factor: float = 2.0) -> None:
         attachment = await PartialAttachment.imageonly_fallback(ctx)
@@ -353,7 +353,7 @@ class Manipulation(Package):
             processor=lambda d: ffm.gif_speed(d, factor),
         )
 
-    @media.command(name="rotate", description="Rotate an image")
+    @media.command(name="rotate", description="rotate an image")
     @describe(angle="Rotation angle in degrees")
     async def media_rotate(self, ctx: Context, angle: int = 90) -> None:
         await self._flux_command(
@@ -363,32 +363,32 @@ class Manipulation(Package):
             pil_fallback=lambda data: image_ops.pil_rotate(data, angle),
         )
 
-    @media.command(name="flip", description="Flip an image vertically")
+    @media.command(name="flip", description="flip an image vertically")
     async def media_flip(self, ctx: Context) -> None:
         attachment = await PartialAttachment.imageonly_fallback(ctx)
         await self._process(ctx, attachment, filename="flip.gif", processor=lambda d: ffm.image_to_gif(d, "vflip"))
 
-    @media.command(name="mirror", description="Mirror an image horizontally")
+    @media.command(name="mirror", description="mirror an image horizontally")
     async def media_mirror(self, ctx: Context) -> None:
         attachment = await PartialAttachment.imageonly_fallback(ctx)
         await self._process(ctx, attachment, filename="mirror.gif", processor=lambda d: ffm.image_to_gif(d, "hflip"))
 
-    @media.command(name="sharpen", description="Sharpen an image")
+    @media.command(name="sharpen", description="sharpen an image")
     async def media_sharpen(self, ctx: Context) -> None:
         attachment = await PartialAttachment.imageonly_fallback(ctx)
         await self._process(ctx, attachment, filename="sharpen.gif", processor=lambda d: ffm.image_to_gif(d, "unsharp=5:5:1.0:5:5:0.0"))
 
-    @media.command(name="brighten", description="Brighten an image")
+    @media.command(name="brighten", description="brighten an image")
     async def media_brighten(self, ctx: Context) -> None:
         attachment = await PartialAttachment.imageonly_fallback(ctx)
         await self._process(ctx, attachment, filename="brighten.gif", processor=lambda d: ffm.image_to_gif(d, "eq=brightness=0.15"))
 
-    @media.command(name="contrast", description="Increase image contrast")
+    @media.command(name="contrast", description="increase image contrast")
     async def media_contrast(self, ctx: Context) -> None:
         attachment = await PartialAttachment.imageonly_fallback(ctx)
         await self._process(ctx, attachment, filename="contrast.gif", processor=lambda d: ffm.image_to_gif(d, "eq=contrast=1.5"))
 
-    @media.command(name="sepia", description="Apply a sepia tone")
+    @media.command(name="sepia", description="apply a sepia tone")
     async def media_sepia(self, ctx: Context) -> None:
         attachment = await PartialAttachment.imageonly_fallback(ctx)
         await self._process(
@@ -401,32 +401,32 @@ class Manipulation(Package):
             ),
         )
 
-    @media.command(name="edges", description="Detect edges in an image")
+    @media.command(name="edges", description="detect edges in an image")
     async def media_edges(self, ctx: Context) -> None:
         attachment = await PartialAttachment.imageonly_fallback(ctx)
         await self._process(ctx, attachment, filename="edges.gif", processor=lambda d: ffm.image_to_gif(d, "edgedetect"))
 
-    @media.command(name="negate", description="Negate image colors with ffmpeg")
+    @media.command(name="negate", description="negate image colors with ffmpeg")
     async def media_negate(self, ctx: Context) -> None:
         attachment = await PartialAttachment.imageonly_fallback(ctx)
         await self._process(ctx, attachment, filename="negate.gif", processor=lambda d: ffm.image_to_gif(d, "negate"))
 
-    @media.command(name="saturate", description="Boost image saturation")
+    @media.command(name="saturate", description="boost image saturation")
     async def media_saturate(self, ctx: Context) -> None:
         attachment = await PartialAttachment.imageonly_fallback(ctx)
         await self._process(ctx, attachment, filename="saturate.gif", processor=lambda d: ffm.image_to_gif(d, "eq=saturation=2"))
 
-    @media.command(name="fade", description="Fade an image in")
+    @media.command(name="fade", description="fade an image in")
     async def media_fade(self, ctx: Context) -> None:
         attachment = await PartialAttachment.imageonly_fallback(ctx)
         await self._process(ctx, attachment, filename="fade.gif", processor=lambda d: ffm.image_to_gif(d, "fade=in:0:30"))
 
-    @media.command(name="crop", description="Crop to center square")
+    @media.command(name="crop", description="crop to center square")
     async def media_crop(self, ctx: Context) -> None:
         attachment = await PartialAttachment.imageonly_fallback(ctx)
         await self._process(ctx, attachment, filename="crop.gif", processor=lambda d: ffm.image_to_gif(d, "crop=min(iw\\,ih):min(iw\\,ih)"))
 
-    @media.command(name="resize", description="Resize an image")
+    @media.command(name="resize", description="resize an image")
     @describe(width="Target width", height="Target height")
     async def media_resize(self, ctx: Context, width: int = 320, height: int = 320) -> None:
         attachment = await PartialAttachment.imageonly_fallback(ctx)
@@ -752,7 +752,7 @@ class Manipulation(Package):
 
     @hybrid(
         name="quote",
-        description="Quote a message as an image",
+        description="quote a message as an image",
         aliases=["qm", "quotemessage"],
         group=True,
         invoke_without_command=True,
@@ -834,7 +834,7 @@ class Manipulation(Package):
     @quote_command.group(
         name="channel",
         aliases=["set", "ch", "destination", "dest"],
-        description="Set the channel or thread where quotes are also posted",
+        description="set the channel or thread where quotes are also posted",
         example=",quote channel #quotes",
         usage="[channel or thread]",
         invoke_without_command=True,
@@ -895,7 +895,7 @@ class Manipulation(Package):
     @quote_channel.command(
         name="reset",
         aliases=["rem", "remove", "delete", "del", "clear", "off"],
-        description="Remove the quote destination channel",
+        description="remove the quote destination channel",
         example=",quote channel reset",
     )
     @commands.has_permissions(manage_guild=True)
@@ -910,7 +910,7 @@ class Manipulation(Package):
     @hybrid(
         name="imagetogif",
         aliases=["img2gif", "togif", "image2gif"],
-        description="Convert an image to GIF",
+        description="convert an image to gif",
         guild_only=True,
     )
     async def imagetogif(self, ctx: Context) -> None:

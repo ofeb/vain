@@ -73,14 +73,14 @@ class PaginationCommands(Package):
     @group(
         name="pagination",
         aliases=["pn", "pages"],
-        description="Set up multiple embeds on one message",
+        description="set up multiple embeds on one message",
         invoke_without_command=True,
     )
     async def pagination(self, ctx):
         """pagination help"""
         return await ctx.send_help(ctx.command)
 
-    @pagination.command(name="add", description="Add a page to a pagination embed")
+    @pagination.command(name="add", description="add a page to a pagination embed")
     @has_permissions(manage_messages=True)
     async def pagination_add(self, ctx, message: Message, *, embed_code: EmbedConverter):
         """add new page"""
@@ -106,7 +106,7 @@ class PaginationCommands(Package):
         )
         return await ctx.success("page added")
 
-    @pagination.command(name="update", description="Update an existing page on pagination embed")
+    @pagination.command(name="update", description="update an existing page on pagination embed")
     @has_permissions(manage_messages=True)
     async def pagination_update(
         self, ctx, message: Message, page_id: int, *, embed_code: EmbedConverter
@@ -176,7 +176,7 @@ class PaginationCommands(Package):
             "All paginators cleared. This action can't be undone."
         )
 
-    @pagination.command(name="list", aliases=["ls", "show", "view"], description="View all existing pagination embeds")
+    @pagination.command(name="list", aliases=["ls", "show", "view"], description="view all existing pagination embeds")
     @has_permissions(manage_messages=True)
     async def pagination_list(self, ctx):
         """list paginators"""
@@ -203,7 +203,7 @@ class PaginationCommands(Package):
     @pagination.command(
         name="restorereactions",
         aliases=["rr", "restore"],
-        description="Restore pagination reactions on an existing pagination embed",
+        description="restore pagination reactions on an existing pagination embed",
     )
     @has_permissions(manage_messages=True)
     async def pagination_restorereactions(self, ctx, message: Message):
@@ -235,7 +235,7 @@ class PaginationCommands(Package):
 
     @pagination.group(
         name="edit",
-        description="Edit pagination controls",
+        description="edit pagination controls",
         invoke_without_command=True,
     )
     @has_permissions(manage_messages=True)
@@ -245,7 +245,7 @@ class PaginationCommands(Package):
     @pagination_edit.command(
         name="reaction",
         aliases=["reactions", "emoji", "emojis"],
-        description="Set left/right reaction emojis for a pagination message",
+        description="set left/right reaction emojis for a pagination message",
         usage="<message> [left or right] [emoji or default]",
         example=",pagination edit reaction 123 right ➡️",
     )
@@ -343,7 +343,7 @@ class PaginationCommands(Package):
             f"→ left {left_val} · right {right_val}"
         )
 
-    @pagination.command(name="set", description="Set up an existing embed to be paginated")
+    @pagination.command(name="set", description="set up an existing embed to be paginated")
     @has_permissions(manage_messages=True)
     async def pagination_set(self, ctx, message: Message):
         """convert embed to paginator"""
@@ -379,7 +379,7 @@ class PaginationCommands(Package):
             f"[`{message.id}`]({message.jump_url}) is now a **pagination embed**"
         )
 
-    @pagination.command(name="delete", description="Delete a pagination embed entirely")
+    @pagination.command(name="delete", description="delete a pagination embed entirely")
     @has_permissions(manage_messages=True)
     async def pagination_delete(self, ctx, message: Message):
         """delete a paginator"""
@@ -410,7 +410,7 @@ class PaginationCommands(Package):
             f"deleted paginator [`{message.id}`]({message.jump_url})"
         )
 
-    @pagination.command(name="remove", description="Remove a page from a pagination embed")
+    @pagination.command(name="remove", description="remove a page from a pagination embed")
     @has_permissions(manage_messages=True)
     async def pagination_remove(self, ctx, message: Message, page_id: int):
         """drop a page"""

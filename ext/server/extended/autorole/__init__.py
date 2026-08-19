@@ -34,7 +34,7 @@ class Autorole(commands.Cog):
 
     @group(
         name="autorole",
-        description="Set up automatic role assign on member join",
+        description="set up automatic role assign on member join",
         guild_only=True,
     )
     @has_permissions(manage_guild=True, manage_roles=True)
@@ -45,7 +45,7 @@ class Autorole(commands.Cog):
 
     @autorole.command(
         name="list",
-        description="View a list of every auto role",
+        description="view a list of every auto role",
         guild_only=True,
     )
     @has_permissions(manage_guild=True, manage_roles=True)
@@ -68,7 +68,7 @@ class Autorole(commands.Cog):
 
     @autorole.command(
         name="remove",
-        description="Removes a autorole and stops assigning on join",
+        description="removes a autorole and stops assigning on join",
         guild_only=True,
     )
     @describe(role="Role to remove from auto role")
@@ -84,7 +84,7 @@ class Autorole(commands.Cog):
 
     @autorole.command(
         name="reset",
-        description="Clears every autorole for guild",
+        description="clears every autorole for guild",
         guild_only=True,
     )
     @has_permissions(manage_guild=True, manage_roles=True)
@@ -111,7 +111,7 @@ class Autorole(commands.Cog):
 
     @autorole.command(
         name="add",
-        description="Adds a autorole and assigns on join to member",
+        description="adds a autorole and assigns on join to member",
         guild_only=True,
     )
     @describe(role="Role to add as auto role")
@@ -127,7 +127,7 @@ class Autorole(commands.Cog):
 
     @group(
         name="buttonrole",
-        description="Button role management",
+        description="button role management",
         guild_only=True,
     )
     @has_permissions(manage_guild=True, manage_roles=True)
@@ -138,7 +138,7 @@ class Autorole(commands.Cog):
 
     @buttonrole.command(
         name="remove",
-        description="Remove a button role from a message",
+        description="remove a button role from a message",
         guild_only=True,
     )
     @describe(message="Message to remove button role from", index="Index of button to remove")
@@ -163,7 +163,7 @@ class Autorole(commands.Cog):
 
     @buttonrole.command(
         name="reset",
-        description="Clears every button role from guild",
+        description="clears every button role from guild",
         guild_only=True,
     )
     @has_permissions(manage_guild=True, manage_roles=True)
@@ -205,7 +205,7 @@ class Autorole(commands.Cog):
 
     @buttonrole.command(
         name="removeall",
-        description="Removes all button roles from a message",
+        description="removes all button roles from a message",
         guild_only=True,
     )
     @describe(message="Message to remove all button roles from")
@@ -221,7 +221,7 @@ class Autorole(commands.Cog):
 
     @buttonrole.command(
         name="list",
-        description="View a list of every button role",
+        description="view a list of every button role",
         guild_only=True,
     )
     @has_permissions(manage_guild=True, manage_roles=True)
@@ -277,7 +277,7 @@ class Autorole(commands.Cog):
 
     @buttonrole.command(
         name="add",
-        description="Add a button role to a message",
+        description="add a button role to a message",
         guild_only=True,
     )
     @describe(message="Message to add button to", role="Role to assign", style="Button style", emoji="Button emoji", label="Button label")
@@ -327,7 +327,7 @@ class Autorole(commands.Cog):
 
     @group(
         name="reactionrole",
-        description="Set up self-assignable roles with reactions",
+        description="set up self-assignable roles with reactions",
         guild_only=True,
     )
     @has_permissions(manage_guild=True, manage_roles=True)
@@ -338,7 +338,7 @@ class Autorole(commands.Cog):
 
     @reactionrole.command(
         name="removeall",
-        description="Removes all reaction roles from a message",
+        description="removes all reaction roles from a message",
         guild_only=True,
     )
     @describe(message="Message to remove all reaction roles from")
@@ -354,7 +354,7 @@ class Autorole(commands.Cog):
 
     @reactionrole.command(
         name="reset",
-        description="Clears every reaction role from guild",
+        description="clears every reaction role from guild",
         guild_only=True,
     )
     @has_permissions(manage_guild=True, manage_roles=True)
@@ -383,7 +383,7 @@ class Autorole(commands.Cog):
 
     @reactionrole.command(
         name="remove",
-        description="Removes a reaction role from a message",
+        description="removes a reaction role from a message",
         guild_only=True,
     )
     @describe(message="Message to remove reaction role from", emoji="Emoji to remove")
@@ -400,7 +400,7 @@ class Autorole(commands.Cog):
 
     @reactionrole.command(
         name="list",
-        description="View a list of every reaction role",
+        description="view a list of every reaction role",
         guild_only=True,
     )
     @has_permissions(manage_guild=True, manage_roles=True)
@@ -431,7 +431,7 @@ class Autorole(commands.Cog):
 
     @reactionrole.command(
         name="add",
-        description="Adds a reaction role to a message",
+        description="adds a reaction role to a message",
         guild_only=True,
     )
     @describe(message="Message to add reaction role to", emoji="Emoji to react with", role="Role to assign")

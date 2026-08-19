@@ -71,7 +71,7 @@ class Forcenickname(Package):
     @forcenickname.command(
         name="list",
         aliases=["ls", "show"],
-        description="View all forced nicknames in this server",
+        description="view all forced nicknames in this server",
     )
     @has_permissions(manage_guild=True)
     async def forcenickname_list(self, ctx):
@@ -100,7 +100,7 @@ class Forcenickname(Package):
     @forcenickname.command(
         name="remove",
         aliases=["delete", "del", "clear"],
-        description="Remove a forced nickname lock",
+        description="remove a forced nickname lock",
         example=",forcenickname remove @member",
     )
     @has_permissions(manage_nicknames=True)

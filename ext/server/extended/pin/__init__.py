@@ -9,14 +9,14 @@ class PinCommands(Package):
 
     @group(
         name="pins",
-        description="Pin archival system commands",
+        description="pin archival system commands",
         invoke_without_command=True,
     )
     async def pins(self, ctx):
         """pins help"""
         return await ctx.send_help()
 
-    @pins.command(name="archive", description="Archive the pins in the current channel")
+    @pins.command(name="archive", description="archive the pins in the current channel")
     @has_permissions(manage_guild=True)
     async def pins_archive(self, ctx):
         """run pin archive"""
@@ -47,7 +47,7 @@ class PinCommands(Package):
 
     @pins.command(
         name="config",
-        description="View the pin archival config",
+        description="view the pin archival config",
         aliases=["show", "cfg", "settings"],
     )
     @has_permissions(manage_guild=True)
@@ -80,7 +80,7 @@ class PinCommands(Package):
 
     @pins.command(
         name="unpin",
-        description="Enable or disable the unpinning of messages during archival",
+        description="enable or disable the unpinning of messages during archival",
     )
     @has_permissions(manage_guild=True)
     async def pins_unpin(self, ctx, option: bool):
@@ -92,7 +92,7 @@ class PinCommands(Package):
         state = "enabled" if option else "disabled"
         return await ctx.success(f"auto-unpin **{state}**")
 
-    @pins.command(name="set", description="Enable or disable the pin archival system")
+    @pins.command(name="set", description="enable or disable the pin archival system")
     @has_permissions(manage_guild=True)
     async def pins_set(self, ctx, option: bool):
         """toggle pin archival"""
@@ -105,7 +105,7 @@ class PinCommands(Package):
 
     @pins.command(
         name="channel",
-        description="Set the pin archival channel (defaults to current channel)",
+        description="set the pin archival channel (defaults to current channel)",
         usage="[channel]",
     )
     @has_permissions(manage_guild=True)

@@ -20,7 +20,7 @@ class Uwulock(Package):
 
     @group(
         name="uwulock",
-        description="Uwulock a member so their messages get uwuified",
+        description="uwulock a member so their messages get uwuified",
         invoke_without_command=True,
         example=",uwulock @member",
     )
@@ -41,7 +41,7 @@ class Uwulock(Package):
     @uwulock.command(
         name="clear",
         aliases=["reset"],
-        description="Remove all uwulocks in this server",
+        description="remove all uwulocks in this server",
     )
     async def uwulock_clear(self, ctx) -> None:
         """Remove all uwulocks in this server."""
@@ -57,7 +57,7 @@ class Uwulock(Package):
     @uwulock.command(
         name="list",
         aliases=["ls", "show", "view"],
-        description="List uwulocked members",
+        description="list uwulocked members",
     )
     async def uwulock_list(self, ctx) -> None:
         """List uwulocked members."""

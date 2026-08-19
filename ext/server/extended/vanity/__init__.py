@@ -36,7 +36,7 @@ class VanityCommands(VanityEvents, Package):
         name="vanity",
         aliases=["vr"],
         invoke_without_command=True,
-        description="Manage vanity role rewards for status repping",
+        description="manage vanity role rewards for status repping",
     )
     @has_permissions(manage_roles=True)
     async def vanity(self, ctx: commands.Context) -> None:
@@ -193,7 +193,7 @@ class VanityCommands(VanityEvents, Package):
         name="strict",
         usage="<on or off>",
         example=",vr strict off",
-        description="Toggle strict vanity matching (default: off)",
+        description="toggle strict vanity matching (default: off)",
     )
     @has_permissions(manage_guild=True)
     async def vanity_strict(self, ctx: commands.Context, state: str = None) -> None:
@@ -218,7 +218,7 @@ class VanityCommands(VanityEvents, Package):
     @vanity.command(
         name="check",
         aliases=["me", "status", "test"],
-        description="Check if a member is repping vanity and force-sync their roles",
+        description="check if a member is repping vanity and force-sync their roles",
         example=",vr check @user",
     )
     async def vanity_check(
@@ -275,7 +275,7 @@ class VanityCommands(VanityEvents, Package):
 
     @vanity.command(
         name="sync",
-        description="Scan online members and apply vanity roles",
+        description="scan online members and apply vanity roles",
     )
     @has_permissions(manage_roles=True)
     async def vanity_sync(self, ctx: commands.Context) -> None:

@@ -2239,12 +2239,12 @@ class Music(MusicEvents, Package):
             )
             return await ctx.fail(f"failed to play track: {exc}")
 
-    @hybrid(name="queue", description="View all tracks queued", group=True, invoke_without_command=True, guild_only=True)
+    @hybrid(name="queue", description="view all tracks queued", group=True, invoke_without_command=True, guild_only=True)
     async def queue(self, ctx) -> None:
         if ctx.invoked_subcommand is None:
             await self.queue_view.callback(self, ctx)
 
-    @queue.command(name="view", description="View all tracks queued", aliases=["list"])
+    @queue.command(name="view", description="view all tracks queued", aliases=["list"])
     async def queue_view(self, ctx) -> None:
         state = self._queue(ctx.guild.id)
         if not state.tracks and not state.current:
@@ -2291,7 +2291,7 @@ class Music(MusicEvents, Package):
             state.play_message_id = ctx.message.id
         await self._send_control_panel(ctx.guild.id, player, track)
 
-    @queue.command(name="remove", description="Remove a track from the queue")
+    @queue.command(name="remove", description="remove a track from the queue")
     @describe(position="Track position in the queue")
     async def queue_remove(self, ctx, position: int) -> None:
         state = self._queue(ctx.guild.id)
@@ -2300,7 +2300,7 @@ class Music(MusicEvents, Package):
         track = state.tracks.pop(position - 1)
         await ctx.success(f"removed **{track.title}**")
 
-    @queue.command(name="shuffle", description="Shuffle the queue")
+    @queue.command(name="shuffle", description="shuffle the queue")
     async def queue_shuffle(self, ctx) -> None:
         state = self._queue(ctx.guild.id)
         if len(state.tracks) < 2:
@@ -2308,12 +2308,12 @@ class Music(MusicEvents, Package):
         random.shuffle(state.tracks)
         await ctx.success("shuffled")
 
-    @queue.command(name="empty", description="Empty the queue", aliases=["clear"])
+    @queue.command(name="empty", description="empty the queue", aliases=["clear"])
     async def queue_empty(self, ctx) -> None:
         self._queue(ctx.guild.id).tracks.clear()
         await ctx.success("cleared queue")
 
-    @queue.command(name="move", description="Move a track to a different position in the queue")
+    @queue.command(name="move", description="move a track to a different position in the queue")
     @describe(position="Current position", new_position="New position")
     async def queue_move(self, ctx, position: int, new_position: int) -> None:
         state = self._queue(ctx.guild.id)
@@ -2520,11 +2520,11 @@ class Music(MusicEvents, Package):
             self._track_meta.clear()
         await ctx.success("disconnected")
 
-    @hybrid(name="preset", description="Audio filter presets", group=True, invoke_without_command=True, guild_only=True)
+    @hybrid(name="preset", description="audio filter presets", group=True, invoke_without_command=True, guild_only=True)
     async def preset(self, ctx) -> None:
         await ctx.send_help(ctx.command)
 
-    @preset.command(name="active", description="Show the active audio preset")
+    @preset.command(name="active", description="show the active audio preset")
     async def preset_active(self, ctx) -> None:
         active = self._queue(ctx.guild.id).active_preset
         if not active:

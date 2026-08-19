@@ -309,7 +309,7 @@ class Socials(Package):
 
     @group(
         name="socials",
-        description="Configure social media notifications",
+        description="configure social media notifications",
         invoke_without_command=True,
         aliases=["social"],
     )
@@ -317,7 +317,7 @@ class Socials(Package):
     async def socials(self, ctx: Context) -> None:
         await ctx.send_help(ctx.command)
 
-    @socials.command(name="twitter", description="Follow or unfollow an X account", aliases=["x"])
+    @socials.command(name="twitter", description="follow or unfollow an x account", aliases=["x"])
     @describe(action="add or remove", handle="X handle (without @)")
     @has_permissions(manage_guild=True)
     async def socials_twitter(self, ctx: Context, action: str, *, handle: str) -> None:
@@ -331,7 +331,7 @@ class Socials(Package):
         else:
             await ctx.warn("Use `add`, `remove`, or `list`.")
 
-    @socials.command(name="twitch", description="Follow or unfollow a Twitch channel")
+    @socials.command(name="twitch", description="follow or unfollow a twitch channel")
     @describe(action="add or remove", channel="Twitch channel name")
     @has_permissions(manage_guild=True)
     async def socials_twitch(self, ctx: Context, action: str, *, channel: str) -> None:
@@ -345,7 +345,7 @@ class Socials(Package):
         else:
             await ctx.warn("Use `add`, `remove`, or `list`.")
 
-    @socials.command(name="youtube", description="Follow or unfollow a YouTube channel", aliases=["yt"])
+    @socials.command(name="youtube", description="follow or unfollow a youtube channel", aliases=["yt"])
     @describe(action="add or remove", channel="YouTube channel name or ID")
     @has_permissions(manage_guild=True)
     async def socials_youtube(self, ctx: Context, action: str, *, channel: str) -> None:
@@ -359,7 +359,7 @@ class Socials(Package):
         else:
             await ctx.warn("Use `add`, `remove`, or `list`.")
 
-    @socials.command(name="tiktok", description="Follow or unfollow a TikTok account for feed")
+    @socials.command(name="tiktok", description="follow or unfollow a tiktok account for feed")
     @describe(action="add or remove", username="TikTok username")
     @has_permissions(manage_guild=True)
     async def socials_tiktok(self, ctx: Context, action: str, *, username: str) -> None:
@@ -373,7 +373,7 @@ class Socials(Package):
         else:
             await ctx.warn("Use `add`, `remove`, or `list`.")
 
-    @socials.command(name="instagram", description="Follow or unfollow an Instagram account for feed", aliases=["ig"])
+    @socials.command(name="instagram", description="follow or unfollow an instagram account for feed", aliases=["ig"])
     @describe(action="add or remove", username="Instagram username")
     @has_permissions(manage_guild=True)
     async def socials_instagram(self, ctx: Context, action: str, *, username: str) -> None:
@@ -387,7 +387,7 @@ class Socials(Package):
         else:
             await ctx.warn("Use `add`, `remove`, or `list`.")
 
-    @socials.command(name="pinterest", description="Follow or unfollow a Pinterest profile", aliases=["pin"])
+    @socials.command(name="pinterest", description="follow or unfollow a pinterest profile", aliases=["pin"])
     @describe(action="add or remove", username="Pinterest username")
     @has_permissions(manage_guild=True)
     async def socials_pinterest(self, ctx: Context, action: str, *, username: str) -> None:
@@ -401,7 +401,7 @@ class Socials(Package):
         else:
             await ctx.warn("Use `add`, `remove`, or `list`.")
 
-    @socials.command(name="snapchat", description="Follow or unfollow a Snapchat profile", aliases=["snap"])
+    @socials.command(name="snapchat", description="follow or unfollow a snapchat profile", aliases=["snap"])
     @describe(action="add or remove", username="Snapchat username")
     @has_permissions(manage_guild=True)
     async def socials_snapchat(self, ctx: Context, action: str, *, username: str) -> None:
@@ -415,12 +415,12 @@ class Socials(Package):
         else:
             await ctx.warn("Use `add`, `remove`, or `list`.")
 
-    @socials.command(name="list", description="View all configured social feeds", aliases=["all"])
+    @socials.command(name="list", description="view all configured social feeds", aliases=["all"])
     @has_permissions(manage_guild=True)
     async def socials_list(self, ctx: Context) -> None:
         await self._feed_list(ctx, None)
 
-    @socials.command(name="migrate", description="Move feeds from one channel to another")
+    @socials.command(name="migrate", description="move feeds from one channel to another")
     @describe(platform="Platform name", source="Current channel", destination="New channel")
     @has_permissions(manage_guild=True)
     async def socials_migrate(
@@ -440,7 +440,7 @@ class Socials(Package):
             return
         await self._feed_migrate(ctx, plat, source, destination)
 
-    @socials.command(name="message", description="Set a custom feed notification template", aliases=["template", "msg"])
+    @socials.command(name="message", description="set a custom feed notification template", aliases=["template", "msg"])
     @describe(platform="Platform name", template="Template text, or `none` to clear")
     @has_permissions(manage_guild=True)
     async def socials_message(self, ctx: Context, platform: str, *, template: str) -> None:
@@ -460,7 +460,7 @@ class Socials(Package):
 
     @hybrid(
         name="instagram",
-        description="Instagram profiles, posts, stories & highlights",
+        description="instagram profiles, posts, stories & highlights",
         aliases=["ig"],
         group=True,
         invoke_without_command=True,
@@ -475,7 +475,7 @@ class Socials(Package):
             return
         await ctx.invoke(self.instagram_user, username=username)
 
-    @instagram.command(name="user", description="Look up an Instagram profile", aliases=["profile", "p"])
+    @instagram.command(name="user", description="look up an instagram profile", aliases=["profile", "p"])
     @describe(username="Instagram username")
     async def instagram_user(self, ctx: Context, *, username: str) -> None:
         from .improper.api import instagram_user as api_user, parse_instagram_user
@@ -523,7 +523,7 @@ class Socials(Package):
             )
             await self._send_profile(ctx, containers)
 
-    @instagram.command(name="repost", description="Repost an Instagram post or reel", aliases=["post", "reel"])
+    @instagram.command(name="repost", description="repost an instagram post or reel", aliases=["post", "reel"])
     @describe(url="Instagram post/reel URL")
     async def instagram_repost(self, ctx: Context, *, url: str) -> None:
         async with ctx.typing():
@@ -532,7 +532,7 @@ class Socials(Package):
             except Exception as e:
                 await ctx.fail(f"Repost failed: {str(e)[:150]}")
 
-    @instagram.command(name="stories", description="List active Instagram stories", aliases=["story"])
+    @instagram.command(name="stories", description="list active instagram stories", aliases=["story"])
     @describe(username="Instagram username")
     async def instagram_stories(self, ctx: Context, *, username: str) -> None:
         from .improper.api import instagram_user_stories
@@ -547,7 +547,7 @@ class Socials(Package):
                 empty=f"No stories for `@{uname}` (private or empty).",
             )
 
-    @instagram.command(name="highlights", description="List Instagram highlight reels", aliases=["highlight", "hl"])
+    @instagram.command(name="highlights", description="list instagram highlight reels", aliases=["highlight", "hl"])
     @describe(username="Instagram username")
     async def instagram_highlights(self, ctx: Context, *, username: str) -> None:
         from .improper.api import instagram_user_highlights
@@ -562,7 +562,7 @@ class Socials(Package):
                 empty=f"No highlights for `@{uname}`.",
             )
 
-    @instagram.command(name="trending", description="Instagram trending posts", aliases=["explore"])
+    @instagram.command(name="trending", description="instagram trending posts", aliases=["explore"])
     @describe(count="How many posts (1-12)")
     async def instagram_trending(self, ctx: Context, count: int = 4) -> None:
         from .improper.api import instagram_trending, parse_instagram_post
@@ -583,7 +583,7 @@ class Socials(Package):
                     lines.append(f"**{i}.** post")
             await ctx.send(embed=c2(color=color.base, title="Instagram trending", message="\n".join(lines)))
 
-    @instagram.command(name="posts", description="Recent posts from an Instagram user")
+    @instagram.command(name="posts", description="recent posts from an instagram user")
     @describe(username="Instagram username", count="How many posts (1-24)")
     async def instagram_posts(self, ctx: Context, username: str, count: int = 12) -> None:
         from .improper.api import instagram_user_posts
@@ -600,7 +600,7 @@ class Socials(Package):
 
     @instagram.group(
         name="reposter",
-        description="Instagram auto-reposter settings",
+        description="instagram auto-reposter settings",
         invoke_without_command=True,
         aliases=["auto"],
     )
@@ -608,7 +608,7 @@ class Socials(Package):
     async def instagram_reposter(self, ctx: Context) -> None:
         await ctx.send_help(ctx.command)
 
-    @instagram_reposter.command(name="toggle", description="Toggle Instagram link auto-repost in this guild")
+    @instagram_reposter.command(name="toggle", description="toggle instagram link auto-repost in this guild")
     @has_permissions(manage_guild=True)
     async def instagram_reposter_toggle(self, ctx: Context) -> None:
         
@@ -618,7 +618,7 @@ class Socials(Package):
         state = "enabled" if not cur else "disabled"
         await ctx.success(f"Instagram auto-reposter **{state}** for this server.")
 
-    @instagram_reposter.command(name="prefix", description="Set optional prefix required before IG links to auto-repost")
+    @instagram_reposter.command(name="prefix", description="set optional prefix required before ig links to auto-repost")
     @describe(prefix="Prefix text, or `none` to clear")
     @has_permissions(manage_guild=True)
     async def instagram_reposter_prefix(self, ctx: Context, *, prefix: str = "none") -> None:
@@ -636,7 +636,7 @@ class Socials(Package):
 
     @hybrid(
         name="tiktok",
-        description="TikTok profiles, posts, FYP & downloads",
+        description="tiktok profiles, posts, fyp & downloads",
         aliases=["tt"],
         group=True,
         invoke_without_command=True,
@@ -655,7 +655,7 @@ class Socials(Package):
             return
         await ctx.invoke(self.tiktok_user, username=q)
 
-    @tiktok.command(name="user", description="Look up a TikTok profile", aliases=["profile", "p"])
+    @tiktok.command(name="user", description="look up a tiktok profile", aliases=["profile", "p"])
     @describe(username="TikTok username")
     async def tiktok_user(self, ctx: Context, *, username: str) -> None:
         from .improper.api import parse_tiktok_user, tiktok_user as api_user
@@ -753,7 +753,7 @@ class Socials(Package):
             )
             await self._send_profile(ctx, containers)
 
-    @tiktok.command(name="repost", description="Repost a TikTok video or photo set", aliases=["post", "video"])
+    @tiktok.command(name="repost", description="repost a tiktok video or photo set", aliases=["post", "video"])
     @describe(url="TikTok post URL")
     async def tiktok_repost(self, ctx: Context, *, url: str) -> None:
         async with ctx.typing():
@@ -762,7 +762,7 @@ class Socials(Package):
             except Exception as e:
                 await ctx.fail(f"Repost failed: {str(e)[:150]}")
 
-    @tiktok.command(name="download", description="Download a TikTok video by URL", aliases=["dl", "get"])
+    @tiktok.command(name="download", description="download a tiktok video by url", aliases=["dl", "get"])
     @describe(url="TikTok post URL")
     async def tiktok_download(self, ctx: Context, *, url: str) -> None:
         async with ctx.typing():
@@ -790,7 +790,7 @@ class Socials(Package):
             except Exception as e:
                 await ctx.fail(f"Download failed: {str(e)[:200]}")
 
-    @tiktok.command(name="info", description="Get information about a TikTok video", aliases=["details"])
+    @tiktok.command(name="info", description="get information about a tiktok video", aliases=["details"])
     @describe(url="TikTok post URL")
     async def tiktok_info(self, ctx: Context, *, url: str) -> None:
         client = TikTok()
@@ -817,7 +817,7 @@ class Socials(Package):
             embed.set_thumbnail(url=post.avatar_url)
         await ctx.send(embed=embed)
 
-    @tiktok.command(name="fyp", description="TikTok For You sample", aliases=["feed"])
+    @tiktok.command(name="fyp", description="tiktok for you sample", aliases=["feed"])
     @describe(limit="How many posts (1-12)", region="Optional 2-letter region")
     async def tiktok_fyp(self, ctx: Context, limit: int = 8, region: str | None = None) -> None:
         from .improper.api import parse_tiktok_post, tiktok_fyp
@@ -836,7 +836,7 @@ class Socials(Package):
                     lines.append(f"**{i}.** post")
             await ctx.send(embed=c2(color=color.base, title="TikTok FYP", message="\n".join(lines)))
 
-    @tiktok.command(name="posts", description="Recent posts from a TikTok user")
+    @tiktok.command(name="posts", description="recent posts from a tiktok user")
     @describe(username="TikTok username", limit="How many (1-20)")
     async def tiktok_posts(self, ctx: Context, username: str, limit: int = 12) -> None:
         from .improper.api import tiktok_user_posts
@@ -857,7 +857,7 @@ class Socials(Package):
 
     @hybrid(
         name="x",
-        description="X (Twitter) profiles and posts",
+        description="x (twitter) profiles and posts",
         aliases=["twitter", "twt"],
         group=True,
         invoke_without_command=True,
@@ -876,7 +876,7 @@ class Socials(Package):
             return
         await ctx.invoke(self.x_user, username=q)
 
-    @x.command(name="user", description="Look up an X profile", aliases=["profile", "p"])
+    @x.command(name="user", description="look up an x profile", aliases=["profile", "p"])
     @describe(username="X handle")
     async def x_user(self, ctx: Context, *, username: str) -> None:
         from .improper.api import parse_twitter_user, twitter_user
@@ -907,7 +907,7 @@ class Socials(Package):
             )
             await self._send_profile(ctx, containers)
 
-    @x.command(name="repost", description="Repost an X status", aliases=["post", "status", "tweet"])
+    @x.command(name="repost", description="repost an x status", aliases=["post", "status", "tweet"])
     @describe(url="X/Twitter status URL")
     async def x_repost(self, ctx: Context, *, url: str) -> None:
         async with ctx.typing():
@@ -916,7 +916,7 @@ class Socials(Package):
             except Exception as e:
                 await ctx.fail(f"Repost failed: {str(e)[:150]}")
 
-    @x.command(name="tweets", description="Recent tweets from a user", aliases=["posts"])
+    @x.command(name="tweets", description="recent tweets from a user", aliases=["posts"])
     @describe(username="X handle")
     async def x_tweets(self, ctx: Context, *, username: str) -> None:
         from .improper.api import twitter_user_tweets
@@ -937,7 +937,7 @@ class Socials(Package):
 
     @hybrid(
         name="youtube",
-        description="YouTube channels, videos & shorts",
+        description="youtube channels, videos & shorts",
         aliases=["yt"],
         group=True,
         invoke_without_command=True,
@@ -958,7 +958,7 @@ class Socials(Package):
             return
         await ctx.invoke(self.youtube_user, channel=q)
 
-    @youtube.command(name="user", description="Look up a YouTube channel", aliases=["channel", "c", "profile"])
+    @youtube.command(name="user", description="look up a youtube channel", aliases=["channel", "c", "profile"])
     @describe(channel="Channel handle or ID")
     async def youtube_user(self, ctx: Context, *, channel: str) -> None:
         from .improper.api import parse_youtube_channel, youtube_channel
@@ -995,7 +995,7 @@ class Socials(Package):
             
             await self._send_profile(ctx, containers)
 
-    @youtube.command(name="repost", description="Repost a YouTube video or short", aliases=["video", "short"])
+    @youtube.command(name="repost", description="repost a youtube video or short", aliases=["video", "short"])
     @describe(url="YouTube video or shorts URL")
     async def youtube_repost(self, ctx: Context, *, url: str) -> None:
         async with ctx.typing():
@@ -1004,7 +1004,7 @@ class Socials(Package):
             except Exception as e:
                 await ctx.fail(f"Repost failed: {str(e)[:150]}")
 
-    @youtube.command(name="shorts", description="Recent shorts from a channel")
+    @youtube.command(name="shorts", description="recent shorts from a channel")
     @describe(channel="Channel handle", limit="How many (1-20)")
     async def youtube_shorts(self, ctx: Context, channel: str, limit: int = 10) -> None:
         from .improper.api import youtube_channel_shorts
@@ -1019,7 +1019,7 @@ class Socials(Package):
                 empty=f"No shorts for `{ch}`.",
             )
 
-    @youtube.command(name="videos", description="Recent videos from a channel")
+    @youtube.command(name="videos", description="recent videos from a channel")
     @describe(channel="Channel handle", limit="How many (1-20)")
     async def youtube_videos(self, ctx: Context, channel: str, limit: int = 10) -> None:
         from .improper.api import youtube_channel_videos
@@ -1040,7 +1040,7 @@ class Socials(Package):
 
     @hybrid(
         name="telegram",
-        description="Telegram users and channels",
+        description="telegram users and channels",
         aliases=["tg"],
         group=True,
         invoke_without_command=True,
@@ -1055,7 +1055,7 @@ class Socials(Package):
             return
         await ctx.invoke(self.telegram_user, username=username)
 
-    @telegram.command(name="user", description="Look up a Telegram user", aliases=["profile", "p"])
+    @telegram.command(name="user", description="look up a telegram user", aliases=["profile", "p"])
     @describe(username="Telegram username")
     async def telegram_user(self, ctx: Context, *, username: str) -> None:
         from .improper.api import parse_telegram_user, telegram_user as api_user
@@ -1089,7 +1089,7 @@ class Socials(Package):
             )
             await self._send_profile(ctx, containers)
 
-    @telegram.command(name="channel", description="Look up a Telegram channel", aliases=["ch"])
+    @telegram.command(name="channel", description="look up a telegram channel", aliases=["ch"])
     @describe(username="Channel username")
     async def telegram_channel(self, ctx: Context, *, username: str) -> None:
         from .improper.api import parse_telegram_channel, telegram_channel as api_ch
@@ -1124,7 +1124,7 @@ class Socials(Package):
 
     @hybrid(
         name="twitch",
-        description="Twitch profiles, live status & videos",
+        description="twitch profiles, live status & videos",
         aliases=["ttv"],
         group=True,
         invoke_without_command=True,
@@ -1139,7 +1139,7 @@ class Socials(Package):
             return
         await ctx.invoke(self.twitch_user, username=username)
 
-    @twitch.command(name="user", description="Look up a Twitch profile", aliases=["profile", "p"])
+    @twitch.command(name="user", description="look up a twitch profile", aliases=["profile", "p"])
     @describe(username="Twitch login")
     async def twitch_user(self, ctx: Context, *, username: str) -> None:
         from .improper.api import parse_twitch_user, twitch_user as api_user
@@ -1180,7 +1180,7 @@ class Socials(Package):
             )
             await self._send_profile(ctx, containers)
 
-    @twitch.command(name="live", description="Check if a Twitch channel is live")
+    @twitch.command(name="live", description="check if a twitch channel is live")
     @describe(username="Twitch login")
     async def twitch_live(self, ctx: Context, *, username: str) -> None:
         from .improper.api import parse_twitch_user, twitch_live, twitch_user as api_user
@@ -1225,7 +1225,7 @@ class Socials(Package):
                     )
                 )
 
-    @twitch.command(name="videos", description="Recent Twitch videos / VODs")
+    @twitch.command(name="videos", description="recent twitch videos / vods")
     @describe(username="Twitch login")
     async def twitch_videos(self, ctx: Context, *, username: str) -> None:
         from .improper.api import twitch_videos
@@ -1242,7 +1242,7 @@ class Socials(Package):
 
     @hybrid(
         name="snapchat",
-        description="Snapchat public profiles",
+        description="snapchat public profiles",
         aliases=["snap"],
         group=True,
         invoke_without_command=True,
@@ -1257,7 +1257,7 @@ class Socials(Package):
             return
         await ctx.invoke(self.snapchat_user, username=username)
 
-    @snapchat.command(name="user", description="Look up a Snapchat profile", aliases=["profile", "p"])
+    @snapchat.command(name="user", description="look up a snapchat profile", aliases=["profile", "p"])
     @describe(username="Snapchat username")
     async def snapchat_user(self, ctx: Context, *, username: str) -> None:
         from .improper.api import parse_snapchat_user, snapchat_user as api_user
@@ -1294,7 +1294,7 @@ class Socials(Package):
 
     @hybrid(
         name="pinterest",
-        description="Pinterest profiles, pins & search",
+        description="pinterest profiles, pins & search",
         aliases=["pin"],
         group=True,
         invoke_without_command=True,
@@ -1313,7 +1313,7 @@ class Socials(Package):
             return
         await ctx.invoke(self.pinterest_user, username=q)
 
-    @pinterest.command(name="user", description="Look up a Pinterest profile", aliases=["profile", "p"])
+    @pinterest.command(name="user", description="look up a pinterest profile", aliases=["profile", "p"])
     @describe(username="Pinterest username")
     async def pinterest_user(self, ctx: Context, *, username: str) -> None:
         from .improper.api import parse_pinterest_user, pinterest_user as api_user
@@ -1349,7 +1349,7 @@ class Socials(Package):
             )
             await self._send_profile(ctx, containers)
 
-    @pinterest.command(name="repost", description="Repost a Pinterest pin", aliases=["pin"])
+    @pinterest.command(name="repost", description="repost a pinterest pin", aliases=["pin"])
     @describe(url="Pinterest pin URL or id")
     async def pinterest_repost(self, ctx: Context, *, url: str) -> None:
         async with ctx.typing():
@@ -1358,7 +1358,7 @@ class Socials(Package):
             except Exception as e:
                 await ctx.fail(f"Repost failed: {str(e)[:150]}")
 
-    @pinterest.command(name="search", description="Search Pinterest pins")
+    @pinterest.command(name="search", description="search pinterest pins")
     @describe(query="Search query", limit="How many (1-12)")
     async def pinterest_search(self, ctx: Context, query: str, limit: int = 8) -> None:
         from .improper.api import parse_pinterest_pin, pinterest_search
@@ -1386,7 +1386,7 @@ class Socials(Package):
 
     @hybrid(
         name="brave",
-        description="Brave search & page scrape",
+        description="brave search & page scrape",
         group=True,
         invoke_without_command=True,
         guilds=True,
@@ -1400,7 +1400,7 @@ class Socials(Package):
             return
         await ctx.invoke(self.brave_search, query=query)
 
-    @brave.command(name="search", description="Search the web via Brave", aliases=["s", "q"])
+    @brave.command(name="search", description="search the web via brave", aliases=["s", "q"])
     @describe(query="Search query")
     async def brave_search(self, ctx: Context, *, query: str) -> None:
         from .improper.api import brave_search, parse_search_results
@@ -1424,7 +1424,7 @@ class Socials(Package):
                 embed=c2(color=color.base, title=f"Brave · {query[:80]}", message="\n".join(lines))
             )
 
-    @brave.command(name="scrape", description="Scrape a URL via Brave")
+    @brave.command(name="scrape", description="scrape a url via brave")
     @describe(url="Page URL")
     async def brave_scrape(self, ctx: Context, *, url: str) -> None:
         from .improper.api import brave_scrape
@@ -1451,7 +1451,7 @@ class Socials(Package):
                 )
             )
 
-    @brave.command(name="ai", description="Brave AI answer")
+    @brave.command(name="ai", description="brave ai answer")
     @describe(query="Question")
     async def brave_ai(self, ctx: Context, *, query: str) -> None:
         from .improper.api import brave_ai
@@ -1479,7 +1479,7 @@ class Socials(Package):
 
     @hybrid(
         name="google",
-        description="Google search & page scrape",
+        description="google search & page scrape",
         aliases=["g"],
         group=True,
         invoke_without_command=True,
@@ -1494,7 +1494,7 @@ class Socials(Package):
             return
         await ctx.invoke(self.google_search, query=query)
 
-    @google.command(name="search", description="Search the web via Google", aliases=["s", "q"])
+    @google.command(name="search", description="search the web via google", aliases=["s", "q"])
     @describe(query="Search query")
     async def google_search(self, ctx: Context, *, query: str) -> None:
         from .improper.api import google_search, parse_search_results
@@ -1518,7 +1518,7 @@ class Socials(Package):
                 embed=c2(color=color.base, title=f"Google · {query[:80]}", message="\n".join(lines))
             )
 
-    @google.command(name="scrape", description="Scrape a URL via Google path")
+    @google.command(name="scrape", description="scrape a url via google path")
     @describe(url="Page URL")
     async def google_scrape(self, ctx: Context, *, url: str) -> None:
         from .improper.api import google_scrape
@@ -1547,7 +1547,7 @@ class Socials(Package):
 
     @hybrid(
         name="repost",
-        description="Repost TikTok, Instagram, X, YouTube, or Pinterest media",
+        description="repost tiktok, instagram, x, youtube, or pinterest media",
         example=",repost https://www.instagram.com/reel/xxxx",
         guilds=True,
         dms=True,

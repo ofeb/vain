@@ -9,7 +9,7 @@ class PrefixCommands(Package):
 
     @group(
         name="prefix",
-        description="View guild prefix",
+        description="view guild prefix",
         invoke_without_command=True,
     )
     async def prefix(self, ctx):
@@ -23,7 +23,7 @@ class PrefixCommands(Package):
 
     @prefix.command(
         name="set",
-        description="Set command prefix for server",
+        description="set command prefix for server",
         example=",prefix set !",
     )
     @has_permissions(manage_guild=True)
@@ -95,7 +95,7 @@ class PrefixCommands(Package):
     @prefix.command(
         name="remove",
         aliases=["delete", "del", "clear"],
-        description="Remove command prefix for server",
+        description="remove command prefix for server",
     )
     @has_permissions(manage_guild=True)
     async def prefix_remove(self, ctx, prefix: str):
@@ -121,7 +121,7 @@ class PrefixCommands(Package):
 
     @prefix.group(
         name="self",
-        description="Set personal prefix across all guilds with Vain",
+        description="set personal prefix across all guilds with vain",
         example=",prefix self k!",
         invoke_without_command=True,
     )

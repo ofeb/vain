@@ -857,7 +857,7 @@ class SuggestCommands(Package):
     @suggest.command(
         name="set",
         aliases=["channel"],
-        description="Set the suggestions channel (defaults to current channel)",
+        description="set the suggestions channel (defaults to current channel)",
         usage="[channel]",
     )
     @has_permissions(manage_channels=True)
@@ -1060,7 +1060,7 @@ class SuggestCommands(Package):
 
     @suggest_review.command(
         name="channel",
-        description="Set the suggestion review channel (defaults to current channel)",
+        description="set the suggestion review channel (defaults to current channel)",
         usage="[channel]",
     )
     @has_permissions(manage_channels=True)

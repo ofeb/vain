@@ -82,14 +82,14 @@ class Highlight(Package):
     @group(
         name="highlight",
         aliases=["hl"],
-        description="Set notifications for when a keyword is said",
+        description="set notifications for when a keyword is said",
         invoke_without_command=True,
     )
     @has_permissions(guild_owner=True)
     async def highlight(self, ctx):
         return await ctx.send_help(ctx.command)
 
-    @highlight.command(name="add", description="Add a highlighted keyword")
+    @highlight.command(name="add", description="add a highlighted keyword")
     async def highlight_add(self, ctx, *, keyword: str):
         kw = keyword.strip().lower()
         if not kw:
@@ -103,7 +103,7 @@ class Highlight(Package):
         )
         return await ctx.success(f"Added keyword\n> -# **keyword:** `{kw}`")
 
-    @highlight.command(name="remove", description="Remove a highlighted keyword", aliases=["rm", "del"])
+    @highlight.command(name="remove", description="remove a highlighted keyword", aliases=["rm", "del"])
     async def highlight_remove(self, ctx, *, keyword: str):
         kw = keyword.strip().lower()
         await self.bot.db.execute(
@@ -114,7 +114,7 @@ class Highlight(Package):
         )
         return await ctx.success(f"Removed keyword\n> -# **keyword:** `{kw}`")
 
-    @highlight.command(name="list", description="List all your highlighted keywords", aliases=["ls"])
+    @highlight.command(name="list", description="list all your highlighted keywords", aliases=["ls"])
     async def highlight_list(self, ctx):
         rows = await self.bot.db.fetch(
             "SELECT keyword FROM highlights WHERE guild_id = $1 AND user_id = $2",
@@ -129,7 +129,7 @@ class Highlight(Package):
         keywords = [f"`{h['keyword']}`" for h in rows]
         return await ctx.success(f"Your keywords\n{', '.join(keywords)}")
 
-    @highlight.command(name="reset", description="Remove all your highlighted keywords")
+    @highlight.command(name="reset", description="remove all your highlighted keywords")
     async def highlight_reset(self, ctx):
         await self.bot.db.execute(
             "DELETE FROM highlights WHERE guild_id = $1 AND user_id = $2",
@@ -140,7 +140,7 @@ class Highlight(Package):
 
     @highlight.command(
         name="type",
-        description="Where highlight logs are sent (dm or channel)",
+        description="where highlight logs are sent (dm or channel)",
         example=",highlight type channel #logs",
     )
     @has_permissions(manage_guild=True)
@@ -202,7 +202,7 @@ class Highlight(Package):
     @highlight.command(
         name="punishment",
         aliases=["punish", "action"],
-        description="Punishment when a highlighted keyword is used",
+        description="punishment when a highlighted keyword is used",
         example=",highlight punishment timeout 10m --delete 5s",
     )
     @has_permissions(manage_guild=True)
@@ -305,7 +305,7 @@ class Highlight(Package):
             bits.append("> -# **delete after:** off")
         return await ctx.success("\n".join(bits))
 
-    @highlight.command(name="ignore", description="Ignore highlights from a member, role, or channel")
+    @highlight.command(name="ignore", description="ignore highlights from a member, role, or channel")
     async def highlight_ignore(self, ctx, target: discord.Role | discord.Member | discord.TextChannel):
         if isinstance(target, discord.Member):
             ttype, label = "user", target.mention
@@ -323,7 +323,7 @@ class Highlight(Package):
         )
         return await ctx.success(f"Ignoring highlights from {label}")
 
-    @highlight.command(name="unignore", description="Stop ignoring a member, role, or channel")
+    @highlight.command(name="unignore", description="stop ignoring a member, role, or channel")
     async def highlight_unignore(self, ctx, target: discord.Role | discord.Member | discord.TextChannel):
         if isinstance(target, discord.Member):
             ttype = "user"
@@ -341,7 +341,7 @@ class Highlight(Package):
         )
         return await ctx.success(f"No longer ignoring {target.mention}")
 
-    @highlight.command(name="ignorelist", aliases=["ignores"], description="List ignored targets")
+    @highlight.command(name="ignorelist", aliases=["ignores"], description="list ignored targets")
     async def highlight_ignore_list(self, ctx):
         ignores = await self.bot.db.fetch(
             "SELECT target_id, target_type FROM highlight_ignores "

@@ -37,7 +37,7 @@ class Miscellaneous(MiscellaneousEvents, Package):
 
     @hybrid(
         name="uptime",
-        description="Check how long the bot has been online",
+        description="check how long the bot has been online",
     )
     async def uptime(self, ctx: Context) -> None:
         now = discord.utils.utcnow()
@@ -79,7 +79,7 @@ class Miscellaneous(MiscellaneousEvents, Package):
 
     @hybrid(
         name="poll",
-        description="Create a poll with upvote and downvote reactions",
+        description="create a poll with upvote and downvote reactions",
     )
     @describe(question="The poll question")
     async def poll(self, ctx: Context, *, question: str) -> None:
@@ -96,7 +96,7 @@ class Miscellaneous(MiscellaneousEvents, Package):
 
     @hybrid(
         name="quickpoll",
-        description="Add upvote/downvote reactions to a message",
+        description="add upvote/downvote reactions to a message",
     )
     @describe(message_id="ID of the message to add reactions to")
     async def quickpoll(self, ctx: Context, message_id: str) -> None:
@@ -132,7 +132,7 @@ class Miscellaneous(MiscellaneousEvents, Package):
 
     @hybrid(
         name="color",
-        description="Show a hex codes color in an embed",
+        description="show a hex codes color in an embed",
         aliases=["colour"],
     )
     @describe(hex="Hex color code (e.g. #FF0000)")
@@ -154,7 +154,7 @@ class Miscellaneous(MiscellaneousEvents, Package):
 
     @hybrid(
         name="charinfo",
-        description="Get information about a character/symbol",
+        description="get information about a character/symbol",
     )
     @describe(characters="Characters to get info about")
     async def charinfo(self, ctx: Context, *, characters: str) -> None:
@@ -171,7 +171,7 @@ class Miscellaneous(MiscellaneousEvents, Package):
 
     @hybrid(
         name="randomhex",
-        description="Generate a random hex (color)",
+        description="generate a random hex (color)",
     )
     async def randomhex(self, ctx: Context) -> None:
         hex_val = f"{random.randint(0, 0xFFFFFF):06x}"
@@ -185,7 +185,7 @@ class Miscellaneous(MiscellaneousEvents, Package):
 
     @hybrid(
         name="jumbo",
-        description="Enlarge an emoji",
+        description="enlarge an emoji",
         aliases=["e", "enlarge", "enlargen"],
     )
     @describe(emoji="Emoji to enlarge")
@@ -211,7 +211,7 @@ class Miscellaneous(MiscellaneousEvents, Package):
 
     @group(
         name="addemote",
-        description="Downloads emote and adds to server",
+        description="downloads emote and adds to server",
         aliases=["adde"],
     )
     @describe(emoji="Emoji or URL", characters="Name for the emote")

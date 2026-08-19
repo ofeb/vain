@@ -200,7 +200,7 @@ class CommandDisableCommands(Package):
     @disablecommand.command(
         name="list",
         aliases=["ls", "show", "view"],
-        description="View a list of disabled commands in guild",
+        description="view a list of disabled commands in guild",
     )
     @has_permissions(manage_channels=True)
     async def disablecommand_list(self, ctx):
@@ -256,7 +256,7 @@ class CommandDisableCommands(Package):
 
     @disablecommand.command(
         name="all",
-        description="Disable a command in every channel",
+        description="disable a command in every channel",
         usage="<command>",
         example=",disablecommand all snipe",
     )

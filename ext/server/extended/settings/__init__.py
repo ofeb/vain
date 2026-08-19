@@ -146,7 +146,7 @@ class SettingsCommands(Package):
 
     @settings.command(
         name="jail",
-        description="Set the jail channel (defaults to current channel)",
+        description="set the jail channel (defaults to current channel)",
         usage="[channel]",
     )
     @has_permissions(manage_guild=True)
@@ -519,7 +519,7 @@ class SettingsCommands(Package):
     @tracker_username.command(
         name="add",
         aliases=["create", "set", "c", "a", "s"],
-        description="Add a channel for username alerts (defaults to current channel)",
+        description="add a channel for username alerts (defaults to current channel)",
         example=",tracker username add #names",
         usage="[channel]",
     )
@@ -555,7 +555,7 @@ class SettingsCommands(Package):
     @tracker_username.command(
         name="remove",
         aliases=["delete", "del", "d", "r"],
-        description="Remove a username tracker channel (defaults to current channel)",
+        description="remove a username tracker channel (defaults to current channel)",
         example=",tracker username remove #names",
         usage="[channel]",
     )
@@ -595,7 +595,7 @@ class SettingsCommands(Package):
     @tracker.group(
         name="vanity",
         aliases=["vanitys"],
-        description="track available vanity URLs",
+        description="track available vanity urls",
         example=",tracker vanity add #vanities",
         invoke_without_command=True,
     )
@@ -607,7 +607,7 @@ class SettingsCommands(Package):
     @tracker_vanity.command(
         name="add",
         aliases=["create", "set", "c", "a", "s"],
-        description="Add a channel for vanity alerts (defaults to current channel)",
+        description="add a channel for vanity alerts (defaults to current channel)",
         example=",tracker vanity add #vanities",
         usage="[channel]",
     )
@@ -643,7 +643,7 @@ class SettingsCommands(Package):
     @tracker_vanity.command(
         name="remove",
         aliases=["delete", "del", "d", "r"],
-        description="Remove a vanity tracker channel (defaults to current channel)",
+        description="remove a vanity tracker channel (defaults to current channel)",
         example=",tracker vanity remove #vanities",
         usage="[channel]",
     )

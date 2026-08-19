@@ -282,7 +282,7 @@ class InvokeCommands(Package):
 
     @group(
         name="invoke",
-        description="Change punishment messages for DM or command response",
+        description="change punishment messages for dm or command response",
         invoke_without_command=True,
     )
     @has_permissions(manage_guild=True)

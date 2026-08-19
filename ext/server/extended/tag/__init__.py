@@ -30,7 +30,7 @@ class TagCommands(TagEvents, Package):
         name="tag",
         aliases=["servertag", "gtag"],
         invoke_without_command=True,
-        description="Manage server tag role rewards",
+        description="manage server tag role rewards",
     )
     @has_permissions(manage_roles=True)
     async def tag(self, ctx: commands.Context) -> None:
@@ -184,7 +184,7 @@ class TagCommands(TagEvents, Package):
                 + "\n> -# Enable this server's **tag** on your profile (primary guild)."
             )
 
-    @tag.command(name="sync", description="Scan members and apply tag roles")
+    @tag.command(name="sync", description="scan members and apply tag roles")
     @has_permissions(manage_roles=True)
     async def tag_sync(self, ctx: commands.Context) -> None:
         assert ctx.guild is not None

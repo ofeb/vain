@@ -306,7 +306,7 @@ class AutoresponderCommands(Package):
             "All autoresponders cleared\n> -# **this action can't be undone**"
         )
 
-    @autoresponder.command(name="variables", aliases=["vars"], description="View a list of available variables")
+    @autoresponder.command(name="variables", aliases=["vars"], description="view a list of available variables")
     @has_permissions(manage_channels=True)
     async def autoresponder_variables(self, ctx):
         return await ctx.normal(
@@ -316,7 +316,7 @@ class AutoresponderCommands(Package):
 
     @autoresponder.command(
         name="update",
-        description="Update a reply. Flags: --strict --not_strict --self_destruct <secs> --reply --delete or --delete_trigger --ignore_command_check",
+        description="update a reply. flags: --strict --not_strict --self_destruct <secs> --reply --delete or --delete_trigger --ignore_command_check",
         example=",autoresponder update welc, welcome to the server! --reply --self_destruct 10",
     )
     @has_permissions(manage_channels=True)
@@ -325,7 +325,7 @@ class AutoresponderCommands(Package):
 
     @autoresponder.command(
         name="remove", aliases=["del", "delete"],
-        description="Remove a reply for a trigger word",
+        description="remove a reply for a trigger word",
         example=",autoresponder remove welc",
     )
     @has_permissions(manage_channels=True)
@@ -353,7 +353,7 @@ class AutoresponderCommands(Package):
 
     @autoresponder.group(
         name="list", aliases=["view", "show", "ls"],
-        description="View auto-reply triggers in guild",
+        description="view auto-reply triggers in guild",
         invoke_without_command=True,
     )
     @has_permissions(manage_channels=True)
@@ -367,7 +367,7 @@ class AutoresponderCommands(Package):
 
     @autoresponder.command(
         name="add", aliases=["create"],
-        description="Create a reply for a trigger. Flags: --strict --not_strict --self_destruct <secs> --reply --delete or --delete_trigger --ignore_command_check",
+        description="create a reply for a trigger. flags: --strict --not_strict --self_destruct <secs> --reply --delete or --delete_trigger --ignore_command_check",
         example=",autoresponder add welc, welcome to the server! --self_destruct 10 --reply --not_strict",
     )
     @has_permissions(manage_channels=True)

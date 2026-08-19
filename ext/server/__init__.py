@@ -268,7 +268,7 @@ class ServerCommands(Package):
     @group(
         name="embedcreate",
         aliases=["ce", "createembed"],
-        description="Create and send a classic embed. Use {embed} or bare {title}/{description}. Supports variables.",
+        description="create and send a classic embed. use {embed} or bare {title}/{description}. supports variables",
         usage="(script)",
         example="{title: Hello from {guild.name}}$v{description: Sent by {user} in {channel.name} on {date}}$v{color: #5865F2}",
         invoke_without_command=True,
@@ -294,7 +294,7 @@ class ServerCommands(Package):
     @group(
         name="containercreate",
         aliases=["cc", "createcontainer"],
-        description="Create and send a Components V2 container. Use {container}, {divider}, {title}, {description}, {button}.",
+        description="create and send a components v2 container. use {container}, {divider}, {title}, {description}, {button}",
         usage="(script)",
         example="{container}$v{title: Hello}$v{description: World}$v{divider}$v{button: link && Site && https://example.com}",
         invoke_without_command=True,
@@ -582,7 +582,7 @@ class ServerCommands(Package):
 
     @hybrid(
         name="serverinfo",
-        description="View detailed information about the current server",
+        description="view detailed information about the current server",
         aliases=["si", "server", "guildinfo", "gi"],
         usage="",
         example=",serverinfo",
@@ -731,7 +731,7 @@ class ServerCommands(Package):
     @command(
         name="roles",
         aliases=["rolelist"],
-        description="View all roles in the server",
+        description="view all roles in the server",
     )
     async def roles(self, ctx):
         """list all roles"""
@@ -745,7 +745,7 @@ class ServerCommands(Package):
     @command(
         name="inrole",
         aliases=["membersinrole", "withrole", "dump"],
-        description="List every member with a role",
+        description="list every member with a role",
         usage="<role>",
         example=",inrole members",
     )
@@ -760,7 +760,7 @@ class ServerCommands(Package):
 
     @command(
         name="bots",
-        description="List all bots in the server",
+        description="list all bots in the server",
     )
     async def bots(self, ctx):
         """list all bots"""
@@ -805,7 +805,7 @@ class ServerCommands(Package):
     @command(
         name="seticon",
         aliases=["setservericon", "guildiconset"],
-        description="Set or clear the server icon from an attachment or image url",
+        description="set or clear the server icon from an attachment or image url",
         usage="[url or none]",
         example=",seticon https://i.imgur.com/icon.png",
     )
@@ -822,7 +822,7 @@ class ServerCommands(Package):
     @command(
         name="setbanner",
         aliases=["setserverbanner", "guildbannerset"],
-        description="Set or clear the server banner from an attachment or image url (boost level 2+)",
+        description="set or clear the server banner from an attachment or image url (boost level 2+)",
         usage="[url or none]",
         example=",setbanner https://i.imgur.com/banner.png",
     )
@@ -841,7 +841,7 @@ class ServerCommands(Package):
     @command(
         name="setsplash",
         aliases=["setserversplash", "guildsplashset", "setinvitesplash"],
-        description="Set or clear the invite splash from an attachment or image url (boost level 1+)",
+        description="set or clear the invite splash from an attachment or image url (boost level 1+)",
         usage="[url or none]",
         example=",setsplash https://i.imgur.com/splash.png",
     )

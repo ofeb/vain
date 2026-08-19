@@ -23,7 +23,7 @@ class EmbedCommands(Package):
 
     @hybrid(
         name="embed",
-        description="Create and manage saved embed templates",
+        description="create and manage saved embed templates",
         group=True,
         aliases=["savedembed"],
         guild_only=True,
@@ -35,7 +35,7 @@ class EmbedCommands(Package):
 
     @embed.command(
         name="create",
-        description="Save an embed script as a template",
+        description="save an embed script as a template",
         aliases=["add", "save"],
     )
     @describe(name="Template name", script="Embed script to save")
@@ -61,7 +61,7 @@ class EmbedCommands(Package):
 
     @embed.command(
         name="edit",
-        description="Edit a saved embed template",
+        description="edit a saved embed template",
         aliases=["update"],
     )
     @describe(name="Template name", script="New embed script")
@@ -88,7 +88,7 @@ class EmbedCommands(Package):
         )
         await ctx.success(f"Updated embed template **`{name}`**.")
 
-    @embed.command(name="list", description="List saved embed templates")
+    @embed.command(name="list", description="list saved embed templates")
     async def embed_list(self, ctx: Context) -> None:
         rows = await self.db.fetch(
             "SELECT name, author_id, updated_at FROM saved_embeds WHERE guild_id = $1 ORDER BY name",
@@ -108,7 +108,7 @@ class EmbedCommands(Package):
         )
         await ctx.send(embed=embed)
 
-    @embed.command(name="preview", description="Preview a saved embed or raw script")
+    @embed.command(name="preview", description="preview a saved embed or raw script")
     @describe(target="Template name or raw embed script")
     async def embed_preview(self, ctx: Context, *, target: str) -> None:
         row = await self.db.fetchrow(
@@ -119,7 +119,7 @@ class EmbedCommands(Package):
         script = row["script"] if row else target
         await self._send_embed_script(ctx, script)
 
-    @embed.command(name="send", description="Send a saved embed template")
+    @embed.command(name="send", description="send a saved embed template")
     @describe(name="Template name")
     async def embed_send(self, ctx: Context, name: str) -> None:
         row = await self.db.fetchrow(
@@ -131,7 +131,7 @@ class EmbedCommands(Package):
             return await ctx.warn(f"No embed template named **`{name}`**.")
         await self._send_embed_script(ctx, row["script"])
 
-    @embed.command(name="copy", description="Copy embed code from a message link")
+    @embed.command(name="copy", description="copy embed code from a message link")
     @describe(message="Discord message link")
     async def embed_copy(self, ctx: Context, *, message: str) -> None:
         channel_id, message_id = self._parse_message_link(message)
@@ -156,7 +156,7 @@ class EmbedCommands(Package):
             timestamp=False,
         ))
 
-    @embed.command(name="delete", description="Delete a saved embed template", aliases=["remove"])
+    @embed.command(name="delete", description="delete a saved embed template", aliases=["remove"])
     @describe(name="Template name")
     async def embed_delete(self, ctx: Context, name: str) -> None:
         name = name.lower().strip()
@@ -171,7 +171,7 @@ class EmbedCommands(Package):
 
     @hybrid(
         name="editembed",
-        description="Edit a saved embed template",
+        description="edit a saved embed template",
         aliases=["embededit"],
         guild_only=True,
     )

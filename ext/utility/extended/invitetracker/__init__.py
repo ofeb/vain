@@ -45,7 +45,7 @@ class InviteTracker(Package):
 
     @group(
         name="invites",
-        description="View and manage invite tracking",
+        description="view and manage invite tracking",
         invoke_without_command=True,
     )
     @has_permissions(manage_guild=True)
@@ -78,7 +78,7 @@ class InviteTracker(Package):
     @invites.command(
         name="leaderboard",
         aliases=["lb", "top", "rank"],
-        description="View the invite leaderboard",
+        description="view the invite leaderboard",
     )
     @has_permissions(manage_guild=True)
     async def invites_leaderboard(self, ctx: Context):
@@ -108,7 +108,7 @@ class InviteTracker(Package):
 
     @invites.command(
         name="resetall",
-        description="Wipe all invite stats for the server",
+        description="wipe all invite stats for the server",
     )
     @has_permissions(manage_guild=True)
     async def invites_resetall(self, ctx: Context):
@@ -142,7 +142,7 @@ class InviteTracker(Package):
 
     @invites.command(
         name="resetuser",
-        description="Reset invite counts for one user",
+        description="reset invite counts for one user",
     )
     @has_permissions(manage_guild=True)
     async def invites_resetuser(self, ctx: Context, member: discord.Member):
@@ -167,7 +167,7 @@ class InviteTracker(Package):
 
     @invites.command(
         name="bonus",
-        description="Add bonus invites to a user",
+        description="add bonus invites to a user",
     )
     @has_permissions(manage_guild=True)
     async def invites_bonus(
@@ -232,7 +232,7 @@ class InviteTracker(Package):
     @group(
         name="invitetracker",
         aliases=["it"],
-        description="Configure invite tracking",
+        description="configure invite tracking",
         invoke_without_command=True,
     )
     @has_permissions(manage_guild=True)
@@ -243,7 +243,7 @@ class InviteTracker(Package):
 
     @invitetracker.group(
         name="join",
-        description="Configure invite join messages",
+        description="configure invite join messages",
         invoke_without_command=True,
     )
     @has_permissions(manage_guild=True)
@@ -252,7 +252,7 @@ class InviteTracker(Package):
 
     @invitetracker_join.command(
         name="set",
-        description="Set the channel for invite join logs",
+        description="set the channel for invite join logs",
     )
     @has_permissions(manage_guild=True)
     async def invitetracker_join_set(self, ctx: Context, channel: Optional[discord.TextChannel] = None):
@@ -278,7 +278,7 @@ class InviteTracker(Package):
 
     @invitetracker_join.command(
         name="on",
-        description="Enable invite join messages",
+        description="enable invite join messages",
     )
     @has_permissions(manage_guild=True)
     async def invitetracker_join_on(self, ctx: Context):
@@ -307,7 +307,7 @@ class InviteTracker(Package):
 
     @invitetracker_join.command(
         name="off",
-        description="Disable invite join messages",
+        description="disable invite join messages",
     )
     @has_permissions(manage_guild=True)
     async def invitetracker_join_off(self, ctx: Context):
@@ -319,7 +319,7 @@ class InviteTracker(Package):
 
     @invitetracker_join.command(
         name="remove",
-        description="Disable invite join logging",
+        description="disable invite join logging",
     )
     @has_permissions(manage_guild=True)
     async def invitetracker_join_remove(self, ctx: Context):
@@ -331,7 +331,7 @@ class InviteTracker(Package):
 
     @invitetracker_join.command(
         name="message",
-        description="Set the invite join message",
+        description="set the invite join message",
         usage="(text)",
         example=",invitetracker join message welcome {user.mention} invited by {inviter.mention}",
     )
@@ -351,7 +351,7 @@ class InviteTracker(Package):
 
     @invitetracker_join.command(
         name="view",
-        description="View current invite join configuration",
+        description="view current invite join configuration",
     )
     @has_permissions(manage_guild=True)
     async def invitetracker_join_view(self, ctx: Context):
@@ -376,7 +376,7 @@ class InviteTracker(Package):
 
     @invitetracker.group(
         name="leave",
-        description="Configure invite leave messages",
+        description="configure invite leave messages",
         invoke_without_command=True,
     )
     @has_permissions(manage_guild=True)
@@ -385,7 +385,7 @@ class InviteTracker(Package):
 
     @invitetracker_leave.command(
         name="set",
-        description="Set the channel for invite leave logs",
+        description="set the channel for invite leave logs",
     )
     @has_permissions(manage_guild=True)
     async def invitetracker_leave_set(self, ctx: Context, channel: Optional[discord.TextChannel] = None):
@@ -411,7 +411,7 @@ class InviteTracker(Package):
 
     @invitetracker_leave.command(
         name="remove",
-        description="Disable invite leave logging",
+        description="disable invite leave logging",
     )
     @has_permissions(manage_guild=True)
     async def invitetracker_leave_remove(self, ctx: Context):
@@ -423,7 +423,7 @@ class InviteTracker(Package):
 
     @invitetracker_leave.command(
         name="on",
-        description="Enable invite leave messages",
+        description="enable invite leave messages",
     )
     @has_permissions(manage_guild=True)
     async def invitetracker_leave_on(self, ctx: Context):
@@ -451,7 +451,7 @@ class InviteTracker(Package):
 
     @invitetracker_leave.command(
         name="off",
-        description="Disable invite leave messages",
+        description="disable invite leave messages",
     )
     @has_permissions(manage_guild=True)
     async def invitetracker_leave_off(self, ctx: Context):
@@ -463,7 +463,7 @@ class InviteTracker(Package):
 
     @invitetracker_leave.command(
         name="message",
-        description="Set the invite leave message",
+        description="set the invite leave message",
         usage="(text)",
         example=",invitetracker leave message {user.mention} left the server",
     )
@@ -483,7 +483,7 @@ class InviteTracker(Package):
 
     @invitetracker_leave.command(
         name="view",
-        description="View current invite leave configuration",
+        description="view current invite leave configuration",
     )
     @has_permissions(manage_guild=True)
     async def invitetracker_leave_view(self, ctx: Context):

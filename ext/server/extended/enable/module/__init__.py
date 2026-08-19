@@ -64,7 +64,7 @@ class ModuleEnableCommands(Package):
 
     @group(
         name="enablemodule",
-        description="Enable a module in a channel/server (defaults to this channel)",
+        description="enable a module in a channel/server (defaults to this channel)",
         usage="[channel or server] <module>",
         example=",enablemodule #general server",
         invoke_without_command=True,
@@ -127,7 +127,7 @@ class ModuleEnableCommands(Package):
 
     @enablemodule.command(
         name="all",
-        description="Enables a module in every channel",
+        description="enables a module in every channel",
         usage="<module>",
         example=",enablemodule all server",
     )
@@ -155,7 +155,7 @@ class ModuleEnableCommands(Package):
     @enablemodule.command(
         name="list",
         aliases=["ls", "show", "view"],
-        description="View modules currently disabled somewhere",
+        description="view modules currently disabled somewhere",
     )
     @has_permissions(manage_channels=True)
     async def enablemodule_list(self, ctx):

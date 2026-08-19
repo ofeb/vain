@@ -257,7 +257,7 @@ class Nuke(Package):
 
     @group(
         name="nuke",
-        description="Clone and delete a channel (optionally schedule via autonuke)",
+        description="clone and delete a channel (optionally schedule via autonuke)",
         invoke_without_command=True,
         example=",nuke #general",
     )
@@ -301,7 +301,7 @@ class Nuke(Package):
     @nuke.command(
         name="script",
         aliases=["message", "embed", "msg"],
-        description="Set the default message/embed script posted after a manual nuke",
+        description="set the default message/embed script posted after a manual nuke",
         example=",nuke script {embed}$v{description: channel nuked}",
     )
     @has_permissions(administrator=True)
@@ -330,7 +330,7 @@ class Nuke(Package):
     @nuke.command(
         name="variables",
         aliases=["vars", "variable"],
-        description="Show variables available in nuke / autonuke embed scripts",
+        description="show variables available in nuke / autonuke embed scripts",
     )
     @has_permissions(administrator=True)
     async def nuke_variables(self, ctx):
@@ -351,7 +351,7 @@ class Nuke(Package):
     @group(
         name="autonuke",
         aliases=["anuke"],
-        description="Schedule automatic channel nukes",
+        description="schedule automatic channel nukes",
         invoke_without_command=True,
         example=",autonuke add #general 2h",
     )
@@ -362,7 +362,7 @@ class Nuke(Package):
     @autonuke.command(
         name="message",
         aliases=["script", "template", "msg"],
-        description="Set the default message/embed script for all autonukes",
+        description="set the default message/embed script for all autonukes",
         example=",autonuke message {embed}$v{description: channel autonuked}",
     )
     @has_permissions(administrator=True)
@@ -391,7 +391,7 @@ class Nuke(Package):
     @autonuke.command(
         name="add",
         aliases=["create", "cr", "c", "a", "set"],
-        description="Schedule a channel to be nuked on an interval",
+        description="schedule a channel to be nuked on an interval",
         example=",autonuke add #general 2h",
     )
     @has_permissions(administrator=True)
@@ -473,7 +473,7 @@ class Nuke(Package):
     @autonuke.command(
         name="remove",
         aliases=["delete", "del", "rem", "r", "d"],
-        description="Remove a scheduled autonuke",
+        description="remove a scheduled autonuke",
         example=",autonuke remove #text",
     )
     @has_permissions(administrator=True)
@@ -494,7 +494,7 @@ class Nuke(Package):
     @autonuke.command(
         name="list",
         aliases=["ls", "show", "view"],
-        description="View all scheduled autonukes",
+        description="view all scheduled autonukes",
     )
     @has_permissions(administrator=True)
     async def autonuke_list(self, ctx):
@@ -530,7 +530,7 @@ class Nuke(Package):
     @autonuke.command(
         name="variables",
         aliases=["vars", "variable"],
-        description="Show variables available in nuke / autonuke embed scripts",
+        description="show variables available in nuke / autonuke embed scripts",
     )
     @has_permissions(administrator=True)
     async def autonuke_variables(self, ctx):
@@ -539,7 +539,7 @@ class Nuke(Package):
     @autonuke.group(
         name="change",
         aliases=["cfg", "edit", "update"],
-        description="Change an existing autonuke schedule (interval / script)",
+        description="change an existing autonuke schedule (interval / script)",
         invoke_without_command=True,
         example=",autonuke change interval #general 1h",
     )
@@ -550,7 +550,7 @@ class Nuke(Package):
     @autonuke_change.command(
         name="interval",
         aliases=["time", "threshold", "ci"],
-        description="Change the autonuke interval for a channel",
+        description="change the autonuke interval for a channel",
         example=",autonuke change interval #general 2h",
         usage="[channel] <interval>",
     )
@@ -603,7 +603,7 @@ class Nuke(Package):
     @autonuke_change.command(
         name="script",
         aliases=["message", "embed", "msg"],
-        description="Change the autonuke message/script for a channel",
+        description="change the autonuke message/script for a channel",
         example=",autonuke change script #general {embed}$v{description: wiped}",
         usage="[channel] <script>",
     )

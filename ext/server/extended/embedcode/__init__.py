@@ -134,7 +134,7 @@ class Embedcode(Package):
     @hybrid(
         name="embedcode",
         aliases=["copyembed", "ec"],
-        description="Copy the embed code (or container code) from a message",
+        description="copy the embed code (or container code) from a message",
         example=",embedcode (reply) or ,embedcode <message link/id>",
         guilds=True,
         dms=True,
@@ -171,7 +171,7 @@ class Embedcode(Package):
     @hybrid(
         name="containercode",
         aliases=["ccode", "containerc", "copycontainer"],
-        description="Copy the container code (or embed code) from a message",
+        description="copy the container code (or embed code) from a message",
         example=",containercode (reply) or ,containercode <message link/id>",
         guilds=True,
         dms=True,

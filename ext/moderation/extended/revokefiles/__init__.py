@@ -31,7 +31,7 @@ class Revokefiles(Package):
     @group(
         name="revokefiles",
         aliases=["rf"],
-        description="Removes/assigns the permission to attach files & embed links in the current channel",
+        description="removes/assigns the permission to attach files & embed links in the current channel",
         invoke_without_command=True,
     )
     @has_permissions(manage_channels=True)
@@ -42,7 +42,7 @@ class Revokefiles(Package):
     @revokefiles.command(
         name="on",
         aliases=["enable", "allow"],
-        description="Enable permissions to attach files & embed links in a channel",
+        description="enable permissions to attach files & embed links in a channel",
         example=",revokefiles on",
     )
     @has_permissions(manage_channels=True)
@@ -66,7 +66,7 @@ class Revokefiles(Package):
     @revokefiles.command(
         name="off",
         aliases=["disable", "deny"],
-        description="Disables permissions to attach files & embed links in a channel",
+        description="disables permissions to attach files & embed links in a channel",
         example=",revokefiles off",
     )
     @has_permissions(manage_channels=True)

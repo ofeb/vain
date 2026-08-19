@@ -23,7 +23,7 @@ class GoodbyeCommands(Package):
         name="goodbye",
         aliases=["bye", "gb", "leave"],
         invoke_without_command=True,
-        description="Manage messages sent when a member leaves the server",
+        description="manage messages sent when a member leaves the server",
         example=",goodbye add #bye See ya {user}!",
     )
     @has_permissions(manage_guild=True)
@@ -35,7 +35,7 @@ class GoodbyeCommands(Package):
         name="add",
         aliases=["create", "set"],
         flags=Parameters,
-        description="Add a goodbye message to a channel (defaults to current channel)",
+        description="add a goodbye message to a channel (defaults to current channel)",
         usage="[channel] <script> [--self_destruct <time>]",
         example=",goodbye add #bye See ya {user}!",
     )
@@ -71,7 +71,7 @@ class GoodbyeCommands(Package):
         name="edit",
         aliases=["change", "update"],
         flags=Parameters,
-        description="Edit the goodbye script for a channel (defaults to current channel)",
+        description="edit the goodbye script for a channel (defaults to current channel)",
         usage="[channel] <script> [--self_destruct <time>]",
         example=",goodbye edit #bye Farewell {user}!",
     )
@@ -107,7 +107,7 @@ class GoodbyeCommands(Package):
     @goodbye.command(
         name="remove",
         aliases=["delete", "del"],
-        description="Remove a goodbye message from a channel (defaults to current channel)",
+        description="remove a goodbye message from a channel (defaults to current channel)",
         usage="[channel]",
         example=",goodbye remove #general",
     )
@@ -127,7 +127,7 @@ class GoodbyeCommands(Package):
     @goodbye.command(
         name="view",
         aliases=["check"],
-        description="Preview the goodbye message for a channel (defaults to current channel)",
+        description="preview the goodbye message for a channel (defaults to current channel)",
         usage="[channel]",
         example=",goodbye view #general",
     )
@@ -146,7 +146,7 @@ class GoodbyeCommands(Package):
 
     @goodbye.command(
         name="list",
-        description="List all goodbye channels in this server",
+        description="list all goodbye channels in this server",
         example=",goodbye list",
     )
     @has_permissions(manage_guild=True)
@@ -168,7 +168,7 @@ class GoodbyeCommands(Package):
     @goodbye.command(
         name="variables",
         aliases=["vars"],
-        description="Show available template variables for goodbye scripts",
+        description="show available template variables for goodbye scripts",
         example=",goodbye variables",
     )
     @has_permissions(manage_guild=True)

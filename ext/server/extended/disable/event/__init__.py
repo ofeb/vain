@@ -58,7 +58,7 @@ class EventDisableCommands(Package):
     @group(
         name="disableevent",
         aliases=["de"],
-        description="Disable a bot event in a channel (defaults to current channel)",
+        description="disable a bot event in a channel (defaults to current channel)",
         example=",disableevent repost  or  ,disableevent #text repost",
         usage="[channel] <event>",
         invoke_without_command=True,
@@ -91,7 +91,7 @@ class EventDisableCommands(Package):
     @disableevent.command(
         name="list",
         aliases=["ls", "show", "view"],
-        description="View a list of disabled bot events in guild",
+        description="view a list of disabled bot events in guild",
     )
     @has_permissions(manage_channels=True)
     async def disableevent_list(self, ctx):
@@ -118,7 +118,7 @@ class EventDisableCommands(Package):
 
     @disableevent.command(
         name="all",
-        description="Disable a bot event in every channel",
+        description="disable a bot event in every channel",
         example=",disableevent all member_join",
     )
     @has_permissions(manage_channels=True)

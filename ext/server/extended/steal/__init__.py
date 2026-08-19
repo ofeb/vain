@@ -435,7 +435,7 @@ class Steal(Package):
 
     @group(
         name="steal",
-        description="Steal emojis from a message or scan recent messages for emojis",
+        description="steal emojis from a message or scan recent messages for emojis",
         invoke_without_command=True,
         example=",steal <emoji or message link>",
         guild_only=True,
@@ -577,7 +577,7 @@ class Steal(Package):
     @group(
         name="stickersteal",
         aliases=["stealsticker", "ss"],
-        description="Steal stickers from a message or scan recent messages",
+        description="steal stickers from a message or scan recent messages",
         invoke_without_command=True,
         example=",stickersteal <message link>",
         guild_only=True,

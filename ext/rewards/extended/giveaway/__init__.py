@@ -338,7 +338,7 @@ class Giveaway(commands.Cog):
     @group(
         name="giveaway",
         aliases=["gw"],
-        description="Run giveaways with optional entry rules",
+        description="run giveaways with optional entry rules",
         guild_only=True,
     )
     @has_permissions(manage_guild=True)
@@ -350,7 +350,7 @@ class Giveaway(commands.Cog):
     @giveaway.command(
         name="requirements",
         aliases=["reqs", "requirement"],
-        description="List every entry rule you can attach to a giveaway",
+        description="list every entry rule you can attach to a giveaway",
         guild_only=True,
         example=",giveaway requirements",
     )
@@ -391,7 +391,7 @@ class Giveaway(commands.Cog):
     @giveaway.command(
         name="reroll",
         aliases=["rr"],
-        description="Reroll winners for an ended giveaway",
+        description="reroll winners for an ended giveaway",
         guild_only=True,
         usage="[message id or link] [winners]",
         example=",giveaway reroll 123456789012345678",
@@ -466,7 +466,7 @@ class Giveaway(commands.Cog):
     @giveaway.command(
         name="end",
         aliases=["e", "stop"],
-        description="End an active giveaway early",
+        description="end an active giveaway early",
         guild_only=True,
         usage="[message id or link]",
         example=",giveaway end",
@@ -503,7 +503,7 @@ class Giveaway(commands.Cog):
     @giveaway.group(
         name="edit",
         aliases=["ed"],
-        description="Edit options and limits for a specific giveaway",
+        description="edit options and limits for a specific giveaway",
         guild_only=True,
     )
     @has_permissions(manage_guild=True)
@@ -515,7 +515,7 @@ class Giveaway(commands.Cog):
     @giveaway_edit.command(
         name="maxlevel",
         aliases=["ml"],
-        description="Set the maximum level requirement for giveaway entry",
+        description="set the maximum level requirement for giveaway entry",
         guild_only=True,
     )
     @describe(message="Giveaway message to edit", level="Maximum level required")
@@ -563,7 +563,7 @@ class Giveaway(commands.Cog):
     @giveaway_edit.command(
         name="prize",
         aliases=["p"],
-        description="Change prize for a giveaway",
+        description="change prize for a giveaway",
         guild_only=True,
     )
     @describe(message="Giveaway message to edit", prize="New prize name")
@@ -613,7 +613,7 @@ class Giveaway(commands.Cog):
     @giveaway_edit.command(
         name="duration",
         aliases=["d"],
-        description="Change the end date for a giveaway",
+        description="change the end date for a giveaway",
         guild_only=True,
     )
     @describe(message="Giveaway message to edit", duration="Duration like 1h, 30m, or seconds")
@@ -674,7 +674,7 @@ class Giveaway(commands.Cog):
     @giveaway.command(
         name="start",
         aliases=["s", "create", "launch"],
-        description="Launch a giveaway in a channel",
+        description="launch a giveaway in a channel",
         guild_only=True,
         usage="[channel] <prize>, <duration> [--winners n] [--requirement …]",
         example=",giveaway start #chat Nitro, 2 hours --requirement level 5",
@@ -858,7 +858,7 @@ class Giveaway(commands.Cog):
         name="customize",
         aliases=["custom", "cfg", "config"],
         invoke_without_command=True,
-        description="Customize giveaway embeds, join method, buttons, and DM-on-win",
+        description="customize giveaway embeds, join method, buttons, and dm-on-win",
         guild_only=True,
     )
     @has_permissions(manage_guild=True)
@@ -889,7 +889,7 @@ class Giveaway(commands.Cog):
     @giveaway_customize.command(
         name="embed",
         aliases=["panel", "message", "script"],
-        description="Set a custom giveaway panel embed/script",
+        description="set a custom giveaway panel embed/script",
         usage="[script or clear]",
         example=",giveaway customize embed {title: {prize}}$v{description: Ends soon · hosted by {host}}",
     )
@@ -917,7 +917,7 @@ class Giveaway(commands.Cog):
         name="join",
         aliases=["joinmethod"],
         invoke_without_command=True,
-        description="Configure how users join giveaways (button or reaction)",
+        description="configure how users join giveaways (button or reaction)",
     )
     @has_permissions(manage_guild=True)
     async def customize_join(self, ctx: Context, join_type: str = None) -> None:
@@ -952,7 +952,7 @@ class Giveaway(commands.Cog):
     @customize_join.command(
         name="type",
         aliases=["method"],
-        description="Set join type to button or reaction",
+        description="set join type to button or reaction",
     )
     @has_permissions(manage_guild=True)
     async def customize_join_type(self, ctx: Context, join_type: str) -> None:
@@ -961,7 +961,7 @@ class Giveaway(commands.Cog):
     @customize_join.command(
         name="reaction",
         aliases=["emoji", "react", "joinreaction"],
-        description="Set the reaction emoji used to join",
+        description="set the reaction emoji used to join",
         example=",giveaway customize join reaction 🎉",
     )
     @has_permissions(manage_guild=True)
@@ -987,7 +987,7 @@ class Giveaway(commands.Cog):
     @giveaway_customize.command(
         name="button",
         aliases=["btn", "joinbutton"],
-        description="Set enter button label and emoji",
+        description="set enter button label and emoji",
         usage="[label] [emoji]",
         example=",giveaway customize button Enter 🎉",
     )
@@ -1026,7 +1026,7 @@ class Giveaway(commands.Cog):
     @giveaway_customize.command(
         name="showentries",
         aliases=["entries", "showentry", "show"],
-        description="Toggle showing entry count on the giveaway panel",
+        description="toggle showing entry count on the giveaway panel",
         usage="<on or off>",
         example=",giveaway customize showentries off",
     )
@@ -1056,7 +1056,7 @@ class Giveaway(commands.Cog):
         name="dmonwin",
         aliases=["dm"],
         invoke_without_command=True,
-        description="Toggle DMing winners (default: off)",
+        description="toggle dming winners (default: off)",
         usage="[on or off]",
     )
     @has_permissions(manage_guild=True)
@@ -1085,7 +1085,7 @@ class Giveaway(commands.Cog):
             return
         await ctx.warn(f"Invalid option\n> -# **use:** `on` or `off`\n> -# **or:** {ctx.cmd('giveaway customize dmonwin script ...')}")
 
-    @customize_dmonwin.command(name="on", description="Enable DMing winners")
+    @customize_dmonwin.command(name="on", description="enable dming winners")
     @has_permissions(manage_guild=True)
     async def customize_dmonwin_on(self, ctx: Context) -> None:
         events = self._events()
@@ -1094,7 +1094,7 @@ class Giveaway(commands.Cog):
         await events.set_dm_on_win(ctx.guild.id, True)
         await ctx.success("DM on win\n> -# **status:** enabled")
 
-    @customize_dmonwin.command(name="off", description="Disable DMing winners")
+    @customize_dmonwin.command(name="off", description="disable dming winners")
     @has_permissions(manage_guild=True)
     async def customize_dmonwin_off(self, ctx: Context) -> None:
         events = self._events()
@@ -1106,7 +1106,7 @@ class Giveaway(commands.Cog):
     @customize_dmonwin.command(
         name="script",
         aliases=["message", "msg", "template"],
-        description="Set a custom DM script for winners",
+        description="set a custom dm script for winners",
         usage="[script or clear]",
         example=",giveaway customize dmonwin script {embed}$v{title: You won!}$v{description: **{prize}** in {guild.name}}",
     )
@@ -1137,19 +1137,19 @@ class Giveaway(commands.Cog):
         name="dmonwin",
         aliases=["dmonswin"],
         invoke_without_command=True,
-        description="Alias for giveaway customize dmonwin (default off)",
+        description="alias for giveaway customize dmonwin (default off)",
         guild_only=True,
     )
     @has_permissions(manage_guild=True)
     async def dmonwin(self, ctx: Context, state: str = None) -> None:
         await self.customize_dmonwin.callback(self, ctx, state)
 
-    @dmonwin.command(name="on", description="Enable DMing winners")
+    @dmonwin.command(name="on", description="enable dming winners")
     @has_permissions(manage_guild=True)
     async def dmonwin_on(self, ctx: Context) -> None:
         await self.customize_dmonwin_on.callback(self, ctx)
 
-    @dmonwin.command(name="off", description="Disable DMing winners")
+    @dmonwin.command(name="off", description="disable dming winners")
     @has_permissions(manage_guild=True)
     async def dmonwin_off(self, ctx: Context) -> None:
         await self.customize_dmonwin_off.callback(self, ctx)
@@ -1157,7 +1157,7 @@ class Giveaway(commands.Cog):
     @dmonwin.command(
         name="script",
         aliases=["message", "msg", "template"],
-        description="Set a custom DM script for winners",
+        description="set a custom dm script for winners",
     )
     @has_permissions(manage_guild=True)
     async def dmonwin_script(self, ctx: Context, *, script: str = None) -> None:

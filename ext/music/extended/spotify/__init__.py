@@ -59,7 +59,7 @@ class Spotify(Package):
 
     @group(
         name="spotify",
-        description="Control your music on Spotify or search for a track",
+        description="control your music on spotify or search for a track",
         invoke_without_command=True,
         aliases=["sp"],
     )
@@ -89,7 +89,7 @@ class Spotify(Package):
         )
         await ctx.send(embed=embed)
 
-    @spotify.command(name="login", description="Grant Vain access to your Spotify account")
+    @spotify.command(name="login", description="grant vain access to your spotify account")
     async def spotify_login(self, ctx: Context, *, code: str | None = None) -> None:
         if not self.api._client_configured():
             return await ctx.fail("Spotify API credentials are not configured.")
@@ -122,14 +122,14 @@ class Spotify(Package):
         self._login_states.pop(ctx.author.id, None)
         await ctx.success("Spotify account linked.")
 
-    @spotify.command(name="logout", description="Disconnect your Spotify from our servers")
+    @spotify.command(name="logout", description="disconnect your spotify from our servers")
     async def spotify_logout(self, ctx: Context) -> None:
         if not await self.api.is_linked(ctx.author.id):
             return await ctx.warn("You are not linked to Spotify.")
         await self.api.delete_tokens(ctx.author.id)
         await ctx.success("Disconnected your Spotify account.")
 
-    @spotify.command(name="play", description="Immediately skip to the requested song")
+    @spotify.command(name="play", description="immediately skip to the requested song")
     @describe(query="Track name or Spotify URI")
     async def spotify_play(self, ctx: Context, *, query: str) -> None:
         if not await self._require_linked(ctx):
@@ -151,7 +151,7 @@ class Spotify(Package):
             return await ctx.fail(str(exc))
         await ctx.success(f"Playing **{query}** on Spotify.")
 
-    @spotify.command(name="queue", description="Queue a song")
+    @spotify.command(name="queue", description="queue a song")
     @describe(query="Track name or Spotify URI")
     async def spotify_queue(self, ctx: Context, *, query: str) -> None:
         if not await self._require_linked(ctx):
@@ -177,27 +177,27 @@ class Spotify(Package):
             return await ctx.fail(str(exc))
         await ctx.success("Queued track on Spotify.")
 
-    @spotify.command(name="pause", description="Pause the current song")
+    @spotify.command(name="pause", description="pause the current song")
     async def spotify_pause(self, ctx: Context) -> None:
         if await self._user_action(ctx, "PUT", "me/player/pause"):
             await ctx.success("Paused Spotify playback.")
 
-    @spotify.command(name="resume", description="Resume the current song")
+    @spotify.command(name="resume", description="resume the current song")
     async def spotify_resume(self, ctx: Context) -> None:
         if await self._user_action(ctx, "PUT", "me/player/play"):
             await ctx.success("Resumed Spotify playback.")
 
-    @spotify.command(name="next", description="Skip to the next song")
+    @spotify.command(name="next", description="skip to the next song")
     async def spotify_next(self, ctx: Context) -> None:
         if await self._user_action(ctx, "POST", "me/player/next"):
             await ctx.success("Skipped to the next track.")
 
-    @spotify.command(name="previous", description="Skip to the previous song")
+    @spotify.command(name="previous", description="skip to the previous song")
     async def spotify_previous(self, ctx: Context) -> None:
         if await self._user_action(ctx, "POST", "me/player/previous"):
             await ctx.success("Skipped to the previous track.")
 
-    @spotify.command(name="shuffle", description="Toggle playback shuffle")
+    @spotify.command(name="shuffle", description="toggle playback shuffle")
     @describe(option="on or off")
     async def spotify_shuffle(self, ctx: Context, option: str | None = None) -> None:
         if not await self._require_linked(ctx):
@@ -228,7 +228,7 @@ class Spotify(Package):
             return await ctx.fail(str(exc))
         await ctx.success(f"Shuffle **{'enabled' if state else 'disabled'}**.")
 
-    @spotify.command(name="repeat", description="Repeat the current song")
+    @spotify.command(name="repeat", description="repeat the current song")
     @describe(mode="off, track, or context")
     async def spotify_repeat(self, ctx: Context, mode: str | None = None) -> None:
         if not await self._require_linked(ctx):
@@ -257,7 +257,7 @@ class Spotify(Package):
             return await ctx.fail(str(exc))
         await ctx.success(f"Repeat mode set to **{mode}**.")
 
-    @spotify.command(name="seek", description="Seek to position in current song")
+    @spotify.command(name="seek", description="seek to position in current song")
     @describe(seconds="Position in seconds")
     async def spotify_seek(self, ctx: Context, seconds: int) -> None:
         if seconds < 0:
@@ -275,7 +275,7 @@ class Spotify(Package):
             return await ctx.fail(str(exc))
         await ctx.success(f"Seeked to **{seconds}s**.")
 
-    @spotify.command(name="volume", description="Adjust current player volume")
+    @spotify.command(name="volume", description="adjust current player volume")
     @describe(percent="Volume from 0 to 100")
     async def spotify_volume(self, ctx: Context, percent: int) -> None:
         if percent < 0 or percent > 100:
@@ -293,7 +293,7 @@ class Spotify(Package):
             return await ctx.fail(str(exc))
         await ctx.success(f"Volume set to **{percent}%**.")
 
-    @spotify.command(name="like", description="Like your current playing song on Spotify")
+    @spotify.command(name="like", description="like your current playing song on spotify")
     async def spotify_like(self, ctx: Context) -> None:
         if not await self._require_linked(ctx):
             return
@@ -315,7 +315,7 @@ class Spotify(Package):
             return await ctx.fail(str(exc))
         await ctx.success(f"Liked **{playback['item']['name']}**.")
 
-    @spotify.command(name="unlike", description="Unlike your current playing song on Spotify")
+    @spotify.command(name="unlike", description="unlike your current playing song on spotify")
     async def spotify_unlike(self, ctx: Context) -> None:
         if not await self._require_linked(ctx):
             return
@@ -337,7 +337,7 @@ class Spotify(Package):
             return await ctx.fail(str(exc))
         await ctx.success(f"Unliked **{playback['item']['name']}**.")
 
-    @spotify.command(name="toptracks", description="Show top tracks for the specified time frame")
+    @spotify.command(name="toptracks", description="show top tracks for the specified time frame")
     @describe(duration="week, month, year, or all")
     async def spotify_toptracks(self, ctx: Context, duration: str = "month") -> None:
         if not await self._require_linked(ctx):
@@ -364,7 +364,7 @@ class Spotify(Package):
         )
         await ctx.send(embed=embed)
 
-    @spotify.command(name="topartists", description="Show top artists for the specified time frame")
+    @spotify.command(name="topartists", description="show top artists for the specified time frame")
     @describe(duration="week, month, year, or all")
     async def spotify_topartists(self, ctx: Context, duration: str = "month") -> None:
         if not await self._require_linked(ctx):
@@ -393,7 +393,7 @@ class Spotify(Package):
 
     @spotify.group(
         name="device",
-        description="Change the device that youre listening to Spotify with",
+        description="change the device that youre listening to spotify with",
         invoke_without_command=True,
     )
     async def spotify_device(self, ctx: Context) -> None:
@@ -401,7 +401,7 @@ class Spotify(Package):
             return
         await self.spotify_device_list.callback(self, ctx)
 
-    @spotify_device.command(name="list", description="List all current devices connected to your Spotify account")
+    @spotify_device.command(name="list", description="list all current devices connected to your spotify account")
     async def spotify_device_list(self, ctx: Context) -> None:
         if not await self._require_linked(ctx):
             return
@@ -419,7 +419,7 @@ class Spotify(Package):
         embed = panel_embed(title="Spotify Devices", color=color.base, lines=lines, timestamp=False)
         await ctx.send(embed=embed)
 
-    @spotify_device.command(name="set", description="Switch to a device by position")
+    @spotify_device.command(name="set", description="switch to a device by position")
     @describe(position="Device number from device list")
     async def spotify_device_set(self, ctx: Context, position: int) -> None:
         if not await self._require_linked(ctx):
@@ -443,7 +443,7 @@ class Spotify(Package):
             return await ctx.fail(str(exc))
         await ctx.success(f"Transferred playback to **{device['name']}**.")
 
-    @spotify.command(name="vc", description="Play your current track in a voice channel")
+    @spotify.command(name="vc", description="play your current track in a voice channel")
     async def spotify_vc(self, ctx: Context) -> None:
         if not await self._require_linked(ctx):
             return
@@ -462,12 +462,12 @@ class Spotify(Package):
             return await ctx.warn("music cog isn't loaded")
         await music.play.callback(music, ctx, query=query, next=False)
 
-    @spotify.command(name="search", description="Search for a track on Spotify")
+    @spotify.command(name="search", description="search for a track on spotify")
     @describe(query="Track name to search for")
     async def spotify_search(self, ctx: Context, *, query: str) -> None:
         await self._search_tracks(ctx, query)
 
-    @spotify.command(name="track", description="Get details about a Spotify track")
+    @spotify.command(name="track", description="get details about a spotify track")
     @describe(url_or_id="Spotify track URL or ID")
     async def spotify_track(self, ctx: Context, url_or_id: str) -> None:
         track_id = url_or_id.split("/")[-1].split("?")[0] if "/" in url_or_id else url_or_id
@@ -489,7 +489,7 @@ class Spotify(Package):
             embed.set_thumbnail(url=track["album"]["images"][0]["url"])
         await ctx.send(embed=embed)
 
-    @spotify.command(name="album", description="Get details about a Spotify album")
+    @spotify.command(name="album", description="get details about a spotify album")
     @describe(url_or_id="Spotify album URL or ID")
     async def spotify_album(self, ctx: Context, url_or_id: str) -> None:
         album_id = url_or_id.split("/")[-1].split("?")[0] if "/" in url_or_id else url_or_id
@@ -513,7 +513,7 @@ class Spotify(Package):
 
     @hybrid(
         name="spotifyalbum",
-        description="Search for an album on Spotify",
+        description="search for an album on spotify",
         aliases=["spalbum"],
     )
     @describe(query="Album name to search for, or leave empty to use your current Last.fm album")
@@ -550,7 +550,7 @@ class Spotify(Package):
 
     @hybrid(
         name="spotifytrack",
-        description="Search for a track on Spotify",
+        description="search for a track on spotify",
         aliases=["sptrack"],
     )
     @describe(query="Track name to search for, or leave empty to use your current Last.fm track")

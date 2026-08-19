@@ -11,7 +11,7 @@ class AliasCommands(Package):
     @group(
         name="alias",
         aliases=["shortcut"],
-        description="Create your own shortcuts for commands",
+        description="create your own shortcuts for commands",
         invoke_without_command=True,
     )
     @has_permissions(manage_guild=True)
@@ -22,7 +22,7 @@ class AliasCommands(Package):
     @alias.command(
         name="view",
         aliases=["show"],
-        description="View command execution for alias",
+        description="view command execution for alias",
         example=",alias view hi",
     )
     @has_permissions(manage_guild=True)
@@ -43,7 +43,7 @@ class AliasCommands(Package):
     @alias.command(
         name="removeall",
         aliases=["delall", "deleteeall"],
-        description="Remove an alias for command",
+        description="remove an alias for command",
         example=",alias removeall avatar",
     )
     @has_permissions(manage_guild=True)
@@ -58,7 +58,7 @@ class AliasCommands(Package):
 
     @alias.command(
         name="list",
-        description="List every alias for all commands",
+        description="list every alias for all commands",
     )
     @has_permissions(manage_guild=True)
     async def alias_list(self, ctx):
@@ -83,7 +83,7 @@ class AliasCommands(Package):
     @alias.command(
         name="add",
         aliases=["create"],
-        description="Create an alias for command",
+        description="create an alias for command",
         example=",alias add hi avatar",
     )
     @has_permissions(manage_guild=True)
@@ -100,7 +100,7 @@ class AliasCommands(Package):
     @alias.command(
         name="remove",
         aliases=["del", "delete"],
-        description="Remove an alias for command",
+        description="remove an alias for command",
         example=",alias remove hi",
     )
     @has_permissions(manage_guild=True)

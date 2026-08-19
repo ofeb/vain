@@ -35,7 +35,7 @@ class Away(AFKEvents, Package):
 
     @group(
         name="afk",
-        description="Set yourself as away from keyboard",
+        description="set yourself as away from keyboard",
         aliases=["away"],
         invoke_without_command=True,
     )
@@ -55,7 +55,7 @@ class Away(AFKEvents, Package):
     @afk.command(
         name="mentions",
         aliases=["pings", "mentionslist", "ml"],
-        description="View mentions you received while AFK",
+        description="view mentions you received while afk",
     )
     async def afk_mentions(self, ctx: Context) -> None:
         store = self._store()

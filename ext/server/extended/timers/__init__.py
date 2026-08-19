@@ -84,7 +84,7 @@ class Timers(Package):
 
     @group(
         name="timer",
-        description="Create and manage timed reminders",
+        description="create and manage timed reminders",
         invoke_without_command=True,
         aliases=["schedule", "timers"],
     )
@@ -126,7 +126,7 @@ class Timers(Package):
 
     @timer.command(
         name="list",
-        description="View all your active timers",
+        description="view all your active timers",
         aliases=["all"],
     )
     async def timer_list(self, ctx: Context) -> None:
@@ -151,7 +151,7 @@ class Timers(Package):
 
     @timer.command(
         name="cancel",
-        description="Cancel an active timer",
+        description="cancel an active timer",
         aliases=["remove", "delete", "del"],
     )
     @describe(timer_id="The ID of the timer to cancel")
@@ -165,7 +165,7 @@ class Timers(Package):
 
     @timer.command(
         name="clear",
-        description="Clear all your active timers",
+        description="clear all your active timers",
     )
     async def timer_clear(self, ctx: Context) -> None:
         to_remove = [k for k, v in self._timers.items() if v["user_id"] == ctx.author.id]

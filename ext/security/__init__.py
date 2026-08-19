@@ -816,7 +816,7 @@ class Antinuke(AntinukeEvents, Package):
         return False
     @group(
         name="antinuke",
-        description="Protect your server from mass actions, bots, webhooks, and permission abuse",
+        description="protect your server from mass actions, bots, webhooks, and permission abuse",
         usage="(subcommand) <args>",
         example="ban on --punishment ban --threshold 3",
         aliases=["an"],

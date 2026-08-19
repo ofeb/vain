@@ -21,7 +21,7 @@ class IgnoreCommands(Package):
 
     @ignore.command(
         name="remove",
-        description="Remove ignoring for a member or channel",
+        description="remove ignoring for a member or channel",
         example=",ignore remove @jon",
     )
     @has_permissions(administrator=True)
@@ -42,7 +42,7 @@ class IgnoreCommands(Package):
     @ignore.command(
         name="list",
         aliases=["ls", "show", "view"],
-        description="View a list of ignored members or channels",
+        description="view a list of ignored members or channels",
     )
     @has_permissions(administrator=True)
     async def ignore_list(self, ctx):
@@ -71,7 +71,7 @@ class IgnoreCommands(Package):
 
     @ignore.command(
         name="add",
-        description="Ignore a member or channel",
+        description="ignore a member or channel",
         example=",ignore add @jon",
     )
     @has_permissions(administrator=True)

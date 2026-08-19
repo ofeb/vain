@@ -65,7 +65,7 @@ class Soundcloud(Package):
 
     @group(
         name="soundcloud",
-        description="Search and play SoundCloud tracks",
+        description="search and play soundcloud tracks",
         invoke_without_command=True,
         aliases=["sc"],
     )
@@ -91,7 +91,7 @@ class Soundcloud(Package):
 
     @soundcloud.command(
         name="search",
-        description="Search for a track on SoundCloud",
+        description="search for a track on soundcloud",
     )
     @describe(query="Search query")
     async def soundcloud_search(self, ctx: Context, *, query: str) -> None:
@@ -99,7 +99,7 @@ class Soundcloud(Package):
 
     @soundcloud.command(
         name="info",
-        description="Get information about a SoundCloud track",
+        description="get information about a soundcloud track",
     )
     @describe(url="SoundCloud track URL")
     async def soundcloud_info(self, ctx: Context, url: str) -> None:

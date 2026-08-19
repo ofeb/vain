@@ -43,7 +43,7 @@ class PingOnJoinCommands(PingOnJoinEvents, Package):
         name="pingonjoin",
         aliases=["poj", "joinping"],
         invoke_without_command=True,
-        description="Ping members in a channel when they join",
+        description="ping members in a channel when they join",
     )
     @has_permissions(manage_guild=True)
     async def pingonjoin(self, ctx) -> Message:
@@ -53,7 +53,7 @@ class PingOnJoinCommands(PingOnJoinEvents, Package):
         name="add",
         aliases=["set", "create"],
         example=",pingonjoin add #welcome",
-        description="Add a channel that will ping new members (defaults to current channel)",
+        description="add a channel that will ping new members (defaults to current channel)",
         usage="[channel]",
     )
     @has_permissions(manage_guild=True)
@@ -75,7 +75,7 @@ class PingOnJoinCommands(PingOnJoinEvents, Package):
         name="remove",
         aliases=["del", "rm"],
         example=",pingonjoin remove #welcome",
-        description="Remove a ping on join channel (defaults to current channel)",
+        description="remove a ping on join channel (defaults to current channel)",
         usage="[channel]",
     )
     @has_permissions(manage_guild=True)
@@ -96,7 +96,7 @@ class PingOnJoinCommands(PingOnJoinEvents, Package):
     @pingonjoin.command(
         name="list",
         aliases=["show", "view"],
-        description="List ping on join channels and settings",
+        description="list ping on join channels and settings",
     )
     @has_permissions(manage_guild=True)
     async def pingonjoin_list(self, ctx) -> Message:
@@ -158,7 +158,7 @@ class PingOnJoinCommands(PingOnJoinEvents, Package):
         invoke_without_command=True,
         usage="[script]",
         example=",pingonjoin message welcome {user.mention}!",
-        description="Set the custom ping on join message script",
+        description="set the custom ping on join message script",
     )
     @has_permissions(manage_guild=True)
     async def pingonjoin_message(self, ctx, *, script: str = None) -> Message:
@@ -186,7 +186,7 @@ class PingOnJoinCommands(PingOnJoinEvents, Package):
     @pingonjoin_message.command(
         name="remove",
         aliases=["delete", "del", "rm", "clear", "reset"],
-        description="Reset the ping on join message to the default mention",
+        description="reset the ping on join message to the default mention",
     )
     @has_permissions(manage_guild=True)
     async def pingonjoin_message_remove(self, ctx) -> Message:
@@ -203,7 +203,7 @@ class PingOnJoinCommands(PingOnJoinEvents, Package):
         invoke_without_command=True,
         usage="[on or off or interval]",
         example=",pingonjoin delete 10s",
-        description="Auto-delete ping on join messages after a delay",
+        description="auto-delete ping on join messages after a delay",
     )
     @has_permissions(manage_guild=True)
     async def pingonjoin_delete(self, ctx, *, option: str = None) -> Message:
@@ -256,7 +256,7 @@ class PingOnJoinCommands(PingOnJoinEvents, Package):
     @pingonjoin_delete.command(
         name="enable",
         aliases=["on"],
-        description="Enable auto-delete for ping on join messages",
+        description="enable auto-delete for ping on join messages",
     )
     @has_permissions(manage_guild=True)
     async def pingonjoin_delete_enable(self, ctx) -> Message:
@@ -271,7 +271,7 @@ class PingOnJoinCommands(PingOnJoinEvents, Package):
     @pingonjoin_delete.command(
         name="disable",
         aliases=["off"],
-        description="Disable auto-delete for ping on join messages",
+        description="disable auto-delete for ping on join messages",
     )
     @has_permissions(manage_guild=True)
     async def pingonjoin_delete_disable(self, ctx) -> Message:

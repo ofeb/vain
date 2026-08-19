@@ -100,7 +100,7 @@ class Birthday(Package):
     @hybrid(
         name="birthday",
         aliases=["bday"],
-        description="View your birthday or somebody elses",
+        description="view your birthday or somebody elses",
         group=True,
     )
     @describe(member="The user to check birthday for")
@@ -154,7 +154,7 @@ class Birthday(Package):
 
     @birthday.command(
         name="set",
-        description="Set your birthday",
+        description="set your birthday",
     )
     async def birthday_set(self, ctx, *, date: str):
         """set birthday"""
@@ -179,7 +179,7 @@ class Birthday(Package):
     @birthday.command(
         name="remove",
         aliases=["delete", "del", "reset", "clear"],
-        description="Remove your birthday",
+        description="remove your birthday",
     )
     async def birthday_remove(self, ctx):
         """remove birthday"""
@@ -202,7 +202,7 @@ class Birthday(Package):
 
     @birthday.command(
         name="compare",
-        description="Compare your birthday with another member",
+        description="compare your birthday with another member",
     )
     async def birthday_compare(self, ctx, member: Member):
         """compare birthdays"""

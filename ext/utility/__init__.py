@@ -728,7 +728,7 @@ class Snipe(commands.Cog):
     @hybrid(
         name="snipe",
         aliases=["s"],
-        description="Snipe the latest message that was deleted",
+        description="snipe the latest message that was deleted",
         guild_only=True,
     )
     @describe(index="Index of the snipe to retrieve")
@@ -746,7 +746,7 @@ class Snipe(commands.Cog):
     @hybrid(
         name="editsnipe",
         aliases=["es"],
-        description="Snipe the latest message that was edited",
+        description="snipe the latest message that was edited",
         guild_only=True,
     )
     @describe(index="Index of the edit snipe to retrieve")
@@ -764,7 +764,7 @@ class Snipe(commands.Cog):
     @hybrid(
         name="reactionsnipe",
         aliases=["rs"],
-        description="Snipe the latest reaction that was removed",
+        description="snipe the latest reaction that was removed",
         guild_only=True,
     )
     @describe(index="Index of the reaction snipe to retrieve")
@@ -782,7 +782,7 @@ class Snipe(commands.Cog):
     @hybrid(
         name="clearsnipe",
         aliases=["cs", "csnipe", "clearsnipes"],
-        description="Clear all results for reactions, edits and messages",
+        description="clear all results for reactions, edits and messages",
         guild_only=True,
     )
     @has_permissions(manage_messages=True)
@@ -805,7 +805,7 @@ class Snipe(commands.Cog):
 
     @hybrid(
         name="reactionhistory",
-        description="See logged reactions for a message",
+        description="see logged reactions for a message",
         guild_only=True,
     )
     @describe(message="Message to get reaction history for")
@@ -854,7 +854,7 @@ class Snipe(commands.Cog):
 
     @hybrid(
         name="removesnipe",
-        description="Remove a snipe from the snipe index",
+        description="remove a snipe from the snipe index",
         guild_only=True,
     )
     @describe(index="Index of the snipe to remove")
@@ -1117,7 +1117,7 @@ class Utility(commands.Cog):
     @hybrid(
         name="ask",
         aliases=["chatgpt", "gemini", "gpt", "ai"],
-        description="Ask a question and get results from AI",
+        description="ask a question and get results from ai",
         example=",ask what colors make up purple",
         guilds=True,
         dms=True,
@@ -1140,7 +1140,7 @@ class Utility(commands.Cog):
     @hybrid(
         name="translate",
         aliases=["tr"],
-        description="Translate text using Google Translate",
+        description="translate text using google translate",
         example=",tr es hello",
         guilds=True,
         dms=True,
@@ -1241,7 +1241,7 @@ class Utility(commands.Cog):
     @commands.command(
         name="transcribe",
         aliases=["ts", "transcript"],
-        description="Transcribe a Discord voice message",
+        description="transcribe a discord voice message",
     )
     async def transcribe(self, ctx: Context, message: discord.Message = None) -> None:
         voice = None
@@ -1308,7 +1308,7 @@ class Utility(commands.Cog):
     @hybrid(
         name="ocr",
         aliases=["extracttext", "readimage"],
-        description="Extract text from an image (OCR)",
+        description="extract text from an image (ocr)",
         example=",ocr",
         guilds=True,
         dms=True,
@@ -1374,7 +1374,7 @@ class Utility(commands.Cog):
     @command(
         name="embedbuilder",
         aliases=["eb"],
-        description="Interactive embed builder with live preview. Approve DMs the script.",
+        description="interactive embed builder with live preview. approve dms the script",
         example=",embedbuilder",
     )
     @has_permissions(manage_messages=True)
@@ -1392,7 +1392,7 @@ class Utility(commands.Cog):
     @command(
         name="containerbuilder",
         aliases=["cb"],
-        description="Interactive Components V2 container builder with live preview. Approve DMs the script.",
+        description="interactive components v2 container builder with live preview. approve dms the script",
         example=",containerbuilder",
     )
     @has_permissions(manage_messages=True)
@@ -1415,7 +1415,7 @@ class Utility(commands.Cog):
     @hybrid(
         name="dominant",
         aliases=["dom", "domcolor", "palette"],
-        description="Get dominant color(s) from avatars, image URLs, or attachments",
+        description="get dominant color(s) from avatars, image urls, or attachments",
         example=",dominant @user --colors 3",
         guilds=True,
         dms=True,

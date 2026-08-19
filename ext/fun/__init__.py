@@ -95,7 +95,7 @@ class Fun(Package):
 
     @command(
         name="8ball",
-        description="Ask the magic 8-ball a question",
+        description="ask the magic 8-ball a question",
     )
     @describe(question="Your question for the magic 8-ball")
     async def eightball(self, ctx: Context, *, question: str) -> None:
@@ -134,7 +134,7 @@ class Fun(Package):
 
     @hybrid(
         name="roll",
-        description="Roll a dice",
+        description="roll a dice",
     )
     @describe(sides="Number of sides on the dice (default 6)", count="Number of dice to roll (default 1)")
     async def roll(self, ctx: Context, sides: int = 6, count: int = 1) -> None:
@@ -161,7 +161,7 @@ class Fun(Package):
 
     @hybrid(
         name="flip",
-        description="Flip a coin",
+        description="flip a coin",
     )
     async def flip(self, ctx: Context) -> None:
         """Flip a coin."""
@@ -176,7 +176,7 @@ class Fun(Package):
 
     @command(
         name="choose",
-        description="Choose from a list of options",
+        description="choose from a list of options",
     )
     @describe(options="Options to choose from (separated by commas)")
     async def choose(self, ctx: Context, *, options: str) -> None:
@@ -197,7 +197,7 @@ class Fun(Package):
 
     @hybrid(
         name="rate",
-        description="Rate something out of 10",
+        description="rate something out of 10",
     )
     @describe(thing="Thing to rate")
     async def rate(self, ctx: Context, *, thing: str) -> None:
@@ -213,7 +213,7 @@ class Fun(Package):
 
     @command(
         name="uwuify",
-        description="Uwuify your text",
+        description="uwuify your text",
         aliases=["uwu"],
         example=",uwuify hello world",
     )
@@ -260,7 +260,7 @@ class Fun(Package):
 
     @hybrid(
         name="ship",
-        description="Ship two people together",
+        description="ship two people together",
     )
     @describe(member1="First member", member2="Second member (defaults to you)")
     async def ship(self, ctx: Context, member1: discord.Member, member2: discord.Member = None) -> None:
@@ -300,7 +300,7 @@ class Fun(Package):
 
     @hybrid(
         name="fact",
-        description="Get a random fun fact",
+        description="get a random fun fact",
     )
     async def fact(self, ctx: Context) -> None:
         """Get a random fun fact."""
@@ -350,7 +350,7 @@ class Fun(Package):
 
     @hybrid(
         name="joke",
-        description="Get a random joke",
+        description="get a random joke",
     )
     async def joke(self, ctx: Context) -> None:
         """Get a random joke."""
@@ -398,7 +398,7 @@ class Fun(Package):
 
     @hybrid(
         name="duckduckgo",
-        description="Search the DuckDuckGo search engine",
+        description="search the duckduckgo search engine",
         aliases=["ddg"],
         example=",duckduckgo how to get a girlfriend",
         **_CONTEXTS,
@@ -409,7 +409,7 @@ class Fun(Package):
 
     @hybrid(
         name="duckduckgoimage",
-        description="Search DuckDuckGo for an image",
+        description="search duckduckgo for an image",
         aliases=["ddgim", "ddgimg", "duckduckgoimages"],
         example=",duckduckgoimage cats",
         **_CONTEXTS,
@@ -420,7 +420,7 @@ class Fun(Package):
 
     @hybrid(
         name="googleimages",
-        description="Search Google for an image",
+        description="search google for an image",
         aliases=["gimg", "googleimage", "gimages"],
         example=",googleimages cats",
         **_CONTEXTS,
@@ -439,7 +439,7 @@ class Fun(Package):
 
     @hybrid(
         name="reverseimage",
-        description="Reverse image search on Google",
+        description="reverse image search on google",
         aliases=["rimage", "rimg"],
     )
     @describe(url="Image URL to reverse search")
@@ -461,7 +461,7 @@ class Fun(Package):
 
     @hybrid(
         name="image",
-        description="Search Google for an image",
+        description="search google for an image",
         aliases=["im", "img"],
     )
     @describe(search="Search query")
@@ -477,7 +477,7 @@ class Fun(Package):
 
     @hybrid(
         name="giphy",
-        description="Search Giphy for gif results",
+        description="search giphy for gif results",
         aliases=["gif"],
     )
     @describe(keyword="Search keyword")
@@ -493,7 +493,7 @@ class Fun(Package):
 
     @hybrid(
         name="wikihow",
-        description="How to...?",
+        description="how to...?",
         aliases=["whow"],
     )
     @describe(query="What you want to learn how to do")
@@ -509,7 +509,7 @@ class Fun(Package):
 
     @hybrid(
         name="brainly",
-        description="Search Brainly for answers",
+        description="search brainly for answers",
     )
     @describe(query="Question to search for")
     async def brainly(self, ctx: Context, *, query: str) -> None:
@@ -524,7 +524,7 @@ class Fun(Package):
 
     @hybrid(
         name="lyrics",
-        description="Search for song lyrics",
+        description="search for song lyrics",
     )
     @describe(query="Artist and song title")
     async def lyrics(self, ctx: Context, *, query: str) -> None:
@@ -552,7 +552,7 @@ class Fun(Package):
 
     @hybrid(
         name="rockpaperscissors",
-        description="Play rock paper scissors with another member or the bot",
+        description="play rock paper scissors with another member or the bot",
         aliases=["rps"],
         guilds=True,
         dms=True,
@@ -571,7 +571,7 @@ class Fun(Package):
 
     @hybrid(
         name="tictactoe",
-        description="Play tic-tac-toe with somebody!",
+        description="play tic-tac-toe with somebody!",
         aliases=["ttt", "tic-tac-toe"],
         example=",tictactoe jonathan",
         **_CONTEXTS,
@@ -582,7 +582,7 @@ class Fun(Package):
 
     @hybrid(
         name="tictactoestatistics",
-        description="View tic-tac-toe statistics of a member",
+        description="view tic-tac-toe statistics of a member",
         example=",tictactoe statistics jonathan",
         **_CONTEXTS,
     )
@@ -597,7 +597,7 @@ class Fun(Package):
 
     @hybrid(
         name="tictactoeleaderboard",
-        description="View the most tic-tac-toe wins",
+        description="view the most tic-tac-toe wins",
         example=",tictactoe leaderboard",
         **_CONTEXTS,
     )
@@ -608,7 +608,7 @@ class Fun(Package):
 
     @hybrid(
         name="connect4",
-        description="Play connect four with another member or the bot",
+        description="play connect four with another member or the bot",
         aliases=["4inarow", "connectfour", "c4"],
         guilds=True,
         dms=True,
@@ -620,7 +620,7 @@ class Fun(Package):
 
     @hybrid(
         name="wouldyourather",
-        description="Would you rather?",
+        description="would you rather?",
         aliases=["wyr"],
         **_CONTEXTS,
     )

@@ -295,7 +295,7 @@ class StickymessageCommands(Package):
     @group(
         name="stickymessage",
         aliases=["sticky", "stickymsg"],
-        description="Sticky messages that re-post every N messages or after an idle interval",
+        description="sticky messages that re-post every n messages or after an idle interval",
         invoke_without_command=True,
         example=",stickymessage add #general stay on topic",
     )
@@ -306,7 +306,7 @@ class StickymessageCommands(Package):
     @stickymessage.command(
         name="add",
         aliases=["set", "create"],
-        description="Add a sticky message (default: after every message, rate-limited)",
+        description="add a sticky message (default: after every message, rate-limited)",
         example=",stickymessage add #general stay on topic",
         usage="[channel] <script> [message_limit] [interval]",
     )
@@ -377,7 +377,7 @@ class StickymessageCommands(Package):
     @stickymessage.command(
         name="interval",
         aliases=["changeinterval", "ci"],
-        description="Change the auto-send interval for a sticky (disabled when limit is 1)",
+        description="change the auto-send interval for a sticky (disabled when limit is 1)",
         example=",stickymessage interval #general 10m",
         usage="[channel] <interval or off>",
     )
@@ -436,7 +436,7 @@ class StickymessageCommands(Package):
     @stickymessage.command(
         name="messagelimit",
         aliases=["changemessagelimit", "cml", "limit"],
-        description="Change how many messages trigger a sticky re-post (1 = every message)",
+        description="change how many messages trigger a sticky re-post (1 = every message)",
         example=",stickymessage messagelimit #general 1",
         usage="[channel] <limit>",
     )
@@ -489,7 +489,7 @@ class StickymessageCommands(Package):
     @stickymessage.command(
         name="view",
         aliases=["preview", "show"],
-        description="View the sticky message for a channel",
+        description="view the sticky message for a channel",
         example=",stickymessage view #general",
         usage="[channel]",
     )
@@ -510,7 +510,7 @@ class StickymessageCommands(Package):
     @stickymessage.command(
         name="list",
         aliases=["ls"],
-        description="View all sticky messages in this server",
+        description="view all sticky messages in this server",
         example=",stickymessage list",
     )
     @has_permissions(manage_guild=True)
@@ -543,7 +543,7 @@ class StickymessageCommands(Package):
     @stickymessage.command(
         name="remove",
         aliases=["delete", "del", "rm"],
-        description="Remove a sticky message from a channel",
+        description="remove a sticky message from a channel",
         example=",stickymessage remove #general",
         usage="[channel]",
     )
@@ -572,7 +572,7 @@ class StickymessageCommands(Package):
     @stickymessage.group(
         name="change",
         aliases=["cfg", "config"],
-        description="Change sticky settings (interval, message limit, script)",
+        description="change sticky settings (interval, message limit, script)",
         invoke_without_command=True,
         example=",stickymessage change interval 10m",
     )
@@ -583,7 +583,7 @@ class StickymessageCommands(Package):
     @stickymessage_change.command(
         name="interval",
         aliases=["changeinterval", "ci"],
-        description="Change sticky auto-send interval",
+        description="change sticky auto-send interval",
         example=",stickymessage change interval #general 10m",
         usage="[channel] <interval>",
     )
@@ -594,7 +594,7 @@ class StickymessageCommands(Package):
     @stickymessage_change.command(
         name="messagelimit",
         aliases=["limit", "cml", "changemessagelimit"],
-        description="Change sticky message limit",
+        description="change sticky message limit",
         example=",stickymessage change messagelimit #general 10",
         usage="[channel] <limit>",
     )
@@ -605,7 +605,7 @@ class StickymessageCommands(Package):
     @stickymessage_change.command(
         name="script",
         aliases=["message", "embed", "code"],
-        description="Change only the sticky script for a channel",
+        description="change only the sticky script for a channel",
         example=",stickymessage change script #general Stay on topic!",
         usage="[channel] <script>",
     )

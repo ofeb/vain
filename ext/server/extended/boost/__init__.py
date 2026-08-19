@@ -52,7 +52,7 @@ class BoostCommands(Package):
         example=",boosts add #general thanks {user.mention}!",
         aliases=["boost"],
         invoke_without_command=True,
-        description="Manage messages sent when a member boosts the server",
+        description="manage messages sent when a member boosts the server",
     )
     @has_permissions(manage_guild=True)
     async def boosts(self, ctx) -> Message:
@@ -132,7 +132,7 @@ class BoostCommands(Package):
         example=",boosts add #general thanks {user.mention}!",
         aliases=["create", "set"],
         flags=Parameters,
-        description="Add a boost message (defaults to current channel). Use --twoboosts for the 2nd boost script.",
+        description="add a boost message (defaults to current channel). use --twoboosts for the 2nd boost script",
         usage="[channel] <script> [--self_destruct <time>] [--twoboosts]",
     )
     @has_permissions(manage_guild=True)
@@ -156,7 +156,7 @@ class BoostCommands(Package):
         aliases=["change", "update"],
         example=",boosts edit #general thanks {user.mention} for the boost!",
         flags=Parameters,
-        description="Edit an existing boost script (defaults to current channel)",
+        description="edit an existing boost script (defaults to current channel)",
         usage="[channel] <script> [--self_destruct <time>] [--twoboosts]",
     )
     @has_permissions(manage_guild=True)
@@ -180,7 +180,7 @@ class BoostCommands(Package):
         example=",boosts remove #general",
         aliases=["delete", "del"],
         flags=Parameters,
-        description="Remove a boost message (defaults to current channel). --twoboosts removes the second-boost slot.",
+        description="remove a boost message (defaults to current channel). --twoboosts removes the second-boost slot",
         usage="[channel] [--twoboosts]",
     )
     @has_permissions(manage_guild=True)
@@ -209,7 +209,7 @@ class BoostCommands(Package):
         example=",boosts view #general",
         aliases=["check"],
         flags=Parameters,
-        description="Preview the boost message for a channel",
+        description="preview the boost message for a channel",
         usage="[channel] [--twoboosts]",
     )
     @has_permissions(manage_guild=True)
@@ -233,7 +233,7 @@ class BoostCommands(Package):
     @boosts.command(
         name="list",
         example=",boosts list",
-        description="List all boost channels in this server",
+        description="list all boost channels in this server",
     )
     @has_permissions(manage_guild=True)
     async def boosts_list(self, ctx) -> Message:
@@ -256,7 +256,7 @@ class BoostCommands(Package):
         name="variables",
         aliases=["vars"],
         example=",boosts variables",
-        description="Show available template variables for boost scripts",
+        description="show available template variables for boost scripts",
     )
     @has_permissions(manage_guild=True)
     async def boosts_variables(self, ctx) -> Message:

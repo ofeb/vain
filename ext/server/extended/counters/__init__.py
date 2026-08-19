@@ -71,7 +71,7 @@ class Counters(commands.Cog):
 
     @group(
         name="counter",
-        description="Create counters for everybody to see",
+        description="create counters for everybody to see",
         guild_only=True,
     )
     @has_permissions(manage_channels=True)
@@ -82,7 +82,7 @@ class Counters(commands.Cog):
 
     @counter.command(
         name="add",
-        description="Create channel counter",
+        description="create channel counter",
         guild_only=True,
     )
     @describe(option="Counter type", channel_type="Channel type")
@@ -137,7 +137,7 @@ class Counters(commands.Cog):
 
     @counter.command(
         name="remove",
-        description="Remove a channel or category counter",
+        description="remove a channel or category counter",
         guild_only=True,
     )
     @describe(channel="Channel to remove counter from", action="Action to perform")
@@ -172,7 +172,7 @@ class Counters(commands.Cog):
 
     @counter.command(
         name="list",
-        description="List every category or channel keeping track of members or boosters in this server",
+        description="list every category or channel keeping track of members or boosters in this server",
         guild_only=True,
     )
     @has_permissions(manage_channels=True)

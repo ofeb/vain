@@ -1788,7 +1788,7 @@ async def register_builders(bot: "Vain", cog=None) -> None:
     @command(
         name="embedbuilder",
         aliases=["eb"],
-        description="Interactive embed builder with live preview. Approve DMs the script.",
+        description="interactive embed builder with live preview. approve dms the script",
         example=",embedbuilder",
     )
     @has_permissions(manage_messages=True)
@@ -1805,7 +1805,7 @@ async def register_builders(bot: "Vain", cog=None) -> None:
     @command(
         name="containerbuilder",
         aliases=["cb"],
-        description="Interactive Components V2 container builder with live preview. Approve DMs the script.",
+        description="interactive components v2 container builder with live preview. approve dms the script",
         example=",containerbuilder",
     )
     @has_permissions(manage_messages=True)
