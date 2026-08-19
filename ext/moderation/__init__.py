@@ -470,7 +470,27 @@ class ModerationCommands(Package):
         return "\n".join(lines)
 
 
+    def _json_module_status(self, val) -> bool:
+        import json
+        if val is None:
+            return False
+        if isinstance(val, str):
+            try:
+                val = json.loads(val)
+            except Exception:
+                return False
+        if isinstance(val, dict):
+            return bool(val.get("status"))
+        return False
+
     async def _antinuke_enabled(self, guild_id: int) -> bool:
+        try:
+            cog = self.bot.get_cog("Antinuke")
+            if cog is not None and hasattr(cog, "_guild_config"):
+                cfg = await cog._guild_config(guild_id)
+                return bool(cfg.enabled_modules())
+        except Exception:
+            pass
         try:
             row = await self.db.fetchrow(
                 "SELECT ban, kick, channel, role, webhook, emoji, vanity, botadd FROM antinuke WHERE guild_id = $1",
@@ -480,25 +500,49 @@ class ModerationCommands(Package):
             return False
         if not row:
             return False
-        import json
         for key in ("ban", "kick", "channel", "role", "webhook", "emoji", "vanity", "botadd"):
-            val = row.get(key) if hasattr(row, "get") else row[key]
-            if isinstance(val, str):
-                try:
-                    val = json.loads(val)
-                except Exception:
-                    val = {}
-            if isinstance(val, dict) and val.get("status"):
+            try:
+                val = row[key]
+            except Exception:
+                val = row.get(key) if hasattr(row, "get") else None
+            if self._json_module_status(val):
                 return True
         return False
 
+    async def _is_antinuke_admin(self, ctx) -> bool:
+        if ctx.guild is None:
+            return False
+        if ctx.author.id == ctx.guild.owner_id:
+            return True
+        try:
+            if hasattr(self.db, "is_antinuke_admin"):
+                return bool(await self.db.is_antinuke_admin(ctx.guild.id, ctx.author.id))
+        except Exception:
+            pass
+        try:
+            row = await self.db.fetchrow(
+                "SELECT admins FROM antinuke WHERE guild_id = $1",
+                ctx.guild.id,
+            )
+            if row:
+                admins = row["admins"] if hasattr(row, "keys") else row[0]
+                return ctx.author.id in list(admins or [])
+        except Exception:
+            pass
+        return False
+
     async def _require_antinuke_for_hardban(self, ctx) -> bool:
-        """Return True if hardban is allowed; otherwise warn and return False."""
         enabled = await self._antinuke_enabled(ctx.guild.id)
         if not enabled:
             await ctx.warn(
                 "antinuke isn't enabled in this guild\n"
                 "> -# **enable it using** `antinuke setup`"
+            )
+            return False
+        if not await self._is_antinuke_admin(ctx):
+            await ctx.warn(
+                "You are missing permissions to use this punishment\n"
+                "> -# **Permission Needed: Antinuke Admin**"
             )
             return False
         return True
@@ -519,6 +563,16 @@ class ModerationCommands(Package):
         container.add_item(_ui.TextDisplay(text))
         view = layout_from_items([container], timeout=None)
         return await ctx.send(view=view, allowed_mentions=discord.AllowedMentions.none())
+
+
+    def _action_line(self, verb: str, target, *, reason: str | None = None, extra: str | None = None) -> str:
+        mention = getattr(target, "mention", None) or f"**{target}**"
+        lines = [f"> -# **{verb}** {mention}"]
+        if reason is not None:
+            lines.append(f"> -# **reason:** {self._default_reason(reason)}")
+        if extra:
+            lines.append(f"> -# {extra}")
+        return chr(10).join(lines)
 
 
     async def _build_case_embed(self, ctx, case_id: int) -> discord.Embed | None:
@@ -2377,6 +2431,16 @@ class ModerationCommands(Package):
     @has_permissions(ban_members=True)
     async def unban(self, ctx, user: discord.User, *, reason=None):
         """unban a user"""
+        was_hardbanned = False
+        if getattr(self.db, "pool", None) is not None:
+            with contextlib.suppress(Exception):
+                was_hardbanned = await self.db.is_hardbanned(ctx.guild.id, user.id)
+        if was_hardbanned and not await self._is_antinuke_admin(ctx):
+            return await ctx.warn(
+                "this user is **hardbanned**, you are missing the permission to **unhardban** them\n"
+                "> -# **Permission Needed**: Antinuke Admin"
+            )
+
         try:
             await ctx.guild.fetch_ban(user)
         except discord.NotFound:
@@ -2402,12 +2466,9 @@ class ModerationCommands(Package):
         except discord.HTTPException as e:
             return await ctx.fail(f"Unban failed\n> -# **{user}**: {e}")
 
-        was_hardbanned = False
         if getattr(self.db, "pool", None) is not None:
             with contextlib.suppress(Exception):
                 await self.db.remove_tempban(ctx.guild.id, user.id)
-            with contextlib.suppress(Exception):
-                was_hardbanned = await self.db.is_hardbanned(ctx.guild.id, user.id)
             if was_hardbanned:
                 with contextlib.suppress(Exception):
                     await self.db.remove_hardban(ctx.guild.id, user.id)
@@ -2423,7 +2484,7 @@ class ModerationCommands(Package):
         if await self._invoke_response(ctx, "unban", user=user, reason=reason, case_id=case_id):
             return
         verb = "Unhardbanned" if was_hardbanned else "Unbanned"
-        return await self._action_c2(ctx, f"{verb} **{user}** - {self._default_reason(reason)}")
+        return await self._action_c2(ctx, self._action_line(verb, user, reason=reason))
 
     @unban.group(name="invoke", description="customize unban messages", invoke_without_command=True)
     @has_permissions(manage_guild=True)

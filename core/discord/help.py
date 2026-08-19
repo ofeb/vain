@@ -1052,12 +1052,51 @@ def _detail_embed(
     return e
 
 
+
+async def _fetch_custom_aliases(ctx: Context, cmd: Command) -> tuple[list[str], list[str]]:
+    """Guild + personal aliases that point at this command."""
+    guild_aliases: list[str] = []
+    self_aliases: list[str] = []
+    qn = (cmd.qualified_name or cmd.name or "").lower()
+    names = {qn, (cmd.name or "").lower()}
+    names.update(a.lower() for a in (cmd.aliases or []))
+    db = getattr(getattr(ctx, "bot", None), "db", None)
+    if db is None:
+        return guild_aliases, self_aliases
+    try:
+        if ctx.guild is not None:
+            rows = await db.fetch(
+                "SELECT alias, command_name FROM aliases WHERE guild_id = $1",
+                ctx.guild.id,
+            )
+            for r in rows or []:
+                alias = r["alias"] if hasattr(r, "keys") else r[0]
+                target = (r["command_name"] if hasattr(r, "keys") else r[1] or "").lower()
+                if target in names or target.split()[0] in names:
+                    guild_aliases.append(str(alias))
+        rows = await db.fetch(
+            "SELECT name, invoke, command FROM selfaliases WHERE user_id = $1",
+            ctx.author.id,
+        )
+        for r in rows or []:
+            name = r["name"] if hasattr(r, "keys") else r[0]
+            inv = (r["invoke"] if hasattr(r, "keys") else r[1] or "").lower()
+            cmdn = (r["command"] if hasattr(r, "keys") else (r[2] if len(r) > 2 else "") or "").lower()
+            root = inv.split()[0] if inv else ""
+            if cmdn in names or root in names or inv in names:
+                self_aliases.append(str(name))
+    except Exception:
+        pass
+    return guild_aliases, self_aliases
+
+
 def _detail_text(
     cmd: Command,
     ctx: Context,
     *,
     group_title: bool = False,
     page_info: str | None = None,
+    **kwargs,
 ) -> str:
     """Minimal command/group detail text matching inspiration layout."""
     prefix = _get_prefix(ctx)
@@ -1079,10 +1118,18 @@ def _detail_text(
         f"> {desc}",
         "",
         f"**Aliases:** {aliases}",
+    ]
+    guild_aliases = kwargs.get("guild_aliases") or []
+    self_aliases = kwargs.get("self_aliases") or []
+    if guild_aliases:
+        lines.append(f"**Guild Aliases:** {', '.join(guild_aliases)}")
+    if self_aliases:
+        lines.append(f"**Your Aliases:** {', '.join(self_aliases)}")
+    lines.extend([
         f"**Permissions:** {perm}",
         "```yaml",
         f"Usage: {syntax}",
-    ]
+    ])
     
     if ex and ex.strip() and ex.strip() != syntax.strip():
         lines.append(f"Example: {ex}")
@@ -1413,13 +1460,41 @@ class CommandHelpMenu(ui.LayoutView):
     def __init__(self, ctx: Context, cmd: Command, accent: int | None = None) -> None:
         super().__init__(timeout=180)
         self.ctx = ctx
+        self.cmd = cmd
         self.msg: discord.Message | None = None
         body = ui.TextDisplay(_detail_text(cmd, ctx, group_title=False))
         container = ui.Container()
+        for attr in ("accent_color", "accent_colour"):
+            if hasattr(container, attr):
+                try:
+                    setattr(container, attr, None)
+                except Exception:
+                    pass
         container.add_item(body)
         self.add_item(container)
 
     async def start(self) -> discord.Message:
+        guild_a, self_a = await _fetch_custom_aliases(self.ctx, self.cmd)
+        if guild_a or self_a:
+            self.clear_items()
+            body = ui.TextDisplay(
+                _detail_text(
+                    self.cmd,
+                    self.ctx,
+                    group_title=False,
+                    guild_aliases=guild_a,
+                    self_aliases=self_a,
+                )
+            )
+            container = ui.Container()
+            for attr in ("accent_color", "accent_colour"):
+                if hasattr(container, attr):
+                    try:
+                        setattr(container, attr, None)
+                    except Exception:
+                        pass
+            container.add_item(body)
+            self.add_item(container)
         kw: dict[str, Any] = {"view": self}
         if self.ctx.message and not self.ctx.interaction:
             kw["reference"] = self.ctx.message.to_reference(fail_if_not_exists=False)

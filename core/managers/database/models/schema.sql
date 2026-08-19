@@ -555,6 +555,14 @@ CREATE TABLE IF NOT EXISTS aliases (
     PRIMARY KEY (guild_id, alias)
 );
 
+CREATE TABLE IF NOT EXISTS selfaliases (
+    user_id  BIGINT NOT NULL,
+    name     TEXT NOT NULL,
+    invoke   TEXT NOT NULL,
+    command  TEXT NOT NULL,
+    PRIMARY KEY (user_id, name)
+);
+
 CREATE TABLE IF NOT EXISTS nuke (
     guild_id        BIGINT NOT NULL,
     channel_id      BIGINT NOT NULL,

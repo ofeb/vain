@@ -115,19 +115,38 @@ class AliasCommands(Package):
     @alias.command(
         name="add",
         aliases=["create"],
-        description="create an alias for command",
-        example=",alias add hi avatar",
+        description="create an alias for a command",
+        example=",alias add dep, ban",
     )
     @has_permissions(manage_guild=True)
-    async def alias_add(self, ctx, shortcut: str, *, command: CommandConverter):
-        """add a command alias"""
+    async def alias_add(self, ctx, *, payload: str):
+        """add a command alias — format: <alias>, <command>"""
+        if "," not in (payload or ""):
+            return await ctx.warn(
+                "A **comma** is required between the alias and command\n"
+                "> -# **example:** `alias add dep, ban`"
+            )
+        shortcut, invoke = self._split_alias_command(payload)
+        if not shortcut or not invoke:
+            return await ctx.warn(
+                "Use a comma between alias and command\n"
+                "> -# **example:** `alias add dep, ban`"
+            )
+        root = invoke.split()[0]
+        cmd = self.bot.get_command(root)
+        if cmd is None:
+            return await ctx.warn(f"Unknown command `{root}`")
+        if self.bot.get_command(shortcut.lower()):
+            return await ctx.warn(f"`{shortcut}` is already a real command")
         await self.db.execute(
             """INSERT INTO aliases (guild_id, command_name, alias) VALUES($1, $2, $3) ON CONFLICT(guild_id, alias) DO UPDATE SET command_name = excluded.command_name""",
             ctx.guild.id,
-            command.qualified_name,
-            shortcut,
+            cmd.qualified_name,
+            shortcut.lower(),
         )
-        return await ctx.success(f"Alias added\n> -# **{shortcut}** → `{command.qualified_name}`")
+        return await ctx.success(
+            f"Alias added\n> -# **{shortcut.lower()}** → `{cmd.qualified_name}`"
+        )
 
     @alias.command(
         name="remove",
@@ -202,6 +221,11 @@ class AliasCommands(Package):
         example=",alias self add deport, ban",
     )
     async def alias_self_add(self, ctx, *, payload: str):
+        if "," not in (payload or ""):
+            return await ctx.warn(
+                "A **comma** is required between the alias and command\n"
+                "> -# **example:** `alias self add deport, ban`"
+            )
         shortcut, invoke = self._split_alias_command(payload)
         if not self._valid_self_name(shortcut):
             return await ctx.warn(

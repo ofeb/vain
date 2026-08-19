@@ -903,6 +903,10 @@ class Antinuke(AntinukeEvents, Package):
     )
     async def antinuke_config(self, ctx):
         """View server configuration for Antinuke."""
+        from discord import ui as _ui
+        from core.discord.ctx import layout_from_items
+        import contextlib
+
         config = await self._guild_config(ctx.guild.id)
         active = config.enabled_count()
         bot_count = 0
@@ -916,42 +920,39 @@ class Antinuke(AntinukeEvents, Package):
             else:
                 member_count += 1
 
-        embed = Embed(
-            color=self.color,
-            title="Settings",
-            description=f"Antinuke is **{'enabled' if active else 'disabled'}** in this server",
+        status = "enabled" if active else "disabled"
+        modules = chr(10).join([
+            f"> **Mass Member Kick:** {self._toggle_icon(config.kick.status)}",
+            f"> **Webhook Creation:** {self._toggle_icon(config.webhook.status)}",
+            f"> **Emoji Deletion:** {self._toggle_icon(config.emoji.status)}",
+            f"> **Mass Member Ban:** {self._toggle_icon(config.ban.status)}",
+            f"> **Channel Creation/Deletion:** {self._toggle_icon(config.channel.status)}",
+            f"> **Role Deletion:** {self._toggle_icon(config.role.status)}",
+            f"> **Vanity Protection:** {self._toggle_icon(config.vanity.status)}",
+            f"> **Deny Bot Joins:** {self._toggle_icon(config.botadd.status)}",
+        ])
+        general = chr(10).join([
+            f"> **Super Admins:** {len(all_admins)}",
+            f"> **Whitelisted Bots:** {bot_count}",
+            f"> **Whitelisted Members:** {member_count}",
+            f"> **Protection Modules:** {active} enabled",
+            f"> **Watch Permission Grant:** {self._count_perms(config, kind='grant')}/{len(DANGEROUS_PERMISSIONS)}",
+            f"> **Watch Permission Remove:** {self._count_perms(config, kind='remove')}/{len(DANGEROUS_PERMISSIONS)}",
+        ])
+        body = (
+            f"**Antinuke settings**{chr(10)}"
+            f"> Antinuke is **{status}** in this server{chr(10)}{chr(10)}"
+            f"**Modules**{chr(10)}{modules}{chr(10)}{chr(10)}"
+            f"**General**{chr(10)}{general}"
         )
-        embed.set_author(
-            name=str(ctx.author),
-            icon_url=ctx.author.display_avatar.url,
-        )
-        embed.add_field(
-            name="Modules",
-            value=(
-                f"**Mass Member Kick:** {self._toggle_icon(config.kick.status)}"
-                f"\n**Webhook Creation:** {self._toggle_icon(config.webhook.status)}"
-                f"\n**Emoji Deletion:** {self._toggle_icon(config.emoji.status)}"
-                f"\n**Mass Member Ban:** {self._toggle_icon(config.ban.status)}"
-                f"\n**Channel Creation/Deletion:** {self._toggle_icon(config.channel.status)}"
-                f"\n**Role Deletion:** {self._toggle_icon(config.role.status)}"
-                f"\n**Vanity Protection:** {self._toggle_icon(config.vanity.status)}"
-            ),
-            inline=True,
-        )
-        embed.add_field(
-            name="General",
-            value=(
-                f"**Super Admins:** {len(all_admins)}"
-                f"\n**Whitelisted Bots:** {bot_count}"
-                f"\n**Whitelisted Members:** {member_count}"
-                f"\n**Protection Modules:** {active} enabled"
-                f"\n**Watch Permission Grant:** {self._count_perms(config, kind='grant')}/{len(DANGEROUS_PERMISSIONS)} perms"
-                f"\n**Watch Permission Remove:** {self._count_perms(config, kind='remove')}/{len(DANGEROUS_PERMISSIONS)} perms"
-                f"\n**Deny Bot Joins (botadd):** {self._toggle_icon(config.botadd.status)}"
-            ),
-            inline=True,
-        )
-        return await ctx.send(embed=embed)
+        container = _ui.Container()
+        for attr in ("accent_color", "accent_colour", "color", "colour"):
+            if hasattr(container, attr):
+                with contextlib.suppress(Exception):
+                    setattr(container, attr, None)
+        container.add_item(_ui.TextDisplay(body))
+        return await ctx.send(view=layout_from_items([container], timeout=None))
+
 
     @antinuke.command(
         name="whitelist",
@@ -1024,26 +1025,34 @@ class Antinuke(AntinukeEvents, Package):
     @antinuke.command(name="admins")
     async def antinuke_admins(self, ctx):
         """View all antinuke admins."""
+        from discord import ui as _ui
+        from core.discord.ctx import layout_from_items
+        import contextlib
+
         config = await self._guild_config(ctx.guild.id)
         admin_ids = [ctx.guild.owner_id, *config.admins]
         seen: set[int] = set()
-        deduped = [
-            uid for uid in admin_ids if not (uid in seen or seen.add(uid))
-        ]
+        deduped = [uid for uid in admin_ids if not (uid in seen or seen.add(uid))]
         if not deduped:
-            return await ctx.warn(f"No antinuke admins are configured\n> -# **usage:** {ctx.cmd('antinuke admin <member>')} to add one")
-        width = max(2, len(str(len(deduped))))
-        embed = Embed(title="Antinuke admins", color=self.color).set_author(
-            name=str(ctx.author),
-            icon_url=ctx.author.display_avatar.url,
-        )
-        return await ctx.paginate(
-            embed,
-            [
-                f"{index:0{width}d} <@{uid}>"
-                for index, uid in enumerate(deduped, start=1)
-            ],
-        )
+            return await ctx.warn(
+                f"No antinuke admins are configured\n"
+                f"> -# **usage:** {ctx.cmd('antinuke admin <member>')} to add one"
+            )
+        lines = []
+        for index, uid in enumerate(deduped, start=1):
+            member = ctx.guild.get_member(uid) or self.bot.get_user(uid)
+            label = member.mention if member else f"`{uid}`"
+            tag = " (owner)" if uid == ctx.guild.owner_id else ""
+            lines.append(f"> `{index:02}` {label}{tag}")
+        body = "**Antinuke admins**" + chr(10) + chr(10).join(lines)
+        container = _ui.Container()
+        for attr in ("accent_color", "accent_colour", "color", "colour"):
+            if hasattr(container, attr):
+                with contextlib.suppress(Exception):
+                    setattr(container, attr, None)
+        container.add_item(_ui.TextDisplay(body))
+        return await ctx.send(view=layout_from_items([container], timeout=None))
+
 
     @antinuke.command(name="list")
     async def antinuke_list(self, ctx):

@@ -652,7 +652,7 @@ class Vain(commands.AutoShardedBot):
                 origin = copy.copy(origin)
                 origin._update({"content": rewritten})
         ctx = await super().get_context(origin, cls=cls)
-        
+
         try:
             if (
                 isinstance(origin, discord.Message)
@@ -663,6 +663,9 @@ class Vain(commands.AutoShardedBot):
                 rest = origin.content[len(str(ctx.prefix)) :].lstrip()
                 if rest:
                     name = rest.split(None, 1)[0].lower()
+                    tail = rest[len(name) :].lstrip()
+                    inv = None
+                    
                     row = await self.db.fetchrow(
                         "SELECT invoke FROM selfaliases WHERE user_id = $1 AND name = $2",
                         origin.author.id,
@@ -670,7 +673,19 @@ class Vain(commands.AutoShardedBot):
                     )
                     if row:
                         inv = row["invoke"] if hasattr(row, "keys") else row[0]
-                        tail = rest[len(name) :].lstrip()
+                    
+                    if inv is None and getattr(origin, "guild", None) is not None:
+                        row = await self.db.fetchrow(
+                            """
+                            SELECT command_name FROM aliases
+                            WHERE guild_id = $1 AND lower(alias) = $2
+                            """,
+                            origin.guild.id,
+                            name,
+                        )
+                        if row:
+                            inv = row["command_name"] if hasattr(row, "keys") else row[0]
+                    if inv:
                         new_content = f"{ctx.prefix}{inv}" + (f" {tail}" if tail else "")
                         origin = copy.copy(origin)
                         origin._update({"content": new_content})
