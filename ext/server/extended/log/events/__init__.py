@@ -186,7 +186,7 @@ def _components_to_container_script(message: discord.Message) -> list[str]:
 
 
 def _author_label(author: discord.abc.User) -> str:
-    name = getattr(author, "display_name", None) or getattr(author, "name", None) or "unknown"
+    name = getattr(author, "name", None) or getattr(author, "global_name", None) or "unknown"
     return f"@{name} ({author.id})"
 
 
