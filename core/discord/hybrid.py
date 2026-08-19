@@ -242,15 +242,26 @@ class BotGroup(commands.Group, BotCommand):
 
 
 def command(name: str | None = None, **attrs: Any):
-    """prefix-only command using BotCommand"""
+    """prefix-only command using BotCommand.
+
+    If ``group=True`` (or ``invoke_without_command`` is set without an explicit
+    non-group intent), creates a BotGroup so subcommands via ``.command()`` work.
+    """
+    is_group = attrs.pop("group", False)
+    if is_group or ("invoke_without_command" in attrs and attrs.get("cls") is None):
+        attrs.setdefault("cls", BotGroup)
+        attrs.setdefault("invoke_without_command", True)
+        return commands.group(name=name, **attrs)
     attrs.setdefault("cls", BotCommand)
     return commands.command(name=name, **attrs)
 
 
 def group(name: str | None = None, **attrs: Any):
     """prefix-only group using BotGroup"""
+    attrs.pop("group", None)
     attrs.setdefault("cls", BotGroup)
-    return commands.command(name=name, **attrs)
+    attrs.setdefault("invoke_without_command", True)
+    return commands.group(name=name, **attrs)
 
 
 def _normalize_aliases(raw: Any) -> list[str]:
