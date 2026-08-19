@@ -1440,8 +1440,8 @@ class Utility(commands.Cog):
         while i < len(tokens):
             low = tokens[i].lower().strip(",")
             if low in ("--colors", "--colour", "--color", "-c"):
-                if i + 1 < len(tokens) and tokens[i + 1].isdigit():
-                    color_count = max(1, min(5, int(tokens[i + 1])))
+                if i + 1 < len(tokens) and tokens[i + 1].lstrip(",").isdigit():
+                    color_count = max(1, min(5, int(tokens[i + 1].strip(","))))
                     i += 2
                     continue
                 i += 1
@@ -1457,62 +1457,122 @@ class Utility(commands.Cog):
             i += 1
         rest = " ".join(cleaned_tokens).strip()
 
-        
-        sources: list[tuple[str, str]] = []  
+        sources: list[tuple[str, str]] = []
+        seen_urls: set[str] = set()
+
+        def _add(kind: str, url: str) -> None:
+            if not url or url in seen_urls:
+                return
+            seen_urls.add(url)
+            sources.append((kind, url))
 
         if ctx.message and ctx.message.attachments:
-            for n, att in enumerate(ctx.message.attachments, 1):
-                ct = (att.content_type or "").lower()
-                name = (att.filename or "").lower()
-                ok = ct.startswith("image") or name.endswith(
+            atts = [
+                a
+                for a in ctx.message.attachments
+                if (a.content_type or "").lower().startswith("image")
+                or (a.filename or "").lower().endswith(
                     (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp")
                 )
-                if not ok:
-                    continue
-                label = "this attachment" if len(ctx.message.attachments) == 1 else f"attachment #{n}"
+            ]
+            for n, att in enumerate(atts, 1):
                 media_url = getattr(att, "url", None) or getattr(att, "proxy_url", None)
                 if not media_url:
                     continue
-                sources.append((label, str(media_url)))
+                label = "this attachment" if len(atts) == 1 else f"attachment #{n}"
+                _add(label, str(media_url))
+
+        mention_ids: set[int] = set()
+        if ctx.message and ctx.message.mentions:
+            for m in ctx.message.mentions:
+                if m.bot and m.id == getattr(self.bot.user, "id", None):
+                    continue
+                mention_ids.add(m.id)
+                _add(f"avatar:{m.id}", str(m.display_avatar.url))
+
+        url_re = _re.compile(r"https?://\S+", _re.I)
+        mention_re = _re.compile(r"<@!?(\d{15,25})>")
+        id_re = _re.compile(r"^\d{15,25}$")
 
         
-        parts = [p.strip() for p in rest.split(",") if p.strip()] if rest else []
-        if not parts and rest:
-            parts = [rest]
+        for mid in mention_re.findall(rest or ""):
+            try:
+                uid = int(mid)
+            except Exception:
+                continue
+            if uid in mention_ids:
+                continue
+            user = self.bot.get_user(uid)
+            if user is None and ctx.guild is not None:
+                user = ctx.guild.get_member(uid)
+            if user is None:
+                with contextlib.suppress(Exception):
+                    user = await self.bot.fetch_user(uid)
+            if user is None:
+                continue
+            mention_ids.add(uid)
+            _add(f"avatar:{uid}", str(user.display_avatar.url))
 
-        user_converter = commands.MemberConverter()
-        url_re = _re.compile(r"https?://\\S+", _re.I)
+        
+        text = mention_re.sub(" ", rest or "")
+        parts = [p.strip(" ,") for p in _re.split(r"[,\s]+", text) if p.strip(" ,")]
 
         for part in parts:
-            
             m = url_re.search(part)
             if m:
                 url = m.group(0).rstrip(")>.,'\"")
-                sources.append(("url", url))
+                _add("url", url)
                 continue
-            
-            try:
-                member = await user_converter.convert(ctx, part)
-                sources.append((f"avatar:{member.id}", str(member.display_avatar.url)))
-            except Exception:
-                
-                if part.isdigit():
-                    try:
-                        user = self.bot.get_user(int(part)) or await self.bot.fetch_user(int(part))
-                        sources.append((f"avatar:{user.id}", str(user.display_avatar.url)))
-                    except Exception:
-                        pass
 
-        
-        if not sources and not rest:
-            sources.append(
-                (f"avatar:{ctx.author.id}", str(ctx.author.display_avatar.url))
-            )
+            if id_re.match(part):
+                uid = int(part)
+                if uid in mention_ids:
+                    continue
+                user = self.bot.get_user(uid)
+                if user is None and ctx.guild is not None:
+                    user = ctx.guild.get_member(uid)
+                if user is None:
+                    with contextlib.suppress(Exception):
+                        user = await self.bot.fetch_user(uid)
+                if user is None:
+                    continue
+                mention_ids.add(uid)
+                _add(f"avatar:{uid}", str(user.display_avatar.url))
+                continue
+
+            
+            user = None
+            if ctx.guild is not None:
+                low = part.lower().lstrip("@")
+                for member in ctx.guild.members:
+                    if (
+                        member.name.lower() == low
+                        or member.display_name.lower() == low
+                        or str(member).lower() == low
+                        or (member.global_name and member.global_name.lower() == low)
+                    ):
+                        user = member
+                        break
+            if user is None:
+                try:
+                    user = await commands.MemberConverter().convert(ctx, part)
+                except Exception:
+                    try:
+                        user = await commands.UserConverter().convert(ctx, part)
+                    except Exception:
+                        user = None
+            if user is not None:
+                if user.id in mention_ids:
+                    continue
+                mention_ids.add(user.id)
+                _add(f"avatar:{user.id}", str(user.display_avatar.url))
 
         if not sources:
-            return await ctx.warn(
-                "Attachments or URLs **must** be **GIFs** or **Images**"
-            )
+            if rest:
+                return await ctx.warn(
+                    "Attachments or URLs **must** be **GIFs** or **Images**"
+                )
+            _add(f"avatar:{ctx.author.id}", str(ctx.author.display_avatar.url))
 
         sources = sources[:10]
 
@@ -1531,10 +1591,7 @@ class Utility(commands.Cog):
                     img = Image.open(BytesIO(data))
                     if getattr(img, "is_animated", False):
                         img.seek(0)
-                    if img.mode not in ("RGB", "RGBA"):
-                        img = img.convert("RGB")
-                    else:
-                        img = img.convert("RGB")
+                    img = img.convert("RGB")
                     buf = BytesIO()
                     img.save(buf, format="PNG")
                     buf.seek(0)
@@ -1564,10 +1621,9 @@ class Utility(commands.Cog):
                 uid = kind.split(":", 1)[1]
                 title = f"[**dominant colors for <@{uid}>'s avatar**]({url})"
             elif kind == "url":
-                if len(sources) == 1:
+                if sum(1 for k, _ in sources if k == "url") == 1:
                     title = f"[**dominant colors for this url**]({url})"
                 else:
-                    
                     url_n = sum(1 for k, _ in sources[:idx] if k == "url")
                     title = f"[**dominant colors for URL #{url_n}**]({url})"
             elif kind == "this attachment":
