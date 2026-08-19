@@ -90,15 +90,12 @@ class Autorole(commands.Cog):
         from core.discord.views.confirm import ConfirmView
 
         view = ConfirmView(ctx)
-        emb = discord.Embed(
-            color=color.base,
-            description=(
-                "This will **clear every autorole** for this server.\n"
-                "This action **can't be undone**.\n"
-                "Are you sure you want to do this?\n"
-            ),
+        message = (
+            "This will **clear every autorole** for this server.\n"
+            "This action **can't be undone**.\n"
+            "Are you sure you want to do this?\n"
         )
-        if not await view.prompt(embed=emb):
+        if not await view.prompt(message):
             return await ctx.warn("Cancelled\n> -# **no autoroles were removed**")
         settings = await AutoroleSettings.fetch(self.bot, ctx.guild)
         await settings.clear()
@@ -160,15 +157,12 @@ class Autorole(commands.Cog):
         from core.discord.views.confirm import ConfirmView
 
         view = ConfirmView(ctx)
-        emb = discord.Embed(
-            color=color.base,
-            description=(
-                "This will **clear every button role** for this server.\n"
-                "This action **can't be undone**.\n"
-                "Are you sure you want to do this?\n"
-            ),
+        message = (
+            "This will **clear every button role** for this server.\n"
+            "This action **can't be undone**.\n"
+            "Are you sure you want to do this?\n"
         )
-        if not await view.prompt(embed=emb):
+        if not await view.prompt(message):
             return await ctx.warn("Cancelled\n> -# **no button roles were removed**")
         settings = await ButtonRoleSettings.fetch(self.bot, ctx.guild)
         for row in settings.rows:
@@ -317,15 +311,12 @@ class Autorole(commands.Cog):
         from core.discord.views.confirm import ConfirmView
 
         view = ConfirmView(ctx)
-        emb = discord.Embed(
-            color=color.base,
-            description=(
-                "This will **clear every reaction role** for this server.\n"
-                "This action **can't be undone**.\n"
-                "Are you sure you want to do this?\n"
-            ),
+        message = (
+            "This will **clear every reaction role** for this server.\n"
+            "This action **can't be undone**.\n"
+            "Are you sure you want to do this?\n"
         )
-        if not await view.prompt(embed=emb):
+        if not await view.prompt(message):
             return await ctx.warn("Cancelled\n> -# **no reaction roles were removed**")
         settings = await ReactionRoleSettings.fetch(self.bot, ctx.guild)
         await settings.clear()

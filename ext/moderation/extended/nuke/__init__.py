@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Optional
 
@@ -138,6 +139,11 @@ class Nuke(Package):
 
         await self.update_channels_by_id(old_id, new_channel.id, guild.id)
 
+        vm = self.bot.get_cog("VoiceMaster")
+        if vm is not None:
+            with contextlib.suppress(Exception):
+                await vm.reconfigure_after_nuke(old_id, new_channel)
+
         script = message if message is not None else await self._get_default_message(guild.id)
         if not script:
             script = _DEFAULT_MESSAGE
@@ -269,14 +275,12 @@ class Nuke(Package):
             raise CommandError("You can only nuke text channels")
 
         view = ConfirmView(ctx, timeout=30.0)
-        embed = Embed(
-            description=(
-                f"This will **nuke** {channel.mention}.\n"
-                f"Are you sure you want to do this?\n"
-                f"> -# **the channel will be cloned then deleted**"
-            ),
+        message = (
+            f"This will **nuke** {channel.mention}.\n"
+            f"Are you sure you want to do this?\n"
+            f"> -# **the channel will be cloned then deleted**"
         )
-        if not await view.prompt(embed=embed):
+        if not await view.prompt(message):
             try:
                 return await ctx.warn("Nuke **cancelled**")
             except (discord.NotFound, discord.HTTPException):

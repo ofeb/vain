@@ -83,16 +83,16 @@ class VoiceMaster(VoiceMasterEvents, Package):
         container.add_item(discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small))
 
         left_col = (
-            f"{VM['claim']} — claim ownership\n"
-            f"{VM['delete']} — remove the channel\n"
-            f"{VM['disconnect']} — evict a member\n"
-            f"{VM['hide']} — hide from channel list\n"
-            f"{VM['reveal']} — show in channel list"
-        )
-        right_col = (
-            f"{VM['limit']} — set member cap\n"
             f"{VM['lock']} — restrict access\n"
             f"{VM['unlock']} — allow access\n"
+            f"{VM['claim']} — claim ownership\n"
+            f"{VM['delete']} — remove the channel\n"
+            f"{VM['disconnect']} — evict a member"
+        )
+        right_col = (
+            f"{VM['hide']} — hide from channel list\n"
+            f"{VM['reveal']} — show in channel list\n"
+            f"{VM['limit']} — set member cap\n"
             f"{VM['rename']} — change name\n"
             f"{VM['status']} — set channel status"
         )
@@ -109,17 +109,17 @@ class VoiceMaster(VoiceMasterEvents, Package):
         container.add_item(discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small))
 
         row1 = discord.ui.ActionRow(
+            discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=VM["lock"], custom_id="voicemaster:lock"),
+            discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=VM["unlock"], custom_id="voicemaster:unlock"),
             discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=VM["claim"], custom_id="voicemaster:claim"),
             discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=VM["delete"], custom_id="voicemaster:delete"),
             discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=VM["disconnect"], custom_id="voicemaster:disconnect"),
-            discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=VM["hide"], custom_id="voicemaster:hide"),
-            discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=VM["reveal"], custom_id="voicemaster:reveal"),
         )
         container.add_item(row1)
         row2 = discord.ui.ActionRow(
+            discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=VM["hide"], custom_id="voicemaster:hide"),
+            discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=VM["reveal"], custom_id="voicemaster:reveal"),
             discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=VM["limit"], custom_id="voicemaster:limit"),
-            discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=VM["lock"], custom_id="voicemaster:lock"),
-            discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=VM["unlock"], custom_id="voicemaster:unlock"),
             discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=VM["rename"], custom_id="voicemaster:rename"),
             discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=VM["status"], custom_id="voicemaster:status"),
         )
@@ -205,6 +205,19 @@ class VoiceMaster(VoiceMasterEvents, Package):
                 await settings.upsert(panel_message_id=msg.id)
             except Exception:
                 continue
+
+    async def reconfigure_after_nuke(self, old_channel_id: int, new_channel: discord.TextChannel) -> None:
+        """Re-send the voicemaster panel if the nuked channel was the interface."""
+        if getattr(self.bot.db, "pool", None) is None:
+            return
+        settings = await VoiceMasterSettings.fetch(self.bot, new_channel.guild)
+        if not settings.record.get("interface_id"):
+            return
+        try:
+            msg = await new_channel.send(view=self._panel_view(new_channel.guild))
+            await settings.upsert(panel_message_id=msg.id)
+        except Exception:
+            pass
 
     def _get_cooldown(self, key: str, rate: int, per: float) -> Optional[float]:
         now = asyncio.get_event_loop().time()

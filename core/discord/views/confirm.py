@@ -1,7 +1,6 @@
 """Yes/no confirmation view (Approve / Deny).
 
-Matches the booster-ban style: only the invoker can click, buttons use
-approve/deny emojis, prompt can be a plain string or an embed.
+C2 container style: blue approve, red deny, no emojis.
 """
 
 from __future__ import annotations
@@ -14,11 +13,12 @@ from enum import Enum
 import discord
 from discord.ext.commands import Context
 
-from config import color, emojis
-from core.discord.views.embed import c2
+from config import color
 
 
-def _confirm_embed(message: str) -> discord.Embed:
+def _build_confirm_container(message: str) -> discord.Embed:
+    """Build a C2 container embed for confirm prompts."""
+    from core.discord.views.embed import c2
     return c2(
         message=message or "Are you sure you want to do this?",
         timestamp=False,
@@ -41,26 +41,15 @@ class ConfirmView(discord.ui.View):
         self.value: bool | None = None
         self.message: discord.Message | None = None
 
-        
         self.clear_items()
-
-        def _emoji(raw: str | None):
-            if not raw:
-                return None
-            try:
-                return discord.PartialEmoji.from_str(str(raw))
-            except Exception:
-                return None
 
         approve = discord.ui.Button(
             label="Approve",
             style=discord.ButtonStyle.success,
-            emoji=_emoji(getattr(emojis, "approve", None)),
         )
         deny = discord.ui.Button(
             label="Deny",
             style=discord.ButtonStyle.danger,
-            emoji=_emoji(getattr(emojis, "deny", None)),
         )
         approve.callback = self._approve  # type: ignore[method-assign]
         deny.callback = self._deny  # type: ignore[method-assign]
@@ -100,14 +89,9 @@ class ConfirmView(discord.ui.View):
         delete_after: bool = True,
         cancel_message: str | None = "Cancelled",
     ) -> bool:
-        """Send the prompt and wait for Approve / Deny. Returns True if approved.
-
-        On deny/timeout, shows a warn-style cancelled message that auto-deletes after 5s.
-        """
-        if embed is None:
-            embed = _confirm_embed(
-                message or "Are you sure you want to do this?"
-            )
+        """Send the prompt and wait for Approve / Deny. Returns True if approved."""
+        display_message = message or "Are you sure you want to do this?"
+        embed = _build_confirm_container(display_message)
         self.message = await self.ctx.send(embed=embed, view=self)
         await self.wait()
         approved = bool(self.value)
@@ -125,6 +109,7 @@ class ConfirmView(discord.ui.View):
 
     def _cancel_warn_embed(self, message: str) -> discord.Embed:
         from core.discord.views.embed import reply_embed
+        from config import emojis
         emoji = getattr(emojis, "warn", None) or ""
         mention = getattr(self.ctx.author, "mention", "")
         body = f"{emoji} {mention}: {message}".strip()
@@ -162,23 +147,13 @@ class ThreeButtonConfirmView(discord.ui.View):
 
         self.clear_items()
 
-        def _emoji(raw: str | None):
-            if not raw:
-                return None
-            try:
-                return discord.PartialEmoji.from_str(str(raw))
-            except Exception:
-                return None
-
         approve = discord.ui.Button(
             label="Approve",
             style=discord.ButtonStyle.success,
-            emoji=_emoji(getattr(emojis, "approve", None)),
         )
         deny = discord.ui.Button(
             label="Deny",
             style=discord.ButtonStyle.danger,
-            emoji=_emoji(getattr(emojis, "deny", None)),
         )
         approve.callback = self._approve
         deny.callback = self._deny
@@ -188,8 +163,7 @@ class ThreeButtonConfirmView(discord.ui.View):
         if show_cancel:
             cancel = discord.ui.Button(
                 label="Cancel",
-                style=discord.ButtonStyle.secondary,
-                emoji="✖",
+                style=discord.ButtonStyle.danger,
             )
             cancel.callback = self._cancel
             self.add_item(cancel)
@@ -233,10 +207,8 @@ class ThreeButtonConfirmView(discord.ui.View):
         cancel_message: str | None = "Cancelled",
     ) -> ConfirmChoice:
         """Send the prompt and wait for Approve / Deny / Cancel. Returns ConfirmChoice."""
-        if embed is None:
-            embed = _confirm_embed(
-                message or "Are you sure you want to do this?"
-            )
+        display_message = message or "Are you sure you want to do this?"
+        embed = _build_confirm_container(display_message)
         self.message = await self.ctx.send(embed=embed, view=self)
         await self.wait()
         result = self.value or ConfirmChoice.CANCEL
@@ -244,6 +216,7 @@ class ThreeButtonConfirmView(discord.ui.View):
             if result != ConfirmChoice.APPROVE and cancel_message:
                 with contextlib.suppress(Exception):
                     from core.discord.views.embed import reply_embed
+                    from config import emojis
                     emoji = getattr(emojis, "warn", None) or ""
                     mention = getattr(self.ctx.author, "mention", "")
                     body = f"{emoji} {mention}: {cancel_message}".strip()

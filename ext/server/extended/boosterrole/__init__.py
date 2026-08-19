@@ -30,25 +30,8 @@ class _ShareConfirmView(discord.ui.View):
         self.message: discord.Message | None = None
 
         self.clear_items()
-
-        def _emoji(raw: str | None):
-            if not raw:
-                return None
-            try:
-                return discord.PartialEmoji.from_str(str(raw))
-            except Exception:
-                return None
-
-        accept = discord.ui.Button(
-            label="Accept",
-            style=discord.ButtonStyle.success,
-            emoji=_emoji(getattr(emojis, "approve", None)),
-        )
-        deny = discord.ui.Button(
-            label="Deny",
-            style=discord.ButtonStyle.danger,
-            emoji=_emoji(getattr(emojis, "deny", None)),
-        )
+        accept = discord.ui.Button(label="Accept", style=discord.ButtonStyle.success)
+        deny = discord.ui.Button(label="Deny", style=discord.ButtonStyle.danger)
         accept.callback = self._accept
         deny.callback = self._deny
         self.add_item(accept)
@@ -80,8 +63,10 @@ class _ShareConfirmView(discord.ui.View):
                 await self.message.delete()
 
     async def prompt(self, message: str | None = None, *, embed: discord.Embed | None = None, delete_after: bool = True) -> bool:
-        if embed is None:
-            embed = _confirm_embed(message or "Are you sure you want to do this?")
+        from core.discord.views.embed import c2
+        display_message = message or "Are you sure you want to do this?"
+        embed = c2(message=display_message, timestamp=False)
+        embed.color = None
         self.message = await self.ctx.send(embed=embed, view=self)
         await self.wait()
         if delete_after and self.message is not None:

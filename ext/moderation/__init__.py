@@ -47,6 +47,14 @@ class _BoostConfirmView(discord.ui.View):
         self.value: bool | None = None
         self._action = action
 
+        self.clear_items()
+        approve = discord.ui.Button(label="Approve", style=discord.ButtonStyle.success)
+        decline = discord.ui.Button(label="Decline", style=discord.ButtonStyle.danger)
+        approve.callback = self._approve
+        decline.callback = self._decline
+        self.add_item(approve)
+        self.add_item(decline)
+
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.ctx.author.id:
             await interaction.response.send_message(
@@ -56,26 +64,26 @@ class _BoostConfirmView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="Approve", style=discord.ButtonStyle.success)
-    async def approve(self, interaction: discord.Interaction, _: discord.ui.Button):
+    async def _approve(self, interaction: discord.Interaction):
         self.value = True
         await interaction.response.defer()
         self.stop()
 
-    @discord.ui.button(label="Decline", style=discord.ButtonStyle.danger)
-    async def decline(self, interaction: discord.Interaction, _: discord.ui.Button):
+    async def _decline(self, interaction: discord.Interaction):
         self.value = False
         await interaction.response.defer()
         self.stop()
 
     async def prompt(self) -> bool:
-        embed = reply_embed(
-            color=0x2A2B2F,
+        from core.discord.views.embed import c2
+        embed = c2(
             message=(
                 f"Are you sure you want to **{self._action}** {self.member.mention}?\n"
                 f"They are currently boosting the server."
             ),
+            timestamp=False,
         )
+        embed.color = None
         msg = await self.ctx.send(embed=embed, view=self)
         await self.wait()
         with contextlib.suppress(discord.HTTPException):
@@ -2319,14 +2327,11 @@ class ModerationCommands(Package):
         if not invites:
             return await ctx.warn("No invites\n> -# **this server has no invites**")
         view = ConfirmView(ctx)
-        emb = reply_embed(
-            color=0x2A2B2F,
-            message=(
-                f"This will **delete all invites** in this server (**{len(invites)}**).\n"
-                f"Are you sure you want to do this?"
-            ),
+        message = (
+            f"This will **delete all invites** in this server (**{len(invites)}**).\n"
+            f"Are you sure you want to do this?"
         )
-        if not await view.prompt(embed=emb):
+        if not await view.prompt(message):
             return await ctx.warn("Cancelled\n> -# **clearinvites was cancelled**")
         deleted = 0
         for invite in invites:

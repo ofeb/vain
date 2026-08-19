@@ -360,13 +360,13 @@ class ConfirmView(View):
             return False
         return True
 
-    @discord.ui.button(label="Confirm", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label="Confirm", style=discord.ButtonStyle.success)
     async def confirm(self, interaction: Interaction, button: Button):
         self.value = True
         self.stop()
         await interaction.response.defer()
 
-    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.danger)
     async def cancel(self, interaction: Interaction, button: Button):
         self.value = False
         self.stop()
@@ -765,16 +765,16 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
             )
         view = ConfirmView(ctx.author.id)
         target = member.mention if member else "**everyone**"
-        msg = await ctx.send(
-            embed=Embed(
-                color=0xED4245,
-                description=(
-                    f"{ctx.author.mention}: Reset level stats for {target}? "
-                    "This action **can't be undone**."
-                ),
+        from core.discord.views.embed import c2
+        embed = c2(
+            message=(
+                f"{ctx.author.mention}: Reset level stats for {target}? "
+                "This action **can't be undone**."
             ),
-            view=view,
+            timestamp=False,
         )
+        embed.color = None
+        msg = await ctx.send(embed=embed, view=view)
         await view.wait()
         with contextlib.suppress(Exception):
             await msg.edit(view=None)
@@ -802,16 +802,16 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         if not cfg:
             return await ctx.warn("Not configured\n> -# **leveling is not set up for this server**")
         view = ConfirmView(ctx.author.id)
-        msg = await ctx.send(
-            embed=Embed(
-                color=0xED4245,
-                description=(
-                    f"{ctx.author.mention}: Delete **all** leveling configuration and XP? "
-                    "This action ****can't** be undone**."
-                ),
+        from core.discord.views.embed import c2
+        embed = c2(
+            message=(
+                f"{ctx.author.mention}: Delete **all** leveling configuration and XP? "
+                "This action **can't be undone**."
             ),
-            view=view,
+            timestamp=False,
         )
+        embed.color = None
+        msg = await ctx.send(embed=embed, view=view)
         await view.wait()
         with contextlib.suppress(Exception):
             await msg.edit(view=None)
