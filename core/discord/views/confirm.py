@@ -6,6 +6,8 @@ approve/deny emojis, prompt can be a plain string or an embed.
 
 from __future__ import annotations
 
+import asyncio
+
 import contextlib
 from enum import Enum
 
@@ -96,18 +98,43 @@ class ConfirmView(discord.ui.View):
         *,
         embed: discord.Embed | None = None,
         delete_after: bool = True,
+        cancel_message: str | None = "Cancelled",
     ) -> bool:
-        """Send the prompt and wait for Approve / Deny. Returns True if approved."""
+        """Send the prompt and wait for Approve / Deny. Returns True if approved.
+
+        On deny/timeout, shows a warn-style cancelled message that auto-deletes after 3s.
+        """
         if embed is None:
             embed = _confirm_embed(
                 message or "Are you sure you want to do this?"
             )
         self.message = await self.ctx.send(embed=embed, view=self)
         await self.wait()
+        approved = bool(self.value)
         if delete_after and self.message is not None:
-            with contextlib.suppress(discord.HTTPException):
+            if not approved and cancel_message:
+                with contextlib.suppress(Exception):
+                    await self.message.edit(
+                        embed=self._cancel_warn_embed(cancel_message),
+                        view=None,
+                    )
+                    await asyncio.sleep(3)
+            with contextlib.suppress(discord.HTTPException, Exception):
                 await self.message.delete()
-        return bool(self.value)
+        return approved
+
+    def _cancel_warn_embed(self, message: str) -> discord.Embed:
+        from core.discord.views.embed import reply_embed
+        emoji = getattr(emojis, "warn", None) or ""
+        mention = getattr(self.ctx.author, "mention", "")
+        body = f"{emoji} {mention}: {message}".strip()
+        emb = reply_embed(message=body)
+        try:
+            emb.color = int(getattr(color, "warn", 0) or 0) or None
+        except Exception:
+            pass
+        return emb
+
 
 
 class ConfirmChoice(Enum):
@@ -203,6 +230,7 @@ class ThreeButtonConfirmView(discord.ui.View):
         *,
         embed: discord.Embed | None = None,
         delete_after: bool = True,
+        cancel_message: str | None = "Cancelled",
     ) -> ConfirmChoice:
         """Send the prompt and wait for Approve / Deny / Cancel. Returns ConfirmChoice."""
         if embed is None:
@@ -211,7 +239,21 @@ class ThreeButtonConfirmView(discord.ui.View):
             )
         self.message = await self.ctx.send(embed=embed, view=self)
         await self.wait()
+        result = self.value or ConfirmChoice.CANCEL
         if delete_after and self.message is not None:
-            with contextlib.suppress(discord.HTTPException):
+            if result != ConfirmChoice.APPROVE and cancel_message:
+                with contextlib.suppress(Exception):
+                    from core.discord.views.embed import reply_embed
+                    emoji = getattr(emojis, "warn", None) or ""
+                    mention = getattr(self.ctx.author, "mention", "")
+                    body = f"{emoji} {mention}: {cancel_message}".strip()
+                    emb = reply_embed(message=body)
+                    try:
+                        emb.color = int(getattr(color, "warn", 0) or 0) or None
+                    except Exception:
+                        pass
+                    await self.message.edit(embed=emb, view=None)
+                    await asyncio.sleep(3)
+            with contextlib.suppress(discord.HTTPException, Exception):
                 await self.message.delete()
-        return self.value or ConfirmChoice.CANCEL
+        return result

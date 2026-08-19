@@ -163,7 +163,6 @@ def build_urban_embed(
         body_parts.append(definition)
     if example:
         body_parts.append(f"**example:** {example}")
-    body_parts.append(f"**votes:** 👍 `{thumbs_up}` · 👎 `{thumbs_down}`")
     body = "\n\n".join(body_parts)
     body = f"{body}\n\n> -# page {page}/{total}"
     

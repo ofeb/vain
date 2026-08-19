@@ -7,6 +7,8 @@ Container builder → Components V2 LayoutView (TextDisplay, Section+Thumbnail,
 
 from __future__ import annotations
 
+import asyncio
+
 import contextlib
 from typing import TYPE_CHECKING, Any
 
@@ -1737,26 +1739,39 @@ class _BaseBuilder:
 
     async def handle_cancel(self, inter: discord.Interaction) -> None:
         self._stopped = True
-        name = "Embed" if self.kind == "embed" else "Container"
+        name = "embed" if self.kind == "embed" else "container"
+        from core.discord.views.embed import reply_embed
+        from config import color as _color, emojis as _emojis
+        emoji = getattr(_emojis, "warn", None) or ""
+        user = inter.user
+        mention = getattr(user, "mention", "")
+        body = f"{emoji} {mention}: **{name}** builder cancelled".strip()
+        emb = reply_embed(message=body)
+        try:
+            emb.color = int(getattr(_color, "warn", 0) or 0) or None
+        except Exception:
+            pass
         try:
             if not inter.response.is_done():
-                await inter.response.edit_message(
-                    content=f"{name} builder cancelled.",
-                    embed=None,
-                    view=None,
-                )
+                await inter.response.edit_message(content=None, embed=emb, view=None)
+            else:
+                await inter.message.edit(content=None, embed=emb, view=None)
         except Exception:
             pass
         if self.preview_message is not None:
-            try:
+            with contextlib.suppress(Exception):
                 await self.preview_message.delete()
-            except Exception:
-                pass
         if self.content_message is not None:
-            try:
+            with contextlib.suppress(Exception):
                 await self.content_message.delete()
-            except Exception:
-                pass
+        try:
+            await asyncio.sleep(3)
+            msg = inter.message
+            if msg is not None:
+                await msg.delete()
+        except Exception:
+            pass
+
 
     async def handle_timeout(self) -> None:
         self._stopped = True
