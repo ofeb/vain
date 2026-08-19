@@ -3506,7 +3506,7 @@ class ModerationCommands(Package):
 
     @command(
         name="setup",
-        aliases=["setup", "setme"]
+        aliases=["setup", "setme"],
         description="start process for setting up the moderation system",
     )
     async def setup(self, ctx):
