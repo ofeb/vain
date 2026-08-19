@@ -85,7 +85,7 @@ def embed_to_container(
             container.add_item(
                 ui.Section(
                     ui.TextDisplay("\n".join(header_bits)),
-                    accessory=ui.Thumbnail(media=str(media_url)),
+                    accessory=ui.ActionRow(ui.Thumbnail(media=str(media_url))),
                 )
             )
         except Exception:
@@ -302,7 +302,7 @@ class PageJumpSelect(ui.LayoutView):
         self.on_pick = on_pick
         self.message: discord.Message | None = None
         self._title = title
-        self._options = list(options)[:25]
+        self._all_options = list(options)
         self._placeholder = (placeholder or "select a page...").strip()[:150] or "select a page..."
         self._disabled = False
         self._build()
@@ -311,34 +311,40 @@ class PageJumpSelect(ui.LayoutView):
         self.clear_items()
         container = ui.Container()
         container.add_item(ui.TextDisplay(self._title))
-        row = ui.ActionRow()
-        select = ui.Select(
-            placeholder=self._placeholder,
-            min_values=1,
-            max_values=1,
-            options=self._options,
-            disabled=self._disabled,
-        )
 
-        async def _cb(interaction: discord.Interaction) -> None:
-            if interaction.user.id != self.author_id:
-                await interaction.response.send_message(
-                    embed=_warning_embed(
-                        interaction.user,
-                        "these controls aren't for you.",
-                    ),
-                    ephemeral=True,
-                )
-                return
-            if self._disabled:
-                await interaction.response.defer()
-                return
-            value = select.values[0]
-            await self.on_pick(interaction, value)
+        chunks = [self._all_options[i:i + 25] for i in range(0, len(self._all_options), 25)]
+        for idx, chunk in enumerate(chunks):
+            row = ui.ActionRow()
+            ph = self._placeholder
+            if len(chunks) > 1:
+                ph = f"{ph} ({idx + 1}/{len(chunks)})"
+            select = ui.Select(
+                placeholder=ph,
+                min_values=1,
+                max_values=1,
+                options=chunk,
+                disabled=self._disabled,
+            )
 
-        select.callback = _cb
-        row.add_item(select)
-        container.add_item(row)
+            async def _cb(interaction: discord.Interaction, _sel: ui.Select = select) -> None:
+                if interaction.user.id != self.author_id:
+                    await interaction.response.send_message(
+                        embed=_warning_embed(
+                            interaction.user,
+                            "these controls aren't for you.",
+                        ),
+                        ephemeral=True,
+                    )
+                    return
+                if self._disabled:
+                    await interaction.response.defer()
+                    return
+                value = _sel.values[0]
+                await self.on_pick(interaction, value)
+
+            select.callback = _cb
+            row.add_item(select)
+            container.add_item(row)
         self.add_item(container)
 
     async def on_timeout(self) -> None:
@@ -602,7 +608,7 @@ class PaginateView(discord.ui.LayoutView):
             return
 
         if self.search_options:
-            options = list(self.search_options)[:25]
+            options = list(self.search_options)
             title = self.search_title or (
                 f"Search for a page (1-{len(self.pages)}).."
             )
@@ -614,7 +620,7 @@ class PaginateView(discord.ui.LayoutView):
                     label=f"page {i}",
                     value=str(i - 1),
                 )
-                for i in range(1, min(total, 25) + 1)
+                for i in range(1, total + 1)
             ]
             title = self.search_title or f"Search for a page (1-{total}).."
             placeholder = self.search_placeholder or "select a page to jump to..."

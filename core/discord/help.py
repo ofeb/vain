@@ -1394,7 +1394,7 @@ class GroupHelpMenu(ui.LayoutView):
 
         total = len(self.pages)
         options: list[SelectOption] = []
-        for i, cmd in enumerate(self.pages[:25]):
+        for i, cmd in enumerate(self.pages):
             options.append(
                 SelectOption(
                     label=self._cmd_label(cmd)[:100],

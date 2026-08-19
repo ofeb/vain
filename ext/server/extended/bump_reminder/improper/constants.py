@@ -14,7 +14,7 @@ DEFAULT_REMINDER_SCRIPT = (
 
 DEFAULT_THANKYOU_SCRIPT = (
     "{container}"
-    "$v{description: > **{guild.name} was bumped!**\n>\n"
-    "> Thanks {bumper.mention} - **{guild.name}** is **back** on the **Disboard** list.\n>\n"
+    "$v{description: > **{guild.name} was bumped!**\n> \n"
+    "> Thanks {bumper.mention} - **{guild.name}** is **back** on the **Disboard** list.\n> \n"
     "> **Next reminder**: {next_bump_ts}}"
 )

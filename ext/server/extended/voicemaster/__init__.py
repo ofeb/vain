@@ -66,46 +66,34 @@ class VoiceMaster(VoiceMasterEvents, Package):
                     setattr(container, attr, None)
 
         server_icon = guild.icon.url if guild.icon else None
+        header_text = (
+            f"## {guild.name}\n"
+            f"-# Manage temporary voice channels in **{guild.name}**."
+        )
         if server_icon:
-            header = discord.ui.Section(
-                discord.ui.TextDisplay(
-                    f"# {guild.name}\n"
-                    f"-# Temporary voice channel controls"
+            container.add_item(discord.ui.Section(
+                discord.ui.TextDisplay(header_text),
+                accessory=discord.ui.ActionRow(
+                    discord.ui.Thumbnail(media=server_icon),
                 ),
-                accessory=discord.ui.Thumbnail(media=server_icon),
-            )
+            ))
         else:
-            header = discord.ui.TextDisplay(
-                f"# {guild.name}\n"
-                f"-# Temporary voice channel controls"
-            )
-        container.add_item(header)
+            container.add_item(discord.ui.TextDisplay(header_text))
         container.add_item(discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small))
 
-        left_col = (
-            f"{VM['lock']} — restrict access\n"
-            f"{VM['unlock']} — allow access\n"
-            f"{VM['claim']} — claim ownership\n"
-            f"{VM['delete']} — remove the channel\n"
-            f"{VM['disconnect']} — evict a member"
+        controls = (
+            f">>> **Controls**\n"
+            f"{VM['lock']} — **Lock** the channel\n"
+            f"{VM['unlock']} — **Unlock** the channel\n"
+            f"{VM['claim']} — **Claim** the channel\n"
+            f"{VM['delete']} — **Delete** the channel\n"
+            f"{VM['disconnect']} — **Disconnect** member(s)\n"
+            f"{VM['hide']} — **Hide** the channel\n"
+            f"{VM['reveal']} — **Reveal** the channel\n"
+            f"{VM['limit']} — Set a user **limit**\n"
+            f"{VM['rename']} — **Rename** the channel"
         )
-        right_col = (
-            f"{VM['hide']} — hide from channel list\n"
-            f"{VM['reveal']} — show in channel list\n"
-            f"{VM['limit']} — set member cap\n"
-            f"{VM['rename']} — change name\n"
-            f"{VM['status']} — set channel status"
-        )
-        container.add_item(discord.ui.Section(
-            discord.ui.TextDisplay(
-                f">>> **Controls**\n"
-                f"{left_col}"
-            ),
-            accessory=discord.ui.TextDisplay(
-                f"**Actions**\n"
-                f"{right_col}"
-            ),
-        ))
+        container.add_item(discord.ui.TextDisplay(controls))
         container.add_item(discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small))
 
         row1 = discord.ui.ActionRow(
@@ -124,7 +112,7 @@ class VoiceMaster(VoiceMasterEvents, Package):
             discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=VM["status"], custom_id="voicemaster:status"),
         )
         container.add_item(row2)
-        container.add_item(discord.ui.TextDisplay("-# you must own a voice channel to use these controls"))
+        container.add_item(discord.ui.TextDisplay("-# You must own the voice channel to use these controls."))
         return layout_from_items([container], timeout=None)
 
     async def cog_load(self) -> None:

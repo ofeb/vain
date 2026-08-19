@@ -419,7 +419,7 @@ def build_profile_container(
             c.add_item(
                 ui.Section(
                     ui.TextDisplay(header[:1900]),
-                    accessory=ui.Thumbnail(media=str(avatar_url)),
+                    accessory=ui.ActionRow(ui.Thumbnail(media=str(avatar_url))),
                 )
             )
         except Exception:

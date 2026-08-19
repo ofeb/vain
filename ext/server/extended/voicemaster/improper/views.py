@@ -186,8 +186,17 @@ class VoiceInterface(ui.View):
 
     @ui.button(emoji=VM["disconnect"], custom_id="voicemaster:disconnect")
     async def disconnect(self, interaction: discord.Interaction, button: ui.Button) -> None:
+        container = ui.Container()
+        for attr in ("accent_color", "accent_colour"):
+            if hasattr(container, attr):
+                with contextlib.suppress(Exception):
+                    setattr(container, attr, None)
+        container.add_item(ui.TextDisplay(f"{interaction.user.mention}: choose members to **disconnect**"))
+        row = ui.ActionRow()
+        row.add_item(DisconnectMembers(interaction.user, self.cog))
+        container.add_item(row)
         view = ui.LayoutView(timeout=None)
-        view.add_item(DisconnectMembers(interaction.user, self.cog))
+        view.add_item(container)
         await _reply(interaction, view=view)
 
     @ui.button(emoji=VM["hide"], custom_id="voicemaster:hide")

@@ -580,7 +580,7 @@ class Tickets(TicketEvents, Package):
                 f"No opening buttons yet. Add one with `{ctx.clean_prefix}tc opening button add`."
             )
         rows = [dict(b) for b in buttons]
-        view = OpeningButtonEmojiView(self, rows)
+        view = OpeningButtonEmojiSelect(self, rows)
         embed = Embed(
             title="Edit opening button emoji",
             description="Select a button below, then enter the new emoji in the modal.",

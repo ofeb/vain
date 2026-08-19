@@ -443,9 +443,95 @@ class Steal(Package):
     @has_permissions(manage_emojis=True)
     async def steal(self, ctx, *, target: str | None = None):
         """steal emojis"""
+        replied = ctx.message.reference
+        if replied and replied.message_id:
+            return await self._steal_from_reply(ctx)
         if target:
             return await self._steal_specific(ctx, target)
         return await self._steal_scan(ctx)
+
+    async def _steal_from_reply(self, ctx):
+        """Steal all emojis and stickers from the replied message automatically."""
+        try:
+            ref = ctx.message.reference
+            if ref.cached_message:
+                message = ref.cached_message
+            else:
+                channel = ctx.guild.get_channel(ref.channel_id)
+                if not channel:
+                    return await ctx.warn("Could not find the referenced channel")
+                message = await channel.fetch_message(ref.message_id)
+        except Exception:
+            return await ctx.warn("Could not fetch the referenced message")
+
+        emojis_found = _parse_emoji(message.content)
+        for embed in message.embeds:
+            if embed.description:
+                emojis_found.extend(_parse_emoji(embed.description))
+
+        stickers_found = [_sticker_payload(s) for s in message.stickers]
+
+        if not emojis_found and not stickers_found:
+            return await ctx.warn("No emojis or stickers found in that message")
+
+        stolen_emojis = []
+        for emoji_data in emojis_found:
+            try:
+                name = re.sub(
+                    r"[^a-zA-Z0-9_]", "", str(emoji_data.get("name") or "emoji")
+                )[:32] or "emoji"
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(emoji_data["url"]) as resp:
+                        content_type = resp.headers.get("Content-Type", "image/png")
+                        if not content_type.startswith("image/"):
+                            continue
+                        image_data = await resp.read()
+                emoji = await ctx.guild.create_custom_emoji(
+                    name=name,
+                    image=image_data,
+                )
+                stolen_emojis.append(emoji)
+            except discord.HTTPException:
+                continue
+
+        stolen_stickers = []
+        for data in stickers_found:
+            try:
+                name = re.sub(
+                    r"[^a-zA-Z0-9_]", "", str(data.get("name") or "sticker")
+                )[:30] or "sticker"
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(data["url"]) as resp:
+                        image_data = await resp.read()
+                        content_type = resp.headers.get("Content-Type", "image/png")
+                filename = "sticker.png"
+                if "gif" in content_type:
+                    filename = "sticker.gif"
+                elif "json" in content_type:
+                    filename = "sticker.json"
+                file = discord.File(BytesIO(image_data), filename=filename)
+                sticker = await ctx.guild.create_sticker(
+                    name=name,
+                    description=data.get("description") or f"Stolen by {ctx.author}",
+                    emoji=data.get("emoji") or "✂️",
+                    file=file,
+                    reason=f"Sticker steal by {ctx.author} ({ctx.author.id})",
+                )
+                stolen_stickers.append(sticker)
+            except discord.HTTPException:
+                continue
+
+        parts = []
+        if stolen_emojis:
+            parts.append(f"**{len(stolen_emojis)}** emojis: {' '.join(str(e) for e in stolen_emojis)}")
+        if stolen_stickers:
+            names = ", ".join(f"`{s.name}`" for s in stolen_stickers)
+            parts.append(f"**{len(stolen_stickers)}** sticker(s): {names}")
+
+        if not parts:
+            return await ctx.fail("Failed to steal anything")
+
+        return await ctx.success("Stole " + " and ".join(parts))
 
     async def _steal_specific(self, ctx, target: str):
         emojis_found = _parse_emoji(target)
@@ -563,7 +649,7 @@ class Steal(Package):
             pages,
             emojis_found,
             kind="emoji",
-            search_options=search_options[:25],
+            search_options=search_options,
         )
         await view.start()
 
@@ -585,6 +671,9 @@ class Steal(Package):
     @has_permissions(manage_emojis=True)
     async def stickersteal(self, ctx, *, target: str | None = None):
         """steal stickers"""
+        replied = ctx.message.reference
+        if replied and replied.message_id:
+            return await self._steal_from_reply(ctx)
         if target:
             return await self._sticker_specific(ctx, target)
         return await self._sticker_scan(ctx)
@@ -691,6 +780,6 @@ class Steal(Package):
             pages,
             found,
             kind="sticker",
-            search_options=search_options[:25],
+            search_options=search_options,
         )
         await view.start()

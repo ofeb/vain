@@ -100,7 +100,7 @@ def embed_to_container(
             container.add_item(
                 ui.Section(
                     ui.TextDisplay("\n".join(header_bits)),
-                    accessory=ui.Thumbnail(media=str(media_url)),
+                    accessory=ui.ActionRow(ui.Thumbnail(media=str(media_url))),
                 )
             )
         except Exception:

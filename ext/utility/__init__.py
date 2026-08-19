@@ -490,7 +490,7 @@ def _snipe_search_options(
 ) -> list[discord.SelectOption]:
     total = len(data)
     options: list[discord.SelectOption] = []
-    for i, snipe in enumerate(data[:25]):
+    for i, snipe in enumerate(data):
         options.append(
             discord.SelectOption(
                 label=_snipe_option_label(snipe, kind),

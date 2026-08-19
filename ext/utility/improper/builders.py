@@ -1043,7 +1043,7 @@ class _BaseBuilder:
                     container.add_item(
                         ui.Section(
                             ui.TextDisplay(body),
-                            accessory=ui.Thumbnail(media=accessory),
+                            accessory=ui.ActionRow(ui.Thumbnail(media=accessory)),
                         )
                     )
                 except Exception:
@@ -1080,7 +1080,7 @@ class _BaseBuilder:
                         container.add_item(
                             ui.Section(
                                 ui.TextDisplay(body),
-                                accessory=ui.Thumbnail(media=accessory),
+                                accessory=ui.ActionRow(ui.Thumbnail(media=accessory)),
                             )
                         )
                     except Exception:

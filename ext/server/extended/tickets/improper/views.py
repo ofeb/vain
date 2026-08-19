@@ -118,35 +118,70 @@ class TicketControlView(discord.ui.View):
         return None
 
 
-class OpeningButtonEmojiSelect(discord.ui.Select):
+class OpeningButtonEmojiSelect(discord.ui.LayoutView):
     """Pick which opening button to update the emoji for."""
 
     def __init__(self, cog: Any, buttons: list[dict]) -> None:
-        options: list[discord.SelectOption] = []
-        for row in buttons[:25]:
-            label = str(row.get("label") or row.get("id") or "Button")[:100]
-            emoji = _parse_emoji(row.get("emoji"))
-            options.append(
-                discord.SelectOption(
-                    label=label,
-                    value=str(row["id"]),
-                    description=f"id: {row['id']}"[:100],
-                    emoji=emoji,
-                )
-            )
-        super().__init__(
-            placeholder="Select a ticket opening button to edit…",
-            min_values=1,
-            max_values=1,
-            options=options,
-        )
+        super().__init__(timeout=180)
         self.cog = cog
+        self.author_id: int | None = None
+        self._buttons = buttons
+        self._build()
 
-    async def callback(self, interaction: discord.Interaction) -> None:
-        button_id = self.values[0]
-        await interaction.response.send_modal(
-            OpeningButtonEmojiModal(self.cog, button_id)
-        )
+    def _build(self) -> None:
+        self.clear_items()
+        container = discord.ui.Container()
+        for attr in ("accent_color", "accent_colour"):
+            if hasattr(container, attr):
+                with contextlib.suppress(Exception):
+                    setattr(container, attr, None)
+        container.add_item(discord.ui.TextDisplay("Select a ticket opening button to edit..."))
+
+        chunks = [self._buttons[i:i + 25] for i in range(0, len(self._buttons), 25)]
+        for idx, chunk in enumerate(chunks):
+            options = []
+            for row in chunk:
+                label = str(row.get("label") or row.get("id") or "Button")[:100]
+                emoji = _parse_emoji(row.get("emoji"))
+                options.append(
+                    discord.SelectOption(
+                        label=label,
+                        value=str(row["id"]),
+                        description=f"id: {row['id']}"[:100],
+                        emoji=emoji,
+                    )
+                )
+            row = discord.ui.ActionRow()
+            ph = "Select a button..."
+            if len(chunks) > 1:
+                ph = f"{ph} ({idx + 1}/{len(chunks)})"
+            select = discord.ui.Select(
+                placeholder=ph,
+                min_values=1,
+                max_values=1,
+                options=options,
+            )
+
+            async def _cb(interaction: discord.Interaction, _sel: discord.ui.Select = select) -> None:
+                if self.author_id and interaction.user.id != self.author_id:
+                    await interaction.response.send_message("Not for you.", ephemeral=True)
+                    return
+                button_id = _sel.values[0]
+                await interaction.response.send_modal(
+                    OpeningButtonEmojiModal(self.cog, button_id)
+                )
+
+            select.callback = _cb
+            row.add_item(select)
+            container.add_item(row)
+        self.add_item(container)
+
+    async def start(self, ctx) -> None:
+        self.author_id = ctx.author.id
+        msg = await ctx.send(view=self)
+        await self.wait()
+        with contextlib.suppress(discord.HTTPException):
+            await msg.edit(view=None)
 
 
 class OpeningButtonEmojiModal(discord.ui.Modal, title="Set button emoji"):
@@ -240,23 +275,28 @@ class TicketOpenView(discord.ui.View):
         self.panel_type = panel_type
 
         if panel_type == "dropdown":
-            select = discord.ui.Select(
-                custom_id=f"ticket.create:{panel_id}",
-                placeholder="Select an option to open a ticket…",
-                min_values=1,
-                max_values=1,
-                options=[
-                    discord.SelectOption(
-                        label=(str(opt.get("label") or opt.get("id") or "Option"))[:100],
-                        value=(str(opt.get("id") or opt.get("label")))[:100],
-                        description=((opt.get("description") or "")[:100]) or None,
-                        emoji=_parse_emoji(opt.get("emoji")),
-                    )
-                    for opt in options[:25]
-                ],
-            )
-            select.callback = self._dropdown_callback
-            self.add_item(select)
+            chunks = [options[i:i + 25] for i in range(0, len(options), 25)]
+            for idx, chunk in enumerate(chunks):
+                ph = "Select an option to open a ticket..."
+                if len(chunks) > 1:
+                    ph = f"{ph} ({idx + 1}/{len(chunks)})"
+                select = discord.ui.Select(
+                    custom_id=f"ticket.create:{panel_id}:{idx}" if len(chunks) > 1 else f"ticket.create:{panel_id}",
+                    placeholder=ph,
+                    min_values=1,
+                    max_values=1,
+                    options=[
+                        discord.SelectOption(
+                            label=(str(opt.get("label") or opt.get("id") or "Option"))[:100],
+                            value=(str(opt.get("id") or opt.get("label")))[:100],
+                            description=((opt.get("description") or "")[:100]) or None,
+                            emoji=_parse_emoji(opt.get("emoji")),
+                        )
+                        for opt in chunk
+                    ],
+                )
+                select.callback = self._dropdown_callback
+                self.add_item(select)
         else:
             for opt in options:
                 label = str(opt.get("label") or opt.get("id") or "Open Ticket")[:80]

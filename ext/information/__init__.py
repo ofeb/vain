@@ -47,7 +47,7 @@ def panel_container(
             c.add_item(
                 ui.Section(
                     ui.TextDisplay(body_text),
-                    accessory=ui.Thumbnail(media=str(thumbnail)),
+                    accessory=ui.ActionRow(ui.Thumbnail(media=str(thumbnail))),
                 )
             )
         except Exception:
@@ -406,7 +406,7 @@ class InformationCommands(Package):
             container.add_item(
                 ui.Section(
                     ui.TextDisplay("\n".join(info_lines)),
-                    accessory=ui.Thumbnail(media=str(user.display_avatar.url)),
+                    accessory=ui.ActionRow(ui.Thumbnail(media=str(user.display_avatar.url))),
                 )
             )
         else:
