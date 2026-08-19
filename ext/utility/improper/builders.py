@@ -1765,7 +1765,7 @@ class _BaseBuilder:
             with contextlib.suppress(Exception):
                 await self.content_message.delete()
         try:
-            await asyncio.sleep(3)
+            await asyncio.sleep(5)
             msg = inter.message
             if msg is not None:
                 await msg.delete()

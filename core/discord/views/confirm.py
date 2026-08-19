@@ -102,7 +102,7 @@ class ConfirmView(discord.ui.View):
     ) -> bool:
         """Send the prompt and wait for Approve / Deny. Returns True if approved.
 
-        On deny/timeout, shows a warn-style cancelled message that auto-deletes after 3s.
+        On deny/timeout, shows a warn-style cancelled message that auto-deletes after 5s.
         """
         if embed is None:
             embed = _confirm_embed(
@@ -118,7 +118,7 @@ class ConfirmView(discord.ui.View):
                         embed=self._cancel_warn_embed(cancel_message),
                         view=None,
                     )
-                    await asyncio.sleep(3)
+                    await asyncio.sleep(5)
             with contextlib.suppress(discord.HTTPException, Exception):
                 await self.message.delete()
         return approved
@@ -253,7 +253,7 @@ class ThreeButtonConfirmView(discord.ui.View):
                     except Exception:
                         pass
                     await self.message.edit(embed=emb, view=None)
-                    await asyncio.sleep(3)
+                    await asyncio.sleep(5)
             with contextlib.suppress(discord.HTTPException, Exception):
                 await self.message.delete()
         return result
