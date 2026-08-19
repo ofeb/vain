@@ -241,8 +241,8 @@ class VoiceInterface(ui.LayoutView):
         )
 
         header = (
-            "## Voice Controls\n"
-            "-# Manage your voice channel using the controls or use `help voicemaster` to see all commands"
+            "## **voice controls**\n"
+            "> -# **manage** your **voice channel** using the controls\n> -# use `help voicemaster` to see all commands"
         )
 
         container.add_item(
@@ -258,16 +258,16 @@ class VoiceInterface(ui.LayoutView):
 
         controls = (
             "### Voice Controls\n"
-            f"{VM['lock']} — **Lock** the channel\n"
-            f"{VM['unlock']} — **Unlock** the channel\n"
-            f"{VM['hide']} — **Hide** the channel\n"
-            f"{VM['reveal']} — **Reveal** the channel\n"
-            f"{VM['claim']} — **Claim** the channel\n"
-            f"{VM['status']} — Set the channel **status**\n"
-            f"{VM['disconnect']} — **Disconnect** member(s)\n"
-            f"{VM['limit']} — Set the channel **limit**\n"
-            f"{VM['rename']} — **Rename** the channel\n"
-            f"{VM['delete']} — **Delete** the channel"
+            f"{VM['lock']} — **lock** the channel\n"
+            f"{VM['unlock']} — **unlock** the channel\n"
+            f"{VM['hide']} — **hide** the channel\n"
+            f"{VM['reveal']} — **reveal** the channel\n"
+            f"{VM['claim']} — **claim** the channel\n"
+            f"{VM['status']} — set the channel **status**\n"
+            f"{VM['disconnect']} — **disconnect** members\n"
+            f"{VM['limit']} — set the channel **limit**\n"
+            f"{VM['rename']} — **rename** the channel\n"
+            f"{VM['delete']} — **delete** the channel"
         )
 
         if server_icon:
