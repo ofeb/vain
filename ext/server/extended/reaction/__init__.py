@@ -12,6 +12,7 @@ from core.discord.hybrid import hybrid, describe, group
 from core.discord.package import Package
 from config import color, emojis
 from core.managers.permissions import has_permissions
+from .settings import Settings
 
 from .events import ReactionEvents
 
@@ -142,16 +143,8 @@ class Reaction(ReactionEvents, Package):
                 return await ctx.warn(f"invalid emoji: `{em}`")
 
         trigger_key = f"user:{member.id}"
-        await self.bot.db.execute(
-            """
-            INSERT INTO auto_reactions (guild_id, trigger, response, owner_id, strict, reply)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            ON CONFLICT (guild_id, trigger, response)
-            DO UPDATE SET
-                owner_id = EXCLUDED.owner_id,
-                strict = EXCLUDED.strict,
-                reply = EXCLUDED.reply
-            """,
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        await settings.upsert_reaction(
             ctx.guild.id,
             trigger_key,
             emojis_list,
@@ -181,10 +174,8 @@ class Reaction(ReactionEvents, Package):
         )
         if not ok:
             return await ctx.warn("Auto reaction clear **cancelled**")
-        await self.bot.db.execute(
-            "DELETE FROM auto_reactions WHERE guild_id = $1",
-            ctx.guild.id,
-        )
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        await settings.clear()
         await ctx.success(
             "Cleared all auto reactions. This action can't be undone."
         )
@@ -262,17 +253,8 @@ class Reaction(ReactionEvents, Package):
             except Exception:
                 return await ctx.fail(f"couldn't use emoji `{em}`")
 
-        await self.bot.db.execute(
-            """
-            INSERT INTO auto_reactions (guild_id, trigger, response, owner_id, strict, reply)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            ON CONFLICT (guild_id, trigger, response)
-            DO UPDATE SET
-                response = EXCLUDED.response,
-                strict = EXCLUDED.strict,
-                reply = EXCLUDED.reply,
-                owner_id = EXCLUDED.owner_id
-            """,
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        await settings.upsert_reaction(
             ctx.guild.id,
             trigger_raw,
             emojis_list,
@@ -298,7 +280,7 @@ class Reaction(ReactionEvents, Package):
     async def reaction_delete(self, ctx: Context, *, trigger: str) -> None:
         """Remove all auto reactions for a trigger (or a user rule)."""
         trigger = trigger.strip()
-        
+        settings = await Settings.fetch(self.bot, ctx.guild)
         if trigger.lower().startswith("user:"):
             key = trigger
         else:
@@ -308,13 +290,7 @@ class Reaction(ReactionEvents, Package):
                 member = await MemberConverter().convert(ctx, trigger)
                 key = f"user:{member.id}"
                 
-                result = await self.bot.db.execute(
-                    """
-                    DELETE FROM auto_reactions
-                    WHERE guild_id = $1 AND (
-                        LOWER(trigger) = LOWER($2) OR trigger = $3
-                    )
-                    """,
+                result = await settings.delete_by_trigger_and_key(
                     ctx.guild.id,
                     trigger,
                     key,
@@ -324,8 +300,7 @@ class Reaction(ReactionEvents, Package):
                     return
             except Exception:
                 pass
-        result = await self.bot.db.execute(
-            "DELETE FROM auto_reactions WHERE guild_id = $1 AND LOWER(trigger) = LOWER($2)",
+        result = await settings.delete_by_trigger(
             ctx.guild.id,
             key if key.startswith("user:") else trigger,
         )
@@ -353,20 +328,14 @@ class Reaction(ReactionEvents, Package):
             return await ctx.warn("Use `on` or `off`")
 
         if trigger.lower() in {"all", "*", "every"}:
-            await self.bot.db.execute(
-                "UPDATE auto_reactions SET strict = $2 WHERE guild_id = $1",
-                ctx.guild.id,
-                strict,
-            )
+            settings = await Settings.fetch(self.bot, ctx.guild)
+            await settings.update_strict_all(ctx.guild.id, strict)
             return await ctx.success(
                 f"All auto reactions are now **{'strict' if strict else 'not strict'}**"
             )
 
-        await self.bot.db.execute(
-            """
-            UPDATE auto_reactions SET strict = $3
-            WHERE guild_id = $1 AND LOWER(trigger) = LOWER($2)
-            """,
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        await settings.update_strict(
             ctx.guild.id,
             trigger,
             strict,
@@ -407,18 +376,14 @@ class Reaction(ReactionEvents, Package):
                 await ctx.message.add_reaction(em)
             except Exception:
                 return await ctx.fail(f"couldn't use emoji `{em}`")
-        await self.bot.db.execute(
-            """
-            INSERT INTO auto_reactions (guild_id, trigger, response, owner_id, strict)
-            VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT (guild_id, trigger, response)
-            DO UPDATE SET response = EXCLUDED.response
-            """,
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        await settings.upsert_reaction(
             ctx.guild.id,
             str(channel.id),
             emojis_list,
             ctx.author.id,
             True,
+            False,
         )
         await ctx.success(f"Every message in {channel.mention} will get {' '.join(emojis_list)}")
 
@@ -434,8 +399,8 @@ class Reaction(ReactionEvents, Package):
         ctx: Context,
         channel: discord.TextChannel,
     ) -> None:
-        await self.bot.db.execute(
-            "DELETE FROM auto_reactions WHERE guild_id = $1 AND trigger = $2",
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        await settings.delete_by_channel(
             ctx.guild.id,
             str(channel.id),
         )
@@ -448,10 +413,8 @@ class Reaction(ReactionEvents, Package):
     @has_permissions(manage_expressions=True)
     async def reaction_messages_list(self, ctx: Context) -> None:
         """List auto reactions for all channels."""
-        reactions = await self.bot.db.fetch(
-            "SELECT trigger, response FROM auto_reactions WHERE guild_id = $1",
-            ctx.guild.id,
-        )
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        reactions = await settings.fetch_all_reactions(ctx.guild.id)
         rows = []
         for record in reactions:
             trig = str(record["trigger"])
@@ -482,8 +445,8 @@ class Reaction(ReactionEvents, Package):
     @has_permissions(manage_expressions=True)
     async def reaction_deleteall(self, ctx: Context, *, trigger_word: str) -> None:
         """Removes every reaction trigger for a specific word."""
-        await self.bot.db.execute(
-            "DELETE FROM auto_reactions WHERE LOWER(trigger) = LOWER($1) AND guild_id = $2",
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        await settings.delete_by_word(
             trigger_word.strip(),
             ctx.guild.id,
         )
@@ -497,14 +460,8 @@ class Reaction(ReactionEvents, Package):
     @has_permissions(manage_expressions=True)
     async def reaction_list(self, ctx: Context) -> None:
         """View a list of every reaction trigger in guild."""
-        reactions = await self.bot.db.fetch(
-            """
-            SELECT trigger, response, strict FROM auto_reactions
-            WHERE guild_id = $1
-            ORDER BY trigger
-            """,
-            ctx.guild.id,
-        )
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        reactions = await settings.fetch_all_with_strict(ctx.guild.id)
         rows = []
         for record in reactions:
             trig = str(record["trigger"])
@@ -535,14 +492,10 @@ class Reaction(ReactionEvents, Package):
     @has_permissions(manage_expressions=True)
     async def reaction_owner(self, ctx: Context, *, trigger_word: str) -> None:
         """Gets the author of a trigger word."""
-        owner_id = await self.bot.db.fetchval(
-            """
-            SELECT owner_id FROM auto_reactions
-            WHERE LOWER(trigger) = LOWER($1) AND guild_id = $2
-            LIMIT 1
-            """,
-            trigger_word.strip(),
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        owner_id = await settings.fetch_owner_id(
             ctx.guild.id,
+            trigger_word.strip(),
         )
         if not owner_id:
             await ctx.fail(f"No reaction trigger found under `{trigger_word}`")

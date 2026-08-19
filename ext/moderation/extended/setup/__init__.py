@@ -175,6 +175,11 @@ class SetupView(ui.LayoutView):
         lines.append(
             f"> -# run `{self.prefix}unsetup` to revert all configurations done by {BOT_NAME}"
         )
+        lines.append("")
+        lines.append(
+            "> -# this **removes** the configured channels and roles created\n"
+            "> -# however this does **not** affect **voicemaster**, **antinuke** and **antiraid**."
+        )
         return lines
 
     def _build_done(self) -> None:
@@ -524,13 +529,9 @@ class SetupView(ui.LayoutView):
             overwrites=overwrites_logs,
         )
         with contextlib.suppress(Exception):
-            await self.bot.db.execute(
-                """INSERT INTO modlog_config (guild_id, channel_id)
-                   VALUES ($1, $2)
-                   ON CONFLICT (guild_id) DO UPDATE SET channel_id = $2""",
-                guild.id,
-                modlogs.id,
-            )
+            from ext.moderation.extended.setup.settings import Settings
+
+            await Settings.set_modlog_channel(self.bot.db, guild.id, modlogs.id)
         with contextlib.suppress(Exception):
             await self.bot.db.set_security_log_channels(
                 guild.id,
@@ -547,42 +548,10 @@ class SetupView(ui.LayoutView):
             "emojis",
             "voice",
         ]
-        log_cfg_ok = False
-        for evt in log_events:
-            try:
-                await self.bot.db.execute(
-                    """INSERT INTO log_config (guild_id, channel_id, events)
-                       VALUES ($1, $2, ARRAY[$3])
-                       ON CONFLICT (guild_id, channel_id) DO UPDATE
-                       SET events = array_append(log_config.events, $3)
-                       WHERE NOT (log_config.events @> ARRAY[$3])""",
-                    guild.id,
-                    all_logs.id,
-                    evt,
-                )
-                log_cfg_ok = True
-            except Exception:
-                continue
-        if not log_cfg_ok:
-
-            with contextlib.suppress(Exception):
-                await self.bot.db.execute(
-                    """INSERT INTO log_config (guild_id, channel_id, events)
-                       VALUES ($1, $2, $3)
-                       ON CONFLICT (guild_id, channel_id) DO UPDATE
-                       SET events = EXCLUDED.events""",
-                    guild.id,
-                    all_logs.id,
-                    log_events,
-                )
         with contextlib.suppress(Exception):
-            await self.bot.db.execute(
-                """UPDATE server_settings
-                   SET jail_log_channel_id = $2
-                   WHERE guild_id = $1""",
-                guild.id,
-                jail_logs.id,
-            )
+            await Settings.add_log_events(self.bot.db, guild.id, all_logs.id, log_events)
+        with contextlib.suppress(Exception):
+            await Settings.set_jail_log_channel(self.bot.db, guild.id, jail_logs.id)
         self._notes.append(
             f"**logging**: {antinuke_logs.mention}, {antiraid_logs.mention}, "
             f"{jail_logs.mention}, {modlogs.mention}, {all_logs.mention}"
@@ -614,15 +583,7 @@ class SetupView(ui.LayoutView):
             overwrites=overwrites_jail,
         )
         with contextlib.suppress(Exception):
-            await self.bot.db.execute(
-                """INSERT INTO server_settings (guild_id, jail_channel_id, jail_role_id)
-                   VALUES ($1, $2, $3)
-                   ON CONFLICT (guild_id) DO UPDATE
-                   SET jail_channel_id = $2, jail_role_id = $3""",
-                guild.id,
-                jail_ch.id,
-                jail_role.id,
-            )
+            await Settings.set_jail_config(self.bot.db, guild.id, jail_ch.id, jail_role.id)
         for channel in list(guild.channels):
             if not isinstance(
                 channel, (discord.TextChannel, discord.VoiceChannel, discord.ForumChannel)
@@ -643,15 +604,7 @@ class SetupView(ui.LayoutView):
         imuted = await self._ensure_role("Image Muted")
         rmuted = await self._ensure_role("Reaction Muted")
         with contextlib.suppress(Exception):
-            await self.bot.db.execute(
-                """INSERT INTO server_settings (guild_id, imuted_role_id, rmuted_role_id)
-                   VALUES ($1, $2, $3)
-                   ON CONFLICT (guild_id) DO UPDATE
-                   SET imuted_role_id = $2, rmuted_role_id = $3""",
-                guild.id,
-                imuted.id,
-                rmuted.id,
-            )
+            await Settings.set_mute_roles(self.bot.db, guild.id, imuted.id, rmuted.id)
         for channel in list(guild.text_channels):
             with contextlib.suppress(Exception):
                 await channel.set_permissions(
@@ -694,14 +647,11 @@ class SetupView(ui.LayoutView):
                     channel_id=join_vc.id,
                 )
                 cog = self.bot.get_cog("VoiceMaster") or self.bot.get_cog("Voicemaster")
-                if cog is not None and hasattr(cog, "_interface_embed"):
+                if cog is not None and hasattr(cog, "_panel_view"):
                     with contextlib.suppress(Exception):
-                        from ext.server.extended.voicemaster import VoiceInterface
-
-                        await interface.send(
-                            embed=cog._interface_embed(guild),
-                            view=VoiceInterface(cog),
-                        )
+                        panel_msg = await interface.send(view=cog._panel_view(guild))
+                        settings = await VMSettings.fetch(self.bot, guild)
+                        await settings.upsert(panel_message_id=panel_msg.id)
                 self._notes.append(
                     f"**voicemaster**: {interface.mention}, {join_vc.mention}"
                 )
@@ -791,22 +741,13 @@ class SetupView(ui.LayoutView):
                     await role.delete(reason=reason)
 
         with contextlib.suppress(Exception):
-            await self.bot.db.execute(
-                "DELETE FROM modlog_config WHERE guild_id = $1", guild.id
-            )
+            from ext.moderation.extended.setup.settings import Settings
+
+            await Settings.clear_modlog_config(self.bot.db, guild.id)
         with contextlib.suppress(Exception):
-            await self.bot.db.execute(
-                "DELETE FROM log_config WHERE guild_id = $1", guild.id
-            )
+            await Settings.clear_log_config(self.bot.db, guild.id)
         with contextlib.suppress(Exception):
-            await self.bot.db.execute(
-                """UPDATE server_settings
-                   SET jail_channel_id = NULL, jail_role_id = NULL,
-                       muted_role_id = NULL, imuted_role_id = NULL, rmuted_role_id = NULL,
-                       antinuke_log_channel_id = NULL, antiraid_log_channel_id = NULL
-                   WHERE guild_id = $1""",
-                guild.id,
-            )
+            await Settings.clear_jail_and_mute_config(self.bot.db, guild.id)
         with contextlib.suppress(Exception):
             from ext.server.extended.voicemaster.settings import Settings as VMSettings
 

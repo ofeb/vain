@@ -108,6 +108,89 @@ class Settings:
             await self.add(**kwargs)
         return self
 
+    @staticmethod
+    async def get_giveaway(db: Any, message_id: int) -> dict | None:
+        row = await db.fetchrow(
+            "SELECT * FROM giveaways WHERE message_id = $1",
+            message_id,
+        )
+        return dict(row) if row else None
+
+    @staticmethod
+    async def update_max_level(db: Any, level: int, message_id: int) -> None:
+        await db.execute(
+            "UPDATE giveaways SET max_level = $1 WHERE message_id = $2",
+            level,
+            message_id,
+        )
+
+    @staticmethod
+    async def update_prize(db: Any, prize: str, message_id: int) -> None:
+        await db.execute(
+            "UPDATE giveaways SET prize = $1 WHERE message_id = $2",
+            prize,
+            message_id,
+        )
+
+    @staticmethod
+    async def update_expiration(db: Any, expiration: Any, message_id: int) -> None:
+        await db.execute(
+            "UPDATE giveaways SET expiration = $1 WHERE message_id = $2",
+            expiration,
+            message_id,
+        )
+
+    @staticmethod
+    async def insert_giveaway(db: Any, payload: tuple, req_json: Any = None) -> None:
+        import json as _json
+
+        if req_json is not None:
+            await db.execute(
+                """
+                INSERT INTO giveaways (
+                    guild_id, channel_id, message_id, prize, expiration,
+                    winner_count, hosts, entries, min_level, required_roles,
+                    requirements, created_at
+                ) VALUES (
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+                    $11::jsonb, $12
+                )
+                ON CONFLICT (message_id) DO UPDATE SET
+                    prize = EXCLUDED.prize,
+                    expiration = EXCLUDED.expiration,
+                    winner_count = EXCLUDED.winner_count,
+                    hosts = EXCLUDED.hosts,
+                    entries = EXCLUDED.entries,
+                    min_level = EXCLUDED.min_level,
+                    required_roles = EXCLUDED.required_roles,
+                    requirements = EXCLUDED.requirements,
+                    win_message_id = NULL
+                """,
+                *payload[:10],
+                req_json,
+                payload[10],
+            )
+        else:
+            await db.execute(
+                """
+                INSERT INTO giveaways (
+                    guild_id, channel_id, message_id, prize, expiration,
+                    winner_count, hosts, entries, min_level, required_roles,
+                    created_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                ON CONFLICT (message_id) DO UPDATE SET
+                    prize = EXCLUDED.prize,
+                    expiration = EXCLUDED.expiration,
+                    winner_count = EXCLUDED.winner_count,
+                    hosts = EXCLUDED.hosts,
+                    entries = EXCLUDED.entries,
+                    min_level = EXCLUDED.min_level,
+                    required_roles = EXCLUDED.required_roles,
+                    win_message_id = NULL
+                """,
+                *payload,
+            )
+
 
 async def fetch(bot: Vain, guild: Guild) -> Settings:
     return await Settings.fetch(bot, guild)

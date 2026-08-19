@@ -18,6 +18,7 @@ from core.discord.ctx import Context
 from config import api as api_values
 
 from .constants import LASTFM_EMBED_FOOTER_ICON_URL
+from ..settings import Settings
 
 from core.discord.views.embed import c2
 
@@ -490,7 +491,7 @@ class LastFMApiClient:
     async def _session_key_for(self, user_id: int) -> str | None:
         if not getattr(self.bot, "db", None):
             return None
-        data = await self.bot.db.get_lastfm_user(user_id)
+        data = await Settings.get_user(self.bot, user_id)
         session_key = self._text_value(data.get("session_key")) if data else None
         return session_key or None
 
@@ -508,8 +509,8 @@ class LastFMApiClient:
                 username = self._text_value(session.get("name"))
                 session_key = self._text_value(session.get("key"))
                 if username and session_key:
-                    await self.bot.db.set_lastfm_user(user_id, username, session_key)
-                    await self.bot.db.mark_lastfm_login_used(token)
+                    await Settings.set_user(self.bot, user_id, username, session_key)
+                    await Settings.mark_login_used(self.bot, token)
                     with contextlib.suppress(discord.HTTPException):
                         user = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
                         if user:
@@ -535,7 +536,7 @@ class LastFMApiClient:
         target = member or ctx.author
         if not getattr(self.bot, "db", None):
             return None
-        data = await self.bot.db.get_lastfm_user(target.id)
+        data = await Settings.get_user(self.bot, target.id)
         if data:
             return data
         if target.id == ctx.author.id:

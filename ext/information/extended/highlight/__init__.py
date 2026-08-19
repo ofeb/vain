@@ -12,72 +12,26 @@ from core.discord.package import Package
 from core.discord.views.embed import c2
 from core.managers.permissions import has_permissions
 from core.tools.moderation_args import parse_duration_seconds, is_duration_token
+from .events import HighlightEvents
+from .settings import Settings
 
 
 _PUNISHMENTS = ("none", "ban", "softban", "hardban", "warn", "timeout")
 
 
-class Highlight(Package):
+class Highlight(HighlightEvents, Package):
     """Keyword highlights with optional log destination and punishment."""
 
     def __init__(self, bot):
-        super().__init__(bot)
+        Package.__init__(self, bot)
+        HighlightEvents.__init__(self, bot)
 
     async def cog_load(self) -> None:
-        await self._ensure_schema()
+        await Settings.ensure_schema(self.bot.db)
         await super().cog_load()
 
-    async def _ensure_schema(self) -> None:
-        await self.bot.db.execute(
-            """
-            CREATE TABLE IF NOT EXISTS highlights (
-                guild_id BIGINT NOT NULL,
-                user_id BIGINT NOT NULL,
-                keyword TEXT NOT NULL,
-                PRIMARY KEY (guild_id, user_id, keyword)
-            )
-            """
-        )
-        await self.bot.db.execute(
-            """
-            CREATE TABLE IF NOT EXISTS highlight_ignores (
-                guild_id BIGINT NOT NULL,
-                user_id BIGINT NOT NULL,
-                target_id BIGINT NOT NULL,
-                target_type TEXT NOT NULL,
-                PRIMARY KEY (guild_id, user_id, target_id, target_type)
-            )
-            """
-        )
-        await self.bot.db.execute(
-            """
-            CREATE TABLE IF NOT EXISTS highlight_config (
-                guild_id BIGINT PRIMARY KEY,
-                log_type TEXT NOT NULL DEFAULT 'dm',
-                log_channel_id BIGINT,
-                punishment TEXT NOT NULL DEFAULT 'none',
-                timeout_seconds INTEGER,
-                delete_after_seconds INTEGER
-            )
-            """
-        )
-
     async def _get_config(self, guild_id: int) -> dict:
-        await self._ensure_schema()
-        row = await self.bot.db.fetchrow(
-            "SELECT * FROM highlight_config WHERE guild_id = $1",
-            guild_id,
-        )
-        if row:
-            return dict(row)
-        return {
-            "guild_id": guild_id,
-            "log_type": "dm",
-            "log_channel_id": None,
-            "punishment": "none",
-            "timeout_seconds": None,
-            "delete_after_seconds": None,
-        }
+        return await Settings.get_config(self.bot.db, guild_id)
 
     @group(
         name="highlight",
@@ -94,33 +48,18 @@ class Highlight(Package):
         kw = keyword.strip().lower()
         if not kw:
             return await ctx.warn("Provide a keyword")
-        await self.bot.db.execute(
-            "INSERT INTO highlights (guild_id, user_id, keyword) VALUES($1, $2, $3) "
-            "ON CONFLICT(guild_id, user_id, keyword) DO NOTHING",
-            ctx.guild.id,
-            ctx.author.id,
-            kw,
-        )
+        await Settings.add_highlight(self.bot.db, ctx.guild.id, ctx.author.id, kw)
         return await ctx.success(f"Added keyword\n> -# **keyword:** `{kw}`")
 
     @highlight.command(name="remove", description="remove a highlighted keyword", aliases=["rm", "del"])
     async def highlight_remove(self, ctx, *, keyword: str):
         kw = keyword.strip().lower()
-        await self.bot.db.execute(
-            "DELETE FROM highlights WHERE guild_id = $1 AND user_id = $2 AND keyword = $3",
-            ctx.guild.id,
-            ctx.author.id,
-            kw,
-        )
+        await Settings.remove_highlight(self.bot.db, ctx.guild.id, ctx.author.id, kw)
         return await ctx.success(f"Removed keyword\n> -# **keyword:** `{kw}`")
 
     @highlight.command(name="list", description="list all your highlighted keywords", aliases=["ls"])
     async def highlight_list(self, ctx):
-        rows = await self.bot.db.fetch(
-            "SELECT keyword FROM highlights WHERE guild_id = $1 AND user_id = $2",
-            ctx.guild.id,
-            ctx.author.id,
-        )
+        rows = await Settings.fetch_highlights(self.bot.db, ctx.guild.id, ctx.author.id)
         if not rows:
             return await ctx.warn(
                 "You have no keywords set\n"
@@ -131,11 +70,7 @@ class Highlight(Package):
 
     @highlight.command(name="reset", description="remove all your highlighted keywords")
     async def highlight_reset(self, ctx):
-        await self.bot.db.execute(
-            "DELETE FROM highlights WHERE guild_id = $1 AND user_id = $2",
-            ctx.guild.id,
-            ctx.author.id,
-        )
+        await Settings.reset_highlights(self.bot.db, ctx.guild.id, ctx.author.id)
         return await ctx.success("Cleared all your highlighted keywords")
 
     @highlight.command(
@@ -161,15 +96,7 @@ class Highlight(Package):
 
         kind = kind.strip().lower()
         if kind in {"dm", "dms", "direct"}:
-            await self.bot.db.execute(
-                """
-                INSERT INTO highlight_config (guild_id, log_type, log_channel_id)
-                VALUES ($1, 'dm', NULL)
-                ON CONFLICT (guild_id) DO UPDATE
-                  SET log_type = 'dm', log_channel_id = NULL
-                """,
-                ctx.guild.id,
-            )
+            await Settings.set_log_type_dm(self.bot.db, ctx.guild.id)
             return await ctx.success("Highlight logs will be sent via **DM**")
 
         if kind in {"channel", "ch", "log", "logs"}:
@@ -181,16 +108,7 @@ class Highlight(Package):
                     "Provide a channel\n"
                     f"> -# **usage:** {ctx.cmd('highlight type channel #channel')}"
                 )
-            await self.bot.db.execute(
-                """
-                INSERT INTO highlight_config (guild_id, log_type, log_channel_id)
-                VALUES ($1, 'channel', $2)
-                ON CONFLICT (guild_id) DO UPDATE
-                  SET log_type = 'channel', log_channel_id = $2
-                """,
-                ctx.guild.id,
-                dest.id,
-            )
+            await Settings.set_log_type_channel(self.bot.db, ctx.guild.id, dest.id)
             return await ctx.success(f"Highlight logs will post in {dest.mention}")
 
         return await ctx.warn(
@@ -280,16 +198,8 @@ class Highlight(Package):
                 f"> -# **options:** `none` `ban` `softban` `hardban` `warn` `timeout <amount>`"
             )
 
-        await self.bot.db.execute(
-            """
-            INSERT INTO highlight_config (
-                guild_id, punishment, timeout_seconds, delete_after_seconds
-            ) VALUES ($1, $2, $3, $4)
-            ON CONFLICT (guild_id) DO UPDATE SET
-                punishment = $2,
-                timeout_seconds = $3,
-                delete_after_seconds = $4
-            """,
+        await Settings.set_punishment(
+            self.bot.db,
             ctx.guild.id,
             action,
             timeout_seconds,
@@ -313,14 +223,7 @@ class Highlight(Package):
             ttype, label = "role", target.mention
         else:
             ttype, label = "channel", target.mention
-        await self.bot.db.execute(
-            "INSERT INTO highlight_ignores (guild_id, user_id, target_id, target_type) "
-            "VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
-            ctx.guild.id,
-            ctx.author.id,
-            target.id,
-            ttype,
-        )
+        await Settings.add_ignore(self.bot.db, ctx.guild.id, ctx.author.id, target.id, ttype)
         return await ctx.success(f"Ignoring highlights from {label}")
 
     @highlight.command(name="unignore", description="stop ignoring a member, role, or channel")
@@ -331,24 +234,12 @@ class Highlight(Package):
             ttype = "role"
         else:
             ttype = "channel"
-        await self.bot.db.execute(
-            "DELETE FROM highlight_ignores WHERE guild_id = $1 AND user_id = $2 "
-            "AND target_id = $3 AND target_type = $4",
-            ctx.guild.id,
-            ctx.author.id,
-            target.id,
-            ttype,
-        )
+        await Settings.remove_ignore(self.bot.db, ctx.guild.id, ctx.author.id, target.id, ttype)
         return await ctx.success(f"No longer ignoring {target.mention}")
 
     @highlight.command(name="ignorelist", aliases=["ignores"], description="list ignored targets")
     async def highlight_ignore_list(self, ctx):
-        ignores = await self.bot.db.fetch(
-            "SELECT target_id, target_type FROM highlight_ignores "
-            "WHERE guild_id = $1 AND user_id = $2",
-            ctx.guild.id,
-            ctx.author.id,
-        )
+        ignores = await Settings.fetch_ignores(self.bot.db, ctx.guild.id, ctx.author.id)
         if not ignores:
             return await ctx.warn(
                 "You aren't ignoring anyone\n"
@@ -371,153 +262,3 @@ class Highlight(Package):
         if not lines:
             return await ctx.warn("All ignored targets are gone from this server")
         return await ctx.success("Ignored targets\n" + "\n".join(lines))
-
-    async def _is_ignored(self, guild: discord.Guild, owner_id: int, message: discord.Message) -> bool:
-        rows = await self.bot.db.fetch(
-            "SELECT target_id, target_type FROM highlight_ignores "
-            "WHERE guild_id = $1 AND user_id = $2",
-            guild.id,
-            owner_id,
-        )
-        if not rows:
-            return False
-        author = message.author
-        channel_id = message.channel.id
-        role_ids = {r.id for r in getattr(author, "roles", [])} if isinstance(author, discord.Member) else set()
-        for row in rows:
-            if row["target_type"] == "user" and row["target_id"] == author.id:
-                return True
-            if row["target_type"] == "channel" and row["target_id"] == channel_id:
-                return True
-            if row["target_type"] == "role" and row["target_id"] in role_ids:
-                return True
-        return False
-
-    def _build_log_embed(
-        self,
-        *,
-        keyword: str,
-        message: discord.Message,
-        owner: discord.abc.User | None = None,
-    ):
-        author = message.author
-        content = (message.content or "").strip() or "*no text*"
-        if len(content) > 900:
-            content = content[:897] + "..."
-        
-        pattern = re.compile(re.escape(keyword), re.IGNORECASE)
-        shown = pattern.sub(lambda m: f"**{m.group(0)}**", content)
-        lines = [
-            f"**Keyword** `{keyword}` was mentioned",
-            f"> -# **author:** {author.mention} (`{author.id}`)",
-            f"> -# **channel:** {message.channel.mention}",
-            f"> -# **message:** [jump]({message.jump_url})",
-            "",
-            shown,
-        ]
-        return c2(
-            message="\n".join(lines),
-            footer=f"{author}",
-            timestamp=True,
-        )
-
-    async def _apply_punishment(self, message: discord.Message, cfg: dict) -> None:
-        action = (cfg.get("punishment") or "none").lower()
-        if action == "none":
-            return
-        member = message.author
-        if not isinstance(member, discord.Member):
-            return
-        if member.bot or member.guild_permissions.administrator:
-            return
-        guild = message.guild
-        me = guild.me
-        if me is None:
-            return
-        reason = "Highlight keyword punishment"
-
-        try:
-            if action == "warn":
-                
-                with contextlib.suppress(Exception):
-                    await message.channel.send(
-                        f"{member.mention} was **warned** for using a highlighted keyword.",
-                        delete_after=8,
-                    )
-            elif action == "timeout":
-                secs = int(cfg.get("timeout_seconds") or 60)
-                until = datetime.now(timezone.utc) + timedelta(seconds=secs)
-                await member.timeout(until, reason=reason)
-            elif action == "ban":
-                await member.ban(reason=reason, delete_message_days=0)
-            elif action == "hardban":
-                await member.ban(reason=reason, delete_message_days=7)
-            elif action == "softban":
-                uid = member.id
-                await member.ban(reason=reason, delete_message_days=1)
-                await guild.unban(discord.Object(id=uid), reason="Highlight softban")
-        except Exception:
-            pass
-
-        delete_after = cfg.get("delete_after_seconds")
-        if delete_after is not None:
-            try:
-                import asyncio
-                delay = max(0, int(delete_after))
-                if delay > 0:
-                    await asyncio.sleep(delay)
-                await message.delete()
-            except Exception:
-                pass
-
-    @Package.listener()
-    async def on_message(self, message: discord.Message) -> None:
-        if message.author.bot or not message.guild or not message.content:
-            return
-        
-        rows = await self.bot.db.fetch(
-            "SELECT user_id, keyword FROM highlights WHERE guild_id = $1",
-            message.guild.id,
-        )
-        if not rows:
-            return
-
-        content_lower = message.content.lower()
-        
-        hits: dict[str, set[int]] = {}
-        for row in rows:
-            kw = row["keyword"]
-            if kw and kw in content_lower:
-                hits.setdefault(kw, set()).add(row["user_id"])
-        if not hits:
-            return
-
-        cfg = await self._get_config(message.guild.id)
-
-        
-        notified: set[int] = set()
-        for keyword, user_ids in hits.items():
-            for uid in user_ids:
-                if uid == message.author.id or uid in notified:
-                    continue
-                if await self._is_ignored(message.guild, uid, message):
-                    continue
-                notified.add(uid)
-                embed = self._build_log_embed(keyword=keyword, message=message)
-                if cfg.get("log_type") == "channel" and cfg.get("log_channel_id"):
-                    ch = message.guild.get_channel(cfg["log_channel_id"])
-                    if ch is not None:
-                        with contextlib.suppress(Exception):
-                            await ch.send(content=f"<@{uid}>", embed=embed)
-                        continue
-                
-                user = self.bot.get_user(uid)
-                if user is None:
-                    with contextlib.suppress(Exception):
-                        user = await self.bot.fetch_user(uid)
-                if user is not None:
-                    with contextlib.suppress(Exception):
-                        await user.send(embed=embed)
-
-        
-        await self._apply_punishment(message, cfg)

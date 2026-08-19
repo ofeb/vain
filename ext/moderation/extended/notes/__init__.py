@@ -63,10 +63,9 @@ class Notes(Package):
     @has_permissions(manage_messages=True)
     async def notes(self, ctx, target: str):
         """View notes for a user (mention, id, or name — works offline)."""
-        with contextlib.suppress(Exception):
-            await self.db.execute(
-                "ALTER TABLE notes ADD COLUMN IF NOT EXISTS case_id BIGINT"
-            )
+        from ext.moderation.extended.notes.settings import Settings
+
+        await Settings.ensure_schema(self.db)
 
         try:
             user_id, label = await self._resolve_user(ctx, target)
@@ -126,10 +125,9 @@ class Notes(Package):
           ,notes add <user> <note>
           ,notes add <case_id> <note>
         """
-        with contextlib.suppress(Exception):
-            await self.db.execute(
-                "ALTER TABLE notes ADD COLUMN IF NOT EXISTS case_id BIGINT"
-            )
+        from ext.moderation.extended.notes.settings import Settings
+
+        await Settings.ensure_schema(self.db)
 
         note_body = (note or "").strip()
         if not note_body:

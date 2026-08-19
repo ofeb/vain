@@ -154,6 +154,48 @@ class Settings:
         data["guild_id"] = self.guild.id
         self.record = data
 
+    
+
+    @staticmethod
+    async def ensure_quote_schema(db: Any) -> None:
+        await db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS quote_channels (
+                guild_id BIGINT PRIMARY KEY,
+                channel_id BIGINT NOT NULL
+            )
+            """
+        )
+
+    @staticmethod
+    async def get_quote_channel(db: Any, guild_id: int) -> int | None:
+        row = await db.fetchrow(
+            "SELECT channel_id FROM quote_channels WHERE guild_id = $1",
+            guild_id,
+        )
+        if not row:
+            return None
+        return int(row["channel_id"] if isinstance(row, dict) else row[0])
+
+    @staticmethod
+    async def set_quote_channel(db: Any, guild_id: int, channel_id: int) -> None:
+        await db.execute(
+            """
+            INSERT INTO quote_channels (guild_id, channel_id)
+            VALUES ($1, $2)
+            ON CONFLICT (guild_id) DO UPDATE SET channel_id = EXCLUDED.channel_id
+            """,
+            guild_id,
+            channel_id,
+        )
+
+    @staticmethod
+    async def clear_quote_channel(db: Any, guild_id: int) -> None:
+        await db.execute(
+            "DELETE FROM quote_channels WHERE guild_id = $1",
+            guild_id,
+        )
+
 
 async def fetch(bot: Vain, guild: Guild) -> Settings:
     return await Settings.fetch(bot, guild)

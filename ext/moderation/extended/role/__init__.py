@@ -31,6 +31,7 @@ from core.tools.human.text import join as human_join
 from core.tools.human.text import plural
 from core.tools.moderation_logs import build_modlog_embed, send_c2_embed
 from core.tools.pages import Paginator, build_pages
+from .events import RoleEvents
 
 MASS_ROLE_CONCURRENCY = MaxConcurrency(1, per=BucketType.guild, wait=False)
 
@@ -122,11 +123,12 @@ async def do_mass_role(
     return await ctx.success("\n".join(parts))
 
 
-class Role(Package):
+class Role(RoleEvents, Package):
     """role management"""
 
     def __init__(self, bot) -> None:
-        super().__init__(bot)
+        Package.__init__(self, bot)
+        RoleEvents.__init__(self, bot)
         self._role_tables_ready = False
 
     async def cog_command_error(
@@ -363,55 +365,6 @@ class Role(Package):
             extra=extra,
         )
         await send_c2_embed(channel, embed)
-
-    
-
-    @Package.listener("on_member_remove")
-    async def role_cache(self, member: discord.Member) -> None:
-        if member.bot:
-            return
-        me = member.guild.me
-        if me is None or not me.guild_permissions.manage_roles:
-            return
-        role_ids = [role.id for role in member.roles if role.is_assignable()]
-        if not role_ids:
-            return
-        await self._cache_set_roles(self.role_cache_key(member), role_ids, ex=3600)
-
-    @Package.listener("on_member_join")
-    async def role_restore_cache(self, member: discord.Member) -> None:
-        guild = member.guild
-        if member.bot:
-            return
-        me = guild.me
-        if me is None or not me.guild_permissions.manage_roles:
-            return
-
-        key = self.role_cache_key(member)
-        role_ids = await self._cache_get_roles(key)
-        if not role_ids:
-            return
-
-        enabled, ignored = await self._get_reassign(guild.id)
-        if not enabled:
-            return
-
-        ignored_set = set(ignored)
-        roles = [
-            role
-            for role_id in role_ids
-            if (role := guild.get_role(role_id)) is not None
-            and role.is_assignable()
-            and role not in member.roles
-            and role.id not in ignored_set
-            and role < me.top_role
-        ]
-        if not roles:
-            return
-
-        await self._cache_delete(key)
-        with contextlib.suppress(discord.HTTPException, discord.Forbidden):
-            await member.add_roles(*roles, reason="Reassigned from cache")
 
     
 

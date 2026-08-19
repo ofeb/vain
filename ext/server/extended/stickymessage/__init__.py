@@ -20,6 +20,7 @@ from core.tools.moderation_args import (
     parse_duration_seconds,
 )
 from humanize import naturaldelta
+from .settings import Settings
 
 
 _DEFAULT_MESSAGE_LIMIT = 1
@@ -67,15 +68,7 @@ class StickymessageCommands(Package):
     async def _ensure_schema(self) -> None:
         if getattr(self, "_sticky_schema_ready", False):
             return
-        statements = [
-            "ALTER TABLE sticky_message ADD COLUMN IF NOT EXISTS message_limit INT NOT NULL DEFAULT 1",
-            "ALTER TABLE sticky_message ADD COLUMN IF NOT EXISTS interval_seconds INT NOT NULL DEFAULT 0",
-            "ALTER TABLE sticky_message ADD COLUMN IF NOT EXISTS message_count INT NOT NULL DEFAULT 0",
-            "ALTER TABLE sticky_message ADD COLUMN IF NOT EXISTS last_sent TIMESTAMP",
-        ]
-        for sql in statements:
-            with contextlib.suppress(Exception):
-                await self.db.execute(sql)
+        await Settings.ensure_schema(self.bot)
         self._sticky_schema_ready = True
 
     async def cog_unload(self) -> None:
@@ -88,20 +81,13 @@ class StickymessageCommands(Package):
         self._worker_task = None
 
     async def _get_row(self, guild_id: int, channel_id: int) -> dict | None:
-        row = await self.db.fetchrow(
-            """SELECT guild_id, channel_id, code, last_message,
-                      COALESCE(message_limit, $3) AS message_limit,
-                      COALESCE(interval_seconds, $4) AS interval_seconds,
-                      COALESCE(message_count, 0) AS message_count,
-                      last_sent
-               FROM sticky_message
-               WHERE guild_id = $1 AND channel_id = $2""",
+        settings = Settings(self.bot, None)  # type: ignore[arg-type]
+        return await settings.get_row(
             guild_id,
             channel_id,
             _DEFAULT_MESSAGE_LIMIT,
             _INTERVAL_DISABLED,
         )
-        return dict(row) if row else None
 
     async def _repost(self, channel: TextChannel, code: str, *, user=None):
         async with self.sticky_locks[channel.id]:
@@ -138,10 +124,8 @@ class StickymessageCommands(Package):
             if new_msg is None:
                 return None
             now = _now_naive()
-            await self.db.execute(
-                """UPDATE sticky_message
-                   SET last_message = $1, message_count = 0, last_sent = $2
-                   WHERE guild_id = $3 AND channel_id = $4""",
+            settings = Settings(self.bot, None)  # type: ignore[arg-type]
+            await settings.update_repost(
                 new_msg.id,
                 now,
                 channel.guild.id,
@@ -315,16 +299,8 @@ class StickymessageCommands(Package):
         channel, script, message_limit, interval_seconds = await self._resolve_add(
             ctx, args
         )
-        await self.db.execute(
-            """INSERT INTO sticky_message
-                   (guild_id, channel_id, code, message_limit, interval_seconds, message_count, last_sent)
-               VALUES ($1, $2, $3, $4, $5, 0, $6)
-               ON CONFLICT (guild_id, channel_id) DO UPDATE SET
-                   code = excluded.code,
-                   message_limit = excluded.message_limit,
-                   interval_seconds = excluded.interval_seconds,
-                   message_count = 0,
-                   last_sent = excluded.last_sent""",
+        settings = Settings(self.bot, None)  # type: ignore[arg-type]
+        await settings.upsert_sticky(
             ctx.guild.id,
             channel.id,
             script,
@@ -356,11 +332,8 @@ class StickymessageCommands(Package):
             raise CommandError(
                 f"No sticky in {channel.mention} - use `{ctx.clean_prefix}stickymessage add` first"
             )
-        await self.db.execute(
-            """UPDATE sticky_message
-               SET code = $1, message_limit = $2, interval_seconds = $3,
-                   message_count = 0, last_sent = $4
-               WHERE guild_id = $5 AND channel_id = $6""",
+        settings = Settings(self.bot, None)  # type: ignore[arg-type]
+        await settings.update_sticky(
             script,
             message_limit,
             interval_seconds,
@@ -420,8 +393,8 @@ class StickymessageCommands(Package):
                     f"Raise the limit first: `{ctx.clean_prefix}stickymessage messagelimit {channel.mention} 5`"
                 )
 
-        await self.db.execute(
-            "UPDATE sticky_message SET interval_seconds = $1 WHERE guild_id = $2 AND channel_id = $3",
+        settings = Settings(self.bot, None)  # type: ignore[arg-type]
+        await settings.update_interval(
             seconds,
             ctx.guild.id,
             channel.id,
@@ -472,10 +445,8 @@ class StickymessageCommands(Package):
         elif interval < 30:
             interval = _DEFAULT_INTERVAL_SECONDS
 
-        await self.db.execute(
-            """UPDATE sticky_message
-               SET message_limit = $1, interval_seconds = $2, message_count = 0
-               WHERE guild_id = $3 AND channel_id = $4""",
+        settings = Settings(self.bot, None)  # type: ignore[arg-type]
+        await settings.update_message_limit(
             limit,
             interval,
             ctx.guild.id,
@@ -515,11 +486,8 @@ class StickymessageCommands(Package):
     )
     @has_permissions(manage_guild=True)
     async def stickymessage_list(self, ctx):
-        entries = await self.db.fetch(
-            """SELECT channel_id, code,
-                      COALESCE(message_limit, $2) AS message_limit,
-                      COALESCE(interval_seconds, $3) AS interval_seconds
-               FROM sticky_message WHERE guild_id = $1""",
+        settings = Settings(self.bot, None)  # type: ignore[arg-type]
+        entries = await settings.fetch_all_entries(
             ctx.guild.id,
             _DEFAULT_MESSAGE_LIMIT,
             _INTERVAL_DISABLED,
@@ -559,11 +527,8 @@ class StickymessageCommands(Package):
                 discord.NotFound, discord.HTTPException, discord.Forbidden
             ):
                 await self.bot.http.delete_message(channel.id, prev_id)
-        await self.db.execute(
-            "DELETE FROM sticky_message WHERE guild_id = $1 AND channel_id = $2",
-            ctx.guild.id,
-            channel.id,
-        )
+        settings = Settings(self.bot, None)  # type: ignore[arg-type]
+        await settings.delete_sticky(ctx.guild.id, channel.id)
         self._msg_counts.pop(channel.id, None)
         self._last_activity.pop(channel.id, None)
         self._pending_repost.discard(channel.id)
@@ -626,8 +591,8 @@ class StickymessageCommands(Package):
         existing = await self._get_row(ctx.guild.id, channel.id)
         if not existing:
             raise CommandError(f"No sticky in {channel.mention}")
-        await self.db.execute(
-            "UPDATE sticky_message SET code = $1 WHERE guild_id = $2 AND channel_id = $3",
+        settings = Settings(self.bot, None)  # type: ignore[arg-type]
+        await settings.update_script(
             script,
             ctx.guild.id,
             channel.id,
@@ -655,8 +620,8 @@ class StickymessageCommands(Package):
         count = self._msg_counts[channel.id]
         limit = max(1, int(row["message_limit"] or _DEFAULT_MESSAGE_LIMIT))
         with contextlib.suppress(Exception):
-            await self.db.execute(
-                "UPDATE sticky_message SET message_count = $1 WHERE guild_id = $2 AND channel_id = $3",
+            settings = Settings(self.bot, None)  # type: ignore[arg-type]
+            await settings.update_message_count(
                 count,
                 ctx.guild.id,
                 channel.id,
@@ -676,16 +641,8 @@ class StickymessageCommands(Package):
         if getattr(self.db, "pool", None) is None:
             return
         try:
-            rows = await self.db.fetch(
-                """SELECT guild_id, channel_id, code,
-                          COALESCE(interval_seconds, 0) AS interval_seconds,
-                          COALESCE(message_count, 0) AS message_count,
-                          COALESCE(message_limit, 1) AS message_limit,
-                          last_sent
-                   FROM sticky_message
-                   WHERE COALESCE(interval_seconds, 0) >= 30
-                     AND COALESCE(message_limit, 1) > 1"""
-            )
+            settings = Settings(self.bot, None)  # type: ignore[arg-type]
+            rows = await settings.fetch_interval_rows()
         except Exception:
             return
         now = _now_naive()

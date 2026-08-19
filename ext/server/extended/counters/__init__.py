@@ -14,6 +14,8 @@ from core.managers.permissions import has_permissions
 
 from core.discord.views.embed import panel_embed
 
+from .settings import Settings as CountersSettings
+
 if TYPE_CHECKING:
     from .events import CountersEvents
 
@@ -94,18 +96,11 @@ class Counters(commands.Cog):
         channel_type: ChannelTypeConverter,
     ) -> None:
         """Create channel counter."""
-        existing = await self.bot.db.fetchrow(
-            "SELECT * FROM counters WHERE guild_id = $1 AND counter_type = $2",
-            ctx.guild.id,
-            option,
-        )
+        settings = await CountersSettings.fetch(self.bot, ctx.guild)
+        existing = next((r for r in settings.rows if r["counter_type"] == option), None)
         if existing:
             if not ctx.guild.get_channel(existing["channel_id"]):
-                await self.bot.db.execute(
-                    "DELETE FROM counters WHERE guild_id = $1 AND counter_type = $2",
-                    ctx.guild.id,
-                    option,
-                )
+                await settings.remove_where(counter_type=option)
             else:
                 await ctx.warn(f"You already have a {option} counter")
                 return
@@ -127,12 +122,7 @@ class Counters(commands.Cog):
                 f"Your guild doesn't have access to {channel_type} type of channels"
             )
         
-        await self.bot.db.execute(
-            "INSERT INTO counters (guild_id, channel_id, counter_type) VALUES($1, $2, $3)",
-            ctx.guild.id,
-            channel.id,
-            option,
-        )
+        await settings.add(channel_id=channel.id, counter_type=option)
         await ctx.success(f"{channel.mention} will now keep track of the {option} count")
 
     @counter.command(
@@ -149,11 +139,8 @@ class Counters(commands.Cog):
         action: RemovalAction = RemovalActionType.remove,
     ) -> None:
         """Remove a channel or category counter."""
-        if not await self.bot.db.fetchrow(
-            "SELECT * FROM counters WHERE guild_id = $1 AND channel_id = $2",
-            ctx.guild.id,
-            channel.id,
-        ):
+        settings = await CountersSettings.fetch(self.bot, ctx.guild)
+        if not any(r["channel_id"] == channel.id for r in settings.rows):
             await ctx.warn(f"There is no counter in {channel.mention}")
             return
         
@@ -163,11 +150,7 @@ class Counters(commands.Cog):
         else:
             msg = f"Successfully REMOVED the counter for {channel.mention}"
         
-        await self.bot.db.execute(
-            "DELETE FROM counters WHERE guild_id = $1 AND channel_id = $2",
-            ctx.guild.id,
-            channel.id,
-        )
+        await settings.remove_where(channel_id=channel.id)
         await ctx.success(msg)
 
     @counter.command(
@@ -178,16 +161,13 @@ class Counters(commands.Cog):
     @has_permissions(manage_channels=True)
     async def counter_list(self, ctx: Context) -> None:
         """List every category or channel keeping track of members or boosters."""
-        counters = await self.bot.db.fetch(
-            "SELECT * FROM counters WHERE guild_id = $1",
-            ctx.guild.id,
-        )
-        if not counters:
+        settings = await CountersSettings.fetch(self.bot, ctx.guild)
+        if not settings.rows:
             await ctx.warn("No category or channel are keeping track of members or boosts")
             return
         
         rows = []
-        for i, counter in enumerate(counters, start=1):
+        for i, counter in enumerate(settings.rows, start=1):
             rows.append(f"`{i}` <#{counter['channel_id']}> - **{counter['counter_type']}**")
         embed = panel_embed(title="Counters", color=color.base, lines=rows, timestamp=False)
         await ctx.send(embed=embed)

@@ -128,6 +128,73 @@ class Settings:
         data["guild_id"] = self.guild.id
         self.record = data
 
+    @staticmethod
+    async def set_invoke(db, guild_id: int, action: str, column: str, code: str) -> None:
+        await db.execute(
+            f"""INSERT INTO invocation (guild_id, command, {column})
+                VALUES ($1, $2, $3)
+                ON CONFLICT (guild_id, command)
+                DO UPDATE SET {column} = excluded.{column}""",
+            guild_id, action, code,
+        )
+
+    @staticmethod
+    async def get_mute_role(db, guild_id: int, role_key: str) -> dict | None:
+        row = await db.fetchrow(
+            f"SELECT {role_key} FROM server_settings WHERE guild_id = $1",
+            guild_id,
+        )
+        return dict(row) if row else None
+
+    @staticmethod
+    async def insert_mute(
+        db,
+        guild_id: int,
+        user_id: int,
+        moderator_id: int,
+        mute_type: str,
+        role_id: int,
+        expires_at,
+        reason: str,
+    ) -> None:
+        await db.execute(
+            """INSERT INTO mutes (guild_id, user_id, moderator_id, mute_type, role_id, expires_at, reason)
+               VALUES ($1, $2, $3, $4, $5, $6, $7)
+               ON CONFLICT (guild_id, user_id) DO UPDATE
+               SET mute_type = $4, role_id = $5, expires_at = $6, reason = $7, moderator_id = $3""",
+            guild_id, user_id, moderator_id, mute_type, role_id, expires_at, reason,
+        )
+
+    @staticmethod
+    async def delete_mute(db, guild_id: int, user_id: int, mute_type: str) -> None:
+        await db.execute(
+            "DELETE FROM mutes WHERE guild_id = $1 AND user_id = $2 AND mute_type = $3",
+            guild_id, user_id, mute_type,
+        )
+
+    @staticmethod
+    async def delete_modlog_config(db, guild_id: int) -> None:
+        await db.execute(
+            "DELETE FROM modlog_config WHERE guild_id = $1",
+            guild_id,
+        )
+
+    @staticmethod
+    async def set_server_mute_roles(
+        db,
+        guild_id: int,
+        muted_role_id: int,
+        imuted_role_id: int,
+        rmuted_role_id: int,
+    ) -> None:
+        await db.execute(
+            """INSERT INTO server_settings (guild_id, muted_role_id, imuted_role_id, rmuted_role_id)
+               VALUES ($1, $2, $3, $4)
+               ON CONFLICT (guild_id) DO UPDATE SET
+                   muted_role_id = $2, imuted_role_id = $3, rmuted_role_id = $4""",
+            guild_id, muted_role_id, imuted_role_id, rmuted_role_id,
+        )
+
 
 async def fetch(bot: Vain, guild: Guild) -> Settings:
     return await Settings.fetch(bot, guild)

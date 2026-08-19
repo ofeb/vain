@@ -28,6 +28,7 @@ from .improper.requirements import (
     split_start_payload,
 )
 from .improper.views import build_giveaway_panel
+from .settings import Settings
 
 _INVISIBLE_RE = re.compile(r"[\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff]")
 _COMMA_DURATION = re.compile(
@@ -273,10 +274,7 @@ class Giveaway(commands.Cog):
                 return await ctx.channel.fetch_message(message_id)
             except (discord.NotFound, discord.HTTPException):
                 pass
-            row = await self.bot.db.fetchrow(
-                "SELECT channel_id FROM giveaways WHERE message_id = $1",
-                message_id,
-            )
+            row = await Settings.get_giveaway(self.bot.db, message_id)
             if row:
                 channel = self.bot.get_channel(int(row["channel_id"]))
                 if channel is not None:
@@ -434,10 +432,7 @@ class Giveaway(commands.Cog):
             )
             return
 
-        giveaway = await self.bot.db.fetchrow(
-            "SELECT * FROM giveaways WHERE message_id = $1",
-            message.id,
-        )
+        giveaway = await Settings.get_giveaway(self.bot.db, message.id)
         if not giveaway:
             await ctx.warn("Invalid target\n> -# **not a giveaway**")
             return
@@ -482,10 +477,7 @@ class Giveaway(commands.Cog):
             )
             return
 
-        giveaway = await self.bot.db.fetchrow(
-            "SELECT * FROM giveaways WHERE message_id = $1",
-            message.id,
-        )
+        giveaway = await Settings.get_giveaway(self.bot.db, message.id)
         if not giveaway:
             await ctx.warn("Invalid target\n> -# **not a giveaway**")
             return
@@ -535,19 +527,12 @@ class Giveaway(commands.Cog):
                 return
         
         try:
-            await self.bot.db.execute(
-                "UPDATE giveaways SET max_level = $1 WHERE message_id = $2",
-                level,
-                message.id,
-            )
+            await Settings.update_max_level(self.bot.db, level, message.id)
         except Exception:
             await ctx.warn("Invalid target\n> -# **not a giveaway**")
             return
         
-        giveaway = await self.bot.db.fetchrow(
-            "SELECT * FROM giveaways WHERE message_id = $1",
-            message.id,
-        )
+        giveaway = await Settings.get_giveaway(self.bot.db, message.id)
         if not giveaway:
             await ctx.warn("Invalid target\n> -# **not a giveaway**")
             return
@@ -586,19 +571,12 @@ class Giveaway(commands.Cog):
             await ctx.warn("Required\n> -# **a prize is required**")
             return
 
-        giveaway = await self.bot.db.fetchrow(
-            "SELECT * FROM giveaways WHERE message_id = $1",
-            message.id,
-        )
+        giveaway = await Settings.get_giveaway(self.bot.db, message.id)
         if not giveaway:
             await ctx.warn("Invalid target\n> -# **not a giveaway**")
             return
 
-        await self.bot.db.execute(
-            "UPDATE giveaways SET prize = $1 WHERE message_id = $2",
-            prize,
-            message.id,
-        )
+        await Settings.update_prize(self.bot.db, prize, message.id)
         giveaway = dict(giveaway)
         giveaway["prize"] = prize
         events = self._events()
@@ -640,19 +618,12 @@ class Giveaway(commands.Cog):
         secs = int(duration)
         end_time = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=secs)
         try:
-            await self.bot.db.execute(
-                "UPDATE giveaways SET expiration = $1 WHERE message_id = $2",
-                end_time,
-                message.id,
-            )
+            await Settings.update_expiration(self.bot.db, end_time, message.id)
         except Exception:
             await ctx.warn("Invalid target\n> -# **not a giveaway**")
             return
 
-        giveaway = await self.bot.db.fetchrow(
-            "SELECT * FROM giveaways WHERE message_id = $1",
-            message.id,
-        )
+        giveaway = await Settings.get_giveaway(self.bot.db, message.id)
         if not giveaway:
             await ctx.warn("Invalid target\n> -# **not a giveaway**")
             return
@@ -784,55 +755,13 @@ class Giveaway(commands.Cog):
             
             for req_arg in (req_json, json.dumps(req_json)):
                 try:
-                    await self.bot.db.execute(
-                        """
-                        INSERT INTO giveaways (
-                            guild_id, channel_id, message_id, prize, expiration,
-                            winner_count, hosts, entries, min_level, required_roles,
-                            requirements, created_at
-                        ) VALUES (
-                            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-                            $11::jsonb, $12
-                        )
-                        ON CONFLICT (message_id) DO UPDATE SET
-                            prize = EXCLUDED.prize,
-                            expiration = EXCLUDED.expiration,
-                            winner_count = EXCLUDED.winner_count,
-                            hosts = EXCLUDED.hosts,
-                            entries = EXCLUDED.entries,
-                            min_level = EXCLUDED.min_level,
-                            required_roles = EXCLUDED.required_roles,
-                            requirements = EXCLUDED.requirements,
-                            win_message_id = NULL
-                        """,
-                        *payload[:10],
-                        req_arg,
-                        payload[10],
-                    )
+                    await Settings.insert_giveaway(self.bot.db, payload, req_arg)
                     inserted = True
                     break
                 except Exception:
                     continue
             if not inserted:
-                await self.bot.db.execute(
-                    """
-                    INSERT INTO giveaways (
-                        guild_id, channel_id, message_id, prize, expiration,
-                        winner_count, hosts, entries, min_level, required_roles,
-                        created_at
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-                    ON CONFLICT (message_id) DO UPDATE SET
-                        prize = EXCLUDED.prize,
-                        expiration = EXCLUDED.expiration,
-                        winner_count = EXCLUDED.winner_count,
-                        hosts = EXCLUDED.hosts,
-                        entries = EXCLUDED.entries,
-                        min_level = EXCLUDED.min_level,
-                        required_roles = EXCLUDED.required_roles,
-                        win_message_id = NULL
-                    """,
-                    *payload,
-                )
+                await Settings.insert_giveaway(self.bot.db, payload)
 
         await asyncio.gather(_edit(), _insert())
 

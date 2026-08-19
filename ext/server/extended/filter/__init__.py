@@ -19,6 +19,7 @@ from core.discord.package import Package
 from core.managers.permissions import has_permissions
 from core.tools.flags.automod import FilterFlags, SpamFilterFlags
 from core.tools.human import human_join
+from .settings import Settings
 
 
 BOT_RULE_PREFIX = "vain-filter"
@@ -145,15 +146,8 @@ class FilterCommands(Package):
     """chat filter management using Discord AutoMod + custom bot filters"""
 
     async def _ensure_words_table(self) -> None:
-        await self.db.execute(
-            """
-            CREATE TABLE IF NOT EXISTS filter_words (
-                guild_id BIGINT NOT NULL,
-                word TEXT NOT NULL,
-                PRIMARY KEY (guild_id, word)
-            )
-            """
-        )
+        settings = Settings(self.bot, None)  # type: ignore[arg-type]
+        await settings.ensure_words_table()
 
     async def cog_load(self) -> None:
         await self._ensure_words_table()
@@ -247,10 +241,8 @@ class FilterCommands(Package):
         if not ok:
             return await ctx.warn("Cancelled\n> -# **no changes were made**")
 
-        await self.db.execute(
-            "DELETE FROM filter_words WHERE guild_id = $1",
-            ctx.guild.id,
-        )
+        settings = Settings(self.bot, ctx.guild)
+        await settings.clear_filter_words(ctx.guild.id)
         for cog in self.bot.cogs.values():
             if hasattr(cog, "_words_cache"):
                 cog._words_cache.pop(ctx.guild.id, None)
@@ -285,22 +277,11 @@ class FilterCommands(Package):
         if any(len(w) > 60 or len(w) < 1 for w in word_list):
             raise CommandError("each word must be 1–60 characters")
 
+        settings = Settings(self.bot, ctx.guild)
         for w in word_list:
-            await self.db.execute(
-                """
-                INSERT INTO filter_words (guild_id, word)
-                VALUES ($1, $2)
-                ON CONFLICT (guild_id, word) DO NOTHING
-                """,
-                ctx.guild.id,
-                w,
-            )
+            await settings.add_filter_words(ctx.guild.id, [w])
 
-        rows = await self.db.fetch(
-            "SELECT word FROM filter_words WHERE guild_id = $1 ORDER BY word",
-            ctx.guild.id,
-        )
-        all_words = [r["word"] for r in rows]
+        all_words = await settings.fetch_filter_words(ctx.guild.id)
         if len(all_words) > 1000:
             raise CommandError("can only filter 1000 words max")
 
@@ -334,26 +315,13 @@ class FilterCommands(Package):
         if not word_list:
             raise CommandError("provide at least one word")
 
+        settings = Settings(self.bot, ctx.guild)
         dropped = []
         for w in word_list:
-            result = await self.db.execute(
-                "DELETE FROM filter_words WHERE guild_id = $1 AND word = $2",
-                ctx.guild.id,
-                w,
-            )
-            
-            if result and str(result).endswith("1"):
-                dropped.append(w)
-            else:
-                
-                dropped.append(w)
+            result = await settings.remove_filter_words(ctx.guild.id, [w])
+            dropped.extend(result)
 
-        
-        remaining_rows = await self.db.fetch(
-            "SELECT word FROM filter_words WHERE guild_id = $1 ORDER BY word",
-            ctx.guild.id,
-        )
-        remaining = {r["word"] for r in remaining_rows}
+        remaining = await settings.fetch_filter_words(ctx.guild.id)
         actually_dropped = [w for w in word_list if w not in remaining]
         if not actually_dropped:
             return await ctx.warn("none of those words are filtered")
@@ -375,11 +343,8 @@ class FilterCommands(Package):
     @has_permissions(manage_guild=True)
     async def filter_list(self, ctx):
         await self._ensure_words_table()
-        rows = await self.db.fetch(
-            "SELECT word FROM filter_words WHERE guild_id = $1 ORDER BY word",
-            ctx.guild.id,
-        )
-        words = [r["word"] for r in rows]
+        settings = Settings(self.bot, ctx.guild)
+        words = await settings.fetch_filter_words(ctx.guild.id)
         if not words:
             
             bot_rules = await self._get_bot_rules(ctx.guild)
@@ -727,21 +692,18 @@ class FilterCommands(Package):
         """toggle caps filter (custom bot filter)"""
         threshold = flags.threshold if flags else 70
 
+        settings = Settings(self.bot, ctx.guild)
         if setting:
-            await self.db.execute(
-                """INSERT INTO moderation.caps (guild_id, threshold, action)
-                   VALUES($1, $2, $3)
-                   ON CONFLICT(guild_id) DO UPDATE SET threshold = $2, action = $3""",
-                ctx.guild.id, threshold, (flags.punishment if flags else "delete"),
+            await settings.upsert_module(
+                "caps",
+                threshold=threshold,
+                action=(flags.punishment if flags else "delete"),
             )
             return await ctx.success(
                 f"caps filter **enabled**\n> -# **threshold: {threshold}%**"
             )
         else:
-            await self.db.execute(
-                """DELETE FROM moderation.caps WHERE guild_id = $1""",
-                ctx.guild.id,
-            )
+            await settings.delete_module("caps")
             return await ctx.success("caps filter **disabled**")
 
     @filter_caps.group(
@@ -752,23 +714,18 @@ class FilterCommands(Package):
     )
     @has_permissions(manage_guild=True)
     async def filter_caps_exempt(self, ctx, *, roles):
-        row = await self.db.fetchrow(
-            """SELECT exempt_roles FROM moderation.caps WHERE guild_id = $1""",
-            ctx.guild.id,
-        )
-        if not row:
+        settings = Settings(self.bot, ctx.guild)
+        current = await settings.get_exempt_roles("caps", ctx.guild.id)
+        if not current:
             raise CommandError("caps filter not configured, run `filter caps on` first")
-        current = list(set(row.exempt_roles or []))
+        current_set = set(current)
         for r in roles:
-            if r.id in current:
-                current.remove(r.id)
+            if r.id in current_set:
+                current_set.remove(r.id)
             else:
-                current.append(r.id)
-        valid = [rid for rid in current if ctx.guild.get_role(rid)]
-        await self.db.execute(
-            """UPDATE moderation.caps SET exempt_roles = $1 WHERE guild_id = $2""",
-            valid, ctx.guild.id,
-        )
+                current_set.add(r.id)
+        valid = [rid for rid in current_set if ctx.guild.get_role(rid)]
+        await settings.set_exempt_roles("caps", ctx.guild.id, valid)
         mentions = [ctx.guild.get_role(rid).mention for rid in valid if ctx.guild.get_role(rid)]
         return await ctx.success(
             f"exempt roles: {human_join(mentions, final='and') if mentions else 'none'}"
@@ -777,13 +734,11 @@ class FilterCommands(Package):
     @filter_caps_exempt.command(name="list", aliases=["ls", "show", "view"])
     @has_permissions(manage_guild=True)
     async def filter_caps_exempt_list(self, ctx):
-        row = await self.db.fetchrow(
-            """SELECT exempt_roles FROM moderation.caps WHERE guild_id = $1""",
-            ctx.guild.id,
-        )
-        if not row or not row.exempt_roles:
+        settings = Settings(self.bot, ctx.guild)
+        current = await settings.get_exempt_roles("caps", ctx.guild.id)
+        if not current:
             raise CommandError("no roles exempted from caps filter")
-        roles = [ctx.guild.get_role(rid) for rid in row.exempt_roles if ctx.guild.get_role(rid)]
+        roles = [ctx.guild.get_role(rid) for rid in current if ctx.guild.get_role(rid)]
         embed = Embed(title="Caps Exempt Roles").set_author(
             name=str(ctx.author), icon_url=ctx.author.display_avatar.url
         )
@@ -804,21 +759,18 @@ class FilterCommands(Package):
         """toggle spoiler filter (custom bot filter)"""
         threshold = flags.threshold if flags else 5
 
+        settings = Settings(self.bot, ctx.guild)
         if setting:
-            await self.db.execute(
-                """INSERT INTO moderation.spoilers (guild_id, threshold, action)
-                   VALUES($1, $2, $3)
-                   ON CONFLICT(guild_id) DO UPDATE SET threshold = $2, action = $3""",
-                ctx.guild.id, threshold, (flags.punishment if flags else "delete"),
+            await settings.upsert_module(
+                "spoilers",
+                threshold=threshold,
+                action=(flags.punishment if flags else "delete"),
             )
             return await ctx.success(
                 f"spoiler filter **enabled**\n> -# **threshold: {threshold}**"
             )
         else:
-            await self.db.execute(
-                """DELETE FROM moderation.spoilers WHERE guild_id = $1""",
-                ctx.guild.id,
-            )
+            await settings.delete_module("spoilers")
             return await ctx.success("spoiler filter **disabled**")
 
     @filter_spoilers.group(
@@ -829,18 +781,13 @@ class FilterCommands(Package):
     )
     @has_permissions(manage_guild=True)
     async def filter_spoilers_exempt(self, ctx, *, roles):
-        row = await self.db.fetchrow(
-            """SELECT exempt_roles FROM moderation.spoilers WHERE guild_id = $1""",
-            ctx.guild.id,
-        )
-        if not row:
+        settings = Settings(self.bot, ctx.guild)
+        current = await settings.get_exempt_roles("spoilers", ctx.guild.id)
+        if not current:
             raise CommandError("spoiler filter not configured, run `filter spoilers on` first")
-        current = list(set((row.exempt_roles or []) + [r.id for r in roles]))
-        valid = [rid for rid in current if ctx.guild.get_role(rid)]
-        await self.db.execute(
-            """UPDATE moderation.spoilers SET exempt_roles = $1 WHERE guild_id = $2""",
-            valid, ctx.guild.id,
-        )
+        current_set = set(current + [r.id for r in roles])
+        valid = [rid for rid in current_set if ctx.guild.get_role(rid)]
+        await settings.set_exempt_roles("spoilers", ctx.guild.id, valid)
         mentions = [ctx.guild.get_role(rid).mention for rid in valid if ctx.guild.get_role(rid)]
         return await ctx.success(
             f"exempt: {human_join(mentions, final='and') if mentions else 'none'}"
@@ -849,13 +796,11 @@ class FilterCommands(Package):
     @filter_spoilers_exempt.command(name="list", aliases=["ls", "show", "view"])
     @has_permissions(manage_guild=True)
     async def filter_spoilers_exempt_list(self, ctx):
-        row = await self.db.fetchrow(
-            """SELECT exempt_roles FROM moderation.spoilers WHERE guild_id = $1""",
-            ctx.guild.id,
-        )
-        if not row or not row.exempt_roles:
+        settings = Settings(self.bot, ctx.guild)
+        current = await settings.get_exempt_roles("spoilers", ctx.guild.id)
+        if not current:
             raise CommandError("no roles exempted from spoiler filter")
-        roles = [ctx.guild.get_role(rid) for rid in row.exempt_roles if ctx.guild.get_role(rid)]
+        roles = [ctx.guild.get_role(rid) for rid in current if ctx.guild.get_role(rid)]
         embed = Embed(title="Spoiler Exempt Roles").set_author(
             name=str(ctx.author), icon_url=ctx.author.display_avatar.url
         )
@@ -874,19 +819,15 @@ class FilterCommands(Package):
     @has_permissions(manage_guild=True)
     async def filter_musicfile(self, ctx, setting: Optional[bool] = True, *, flags: SpamFilterFlags = None):
         """toggle music file filter (custom bot filter)"""
+        settings = Settings(self.bot, ctx.guild)
         if setting:
-            await self.db.execute(
-                """INSERT INTO moderation.music (guild_id, action)
-                   VALUES($1, $2)
-                   ON CONFLICT(guild_id) DO UPDATE SET action = $2""",
-                ctx.guild.id, (flags.punishment if flags else "delete"),
+            await settings.upsert_module(
+                "music",
+                action=(flags.punishment if flags else "delete"),
             )
             return await ctx.success("music file filter **enabled**")
         else:
-            await self.db.execute(
-                """DELETE FROM moderation.music WHERE guild_id = $1""",
-                ctx.guild.id,
-            )
+            await settings.delete_module("music")
             return await ctx.success("music file filter **disabled**")
 
     @filter_musicfile.group(
@@ -897,18 +838,13 @@ class FilterCommands(Package):
     )
     @has_permissions(manage_guild=True)
     async def filter_musicfile_exempt(self, ctx, *, roles):
-        row = await self.db.fetchrow(
-            """SELECT exempt_roles FROM moderation.music WHERE guild_id = $1""",
-            ctx.guild.id,
-        )
-        if not row:
+        settings = Settings(self.bot, ctx.guild)
+        current = await settings.get_exempt_roles("music", ctx.guild.id)
+        if not current:
             raise CommandError("music file filter not configured, run `filter musicfiles on` first")
-        current = list(set((row.exempt_roles or []) + [r.id for r in roles]))
-        valid = [rid for rid in current if ctx.guild.get_role(rid)]
-        await self.db.execute(
-            """UPDATE moderation.music SET exempt_roles = $1 WHERE guild_id = $2""",
-            valid, ctx.guild.id,
-        )
+        current_set = set(current + [r.id for r in roles])
+        valid = [rid for rid in current_set if ctx.guild.get_role(rid)]
+        await settings.set_exempt_roles("music", ctx.guild.id, valid)
         mentions = [ctx.guild.get_role(rid).mention for rid in valid if ctx.guild.get_role(rid)]
         return await ctx.success(
             f"exempt: {human_join(mentions, final='and') if mentions else 'none'}"
@@ -917,13 +853,11 @@ class FilterCommands(Package):
     @filter_musicfile_exempt.command(name="list", aliases=["ls", "show", "view"])
     @has_permissions(manage_guild=True)
     async def filter_musicfile_exempt_list(self, ctx):
-        row = await self.db.fetchrow(
-            """SELECT exempt_roles FROM moderation.music WHERE guild_id = $1""",
-            ctx.guild.id,
-        )
-        if not row or not row.exempt_roles:
+        settings = Settings(self.bot, ctx.guild)
+        current = await settings.get_exempt_roles("music", ctx.guild.id)
+        if not current:
             raise CommandError("no roles exempted from music file filter")
-        roles = [ctx.guild.get_role(rid) for rid in row.exempt_roles if ctx.guild.get_role(rid)]
+        roles = [ctx.guild.get_role(rid) for rid in current if ctx.guild.get_role(rid)]
         embed = Embed(title="Music File Exempt Roles").set_author(
             name=str(ctx.author), icon_url=ctx.author.display_avatar.url
         )
@@ -996,21 +930,18 @@ class FilterCommands(Package):
         """toggle emoji filter (custom bot filter)"""
         threshold = flags.threshold if flags else 5
 
+        settings = Settings(self.bot, ctx.guild)
         if setting:
-            await self.db.execute(
-                """INSERT INTO moderation.emoji (guild_id, threshold, action)
-                   VALUES($1, $2, $3)
-                   ON CONFLICT(guild_id) DO UPDATE SET threshold = $2, action = $3""",
-                ctx.guild.id, threshold, (flags.punishment if flags else "delete"),
+            await settings.upsert_module(
+                "emoji",
+                threshold=threshold,
+                action=(flags.punishment if flags else "delete"),
             )
             return await ctx.success(
                 f"emoji filter **enabled**\n> -# **threshold: {threshold}**"
             )
         else:
-            await self.db.execute(
-                """DELETE FROM moderation.emoji WHERE guild_id = $1""",
-                ctx.guild.id,
-            )
+            await settings.delete_module("emoji")
             return await ctx.success("emoji filter **disabled**")
 
     @filter_emoji.group(
@@ -1021,18 +952,13 @@ class FilterCommands(Package):
     )
     @has_permissions(manage_guild=True)
     async def filter_emoji_exempt(self, ctx, *, roles):
-        row = await self.db.fetchrow(
-            """SELECT exempt_roles FROM moderation.emoji WHERE guild_id = $1""",
-            ctx.guild.id,
-        )
-        if not row:
+        settings = Settings(self.bot, ctx.guild)
+        current = await settings.get_exempt_roles("emoji", ctx.guild.id)
+        if not current:
             raise CommandError("emoji filter not configured, run `filter emoji on` first")
-        current = list(set((row.exempt_roles or []) + [r.id for r in roles]))
-        valid = [rid for rid in current if ctx.guild.get_role(rid)]
-        await self.db.execute(
-            """UPDATE moderation.emoji SET exempt_roles = $1 WHERE guild_id = $2""",
-            valid, ctx.guild.id,
-        )
+        current_set = set(current + [r.id for r in roles])
+        valid = [rid for rid in current_set if ctx.guild.get_role(rid)]
+        await settings.set_exempt_roles("emoji", ctx.guild.id, valid)
         mentions = [ctx.guild.get_role(rid).mention for rid in valid if ctx.guild.get_role(rid)]
         return await ctx.success(
             f"exempt: {human_join(mentions, final='and') if mentions else 'none'}"
@@ -1041,13 +967,11 @@ class FilterCommands(Package):
     @filter_emoji_exempt.command(name="list", aliases=["ls", "show", "view"])
     @has_permissions(manage_guild=True)
     async def filter_emoji_exempt_list(self, ctx):
-        row = await self.db.fetchrow(
-            """SELECT exempt_roles FROM moderation.emoji WHERE guild_id = $1""",
-            ctx.guild.id,
-        )
-        if not row or not row.exempt_roles:
+        settings = Settings(self.bot, ctx.guild)
+        current = await settings.get_exempt_roles("emoji", ctx.guild.id)
+        if not current:
             raise CommandError("no roles exempted from emoji filter")
-        roles = [ctx.guild.get_role(rid) for rid in row.exempt_roles if ctx.guild.get_role(rid)]
+        roles = [ctx.guild.get_role(rid) for rid in current if ctx.guild.get_role(rid)]
         embed = Embed(title="Emoji Exempt Roles").set_author(
             name=str(ctx.author), icon_url=ctx.author.display_avatar.url
         )
@@ -1073,22 +997,16 @@ class FilterCommands(Package):
         except re.error as e:
             raise CommandError(f"invalid regex: {e}")
 
-        existing = await self.db.fetchrow(
-            """SELECT id FROM moderation.regex WHERE guild_id = $1 AND regex = $2""",
-            ctx.guild.id, pattern,
-        )
+        settings = Settings(self.bot, ctx.guild)
+        existing = await settings.fetch_regex_row(ctx.guild.id, pattern)
         if existing:
-            await self.db.execute(
-                """DELETE FROM moderation.regex WHERE guild_id = $1 AND regex = $2""",
-                ctx.guild.id, pattern,
-            )
+            await settings.delete_regex(ctx.guild.id, pattern)
             return await ctx.success(f"removed regex\n> -# **`{pattern}`**")
 
-        await self.db.execute(
-            """INSERT INTO moderation.regex (guild_id, regex, action)
-               VALUES($1, $2, $3)
-               ON CONFLICT(guild_id, regex) DO UPDATE SET action = $3""",
-            ctx.guild.id, pattern, (flags.punishment if flags else "delete"),
+        await settings.upsert_regex(
+            ctx.guild.id,
+            pattern,
+            (flags.punishment if flags else "delete"),
         )
         return await ctx.success(
             f"added regex\n> -# **`{pattern}`** · {(flags.punishment if flags else 'delete')}"
@@ -1097,13 +1015,10 @@ class FilterCommands(Package):
     @filter_regex.command(name="list", aliases=["ls", "show", "view"])
     @has_permissions(manage_guild=True)
     async def filter_regex_list(self, ctx):
-        rows = await self.db.fetch(
-            "SELECT regex FROM moderation.regex WHERE guild_id = $1",
-            ctx.guild.id,
-        )
-        if not rows:
+        settings = Settings(self.bot, ctx.guild)
+        patterns = await settings.fetch_regex_patterns(ctx.guild.id)
+        if not patterns:
             raise CommandError("no regex patterns configured")
-        patterns = [r.regex for r in rows]
         embed = Embed(title="Regex Patterns").set_author(
             name=str(ctx.author), icon_url=ctx.author.display_avatar.url
         )
@@ -1119,17 +1034,11 @@ class FilterCommands(Package):
     )
     @has_permissions(manage_guild=True)
     async def filter_regex_exempt(self, ctx, *, roles):
-        row = await self.db.fetchrow(
-            """SELECT exempt_roles FROM moderation.regex WHERE guild_id = $1 LIMIT 1""",
-            ctx.guild.id,
-        )
-        current = list(row.exempt_roles or []) if row else []
+        settings = Settings(self.bot, ctx.guild)
+        current = await settings.get_exempt_roles("regex", ctx.guild.id)
         updated = list(set(current + [r.id for r in roles]))
         valid = [rid for rid in updated if ctx.guild.get_role(rid)]
-        await self.db.execute(
-            """UPDATE moderation.regex SET exempt_roles = $1 WHERE guild_id = $2""",
-            valid, ctx.guild.id,
-        )
+        await settings.set_exempt_roles("regex", ctx.guild.id, valid)
         mentions = [ctx.guild.get_role(rid).mention for rid in valid if ctx.guild.get_role(rid)]
         return await ctx.success(
             f"exempt: {human_join(mentions, final='and') if mentions else 'none'}"
@@ -1138,11 +1047,8 @@ class FilterCommands(Package):
     @filter_regex_exempt.command(name="list", aliases=["ls", "show", "view"])
     @has_permissions(manage_guild=True)
     async def filter_regex_exempt_list(self, ctx):
-        row = await self.db.fetchrow(
-            """SELECT exempt_roles FROM moderation.regex WHERE guild_id = $1 LIMIT 1""",
-            ctx.guild.id,
-        )
-        current = list(row.exempt_roles or []) if row else []
+        settings = Settings(self.bot, ctx.guild)
+        current = await settings.get_exempt_roles("regex", ctx.guild.id)
         if not current:
             raise CommandError("no roles exempted from regex filter")
         roles = [ctx.guild.get_role(rid) for rid in current if ctx.guild.get_role(rid)]

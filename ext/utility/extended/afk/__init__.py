@@ -43,10 +43,20 @@ class Away(AFKEvents, Package):
     async def afk(self, ctx: Context, *, status: str = "AFK") -> None:
         if ctx.invoked_subcommand is not None:
             return
+
+        is_global = "--global" in status
+        if is_global:
+            status = status.replace("--global", "").strip() or "AFK"
+            guild_id = None
+            scope_label = "globally"
+        else:
+            guild_id = ctx.guild.id
+            scope_label = f"in **{ctx.guild.name}**"
+
         store = self._store()
-        await store.set(ctx.author.id, status or "AFK")
+        await store.set(ctx.author.id, status or "AFK", guild_id=guild_id)
         embed = c2(
-            message=f"You're now **afk** - {status or 'AFK'}",
+            message=f"You're now **afk** {scope_label} - {status or 'AFK'}",
             timestamp=False,
         )
         embed.color = None
@@ -59,12 +69,13 @@ class Away(AFKEvents, Package):
     )
     async def afk_mentions(self, ctx: Context) -> None:
         store = self._store()
-        mentions = await store.get_mentions(ctx.author.id)
+        mentions = await store.get_mentions(ctx.author.id, guild_id=ctx.guild.id)
         if not mentions:
             return await ctx.warn("No AFK mentions recorded for your last session")
         pages = build_afk_mention_pages(
             mentions,
             owner_mention=ctx.author.mention,
+            bot=self.bot,
         )
         return await send_pages(ctx, pages)
 

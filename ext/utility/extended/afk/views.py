@@ -13,23 +13,39 @@ from core.discord.views.embed import body
 from .settings import AFK
 
 
-def _mention_line(index: int, entry: dict) -> str:
+def _mention_line(index: int, entry: dict, *, bot: Any = None) -> str:
     author_id = entry.get("author_id")
     who = f"<@{author_id}>" if author_id else entry.get("author_name") or "unknown"
     ts = entry.get("timestamp")
-    when = format_dt(ts, "R") if ts else "unknown"
     if isinstance(ts, (int, float)):
         from datetime import datetime, timezone
         when = format_dt(datetime.fromtimestamp(float(ts), tz=timezone.utc), "R")
+    elif ts:
+        when = format_dt(ts, "R")
+    else:
+        when = "unknown"
     jump = entry.get("jump_url") or ""
     jump_bit = f" · [jump]({jump})" if jump else ""
-    return f"-# `{index}.` **{who}** · pinged {when}{jump_bit}"
+
+    channel_id = entry.get("channel_id")
+    guild_id = entry.get("guild_id")
+    location_bits = []
+    if bot and guild_id:
+        guild = bot.get_guild(int(guild_id))
+        if guild:
+            location_bits.append(f"**{guild.name}**")
+    if channel_id:
+        location_bits.append(f"<#{channel_id}>")
+    location = " in " + " · ".join(location_bits) if location_bits else ""
+
+    return f"-# `{index}.` **{who}** · pinged {when}{location}{jump_bit}"
 
 
 def build_afk_mention_pages(
     mentions: list[dict],
     *,
     owner_mention: str,
+    bot: Any = None,
     page_size: int = 10,
 ) -> list:
     """inrole-style C2 pages for AFK mentions."""
@@ -67,7 +83,7 @@ def build_afk_mention_pages(
         )
         container.add_item(ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small))
         lines = [
-            _mention_line(i, entry)
+            _mention_line(i, entry, bot=bot)
             for i, entry in enumerate(chunk, start=start + 1)
         ]
         container.add_item(ui.TextDisplay("\n".join(lines)))
@@ -76,10 +92,11 @@ def build_afk_mention_pages(
 
 
 class AFKMentionsButton(ui.View):
-    def __init__(self, *, owner_id: int, bot: Any):
+    def __init__(self, *, owner_id: int, bot: Any, guild_id: int | None = None):
         super().__init__(timeout=120)
         self.owner_id = owner_id
         self.bot = bot
+        self.guild_id = guild_id
 
     @ui.button(label="Mentions", style=discord.ButtonStyle.primary)
     async def view_mentions(self, interaction: discord.Interaction, button: ui.Button) -> None:
@@ -92,10 +109,11 @@ class AFKMentionsButton(ui.View):
         if redis is None:
             return await interaction.response.send_message("AFK store unavailable.", ephemeral=True)
         store = AFK(redis)
-        mentions = await store.get_mentions(self.owner_id)
+        mentions = await store.get_mentions(self.owner_id, guild_id=self.guild_id)
         pages = build_afk_mention_pages(
             mentions,
             owner_mention=interaction.user.mention,
+            bot=self.bot,
         )
         await interaction.response.defer(ephemeral=True)
         

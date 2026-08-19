@@ -99,6 +99,125 @@ class Settings:
         self.rows = []
         logger.debug("clear auto_reactions guild=%s", self.guild.id)
 
+    async def upsert_reaction(
+        self,
+        guild_id: int,
+        trigger: str,
+        response: list,
+        owner_id: int,
+        strict: bool,
+        reply: bool,
+    ) -> None:
+        await self.bot.db.execute(
+            """
+            INSERT INTO auto_reactions (guild_id, trigger, response, owner_id, strict, reply)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT (guild_id, trigger, response)
+            DO UPDATE SET
+                response = EXCLUDED.response,
+                owner_id = EXCLUDED.owner_id,
+                strict = EXCLUDED.strict,
+                reply = EXCLUDED.reply
+            """,
+            guild_id,
+            trigger,
+            response,
+            owner_id,
+            strict,
+            reply,
+        )
+
+    async def delete_by_trigger(self, guild_id: int, trigger: str) -> str:
+        return await self.bot.db.execute(
+            "DELETE FROM auto_reactions WHERE guild_id = $1 AND LOWER(trigger) = LOWER($2)",
+            guild_id,
+            trigger,
+        )
+
+    async def delete_by_trigger_and_key(
+        self, guild_id: int, trigger: str, key: str
+    ) -> str:
+        return await self.bot.db.execute(
+            """
+            DELETE FROM auto_reactions
+            WHERE guild_id = $1 AND (
+                LOWER(trigger) = LOWER($2) OR trigger = $3
+            )
+            """,
+            guild_id,
+            trigger,
+            key,
+        )
+
+    async def delete_by_channel(self, guild_id: int, channel_id: str) -> None:
+        await self.bot.db.execute(
+            "DELETE FROM auto_reactions WHERE guild_id = $1 AND trigger = $2",
+            guild_id,
+            channel_id,
+        )
+
+    async def delete_by_word(self, guild_id: int, trigger_word: str) -> None:
+        await self.bot.db.execute(
+            "DELETE FROM auto_reactions WHERE LOWER(trigger) = LOWER($1) AND guild_id = $2",
+            trigger_word,
+            guild_id,
+        )
+
+    async def update_strict_all(self, guild_id: int, strict: bool) -> None:
+        await self.bot.db.execute(
+            "UPDATE auto_reactions SET strict = $2 WHERE guild_id = $1",
+            guild_id,
+            strict,
+        )
+
+    async def update_strict(
+        self, guild_id: int, trigger: str, strict: bool
+    ) -> None:
+        await self.bot.db.execute(
+            """
+            UPDATE auto_reactions SET strict = $3
+            WHERE guild_id = $1 AND LOWER(trigger) = LOWER($2)
+            """,
+            guild_id,
+            trigger,
+            strict,
+        )
+
+    async def fetch_all_reactions(
+        self, guild_id: int
+    ) -> list[dict[str, Any]]:
+        rows = await self.bot.db.fetch(
+            "SELECT trigger, response FROM auto_reactions WHERE guild_id = $1",
+            guild_id,
+        )
+        return [dict(r) for r in rows]
+
+    async def fetch_all_with_strict(
+        self, guild_id: int
+    ) -> list[dict[str, Any]]:
+        rows = await self.bot.db.fetch(
+            """
+            SELECT trigger, response, strict FROM auto_reactions
+            WHERE guild_id = $1
+            ORDER BY trigger
+            """,
+            guild_id,
+        )
+        return [dict(r) for r in rows]
+
+    async def fetch_owner_id(
+        self, guild_id: int, trigger: str
+    ) -> int | None:
+        return await self.bot.db.fetchval(
+            """
+            SELECT owner_id FROM auto_reactions
+            WHERE LOWER(trigger) = LOWER($1) AND guild_id = $2
+            LIMIT 1
+            """,
+            trigger,
+            guild_id,
+        )
+
     async def upsert(self, **kwargs: Any) -> Settings:
         """Reload rows (multi-row writes use add / remove_where)."""
         return await self.reload()

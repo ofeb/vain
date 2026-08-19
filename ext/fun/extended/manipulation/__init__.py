@@ -731,24 +731,15 @@ class Manipulation(Package):
         return await loop.run_in_executor(None, _build)
 
     async def _ensure_quote_schema(self) -> None:
-        await self.db.execute(
-            """
-            CREATE TABLE IF NOT EXISTS quote_channels (
-                guild_id BIGINT PRIMARY KEY,
-                channel_id BIGINT NOT NULL
-            )
-            """
-        )
+        from ext.fun.extended.manipulation.settings import Settings
+
+        await Settings.ensure_quote_schema(self.db)
 
     async def _get_quote_channel(self, guild_id: int):
         await self._ensure_quote_schema()
-        row = await self.db.fetchrow(
-            "SELECT channel_id FROM quote_channels WHERE guild_id = $1",
-            guild_id,
-        )
-        if not row:
-            return None
-        return int(row["channel_id"] if isinstance(row, dict) else row[0])
+        from ext.fun.extended.manipulation.settings import Settings
+
+        return await Settings.get_quote_channel(self.db, guild_id)
 
     @hybrid(
         name="quote",
@@ -842,25 +833,18 @@ class Manipulation(Package):
     @has_permissions(manage_guild=True)
     async def quote_channel(self, ctx: Context, *, target: str = None) -> None:
         await self._ensure_quote_schema()
-        
+        from ext.fun.extended.manipulation.settings import Settings
+
         if target is None or not str(target).strip():
             dest = ctx.channel
             if dest is None:
                 return await ctx.warn("Couldn't resolve this channel")
-            await self.db.execute(
-                """
-                INSERT INTO quote_channels (guild_id, channel_id)
-                VALUES ($1, $2)
-                ON CONFLICT (guild_id) DO UPDATE SET channel_id = EXCLUDED.channel_id
-                """,
-                ctx.guild.id,
-                dest.id,
-            )
+            await Settings.set_quote_channel(self.db, ctx.guild.id, dest.id)
             return await ctx.success(f"Quotes will also post in {dest.mention}")
 
         raw = str(target).strip()
         channel = None
-        
+
         m = re.search(r"<#(\d+)>", raw)
         if m:
             cid = int(m.group(1))
@@ -881,15 +865,7 @@ class Manipulation(Package):
                 f"{ctx.cmd('quote channel reset')} to clear"
             )
 
-        await self.db.execute(
-            """
-            INSERT INTO quote_channels (guild_id, channel_id)
-            VALUES ($1, $2)
-            ON CONFLICT (guild_id) DO UPDATE SET channel_id = EXCLUDED.channel_id
-            """,
-            ctx.guild.id,
-            channel.id,
-        )
+        await Settings.set_quote_channel(self.db, ctx.guild.id, channel.id)
         return await ctx.success(f"Quotes will also post in {channel.mention}")
 
     @quote_channel.command(
@@ -901,10 +877,9 @@ class Manipulation(Package):
     @commands.has_permissions(manage_guild=True)
     async def quote_channel_reset(self, ctx: Context) -> None:
         await self._ensure_quote_schema()
-        await self.db.execute(
-            "DELETE FROM quote_channels WHERE guild_id = $1",
-            ctx.guild.id,
-        )
+        from ext.fun.extended.manipulation.settings import Settings
+
+        await Settings.clear_quote_channel(self.db, ctx.guild.id)
         return await ctx.success("Quote channel cleared")
 
     @hybrid(

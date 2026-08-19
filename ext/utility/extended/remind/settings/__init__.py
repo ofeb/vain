@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 from logging import getLogger
 from typing import Any
 
@@ -102,6 +103,54 @@ class Settings:
     async def upsert(self, **kwargs: Any) -> Settings:
         """Reload rows (multi-row writes use add / remove_where)."""
         return await self.reload()
+
+    
+
+    @staticmethod
+    async def ensure_schema(db: Any) -> None:
+        await db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS reminders (
+                id BIGSERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL,
+                guild_id BIGINT NOT NULL DEFAULT 0,
+                number INTEGER NOT NULL DEFAULT 1,
+                message TEXT NOT NULL,
+                jump_url TEXT,
+                time TIMESTAMP WITHOUT TIME ZONE NOT NULL
+            )
+            """
+        )
+        for stmt in (
+            "ALTER TABLE reminders ADD COLUMN IF NOT EXISTS guild_id BIGINT NOT NULL DEFAULT 0",
+            "ALTER TABLE reminders ADD COLUMN IF NOT EXISTS message TEXT",
+            "ALTER TABLE reminders ADD COLUMN IF NOT EXISTS time TIMESTAMP WITHOUT TIME ZONE",
+            "ALTER TABLE reminders ADD COLUMN IF NOT EXISTS user_id BIGINT",
+            "ALTER TABLE reminders ADD COLUMN IF NOT EXISTS number INTEGER",
+            "ALTER TABLE reminders ADD COLUMN IF NOT EXISTS jump_url TEXT",
+        ):
+            with contextlib.suppress(Exception):
+                await db.execute(stmt)
+
+        with contextlib.suppress(Exception):
+            await db.execute(
+                """
+                UPDATE reminders r
+                SET number = sub.n
+                FROM (
+                    SELECT id, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY time ASC, id ASC) AS n
+                    FROM reminders
+                    WHERE number IS NULL OR number < 1
+                ) sub
+                WHERE r.id = sub.id
+                """
+            )
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS reminders_user_idx ON reminders (user_id)"
+        )
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS reminders_time_idx ON reminders (time)"
+        )
 
     async def insert(self, **kwargs: Any) -> Settings:
         if kwargs:

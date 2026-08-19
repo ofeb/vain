@@ -31,6 +31,7 @@ from core.managers.permissions import has_permissions
 
 from core.discord.views.embed import panel_embed, reply_embed
 from core.tools.human.time import human_date
+from ext.moderation.settings import Settings
 from ext.server.extended.invoke import register_invoke_subgroup
 
 def label_line(label: str, value: str) -> str:
@@ -91,13 +92,7 @@ class ModerationCommands(Package):
 
     async def _set_invoke(self, ctx, action: str, target: str, code: str) -> None:
         column = "dm_code" if target == "dm" else "message_code"
-        await self.db.execute(
-            f"""INSERT INTO invocation (guild_id, command, {column})
-                VALUES ($1, $2, $3)
-                ON CONFLICT (guild_id, command)
-                DO UPDATE SET {column} = excluded.{column}""",
-            ctx.guild.id, action, code,
-        )
+        await Settings.set_invoke(self.bot.db, ctx.guild.id, action, column, code)
 
     async def _set_invoke_enabled(self, ctx, action: str, target: str, enabled: bool) -> None:
         column = "dm_enabled" if target == "dm" else "message_enabled"
@@ -1726,10 +1721,7 @@ class ModerationCommands(Package):
         role_key = f"{mute_type}muted_role_id"
         if mute_type == "":
             role_key = "muted_role_id"
-        row = await self.bot.db.fetchrow(
-            f"SELECT {role_key} FROM server_settings WHERE guild_id = $1",
-            ctx.guild.id,
-        )
+        row = await Settings.get_mute_role(self.bot.db, ctx.guild.id, role_key)
         if not row or not row.get(role_key):
             setting_name = {"": "muted", "i": "imuted", "r": "rmuted"}.get(mute_type, mute_type)
             return await ctx.warn(
@@ -1769,11 +1761,8 @@ class ModerationCommands(Package):
             )
 
         await member.add_roles(role, reason=self._audit_reason(ctx, reason))
-        await self.bot.db.execute(
-            """INSERT INTO mutes (guild_id, user_id, moderator_id, mute_type, role_id, expires_at, reason)
-               VALUES ($1, $2, $3, $4, $5, $6, $7)
-               ON CONFLICT (guild_id, user_id) DO UPDATE
-               SET mute_type = $4, role_id = $5, expires_at = $6, reason = $7, moderator_id = $3""",
+        await Settings.insert_mute(
+            self.bot.db,
             ctx.guild.id, member.id, ctx.author.id, mute_type or "text",
             role.id, expires_at, self._default_reason(reason),
         )
@@ -1813,10 +1802,7 @@ class ModerationCommands(Package):
         role_key = f"{mute_type}muted_role_id"
         if mute_type == "":
             role_key = "muted_role_id"
-        row = await self.bot.db.fetchrow(
-            f"SELECT {role_key} FROM server_settings WHERE guild_id = $1",
-            ctx.guild.id,
-        )
+        row = await Settings.get_mute_role(self.bot.db, ctx.guild.id, role_key)
         if not row or not row.get(role_key):
             return await ctx.warn("No mute role\n> -# **no mute role is configured**")
 
@@ -1824,10 +1810,7 @@ class ModerationCommands(Package):
         if role and role in member.roles:
             await member.remove_roles(role, reason=self._audit_reason(ctx, reason))
 
-        await self.bot.db.execute(
-            "DELETE FROM mutes WHERE guild_id = $1 AND user_id = $2 AND mute_type = $3",
-            ctx.guild.id, member.id, mute_type or "text",
-        )
+        await Settings.delete_mute(self.bot.db, ctx.guild.id, member.id, mute_type or "text")
 
         role_label = {"": "text-muted", "i": "image-muted", "r": "reaction-muted"}.get(mute_type, mute_type)
         if mute_type == "":
@@ -3575,10 +3558,7 @@ class ModerationCommands(Package):
                     await cat.delete(reason="Moderation unsetup")
                     removed.append(f"Category: {cat_name}")
 
-            await self.bot.db.execute(
-                "DELETE FROM modlog_config WHERE guild_id = $1",
-                ctx.guild.id,
-            )
+            await Settings.delete_modlog_config(self.bot.db, ctx.guild.id)
 
         if removed:
             await ctx.success(
@@ -3727,11 +3707,8 @@ class ModerationCommands(Package):
                     permissions=discord.Permissions(add_reactions=False),
                 )
 
-            await self.bot.db.execute(
-                """INSERT INTO server_settings (guild_id, muted_role_id, imuted_role_id, rmuted_role_id)
-                   VALUES ($1, $2, $3, $4)
-                   ON CONFLICT (guild_id) DO UPDATE SET
-                       muted_role_id = $2, imuted_role_id = $3, rmuted_role_id = $4""",
+            await Settings.set_server_mute_roles(
+                self.bot.db,
                 ctx.guild.id, muted_role.id, imuted_role.id, rmuted_role.id,
             )
 

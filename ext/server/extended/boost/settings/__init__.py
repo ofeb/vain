@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 from logging import getLogger
 from typing import Any
 
@@ -35,6 +36,29 @@ class Settings:
 
     def __len__(self) -> int:
         return len(self.rows)
+
+    @staticmethod
+    async def ensure_schema(db) -> None:
+        with contextlib.suppress(Exception):
+            await db.execute(
+                "ALTER TABLE boost_messages ADD COLUMN IF NOT EXISTS is_second BOOLEAN NOT NULL DEFAULT FALSE"
+            )
+        with contextlib.suppress(Exception):
+            await db.execute(
+                """
+                DO $$ BEGIN
+                  IF NOT EXISTS (
+                    SELECT 1 FROM pg_constraint WHERE conname = 'boost_messages_guild_channel_second_key'
+                  ) THEN
+                    ALTER TABLE boost_messages
+                      DROP CONSTRAINT IF EXISTS boost_messages_pkey;
+                    ALTER TABLE boost_messages
+                      ADD CONSTRAINT boost_messages_guild_channel_second_key
+                      UNIQUE (guild_id, channel_id, is_second);
+                  END IF;
+                END $$;
+                """
+            )
 
     @classmethod
     async def fetch(cls, bot: Vain, guild: Guild) -> Settings:
@@ -107,6 +131,106 @@ class Settings:
         if kwargs:
             await self.add(**kwargs)
         return self
+
+    @staticmethod
+    async def exists(
+        db, guild_id: int, channel_id: int, is_second: bool
+    ) -> bool:
+        return bool(
+            await db.fetchval(
+                """SELECT 1 FROM boost_messages
+                   WHERE guild_id = $1 AND channel_id = $2 AND is_second = $3""",
+                guild_id,
+                channel_id,
+                is_second,
+            )
+        )
+
+    @staticmethod
+    async def upsert_message(
+        db,
+        guild_id: int,
+        channel_id: int,
+        message: str,
+        self_destruct: int | None,
+        is_second: bool,
+    ) -> None:
+        await db.execute(
+            """UPDATE boost_messages SET message = $1, self_destruct = $2
+               WHERE guild_id = $3 AND channel_id = $4 AND is_second = $5""",
+            message,
+            self_destruct,
+            guild_id,
+            channel_id,
+            is_second,
+        )
+
+    @staticmethod
+    async def insert_message(
+        db,
+        guild_id: int,
+        channel_id: int,
+        message: str,
+        self_destruct: int | None,
+        is_second: bool,
+    ) -> None:
+        await db.execute(
+            """INSERT INTO boost_messages
+               (guild_id, channel_id, message, self_destruct, is_second)
+               VALUES ($1, $2, $3, $4, $5)""",
+            guild_id,
+            channel_id,
+            message,
+            self_destruct,
+            is_second,
+        )
+
+    @staticmethod
+    async def remove_message(
+        db, guild_id: int, channel_id: int, is_second: bool
+    ) -> bool:
+        return bool(
+            await db.fetchval(
+                """DELETE FROM boost_messages
+                   WHERE guild_id = $1 AND channel_id = $2 AND is_second = $3
+                   RETURNING channel_id""",
+                guild_id,
+                channel_id,
+                is_second,
+            )
+        )
+
+    @staticmethod
+    async def get_message(
+        db, guild_id: int, channel_id: int, is_second: bool
+    ) -> str | None:
+        return await db.fetchval(
+            """SELECT message FROM boost_messages
+               WHERE guild_id = $1 AND channel_id = $2 AND is_second = $3""",
+            guild_id,
+            channel_id,
+            is_second,
+        )
+
+    @staticmethod
+    async def get_all(db, guild_id: int) -> list[dict[str, Any]]:
+        rows = await db.fetch(
+            """SELECT channel_id, is_second FROM boost_messages WHERE guild_id = $1""",
+            guild_id,
+        )
+        return [dict(r) for r in rows]
+
+    @staticmethod
+    async def fetch_by_second(
+        db, guild_id: int, is_second: bool
+    ) -> list[dict[str, Any]]:
+        rows = await db.fetch(
+            """SELECT * FROM boost_messages
+               WHERE guild_id = $1 AND is_second = $2""",
+            guild_id,
+            is_second,
+        )
+        return [dict(r) for r in rows]
 
 
 async def fetch(bot: Vain, guild: Guild) -> Settings:

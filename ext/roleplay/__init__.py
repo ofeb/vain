@@ -15,6 +15,7 @@ from core.discord.hybrid import hybrid, describe, command
 from core.tools.human.text import ordinal
 
 from .improper import fetch_action_gif
+from .settings import Settings
 
 from core.discord.views.embed import reply_embed
 
@@ -268,19 +269,7 @@ class RoleplayBackView(discord.ui.View):
             target_user = await bot.fetch_user(self.original_author_id)
             mention = target_user.mention
 
-            total = await bot.db.fetchval(
-                """
-                INSERT INTO roleplay.actions (action, giver, receiver, amount)
-                    VALUES ($1, $2, $3, 1)
-                ON CONFLICT (action, giver, receiver)
-                    DO UPDATE SET amount = roleplay.actions.amount + 1
-                RETURNING amount
-                """,
-                self.action,
-                interaction.user.id,
-                self.original_author_id,
-                cached=False,
-            )
+            total = await Settings.record_action(bot.db, self.action, interaction.user.id, self.original_author_id)
 
             embed_color = _extract_dominant_color(gif_bytes) or bot.color
             embed = reply_embed(
@@ -313,19 +302,7 @@ class RoleplayCommands(Package):
     """Themed member-to-member reaction commands."""
 
     async def _record(self, action: str, giver_id: int, receiver_id: int) -> int:
-        return await self.db.fetchval(
-            """
-            INSERT INTO roleplay.actions (action, giver, receiver, amount)
-                VALUES ($1, $2, $3, 1)
-            ON CONFLICT (action, giver, receiver)
-                DO UPDATE SET amount = roleplay.actions.amount + 1
-            RETURNING amount
-            """,
-            action,
-            giver_id,
-            receiver_id,
-            cached=False,
-        )
+        return await Settings.record_action(self.db, action, giver_id, receiver_id)
 
     async def _perform_action(
         self,

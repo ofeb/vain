@@ -16,6 +16,7 @@ from core.discord.ctx import Context
 from core.discord.hybrid import describe, hybrid
 from core.discord.views.embed import c2, panel_embed
 from core.managers.permissions import has_permissions
+from .settings import Settings
 
 log = logging.getLogger("vain.crypto")
 
@@ -124,25 +125,7 @@ class Crypto(commands.Cog):
         if self._schema_ready:
             return
         with contextlib.suppress(Exception):
-            await self.bot.db.execute(
-                """
-                CREATE TABLE IF NOT EXISTS crypto_feeds (
-                    guild_id BIGINT NOT NULL,
-                    channel_id BIGINT NOT NULL,
-                    coin_id TEXT NOT NULL,
-                    coin_label TEXT NOT NULL,
-                    last_price DOUBLE PRECISION,
-                    last_change DOUBLE PRECISION,
-                    last_market_cap DOUBLE PRECISION,
-                    last_posted TIMESTAMP,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    PRIMARY KEY (guild_id, channel_id, coin_id)
-                )
-                """
-            )
-            await self.bot.db.execute(
-                "CREATE INDEX IF NOT EXISTS idx_crypto_feeds_coin ON crypto_feeds(coin_id)"
-            )
+            await Settings.ensure_schema(self.bot.db)
             self._schema_ready = True
 
     async def _http(self) -> aiohttp.ClientSession:
@@ -378,13 +361,8 @@ class Crypto(commands.Cog):
         await self._ensure_schema()
         channel, coin_id, symbol, name, _thumb = await self._parse_channel_coin(ctx, args)
         label = f"{name} ({symbol})"
-        await self.bot.db.execute(
-            """
-            INSERT INTO crypto_feeds (guild_id, channel_id, coin_id, coin_label)
-            VALUES ($1, $2, $3, $4)
-            ON CONFLICT (guild_id, channel_id, coin_id) DO UPDATE
-                SET coin_label = excluded.coin_label
-            """,
+        await Settings.upsert_feed(
+            self.bot.db,
             ctx.guild.id,
             channel.id,
             coin_id,
@@ -393,18 +371,14 @@ class Crypto(commands.Cog):
         
         data = await self._fetch_price(coin_id)
         if data:
-            await self.bot.db.execute(
-                """
-                UPDATE crypto_feeds
-                   SET last_price = $1, last_change = $2, last_market_cap = $3
-                 WHERE guild_id = $4 AND channel_id = $5 AND coin_id = $6
-                """,
-                float(data.get("usd") or 0),
-                float(data.get("usd_24h_change") or 0),
-                float(data.get("usd_market_cap") or 0),
+            await Settings.update_feed_price(
+                self.bot.db,
                 ctx.guild.id,
                 channel.id,
                 coin_id,
+                float(data.get("usd") or 0),
+                float(data.get("usd_24h_change") or 0),
+                float(data.get("usd_market_cap") or 0),
             )
             embed = self._price_embed(
                 coin_id=coin_id,
@@ -446,11 +420,7 @@ class Crypto(commands.Cog):
         coin_raw = " ".join(tokens[i:]).strip() if tokens[i:] else ""
         if not coin_raw:
             
-            result = await self.bot.db.execute(
-                "DELETE FROM crypto_feeds WHERE guild_id = $1 AND channel_id = $2",
-                ctx.guild.id,
-                channel.id,
-            )
+            await Settings.remove_feed(self.bot.db, ctx.guild.id, channel.id)
             await ctx.success(f"Cleared crypto feeds in {channel.mention}")
             return
         resolved = resolve_coin(coin_raw)
@@ -458,16 +428,7 @@ class Crypto(commands.Cog):
             await ctx.fail(f"Unknown coin `{coin_raw}`")
             return
         coin_id = resolved[0]
-        row = await self.bot.db.fetchrow(
-            """
-            DELETE FROM crypto_feeds
-             WHERE guild_id = $1 AND channel_id = $2 AND coin_id = $3
-         RETURNING coin_label
-            """,
-            ctx.guild.id,
-            channel.id,
-            coin_id,
-        )
+        row = await Settings.remove_feed_coin(self.bot.db, ctx.guild.id, channel.id, coin_id)
         if not row:
             await ctx.warn(f"No **{coin_raw}** feed in {channel.mention}")
             return
@@ -482,15 +443,7 @@ class Crypto(commands.Cog):
     @has_permissions(manage_guild=True)
     async def crypto_feeds_list(self, ctx: Context) -> None:
         await self._ensure_schema()
-        rows = await self.bot.db.fetch(
-            """
-            SELECT channel_id, coin_id, coin_label, last_price, last_change
-              FROM crypto_feeds
-             WHERE guild_id = $1
-             ORDER BY coin_label, channel_id
-            """,
-            ctx.guild.id,
-        )
+        rows = await Settings.fetch_feeds(self.bot.db, ctx.guild.id)
         if not rows:
             await ctx.warn("No crypto feeds configured.")
             return
@@ -506,7 +459,6 @@ class Crypto(commands.Cog):
         embed = panel_embed(
             title="Crypto Feeds",
             lines=lines,
-            footer=f"{len(rows)} feed(s)",
             timestamp=False,
         )
         await ctx.send(embed=embed)
@@ -803,7 +755,7 @@ class Crypto(commands.Cog):
             return
         await self._ensure_schema()
         try:
-            rows = await self.bot.db.fetch("SELECT * FROM crypto_feeds")
+            rows = await Settings.fetch_all_feeds(self.bot.db)
         except Exception as exc:
             log.debug("crypto feed fetch failed: %s", exc)
             return
@@ -835,18 +787,14 @@ class Crypto(commands.Cog):
                         last_posted = row.get("last_posted")
                         if last_posted is not None and row.get("last_price") is not None:
                             continue
-                        await self.bot.db.execute(
-                            """
-                            UPDATE crypto_feeds
-                               SET last_price = $1, last_change = $2, last_market_cap = $3
-                             WHERE guild_id = $4 AND channel_id = $5 AND coin_id = $6
-                            """,
-                            float(data.get("usd") or 0),
-                            float(data.get("usd_24h_change") or 0),
-                            float(data.get("usd_market_cap") or 0),
+                        await Settings.update_feed_price(
+                            self.bot.db,
                             row["guild_id"],
                             row["channel_id"],
                             coin_id,
+                            float(data.get("usd") or 0),
+                            float(data.get("usd_24h_change") or 0),
+                            float(data.get("usd_market_cap") or 0),
                         )
                         continue
 
@@ -865,7 +813,7 @@ class Crypto(commands.Cog):
                             pp = float(prev_price)
                             if pp > 0:
                                 pct = (price - pp) / pp * 100.0
-                                move = f" · {pct:+.2f}% since last alert"
+                                move = f"{pct:+.2f}% since last checked"
                         except Exception:
                             pass
 
@@ -875,7 +823,7 @@ class Crypto(commands.Cog):
                         name=name,
                         data=data,
                         thumbnail=thumb,
-                        footer=f"Crypto feed {move}",
+                        footer=f"{move}",
                     )
                     try:
                         from core.discord.ctx import embed_to_layout
@@ -890,22 +838,15 @@ class Crypto(commands.Cog):
                     except Exception:
                         continue
 
-                    await self.bot.db.execute(
-                        """
-                        UPDATE crypto_feeds
-                           SET last_price = $1,
-                               last_change = $2,
-                               last_market_cap = $3,
-                               last_posted = $4
-                         WHERE guild_id = $5 AND channel_id = $6 AND coin_id = $7
-                        """,
+                    await Settings.update_feed_price_with_posted(
+                        self.bot.db,
+                        row["guild_id"],
+                        row["channel_id"],
+                        coin_id,
                         float(data.get("usd") or 0),
                         float(data.get("usd_24h_change") or 0),
                         float(data.get("usd_market_cap") or 0),
                         _now_naive(),
-                        row["guild_id"],
-                        row["channel_id"],
-                        coin_id,
                     )
                     
                     await asyncio.sleep(0.6)

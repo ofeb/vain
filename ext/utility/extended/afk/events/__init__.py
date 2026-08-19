@@ -30,17 +30,17 @@ class AFKEvents:
         store = self._store()
         if store is None:
             return
-        if not await store.exists(message.author.id):
+        if not await store.exists_any(message.author.id, guild_id=message.guild.id):
             return
-        data = await store.get(message.author.id)
+        data = await store.get_any(message.author.id, guild_id=message.guild.id)
         if not data:
             return
-        if await store.remove(message.author.id):
-            mentions = await store.get_mentions(message.author.id)
+        if await store.remove_any(message.author.id, guild_id=message.guild.id):
+            mentions = await store.get_mentions(message.author.id, guild_id=message.guild.id)
             view = None
             if mentions:
                 from .. import views as afk_views
-                view = afk_views.AFKMentionsButton(owner_id=message.author.id, bot=self.bot)
+                view = afk_views.AFKMentionsButton(owner_id=message.author.id, bot=self.bot, guild_id=message.guild.id)
             embed = c2(
                 message=(
                     f"{message.author.mention}: Welcome back, you were away "
@@ -73,9 +73,9 @@ class AFKEvents:
         for user in message.mentions:
             if user.bot or user.id == message.author.id:
                 continue
-            if not await store.exists(user.id):
+            if not await store.exists_any(user.id, guild_id=message.guild.id):
                 continue
-            data = await store.get(user.id)
+            data = await store.get_any(user.id, guild_id=message.guild.id)
             if not data:
                 continue
             
@@ -88,6 +88,7 @@ class AFKEvents:
                     channel_id=message.channel.id,
                     content=message.content or "",
                     timestamp=message.created_at.timestamp(),
+                    guild_id=message.guild.id,
                 )
             except Exception:
                 pass

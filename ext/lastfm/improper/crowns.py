@@ -13,6 +13,7 @@ from core.tools.guild_members import collect_guild_members
 
 from .api import LastFMApiClient
 from .library import LastFMLibraryStore
+from ..settings import Settings
 
 
 class LastFMCrownStore:
@@ -88,10 +89,10 @@ class LastFMCrownStore:
     async def _guild_lastfm_candidates(self, guild: discord.Guild) -> list[dict]:
         if not getattr(self.bot, "db", None):
             return []
-        users = await self.bot.db.get_lastfm_users()
+        users = await Settings.get_users(self.bot)
         members = await collect_guild_members(guild)
         guild_members = {member.id for member in members}
-        hidden = set(await self.bot.db.list_lastfm_hidden(guild.id))
+        hidden = set(await Settings.list_hidden(self.bot, guild.id))
         return [
             user
             for user in users

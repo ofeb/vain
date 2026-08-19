@@ -16,6 +16,8 @@ from core.tools.flags.guilds import Parameters
 from core.managers.permissions import has_permissions
 from core.tools.human.text import humanize_duration
 
+from .settings import Settings
+
 
 class BoostCommands(Package):
     """Boost messages - one first-boost and one second-boost script per channel."""
@@ -25,27 +27,23 @@ class BoostCommands(Package):
         self.boost_locks = defaultdict(Lock)
         self._boost_counts: dict[int, dict[int, int]] = defaultdict(dict)
 
+    @staticmethod
+    def _parse_boost_flags(ctx, message: str) -> tuple[str, bool, int | None]:
+        import re
+        cleaned = message
+        is_second = bool(re.search(r'(?:^|\s)--twoboosts(?:\s|$)', cleaned))
+        cleaned = re.sub(r'\s*--twoboosts\s*', ' ', cleaned).strip()
+        timer = ctx.flags.get("self_destruct") if hasattr(ctx, 'flags') else None
+        m = re.search(r'--self_destruct\s+(\d+)', cleaned)
+        if m:
+            timer = int(m.group(1))
+            cleaned = re.sub(r'\s*--self_destruct\s+\d+\s*', ' ', cleaned).strip()
+        if cleaned.startswith("```") and cleaned.endswith("```") and len(cleaned) > 6:
+            cleaned = cleaned[3:-3].strip()
+        return cleaned, is_second, timer
+
     async def cog_load(self) -> None:
-        with contextlib.suppress(Exception):
-            await self.db.execute(
-                "ALTER TABLE boost_messages ADD COLUMN IF NOT EXISTS is_second BOOLEAN NOT NULL DEFAULT FALSE"
-            )
-        with contextlib.suppress(Exception):
-            await self.db.execute(
-                """
-                DO $$ BEGIN
-                  IF NOT EXISTS (
-                    SELECT 1 FROM pg_constraint WHERE conname = 'boost_messages_guild_channel_second_key'
-                  ) THEN
-                    ALTER TABLE boost_messages
-                      DROP CONSTRAINT IF EXISTS boost_messages_pkey;
-                    ALTER TABLE boost_messages
-                      ADD CONSTRAINT boost_messages_guild_channel_second_key
-                      UNIQUE (guild_id, channel_id, is_second);
-                  END IF;
-                END $$;
-                """
-            )
+        await Settings.ensure_schema(self.db)
 
     @group(
         name="boosts",
@@ -73,12 +71,8 @@ class BoostCommands(Package):
         if timer is not None and timer < 6:
             return await ctx.warn("self-destruct timer must be at least `6` seconds")
 
-        exists = await self.db.fetchval(
-            """SELECT 1 FROM boost_messages
-               WHERE guild_id = $1 AND channel_id = $2 AND is_second = $3""",
-            ctx.guild.id,
-            channel.id,
-            is_second,
+        exists = await Settings.exists(
+            self.db, ctx.guild.id, channel.id, is_second,
         )
         slot = "second-boost" if is_second else "first-boost"
         if edit:
@@ -88,14 +82,8 @@ class BoostCommands(Package):
                     f"`{ctx.clean_prefix}boosts add` first"
                     + (" `--twoboosts`" if is_second else "")
                 )
-            await self.db.execute(
-                """UPDATE boost_messages SET message = $1, self_destruct = $2
-                   WHERE guild_id = $3 AND channel_id = $4 AND is_second = $5""",
-                script,
-                timer,
-                ctx.guild.id,
-                channel.id,
-                is_second,
+            await Settings.upsert_message(
+                self.db, ctx.guild.id, channel.id, script, timer, is_second,
             )
             verb = "updated"
         else:
@@ -106,15 +94,8 @@ class BoostCommands(Package):
                     + (" `--twoboosts`" if is_second else "")
                 )
             try:
-                await self.db.execute(
-                    """INSERT INTO boost_messages
-                       (guild_id, channel_id, message, self_destruct, is_second)
-                       VALUES ($1, $2, $3, $4, $5)""",
-                    ctx.guild.id,
-                    channel.id,
-                    script,
-                    timer,
-                    is_second,
+                await Settings.insert_message(
+                    self.db, ctx.guild.id, channel.id, script, timer, is_second,
                 )
             except UniqueViolationError:
                 return await ctx.fail(
@@ -131,21 +112,20 @@ class BoostCommands(Package):
         name="add",
         example=",boosts add #general thanks {user.mention}!",
         aliases=["create", "set"],
-        flags=Parameters,
         description="add a boost message (defaults to current channel). use --twoboosts for the 2nd boost script",
         usage="[channel] <script> [--self_destruct <time>] [--twoboosts]",
     )
     @has_permissions(manage_guild=True)
     async def boosts_add(
-        self, ctx, channel: Optional[TextChannel] = None, *, message: EmbedConverter
+        self, ctx, channel: Optional[TextChannel] = None, *, message: str
     ) -> Message:
         channel = channel or ctx.channel
-        timer = ctx.flags.get("self_destruct")
-        is_second = bool(ctx.flags.get("twoboosts"))
+        cleaned, is_second, timer = self._parse_boost_flags(ctx, message)
+        script = await EmbedConverter().convert(ctx, cleaned)
         return await self._upsert(
             ctx,
             channel,
-            message.script,
+            script.script,
             timer,
             is_second=is_second,
             edit=False,
@@ -155,21 +135,20 @@ class BoostCommands(Package):
         name="edit",
         aliases=["change", "update"],
         example=",boosts edit #general thanks {user.mention} for the boost!",
-        flags=Parameters,
         description="edit an existing boost script (defaults to current channel)",
         usage="[channel] <script> [--self_destruct <time>] [--twoboosts]",
     )
     @has_permissions(manage_guild=True)
     async def boosts_edit(
-        self, ctx, channel: Optional[TextChannel] = None, *, message: EmbedConverter
+        self, ctx, channel: Optional[TextChannel] = None, *, message: str
     ) -> Message:
         channel = channel or ctx.channel
-        timer = ctx.flags.get("self_destruct")
-        is_second = bool(ctx.flags.get("twoboosts"))
+        cleaned, is_second, timer = self._parse_boost_flags(ctx, message)
+        script = await EmbedConverter().convert(ctx, cleaned)
         return await self._upsert(
             ctx,
             channel,
-            message.script,
+            script.script,
             timer,
             is_second=is_second,
             edit=True,
@@ -190,13 +169,8 @@ class BoostCommands(Package):
         channel = channel or ctx.channel
         is_second = bool(ctx.flags.get("twoboosts"))
         slot = "second-boost" if is_second else "first-boost"
-        deleted = await self.db.fetchval(
-            """DELETE FROM boost_messages
-               WHERE guild_id = $1 AND channel_id = $2 AND is_second = $3
-               RETURNING channel_id""",
-            ctx.guild.id,
-            channel.id,
-            is_second,
+        deleted = await Settings.remove_message(
+            self.db, ctx.guild.id, channel.id, is_second,
         )
         if deleted:
             return await ctx.success(
@@ -218,12 +192,8 @@ class BoostCommands(Package):
     ) -> Message:
         channel = channel or ctx.channel
         is_second = bool(ctx.flags.get("twoboosts"))
-        msg = await self.db.fetchval(
-            """SELECT message FROM boost_messages
-               WHERE guild_id = $1 AND channel_id = $2 AND is_second = $3""",
-            ctx.guild.id,
-            channel.id,
-            is_second,
+        msg = await Settings.get_message(
+            self.db, ctx.guild.id, channel.id, is_second,
         )
         if not msg:
             slot = "second-boost" if is_second else "first-boost"
@@ -237,10 +207,7 @@ class BoostCommands(Package):
     )
     @has_permissions(manage_guild=True)
     async def boosts_list(self, ctx) -> Message:
-        rows = await self.db.fetch(
-            """SELECT channel_id, is_second FROM boost_messages WHERE guild_id = $1""",
-            ctx.guild.id,
-        )
+        rows = await Settings.get_all(self.db, ctx.guild.id)
         lines = []
         for row in rows:
             ch = ctx.guild.get_channel(row["channel_id"])
@@ -288,17 +255,12 @@ class BoostCommands(Package):
             await sleep(rate)
 
         async with self.boost_locks[f"boost_messages:{member.guild.id}"]:
-            rows = await self.bot.db.fetch(
-                """SELECT * FROM boost_messages
-                   WHERE guild_id = $1 AND is_second = $2""",
-                member.guild.id,
-                is_second,
+            rows = await Settings.fetch_by_second(
+                self.bot.db, member.guild.id, is_second,
             )
             if not rows and is_second:
-                rows = await self.bot.db.fetch(
-                    """SELECT * FROM boost_messages
-                       WHERE guild_id = $1 AND is_second = FALSE""",
-                    member.guild.id,
+                rows = await Settings.fetch_by_second(
+                    self.bot.db, member.guild.id, False,
                 )
             for row in rows:
                 ch = member.guild.get_channel(row["channel_id"])

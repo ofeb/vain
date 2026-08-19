@@ -3,6 +3,7 @@ from __future__ import annotations
 import discord
 
 from core.discord.package import Package
+from ..settings import Settings
 
 
 class LastfmEvents:
@@ -12,7 +13,7 @@ class LastfmEvents:
             return
         if not getattr(self.bot, "db", None):
             return
-        rows = await self.bot.db.list_lastfm_custom_commands(message.guild.id)
+        rows = await Settings.list_custom_commands(self.bot, message.guild.id)
         if not rows:
             return
         content = message.content.lower()

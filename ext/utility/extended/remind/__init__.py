@@ -126,49 +126,9 @@ class Remind(Package):
         await super().cog_unload()
 
     async def _ensure_schema(self) -> None:
-        await self.db.execute(
-            """
-            CREATE TABLE IF NOT EXISTS reminders (
-                id BIGSERIAL PRIMARY KEY,
-                user_id BIGINT NOT NULL,
-                guild_id BIGINT NOT NULL DEFAULT 0,
-                number INTEGER NOT NULL DEFAULT 1,
-                message TEXT NOT NULL,
-                jump_url TEXT,
-                time TIMESTAMP WITHOUT TIME ZONE NOT NULL
-            )
-            """
-        )
-        for stmt in (
-            "ALTER TABLE reminders ADD COLUMN IF NOT EXISTS guild_id BIGINT NOT NULL DEFAULT 0",
-            "ALTER TABLE reminders ADD COLUMN IF NOT EXISTS message TEXT",
-            "ALTER TABLE reminders ADD COLUMN IF NOT EXISTS time TIMESTAMP WITHOUT TIME ZONE",
-            "ALTER TABLE reminders ADD COLUMN IF NOT EXISTS user_id BIGINT",
-            "ALTER TABLE reminders ADD COLUMN IF NOT EXISTS number INTEGER",
-            "ALTER TABLE reminders ADD COLUMN IF NOT EXISTS jump_url TEXT",
-        ):
-            with contextlib.suppress(Exception):
-                await self.db.execute(stmt)
-        
-        with contextlib.suppress(Exception):
-            await self.db.execute(
-                """
-                UPDATE reminders r
-                SET number = sub.n
-                FROM (
-                    SELECT id, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY time ASC, id ASC) AS n
-                    FROM reminders
-                    WHERE number IS NULL OR number < 1
-                ) sub
-                WHERE r.id = sub.id
-                """
-            )
-        await self.db.execute(
-            "CREATE INDEX IF NOT EXISTS reminders_user_idx ON reminders (user_id)"
-        )
-        await self.db.execute(
-            "CREATE INDEX IF NOT EXISTS reminders_time_idx ON reminders (time)"
-        )
+        from ext.utility.extended.remind.settings import Settings
+
+        await Settings.ensure_schema(self.db)
 
     async def _next_number(self, user_id: int) -> int:
         """Smallest free positive integer for this user (restarts at 1 when empty)."""

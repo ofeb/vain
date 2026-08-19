@@ -15,17 +15,9 @@ class AliasCommands(Package):
     """command alias management (server + personal)"""
 
     async def cog_load(self) -> None:
-        await self.db.execute(
-            """
-            CREATE TABLE IF NOT EXISTS selfaliases (
-                user_id BIGINT NOT NULL,
-                name TEXT NOT NULL,
-                invoke TEXT NOT NULL,
-                command TEXT NOT NULL,
-                PRIMARY KEY (user_id, name)
-            )
-            """
-        )
+        from ext.server.extended.alias.settings import Settings
+
+        await Settings.ensure_schema(self.db)
         await super().cog_load()
 
     @group(
@@ -262,17 +254,10 @@ class AliasCommands(Package):
             return await ctx.warn(f"Unknown command `{root}`")
         if self.bot.get_command(shortcut.lower()):
             return await ctx.warn(f"`{shortcut}` is already a real command")
-        await self.db.execute(
-            """
-            INSERT INTO selfaliases (user_id, name, invoke, command)
-            VALUES ($1, $2, $3, $4)
-            ON CONFLICT (user_id, name) DO UPDATE
-            SET invoke = EXCLUDED.invoke, command = EXCLUDED.command
-            """,
-            ctx.author.id,
-            shortcut.lower(),
-            invoke,
-            cmd.qualified_name,
+        from ext.server.extended.alias.settings import Settings
+
+        await Settings.add_selfalias(
+            self.db, ctx.author.id, shortcut.lower(), invoke, cmd.qualified_name
         )
         return await ctx.success(
             f"Self alias added\n> -# **`{shortcut.lower()}`** → `{invoke}`"
@@ -285,12 +270,10 @@ class AliasCommands(Package):
         example=",alias self remove deport",
     )
     async def alias_self_remove(self, ctx, *, name: str):
-        result = await self.db.execute(
-            "DELETE FROM selfaliases WHERE user_id = $1 AND name = $2",
-            ctx.author.id,
-            name.lower().strip(),
-        )
-        if result == "DELETE 0":
+        from ext.server.extended.alias.settings import Settings
+
+        result = await Settings.remove_selfalias(self.db, ctx.author.id, name.lower().strip())
+        if result == 0:
             return await ctx.warn(f"No self alias **`{name}`**")
         return await ctx.success(f"Removed self alias **`{name.lower().strip()}`**")
 
@@ -301,14 +284,11 @@ class AliasCommands(Package):
         example=",alias self view deport",
     )
     async def alias_self_view(self, ctx, *, name: str):
-        row = await self.db.fetchrow(
-            "SELECT invoke FROM selfaliases WHERE user_id = $1 AND name = $2",
-            ctx.author.id,
-            name.lower().strip(),
-        )
-        if not row:
+        from ext.server.extended.alias.settings import Settings
+
+        inv = await Settings.get_selfalias(self.db, ctx.author.id, name.lower().strip())
+        if not inv:
             return await ctx.warn(f"No self alias **`{name}`**")
-        inv = row["invoke"] if hasattr(row, "keys") else row[0]
         return await ctx.success(f"**`{name.lower().strip()}`** invokes `{inv}`")
 
     @alias_self.command(
@@ -317,11 +297,10 @@ class AliasCommands(Package):
         description="remove all of your personal aliases",
     )
     async def alias_self_clear(self, ctx):
-        result = await self.db.execute(
-            "DELETE FROM selfaliases WHERE user_id = $1",
-            ctx.author.id,
-        )
-        if result == "DELETE 0":
+        from ext.server.extended.alias.settings import Settings
+
+        result = await Settings.clear_selfaliases(self.db, ctx.author.id)
+        if result == 0:
             return await ctx.warn("You have no personal aliases")
         return await ctx.success("Cleared all of your personal aliases")
 
@@ -333,22 +312,16 @@ class AliasCommands(Package):
     async def alias_self_list(self, ctx):
         from discord import ui as _ui
         from core.discord.ctx import layout_from_items
+        from ext.server.extended.alias.settings import Settings
 
-        rows = await self.db.fetch(
-            """
-            SELECT name, invoke FROM selfaliases
-            WHERE user_id = $1
-            ORDER BY name ASC
-            """,
-            ctx.author.id,
-        )
-        if not rows:
+        raw = await Settings.fetch_selfaliases(self.db, ctx.author.id)
+        if not raw:
             return await ctx.warn("You have no personal aliases")
         clean = []
         seen = set()
-        for e in rows:
-            name = str(e["name"] if hasattr(e, "keys") else e[0]).strip().rstrip(",")
-            inv = str(e["invoke"] if hasattr(e, "keys") else e[1]).strip()
+        for e in raw:
+            name = str(e["name"]).strip().rstrip(",")
+            inv = str(e["invoke"]).strip()
             if not name or name.lower() in seen:
                 continue
             seen.add(name.lower())

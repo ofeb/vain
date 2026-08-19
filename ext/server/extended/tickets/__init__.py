@@ -41,6 +41,7 @@ from .improper.views import (
     TicketControlView,
     _parse_emoji,
 )
+from .events import TicketEvents
 
 logger = getLogger("tickets")
 
@@ -78,7 +79,7 @@ def _make_identifier(label: str | None = None) -> str:
     return suffix
 
 
-class Tickets(Package):
+class Tickets(TicketEvents, Package):
     """Ticket system – panels, opening buttons, staff controls & transcripts."""
 
     def __init__(self, bot):
@@ -114,14 +115,10 @@ class Tickets(Package):
 
     @loop(minutes=5)
     async def _inactivity_loop(self) -> None:
-        rows = await self.db.fetch(
-            """
-            SELECT o.channel_id, s.inactivity_timeout
-            FROM tickets.open o
-            JOIN tickets.settings s ON o.guild_id = s.guild_id
-            WHERE s.inactivity_timeout IS NOT NULL
-            """
-        )
+        settings = await Settings.fetch(self.bot, self.bot.guilds[0]) if self.bot.guilds else None
+        if not settings:
+            return
+        rows = await settings.fetch_tickets_with_inactivity_timeout()
         to_delete: list[int] = []
         for row in rows:
             timeout = row["inactivity_timeout"]
@@ -141,231 +138,11 @@ class Tickets(Package):
                 to_delete.append(row["channel_id"])
 
         if to_delete:
-            await self.db.execute(
-                "DELETE FROM tickets.open WHERE channel_id = ANY($1::BIGINT[])",
-                to_delete,
-            )
+            await settings.delete_open_tickets(to_delete)
 
     
 
-    @Cog.listener("on_interaction")
-    async def on_ticket_interaction(self, interaction: Interaction) -> None:
-        if not interaction.data or not interaction.guild:
-            return
-        if not isinstance(interaction.user, Member):
-            return
 
-        custom_id = interaction.data.get("custom_id") or ""
-        if not custom_id.startswith("ticket.create"):
-            return
-
-        if not interaction.guild.me.guild_permissions.manage_channels:
-            await _ephemeral(
-                interaction,
-                "I need the **Manage Channels** permission to open tickets.",
-            )
-            return
-
-        component_type = interaction.data.get("component_type", 0)
-        identifier = custom_id.rsplit(":", 1)[-1]
-
-        settings = await Settings.fetch(self.bot, interaction.guild)
-        if settings.is_blacklisted(interaction.user):
-            await _ephemeral(interaction, "You are not allowed to open tickets here.")
-            return
-
-        record: Optional[TicketButton | TicketDropdownOption] = None
-        if component_type == 2:
-            record = await settings.fetch_button(identifier)
-        elif component_type == 3:
-            values = interaction.data.get("values") or []
-            if values:
-                record = await settings.fetch_dropdown_option(identifier, values[0])
-
-        if not record:
-            await _ephemeral(interaction, "This control is no longer valid.")
-            return
-
-        existing = await self.db.fetchrow(
-            """
-            SELECT channel_id FROM tickets.open
-            WHERE id = $1 AND guild_id = $2 AND user_id = $3
-            """,
-            identifier,
-            interaction.guild.id,
-            interaction.user.id,
-        )
-        if existing:
-            ch = interaction.guild.get_channel(existing["channel_id"])
-            if ch:
-                await _ephemeral(
-                    interaction, f"You already have an open ticket: {ch.mention}"
-                )
-                return
-
-        max_tickets = settings.record.get("max_tickets")
-        if max_tickets:
-            count = await self.db.fetchval(
-                "SELECT COUNT(*) FROM tickets.open WHERE guild_id = $1",
-                interaction.guild.id,
-            )
-            if count is not None and int(count) >= int(max_tickets):
-                await _ephemeral(
-                    interaction,
-                    f"The server has reached the maximum of **{max_tickets}** open tickets.",
-                )
-                return
-
-        await interaction.response.defer(ephemeral=True, thinking=True)
-
-        category = None
-        cat_id = record.get("category_id")
-        if cat_id:
-            cat = interaction.guild.get_channel(int(cat_id))
-            if isinstance(cat, CategoryChannel):
-                category = cat
-
-        overwrites: dict[Any, PermissionOverwrite] = {
-            interaction.guild.default_role: PermissionOverwrite(view_channel=False),
-            interaction.user: PermissionOverwrite(
-                view_channel=True,
-                send_messages=True,
-                attach_files=True,
-                embed_links=True,
-                read_message_history=True,
-            ),
-        }
-        for role in settings.staff_roles:
-            overwrites[role] = PermissionOverwrite(
-                view_channel=True,
-                send_messages=True,
-                manage_messages=True,
-                attach_files=True,
-            )
-
-        topic = (record.get("topic") or "")[:1024] or None
-        try:
-            channel = await interaction.guild.create_text_channel(
-                name=f"ticket-{interaction.user.name}"[:100],
-                category=category,
-                overwrites=overwrites,
-                topic=topic,
-                reason=f"Ticket opened by {interaction.user} ({interaction.user.id})",
-            )
-        except HTTPException as exc:
-            await _ephemeral(
-                interaction,
-                f"Could not create the channel: `{exc.text}`",
-                followup=True,
-            )
-            return
-
-        await self.db.execute(
-            """
-            INSERT INTO tickets.open (id, guild_id, channel_id, user_id)
-            VALUES ($1, $2, $3, $4)
-            ON CONFLICT (id, guild_id, user_id)
-            DO UPDATE SET channel_id = EXCLUDED.channel_id, claimed_by = NULL
-            """,
-            identifier,
-            interaction.guild.id,
-            channel.id,
-            interaction.user.id,
-        )
-
-        control = TicketControlView(self)
-        await self._send_open_message(
-            channel,
-            interaction=interaction,
-            settings=settings,
-            record=record,
-            view=control,
-        )
-
-        await _ephemeral(
-            interaction,
-            f"Your ticket has been created: {channel.mention}",
-            followup=True,
-        )
-        logger.info(
-            "Ticket %s opened by %s in %s",
-            channel.id,
-            interaction.user.id,
-            interaction.guild.id,
-        )
-
-    async def _send_open_message(
-        self,
-        channel: TextChannel,
-        *,
-        interaction: Interaction,
-        settings: Settings,
-        record: dict,
-        view: TicketControlView,
-    ) -> None:
-        """Send welcome content - button template > guild open_embed > Vain default."""
-        user = interaction.user
-        guild = interaction.guild
-        template = (record.get("template") or settings.open_embed or "").strip()
-
-        if template:
-            
-            try:
-                await self.bot.send_embed(
-                    channel,
-                    template,
-                    user=user,
-                    member=user,
-                    guild=guild,
-                    channel=channel,
-                    view=view,
-                )
-                return
-            except TypeError:
-                
-                try:
-                    msg = await self.bot.send_embed(
-                        channel,
-                        template,
-                        user=user,
-                        member=user,
-                        guild=guild,
-                        channel=channel,
-                    )
-                    with suppress(HTTPException):
-                        await msg.edit(view=view)
-                    return
-                except Exception:
-                    pass
-            except Exception:
-                
-                content = (
-                    template.replace("{user.mention}", user.mention)
-                    .replace("{user.name}", getattr(user, "display_name", str(user)))
-                    .replace("{user}", user.mention)
-                    .replace("{channel}", channel.mention)
-                    .replace("{guild}", guild.name if guild else "")
-                )
-                with suppress(HTTPException):
-                    await channel.send(content=content, view=view)
-                return
-
-        
-        embed = Embed(
-            title=DEFAULT_OPEN_TITLE,
-            description=DEFAULT_OPEN_DESCRIPTION,
-            color=color.base,
-        )
-        with suppress(HTTPException):
-            await channel.send(content=user.mention, embed=embed, view=view)
-
-    @Cog.listener("on_guild_channel_delete")
-    async def on_ticket_channel_delete(self, channel: discord.abc.GuildChannel) -> None:
-        if not isinstance(channel, TextChannel):
-            return
-        await self.db.execute(
-            "DELETE FROM tickets.open WHERE channel_id = $1", channel.id
-        )
 
     
 
@@ -796,10 +573,8 @@ class Tickets(Package):
     )
     @has_permissions(manage_channels=True)
     async def ticket_opening_button_emoji(self, ctx):
-        buttons = await self.db.fetch(
-            "SELECT id, label, emoji, style FROM tickets.button WHERE guild_id = $1 ORDER BY id",
-            ctx.guild.id,
-        )
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        buttons = await settings.fetch_buttons()
         if not buttons:
             return await ctx.warn(
                 f"No opening buttons yet. Add one with `{ctx.clean_prefix}tc opening button add`."
@@ -887,15 +662,11 @@ class Tickets(Package):
     @has_permissions(manage_channels=True)
     async def ticket_button_remove(self, ctx, identifier: str):
         identifier = identifier.lower().replace(" ", "-")
-        deleted = await self.db.execute(
-            "DELETE FROM tickets.button WHERE guild_id = $1 AND id = $2",
-            ctx.guild.id,
-            identifier,
-        )
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        deleted = await settings.delete_button(identifier)
         if deleted == "DELETE 0":
             return await ctx.warn(f"No button with id `{identifier}` found.")
 
-        settings = await Settings.fetch(self.bot, ctx.guild)
         message = await settings.fetch_message()
         if message:
             await self._refresh_panel(message, ctx.guild.id)
@@ -905,10 +676,8 @@ class Tickets(Package):
     @ticket_button.command(name="list", description="list all buttons on the panel")
     @has_permissions(manage_channels=True)
     async def ticket_button_list(self, ctx):
-        rows = await self.db.fetch(
-            "SELECT id, label, style, emoji FROM tickets.button WHERE guild_id = $1",
-            ctx.guild.id,
-        )
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        rows = await settings.fetch_button_list()
         if not rows:
             return await ctx.warn("No buttons configured.")
         lines = [
@@ -960,16 +729,7 @@ class Tickets(Package):
                 f"Set a panel first with `{ctx.clean_prefix}tc panel`."
             )
 
-        await self.db.execute(
-            """
-            INSERT INTO tickets.dropdown (id, guild_id, placeholder, options)
-            VALUES ($1, $2, $3, '[]'::jsonb)
-            ON CONFLICT (guild_id, id) DO UPDATE SET placeholder = EXCLUDED.placeholder
-            """,
-            identifier,
-            ctx.guild.id,
-            placeholder[:100],
-        )
+        await settings.upsert_dropdown(identifier, placeholder[:100])
         await self._refresh_panel(message, ctx.guild.id)
         return await ctx.success(
             f"Dropdown `{identifier}` created. Add options with "
@@ -997,15 +757,11 @@ class Tickets(Package):
         dropdown_id = dropdown_id.lower().replace(" ", "-")
         option_id = option_id.lower().replace(" ", "-")[:32]
 
-        row = await self.db.fetchrow(
-            "SELECT options FROM tickets.dropdown WHERE guild_id = $1 AND id = $2",
-            ctx.guild.id,
-            dropdown_id,
-        )
-        if not row:
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        options = await settings.fetch_dropdown_options(dropdown_id)
+        if options is None:
             return await ctx.warn(f"Dropdown `{dropdown_id}` does not exist.")
 
-        options = list(row["options"] or [])
         options = [o for o in options if o.get("id") != option_id]
         options.append(
             {
@@ -1021,14 +777,8 @@ class Tickets(Package):
         if len(options) > 25:
             return await ctx.warn("A dropdown can have at most 25 options.")
 
-        await self.db.execute(
-            "UPDATE tickets.dropdown SET options = $1::jsonb WHERE guild_id = $2 AND id = $3",
-            json.dumps(options),
-            ctx.guild.id,
-            dropdown_id,
-        )
+        await settings.update_dropdown_options(dropdown_id, json.dumps(options))
 
-        settings = await Settings.fetch(self.bot, ctx.guild)
         message = await settings.fetch_message()
         if message:
             await self._refresh_panel(message, ctx.guild.id)
@@ -1043,15 +793,11 @@ class Tickets(Package):
     @has_permissions(manage_channels=True)
     async def ticket_dropdown_remove(self, ctx, identifier: str):
         identifier = identifier.lower().replace(" ", "-")
-        deleted = await self.db.execute(
-            "DELETE FROM tickets.dropdown WHERE guild_id = $1 AND id = $2",
-            ctx.guild.id,
-            identifier,
-        )
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        deleted = await settings.delete_dropdown(identifier)
         if deleted == "DELETE 0":
             return await ctx.warn(f"No dropdown `{identifier}` found.")
 
-        settings = await Settings.fetch(self.bot, ctx.guild)
         message = await settings.fetch_message()
         if message:
             await self._refresh_panel(message, ctx.guild.id)
@@ -1111,11 +857,8 @@ class Tickets(Package):
             who = claimer.mention if claimer else f"<@{claimed_by}>"
             return await ctx.warn(f"This ticket is already claimed by {who}.")
 
-        await self.db.execute(
-            "UPDATE tickets.open SET claimed_by = $1 WHERE channel_id = $2",
-            ctx.author.id,
-            ctx.channel.id,
-        )
+        settings = await Settings.fetch(self.bot, ctx.guild)
+        await settings.claim_ticket(ctx.author.id, ctx.channel.id)
         new_name = f"claimed-{ctx.author.name}"[:100]
         with suppress(HTTPException):
             await ctx.channel.edit(
@@ -1148,9 +891,7 @@ class Tickets(Package):
                     settings.transcript_destinations,
                 )
 
-        await self.db.execute(
-            "DELETE FROM tickets.open WHERE channel_id = $1", ctx.channel.id
-        )
+        await settings.delete_open_ticket(ctx.channel.id)
         with suppress(HTTPException):
             await ctx.channel.delete(
                 reason=f"Closed by {ctx.author} ({ctx.author.id})"
@@ -1159,11 +900,7 @@ class Tickets(Package):
     
 
     async def _fetch_open_ticket(self, channel_id: int) -> Optional[dict]:
-        row = await self.db.fetchrow(
-            "SELECT * FROM tickets.open WHERE channel_id = $1",
-            channel_id,
-        )
-        return dict(row) if row else None
+        return await Settings.fetch_open_ticket_by_channel(self.bot, channel_id)
 
     async def claim_ticket(self, interaction: Interaction) -> None:
         if not interaction.guild or not isinstance(interaction.user, Member):
@@ -1193,11 +930,8 @@ class Tickets(Package):
             return
 
         await interaction.response.defer(ephemeral=True)
-        await self.db.execute(
-            "UPDATE tickets.open SET claimed_by = $1 WHERE channel_id = $2",
-            interaction.user.id,
-            interaction.channel.id,
-        )
+        settings = await Settings.fetch(self.bot, interaction.guild)
+        await settings.claim_ticket(interaction.user.id, interaction.channel.id)
 
         new_name = f"claimed-{interaction.user.name}"[:100]
         topic_prefix = f"Claimed by {interaction.user} ({interaction.user.id})"
@@ -1250,9 +984,7 @@ class Tickets(Package):
             )
 
         channel = interaction.channel
-        await self.db.execute(
-            "DELETE FROM tickets.open WHERE channel_id = $1", channel.id
-        )
+        await settings.delete_open_ticket(channel.id)
         with suppress(HTTPException):
             await channel.send(
                 embed=Embed(
@@ -1353,24 +1085,14 @@ class Tickets(Package):
         if not emoji:
             emoji = getattr(emojis.ticket, "open", None) or None
 
-        await self.db.execute(
-            """
-            INSERT INTO tickets.button (id, guild_id, category_id, topic, style, emoji, label)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
-            ON CONFLICT (guild_id, id) DO UPDATE SET
-                category_id = EXCLUDED.category_id,
-                topic       = EXCLUDED.topic,
-                style       = EXCLUDED.style,
-                emoji       = EXCLUDED.emoji,
-                label       = EXCLUDED.label
-            """,
+        await settings.upsert_button(
             identifier,
-            ctx.guild.id,
-            category.id if category else None,
-            topic,
-            style,
-            emoji,
-            label[:80],
+            category_id=category.id if category else None,
+            topic=topic,
+            style=style,
+            emoji=emoji,
+            label=label[:80],
+            update_all=True,
         )
 
         await self._refresh_panel(message, ctx.guild.id)
@@ -1416,22 +1138,12 @@ class Tickets(Package):
         if not emoji:
             emoji = getattr(emojis.ticket, "open", None) or None
 
-        await self.db.execute(
-            """
-            INSERT INTO tickets.button (id, guild_id, category_id, topic, style, emoji, label)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
-            ON CONFLICT (guild_id, id) DO UPDATE SET
-                style = EXCLUDED.style,
-                emoji = EXCLUDED.emoji,
-                label = EXCLUDED.label
-            """,
+        await settings.upsert_button(
             identifier,
-            interaction.guild.id,
-            None,
-            None,
-            style,
-            emoji,
-            label[:80],
+            style=style,
+            emoji=emoji,
+            label=label[:80],
+            update_all=False,
         )
         await self._refresh_panel(message, interaction.guild.id)
         shown = f"{emoji} " if emoji else ""
@@ -1450,21 +1162,12 @@ class Tickets(Package):
             await _ephemeral(interaction, "This can only be used in a server.")
             return
 
-        result = await self.db.execute(
-            """
-            UPDATE tickets.button
-            SET emoji = $3
-            WHERE guild_id = $1 AND id = $2
-            """,
-            interaction.guild.id,
-            button_id,
-            emoji,
-        )
+        settings = await Settings.fetch(self.bot, interaction.guild)
+        result = await settings.update_button_emoji(button_id, emoji)
         if result == "UPDATE 0":
             await _ephemeral(interaction, f"No button `{button_id}` found.")
             return
 
-        settings = await Settings.fetch(self.bot, interaction.guild)
         message = await settings.fetch_message()
         if message:
             await self._refresh_panel(message, interaction.guild.id)
@@ -1489,9 +1192,10 @@ class Tickets(Package):
         except Exception:
             view = View(timeout=None)
 
-        buttons = await self.db.fetch(
-            "SELECT * FROM tickets.button WHERE guild_id = $1 ORDER BY id", guild_id
-        )
+        settings = await Settings.fetch(self.bot, self.bot.get_guild(guild_id))
+        if not settings:
+            return
+        buttons = await settings.fetch_buttons()
         for b in buttons:
             emoji = _parse_emoji(b.get("emoji"))
             view.add_item(
@@ -1503,9 +1207,7 @@ class Tickets(Package):
                 )
             )
 
-        dropdowns = await self.db.fetch(
-            "SELECT * FROM tickets.dropdown WHERE guild_id = $1", guild_id
-        )
+        dropdowns = await settings.fetch_all_dropdowns()
         for d in dropdowns:
             opts = []
             for o in d["options"] or []:

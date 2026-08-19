@@ -164,6 +164,22 @@ class Settings:
         data["guild_id"] = self.guild.id
         self.record = data
 
+    @staticmethod
+    async def record_action(db: Any, action: str, giver_id: int, receiver_id: int) -> int:
+        return await db.fetchval(
+            """
+            INSERT INTO roleplay.actions (action, giver, receiver, amount)
+                VALUES ($1, $2, $3, 1)
+            ON CONFLICT (action, giver, receiver)
+                DO UPDATE SET amount = roleplay.actions.amount + 1
+            RETURNING amount
+            """,
+            action,
+            giver_id,
+            receiver_id,
+            cached=False,
+        )
+
 
 async def fetch(bot: Vain, guild: Guild) -> Settings:
     return await Settings.fetch(bot, guild)

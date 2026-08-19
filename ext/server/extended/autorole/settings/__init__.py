@@ -127,4 +127,167 @@ async def insert(bot: Vain, guild: Guild, **kwargs: Any) -> Settings:
     return await settings.insert(**kwargs)
 
 
-__all__ = ["Settings", "fetch", "fetch_all", "upsert", "insert"]
+class ButtonRoleSettings:
+    """All `button_roles` rows for one guild."""
+
+    bot: Vain
+    guild: Guild
+    rows: list[dict[str, Any]]
+
+    def __init__(
+        self,
+        bot: Vain,
+        guild: Guild,
+        rows: list[dict[str, Any]] | None = None,
+    ) -> None:
+        self.bot = bot
+        self.guild = guild
+        self.rows = list(rows or [])
+
+    def __bool__(self) -> bool:
+        return bool(self.rows)
+
+    def __iter__(self):
+        return iter(self.rows)
+
+    def __len__(self) -> int:
+        return len(self.rows)
+
+    @classmethod
+    async def fetch(cls, bot: Vain, guild: Guild) -> ButtonRoleSettings:
+        rows = await bot.db.fetch(
+            "SELECT * FROM button_roles WHERE guild_id = $1 ORDER BY index ASC",
+            guild.id,
+        )
+        return cls(bot, guild, [dict(r) for r in rows])
+
+    async def reload(self) -> ButtonRoleSettings:
+        fresh = await ButtonRoleSettings.fetch(self.bot, self.guild)
+        self.rows = fresh.rows
+        return self
+
+    async def add(self, **fields: Any) -> dict[str, Any]:
+        if not fields:
+            raise ValueError("add() requires column fields")
+        cols = ["guild_id", *fields.keys()]
+        values: list[Any] = [self.guild.id, *fields.values()]
+        placeholders = ", ".join(f"$%d" % i for i in range(1, len(cols) + 1))
+        col_sql = ", ".join(cols)
+        row = await self.bot.db.fetchrow(
+            f"INSERT INTO button_roles (%s) VALUES (%s) RETURNING *" % (col_sql, placeholders),
+            *values,
+        )
+        data = dict(row) if row else {"guild_id": self.guild.id, **fields}
+        self.rows.append(data)
+        return data
+
+    async def remove_where(self, **match: Any) -> int:
+        if not match:
+            raise ValueError("remove_where requires filters")
+        clauses = ["guild_id = $1"]
+        values: list[Any] = [self.guild.id]
+        for i, (k, v) in enumerate(match.items(), start=2):
+            clauses.append("%s = $%d" % (k, i))
+            values.append(v)
+        where = " AND ".join(clauses)
+        result = await self.bot.db.execute(
+            "DELETE FROM button_roles WHERE %s" % where,
+            *values,
+        )
+        await self.reload()
+        try:
+            return int(str(result).split()[-1])
+        except Exception:
+            return 0
+
+    async def clear(self) -> None:
+        await self.bot.db.execute(
+            "DELETE FROM button_roles WHERE guild_id = $1",
+            self.guild.id,
+        )
+        self.rows = []
+
+
+class ReactionRoleSettings:
+    """All `reaction_role` rows for one guild."""
+
+    bot: Vain
+    guild: Guild
+    rows: list[dict[str, Any]]
+
+    def __init__(
+        self,
+        bot: Vain,
+        guild: Guild,
+        rows: list[dict[str, Any]] | None = None,
+    ) -> None:
+        self.bot = bot
+        self.guild = guild
+        self.rows = list(rows or [])
+
+    def __bool__(self) -> bool:
+        return bool(self.rows)
+
+    def __iter__(self):
+        return iter(self.rows)
+
+    def __len__(self) -> int:
+        return len(self.rows)
+
+    @classmethod
+    async def fetch(cls, bot: Vain, guild: Guild) -> ReactionRoleSettings:
+        rows = await bot.db.fetch(
+            "SELECT * FROM reaction_role WHERE guild_id = $1",
+            guild.id,
+        )
+        return cls(bot, guild, [dict(r) for r in rows])
+
+    async def reload(self) -> ReactionRoleSettings:
+        fresh = await ReactionRoleSettings.fetch(self.bot, self.guild)
+        self.rows = fresh.rows
+        return self
+
+    async def add(self, **fields: Any) -> dict[str, Any]:
+        if not fields:
+            raise ValueError("add() requires column fields")
+        cols = ["guild_id", *fields.keys()]
+        values: list[Any] = [self.guild.id, *fields.values()]
+        placeholders = ", ".join(f"$%d" % i for i in range(1, len(cols) + 1))
+        col_sql = ", ".join(cols)
+        row = await self.bot.db.fetchrow(
+            f"INSERT INTO reaction_role (%s) VALUES (%s) ON CONFLICT(guild_id, channel_id, message_id, role_id) DO UPDATE SET emoji = excluded.emoji RETURNING *"
+            % (col_sql, placeholders),
+            *values,
+        )
+        data = dict(row) if row else {"guild_id": self.guild.id, **fields}
+        self.rows.append(data)
+        return data
+
+    async def remove_where(self, **match: Any) -> int:
+        if not match:
+            raise ValueError("remove_where requires filters")
+        clauses = ["guild_id = $1"]
+        values: list[Any] = [self.guild.id]
+        for i, (k, v) in enumerate(match.items(), start=2):
+            clauses.append("%s = $%d" % (k, i))
+            values.append(v)
+        where = " AND ".join(clauses)
+        result = await self.bot.db.execute(
+            "DELETE FROM reaction_role WHERE %s" % where,
+            *values,
+        )
+        await self.reload()
+        try:
+            return int(str(result).split()[-1])
+        except Exception:
+            return 0
+
+    async def clear(self) -> None:
+        await self.bot.db.execute(
+            "DELETE FROM reaction_role WHERE guild_id = $1",
+            self.guild.id,
+        )
+        self.rows = []
+
+
+__all__ = ["Settings", "ButtonRoleSettings", "ReactionRoleSettings", "fetch", "fetch_all", "upsert", "insert"]

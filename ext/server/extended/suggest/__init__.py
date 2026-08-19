@@ -13,6 +13,7 @@ from core.tools.convert import MemberConvert, RoleConvert, StatusConvert
 from core.managers.permissions import has_permissions
 
 from core.discord.views.embed import compose, body, caption, c2
+from .settings import Settings
 
 DEFAULT_UPVOTE = "\u2705"
 DEFAULT_DOWNVOTE = "\u274c"
@@ -39,156 +40,18 @@ class SuggestCommands(Package):
     async def _ensure_schema(self) -> None:
         if not self.db.pool:
             return
-
-        await self.db.pool.execute(
-            """
-            CREATE TABLE IF NOT EXISTS suggest_settings (
-                guild_id BIGINT PRIMARY KEY,
-                enabled BOOLEAN NOT NULL DEFAULT FALSE,
-                channel_id BIGINT,
-                review_enabled BOOLEAN NOT NULL DEFAULT FALSE,
-                review_channel_id BIGINT,
-                threads_enabled BOOLEAN NOT NULL DEFAULT FALSE,
-                upvote_emoji TEXT NOT NULL DEFAULT chr(9989),
-                downvote_emoji TEXT NOT NULL DEFAULT chr(10060),
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-        await self.db.pool.execute(
-            """
-            CREATE TABLE IF NOT EXISTS suggest_counters (
-                guild_id BIGINT PRIMARY KEY,
-                next_id BIGINT NOT NULL DEFAULT 1
-            )
-            """
-        )
-        await self.db.pool.execute(
-            """
-            CREATE TABLE IF NOT EXISTS suggestions (
-                guild_id BIGINT NOT NULL,
-                suggestion_id BIGINT NOT NULL,
-                author_id BIGINT NOT NULL,
-                content TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'pending',
-                channel_id BIGINT,
-                message_id BIGINT,
-                review_channel_id BIGINT,
-                review_message_id BIGINT,
-                thread_id BIGINT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (guild_id, suggestion_id)
-            )
-            """
-        )
-        await self.db.pool.execute(
-            """
-            CREATE TABLE IF NOT EXISTS suggest_ignored (
-                guild_id BIGINT NOT NULL,
-                target_id BIGINT NOT NULL,
-                target_type TEXT NOT NULL,
-                added_by BIGINT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (guild_id, target_id, target_type)
-            )
-            """
-        )
-        await self.db.pool.execute(
-            """
-            CREATE TABLE IF NOT EXISTS suggest_votes (
-                guild_id BIGINT NOT NULL,
-                suggestion_id BIGINT NOT NULL,
-                user_id BIGINT NOT NULL,
-                vote TEXT NOT NULL,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (guild_id, suggestion_id, user_id)
-            )
-            """
-        )
-        await self.db.pool.execute(
-            """
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_suggestions_message
-            ON suggestions (guild_id, message_id)
-            WHERE message_id IS NOT NULL
-            """
-        )
-        await self.db.pool.execute(
-            """
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_suggestions_review_message
-            ON suggestions (guild_id, review_message_id)
-            WHERE review_message_id IS NOT NULL
-            """
-        )
+        await Settings.ensure_schema(self.bot)
 
     async def _get_settings(self, guild_id: int) -> dict:
         await self._ensure_schema()
-        row = await self.db.fetchrow(
-            """
-            SELECT enabled, channel_id, review_enabled, review_channel_id,
-                   threads_enabled, upvote_emoji, downvote_emoji
-            FROM suggest_settings
-            WHERE guild_id = $1
-            """,
-            guild_id,
-        )
-        if not row:
-            return {
-                "enabled": False,
-                "channel_id": None,
-                "review_enabled": False,
-                "review_channel_id": None,
-                "threads_enabled": False,
-                "upvote_emoji": DEFAULT_UPVOTE,
-                "downvote_emoji": DEFAULT_DOWNVOTE,
-            }
-
-        return {
-            "enabled": bool(row["enabled"]),
-            "channel_id": int(row["channel_id"]) if row["channel_id"] else None,
-            "review_enabled": bool(row["review_enabled"]),
-            "review_channel_id": int(row["review_channel_id"]) if row["review_channel_id"] else None,
-            "threads_enabled": bool(row["threads_enabled"]),
-            "upvote_emoji": row["upvote_emoji"] or DEFAULT_UPVOTE,
-            "downvote_emoji": row["downvote_emoji"] or DEFAULT_DOWNVOTE,
-        }
+        return await Settings.fetch_settings(self.bot, guild_id)
 
     async def _set_settings(self, guild_id: int, **fields) -> None:
-        if not fields:
-            return
-
-        columns = list(fields.keys())
-        values = list(fields.values())
-        inserts = ", ".join(["guild_id", *columns, "updated_at"])
-        params = ", ".join(f"${index}" for index in range(1, len(values) + 2))
-        updates = ", ".join(f"{column} = EXCLUDED.{column}" for column in columns)
-        await self.db.execute(
-            f"""
-            INSERT INTO suggest_settings ({inserts})
-            VALUES ({params}, CURRENT_TIMESTAMP)
-            ON CONFLICT (guild_id) DO UPDATE SET
-                {updates},
-                updated_at = CURRENT_TIMESTAMP
-            """,
-            guild_id,
-            *values,
-        )
+        await Settings.set_settings(self.bot, guild_id, **fields)
 
     async def _next_suggestion_id(self, guild_id: int) -> int:
         await self._ensure_schema()
-        async with self.db.pool.acquire() as conn:
-            async with conn.transaction():
-                row = await conn.fetchrow(
-                    """
-                    INSERT INTO suggest_counters (guild_id, next_id)
-                    VALUES ($1, 2)
-                    ON CONFLICT (guild_id) DO UPDATE SET
-                        next_id = suggest_counters.next_id + 1
-                    RETURNING next_id - 1 AS suggestion_id
-                    """,
-                    guild_id,
-                )
-        return int(row["suggestion_id"])
+        return await Settings.next_suggestion_id(self.bot, guild_id)
 
     async def _insert_suggestion(
         self,
@@ -198,11 +61,8 @@ class SuggestCommands(Package):
         content: str,
         status: str,
     ) -> None:
-        await self.db.execute(
-            """
-            INSERT INTO suggestions (guild_id, suggestion_id, author_id, content, status)
-            VALUES ($1, $2, $3, $4, $5)
-            """,
+        await Settings.insert_suggestion(
+            self.bot,
             guild_id,
             suggestion_id,
             author_id,
@@ -211,74 +71,19 @@ class SuggestCommands(Package):
         )
 
     async def _get_suggestion(self, guild_id: int, suggestion_id: int):
-        return await self.db.fetchrow(
-            """
-            SELECT *
-            FROM suggestions
-            WHERE guild_id = $1 AND suggestion_id = $2
-            """,
-            guild_id,
-            suggestion_id,
-        )
+        return await Settings.get_suggestion(self.bot, guild_id, suggestion_id)
 
     async def _get_suggestion_by_message(self, guild_id: int, message_id: int):
-        return await self.db.fetchrow(
-            """
-            SELECT *
-            FROM suggestions
-            WHERE guild_id = $1
-              AND (message_id = $2 OR review_message_id = $2)
-            """,
-            guild_id,
-            message_id,
-        )
+        return await Settings.get_suggestion_by_message(self.bot, guild_id, message_id)
 
     async def _set_suggestion_fields(self, guild_id: int, suggestion_id: int, **fields) -> None:
-        if not fields:
-            return
-
-        keys = list(fields.keys())
-        values = list(fields.values())
-        assignments = ", ".join(
-            f"{key} = ${index + 3}" for index, key in enumerate(keys)
-        )
-        await self.db.execute(
-            f"""
-            UPDATE suggestions
-            SET {assignments}, updated_at = CURRENT_TIMESTAMP
-            WHERE guild_id = $1 AND suggestion_id = $2
-            """,
-            guild_id,
-            suggestion_id,
-            *values,
-        )
+        await Settings.set_suggestion_fields(self.bot, guild_id, suggestion_id, **fields)
 
     async def _set_vote(self, guild_id: int, suggestion_id: int, user_id: int, vote: str) -> None:
-        await self.db.execute(
-            """
-            INSERT INTO suggest_votes (guild_id, suggestion_id, user_id, vote)
-            VALUES ($1, $2, $3, $4)
-            ON CONFLICT (guild_id, suggestion_id, user_id) DO UPDATE SET
-                vote = EXCLUDED.vote,
-                updated_at = CURRENT_TIMESTAMP
-            """,
-            guild_id,
-            suggestion_id,
-            user_id,
-            vote,
-        )
+        await Settings.set_vote(self.bot, guild_id, suggestion_id, user_id, vote)
 
     async def _remove_vote(self, guild_id: int, suggestion_id: int, user_id: int, vote: str) -> None:
-        await self.db.execute(
-            """
-            DELETE FROM suggest_votes
-            WHERE guild_id = $1 AND suggestion_id = $2 AND user_id = $3 AND vote = $4
-            """,
-            guild_id,
-            suggestion_id,
-            user_id,
-            vote,
-        )
+        await Settings.remove_vote(self.bot, guild_id, suggestion_id, user_id, vote)
 
     async def _toggle_ignored_entry(
         self,
@@ -287,62 +92,24 @@ class SuggestCommands(Package):
         target_type: str,
         added_by: int,
     ) -> bool:
-        inserted = await self.db.fetchrow(
-            """
-            INSERT INTO suggest_ignored (guild_id, target_id, target_type, added_by)
-            VALUES ($1, $2, $3, $4)
-            ON CONFLICT DO NOTHING
-            RETURNING guild_id
-            """,
+        return await Settings.toggle_ignored_entry(
+            self.bot,
             guild_id,
             target_id,
             target_type,
             added_by,
         )
-        if inserted:
-            return True
-
-        await self.db.execute(
-            """
-            DELETE FROM suggest_ignored
-            WHERE guild_id = $1 AND target_id = $2 AND target_type = $3
-            """,
-            guild_id,
-            target_id,
-            target_type,
-        )
-        return False
 
     async def _list_ignored_entries(self, guild_id: int):
-        return await self.db.fetch(
-            """
-            SELECT target_id, target_type
-            FROM suggest_ignored
-            WHERE guild_id = $1
-            ORDER BY target_type, target_id
-            """,
-            guild_id,
-        )
+        return await Settings.list_ignored_entries(self.bot, guild_id)
 
     async def _is_ignored(self, member: discord.Member) -> bool:
         role_ids = [role.id for role in member.roles if not role.is_default()]
-        return bool(
-            await self.db.fetchval(
-                """
-                SELECT 1
-                FROM suggest_ignored
-                WHERE guild_id = $1
-                  AND (
-                    (target_type = 'member' AND target_id = $2)
-                    OR
-                    (target_type = 'role' AND target_id = ANY($3::BIGINT[]))
-                  )
-                LIMIT 1
-                """,
-                member.guild.id,
-                member.id,
-                role_ids,
-            )
+        return await Settings.is_ignored(
+            self.bot,
+            member.guild.id,
+            member.id,
+            role_ids,
         )
 
     async def _resolve_channel(

@@ -12,7 +12,7 @@ from core.discord.hybrid import hybrid, describe, group
 from config import color, emojis
 from core.managers.permissions import has_permissions
 
-from .settings import Settings as AutoroleSettings
+from .settings import Settings as AutoroleSettings, ButtonRoleSettings, ReactionRoleSettings
 
 from core.discord.views.embed import panel_embed
 
@@ -75,11 +75,8 @@ class Autorole(commands.Cog):
     @has_permissions(manage_guild=True, manage_roles=True)
     async def autorole_remove(self, ctx: Context, role: discord.Role) -> None:
         """Removes a autorole and stops assigning on join."""
-        await self.bot.db.execute(
-            "DELETE FROM auto_role WHERE guild_id = $1 AND role_id = $2",
-            ctx.guild.id,
-            role.id,
-        )
+        settings = await AutoroleSettings.fetch(self.bot, ctx.guild)
+        await settings.remove_where(role_id=role.id)
         await ctx.success(f"Auto role removed\n> -# **{role.mention}**")
 
     @autorole.command(
@@ -118,11 +115,8 @@ class Autorole(commands.Cog):
     @has_permissions(manage_guild=True, manage_roles=True)
     async def autorole_add(self, ctx: Context, role: discord.Role) -> None:
         """Adds a autorole and assigns on join to member."""
-        await self.bot.db.execute(
-            "INSERT INTO auto_role (guild_id, role_id) VALUES($1, $2) ON CONFLICT(guild_id, role_id) DO NOTHING",
-            ctx.guild.id,
-            role.id,
-        )
+        settings = await AutoroleSettings.fetch(self.bot, ctx.guild)
+        await settings.add(role_id=role.id)
         await ctx.success(f"Auto role added\n> -# **{role.mention}**")
 
     @group(
@@ -145,18 +139,12 @@ class Autorole(commands.Cog):
     @has_permissions(manage_guild=True, manage_roles=True)
     async def buttonrole_remove(self, ctx: Context, message: discord.Message, index: int) -> None:
         """Remove a button role from a message."""
-        entries = await self.bot.db.fetch(
-            "SELECT index FROM button_roles WHERE message_id = $1 ORDER BY index ASC",
-            message.id,
-        )
+        settings = await ButtonRoleSettings.fetch(self.bot, ctx.guild)
+        entries = [r for r in settings.rows if r["message_id"] == message.id]
         if index > len(entries):
             index = len(entries)
         
-        await self.bot.db.execute(
-            "DELETE FROM button_roles WHERE message_id = $1 AND index = $2",
-            message.id,
-            entries[index - 1].index,
-        )
+        await settings.remove_where(message_id=message.id, index=entries[index - 1]["index"])
         
         await message.edit(view=None)
         await ctx.success(f"Button removed\n> -# **[message]({message.jump_url})**")
@@ -182,23 +170,18 @@ class Autorole(commands.Cog):
         )
         if not await view.prompt(embed=emb):
             return await ctx.warn("Cancelled\n> -# **no button roles were removed**")
-        for row in await self.bot.db.fetch(
-            "SELECT message_id, channel_id FROM button_roles WHERE guild_id = $1",
-            ctx.guild.id,
-        ):
-            channel = ctx.guild.get_channel(row.channel_id)
+        settings = await ButtonRoleSettings.fetch(self.bot, ctx.guild)
+        for row in settings.rows:
+            channel = ctx.guild.get_channel(row["channel_id"])
             if not channel:
                 continue
             try:
-                message = await channel.fetch_message(row.message_id)
+                message = await channel.fetch_message(row["message_id"])
             except Exception:
                 continue
             await message.edit(view=None)
         
-        await self.bot.db.execute(
-            "DELETE FROM button_roles WHERE guild_id = $1",
-            ctx.guild.id,
-        )
+        await settings.clear()
         await ctx.success(
             "Button roles cleared\n> -# **this action can't be undone**"
         )
@@ -213,10 +196,8 @@ class Autorole(commands.Cog):
     async def buttonrole_removeall(self, ctx: Context, message: discord.Message) -> None:
         """Removes all button roles from a message."""
         await message.edit(view=None)
-        await self.bot.db.execute(
-            "DELETE FROM button_roles WHERE message_id = $1",
-            message.id,
-        )
+        settings = await ButtonRoleSettings.fetch(self.bot, ctx.guild)
+        await settings.remove_where(message_id=message.id)
         await ctx.success(f"Button roles removed\n> -# **[message]({message.jump_url})**")
 
     @buttonrole.command(
@@ -227,40 +208,20 @@ class Autorole(commands.Cog):
     @has_permissions(manage_guild=True, manage_roles=True)
     async def buttonrole_list(self, ctx: Context) -> None:
         """View a list of every button role."""
+        settings = await ButtonRoleSettings.fetch(self.bot, ctx.guild)
         rows = []
         i = 0
-        for row in await self.bot.db.fetch(
-            "SELECT message_id, channel_id, role_id FROM button_roles WHERE guild_id = $1 ORDER BY index ASC",
-            ctx.guild.id,
-        ):
-            if not (channel := ctx.guild.get_channel(row.channel_id)):
-                asyncio.ensure_future(
-                    self.bot.db.execute(
-                        "DELETE FROM button_roles WHERE channel_id = $1 AND guild_id = $2",
-                        row.channel_id,
-                        ctx.guild.id,
-                    )
-                )
+        for row in settings.rows:
+            if not (channel := ctx.guild.get_channel(row["channel_id"])):
+                asyncio.ensure_future(settings.remove_where(channel_id=row["channel_id"]))
                 continue
             try:
-                message = await channel.fetch_message(row.message_id)
+                message = await channel.fetch_message(row["message_id"])
             except Exception:
-                asyncio.ensure_future(
-                    self.bot.db.execute(
-                        "DELETE FROM button_roles WHERE message_id = $1 AND guild_id = $2",
-                        row.message_id,
-                        ctx.guild.id,
-                    )
-                )
+                asyncio.ensure_future(settings.remove_where(message_id=row["message_id"]))
                 continue
-            if not (role := ctx.guild.get_role(row.role_id)):
-                asyncio.ensure_future(
-                    self.bot.db.execute(
-                        "DELETE FROM button_roles WHERE role_id = $1 AND guild_id = $2",
-                        row.role_id,
-                        ctx.guild.id,
-                    )
-                )
+            if not (role := ctx.guild.get_role(row["role_id"])):
+                asyncio.ensure_future(settings.remove_where(role_id=row["role_id"]))
                 continue
             i += 1
             rows.append(f"`{i}` {role.mention} - [message]({message.jump_url})")
@@ -299,12 +260,10 @@ class Autorole(commands.Cog):
             await ctx.warn("Missing input\n> -# **provide an emoji or label for the button**")
             return
         
-        indexes = await self.bot.db.fetch(
-            "SELECT index FROM button_roles WHERE message_id = $1 ORDER BY index ASC",
-            message.id,
-        )
+        settings = await ButtonRoleSettings.fetch(self.bot, ctx.guild)
+        indexes = [r for r in settings.rows if r["message_id"] == message.id]
         try:
-            index = indexes[-1].index + 1
+            index = indexes[-1]["index"] + 1
         except Exception:
             index = 1
         
@@ -312,16 +271,14 @@ class Autorole(commands.Cog):
             await ctx.warn("Label too long\n> -# **button labels must be 100 characters or fewer**")
             return
         
-        await self.bot.db.execute(
-            "INSERT INTO button_roles (guild_id, message_id, channel_id, role_id, style, emoji, label, index) VALUES($1, $2, $3, $4, $5, $6, $7, $8)",
-            ctx.guild.id,
-            message.id,
-            message.channel.id,
-            role.id,
-            style,
-            emoji,
-            label,
-            index,
+        await settings.add(
+            message_id=message.id,
+            channel_id=message.channel.id,
+            role_id=role.id,
+            style=style,
+            emoji=emoji,
+            label=label,
+            index=index,
         )
         await ctx.success("Button role added")
 
@@ -345,11 +302,8 @@ class Autorole(commands.Cog):
     @has_permissions(manage_guild=True, manage_roles=True)
     async def reactionrole_removeall(self, ctx: Context, message: discord.Message) -> None:
         """Removes all reaction roles from a message."""
-        await self.bot.db.execute(
-            "DELETE FROM reaction_role WHERE guild_id = $1 AND message_id = $2",
-            ctx.guild.id,
-            message.id,
-        )
+        settings = await ReactionRoleSettings.fetch(self.bot, ctx.guild)
+        await settings.remove_where(message_id=message.id)
         await ctx.success(f"Reaction roles cleared\n> -# **[message]({message.jump_url})**")
 
     @reactionrole.command(
@@ -373,10 +327,8 @@ class Autorole(commands.Cog):
         )
         if not await view.prompt(embed=emb):
             return await ctx.warn("Cancelled\n> -# **no reaction roles were removed**")
-        await self.bot.db.execute(
-            "DELETE FROM reaction_role WHERE guild_id = $1",
-            ctx.guild.id,
-        )
+        settings = await ReactionRoleSettings.fetch(self.bot, ctx.guild)
+        await settings.clear()
         await ctx.success(
             "Reaction roles cleared\n> -# **this action can't be undone**"
         )
@@ -390,12 +342,8 @@ class Autorole(commands.Cog):
     @has_permissions(manage_guild=True, manage_roles=True)
     async def reactionrole_remove(self, ctx: Context, message: discord.Message, emoji: str) -> None:
         """Removes a reaction role from a message."""
-        await self.bot.db.execute(
-            "DELETE FROM reaction_role WHERE guild_id = $1 AND message_id = $2 AND emoji = $3",
-            ctx.guild.id,
-            message.id,
-            str(emoji),
-        )
+        settings = await ReactionRoleSettings.fetch(self.bot, ctx.guild)
+        await settings.remove_where(message_id=message.id, emoji=str(emoji))
         await ctx.success("Reaction role removed")
 
     @reactionrole.command(
@@ -407,24 +355,21 @@ class Autorole(commands.Cog):
     async def reactionrole_list(self, ctx: Context) -> None:
         """View a list of every reaction role."""
         def get_message_link(row):
-            return f"https://discord.com/channels/{row.guild_id}/{row.channel_id}/{row.message_id}"
+            return f"https://discord.com/channels/{row['guild_id']}/{row['channel_id']}/{row['message_id']}"
 
         def get_row(row):
-            if not (role := ctx.guild.get_role(row.role_id)):
+            if not (role := ctx.guild.get_role(row["role_id"])):
                 return None
-            return f"{str(row.emoji)} [{row.message_id}]({get_message_link(row)}) {role.mention}"
+            return f"{str(row['emoji'])} [{row['message_id']}]({get_message_link(row)}) {role.mention}"
 
-        rows = await self.bot.db.fetch(
-            "SELECT * FROM reaction_role WHERE guild_id = $1",
-            ctx.guild.id,
-        )
-        if not rows:
+        settings = await ReactionRoleSettings.fetch(self.bot, ctx.guild)
+        if not settings.rows:
             await ctx.warn("No reaction roles\n> -# **use `reactionrole add` to configure one**")
             return
         
         rows = [
             f"`{i}` {row}"
-            for i, row in enumerate([get_row(r) for r in rows if get_row(r)], start=1)
+            for i, row in enumerate([get_row(r) for r in settings.rows if get_row(r)], start=1)
         ]
         embed = panel_embed(title="Reaction Roles", color=color.base, lines=rows, timestamp=False)
         await ctx.send(embed=embed)
@@ -450,13 +395,12 @@ class Autorole(commands.Cog):
             await ctx.warn(f"Invalid emoji\n> -# **`{emoji}` is not a valid emoji**")
             return
         
-        await self.bot.db.execute(
-            "INSERT INTO reaction_role (guild_id, channel_id, message_id, emoji, role_id) VALUES($1, $2, $3, $4, $5) ON CONFLICT(guild_id, channel_id, message_id, role_id) DO UPDATE SET emoji = excluded.emoji",
-            ctx.guild.id,
-            message.channel.id,
-            message.id,
-            str(emoji),
-            role.id,
+        settings = await ReactionRoleSettings.fetch(self.bot, ctx.guild)
+        await settings.add(
+            channel_id=message.channel.id,
+            message_id=message.id,
+            emoji=str(emoji),
+            role_id=role.id,
         )
         await ctx.success(f"Reaction role added\n> -# **[message]({message.jump_url})**")
 

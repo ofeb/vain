@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 from logging import getLogger
 from typing import Any
 
@@ -102,6 +103,15 @@ class Settings:
     async def upsert(self, **kwargs: Any) -> Settings:
         """Reload rows (multi-row writes use add / remove_where)."""
         return await self.reload()
+
+    
+
+    @staticmethod
+    async def ensure_schema(db: Any) -> None:
+        with contextlib.suppress(Exception):
+            await db.execute(
+                "ALTER TABLE notes ADD COLUMN IF NOT EXISTS case_id BIGINT"
+            )
 
     async def insert(self, **kwargs: Any) -> Settings:
         if kwargs:

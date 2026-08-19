@@ -103,6 +103,87 @@ class Settings:
         """Reload rows (multi-row writes use add / remove_where)."""
         return await self.reload()
 
+    
+
+    @staticmethod
+    async def ensure_schema(db: Any) -> None:
+        await db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS selfaliases (
+                user_id BIGINT NOT NULL,
+                name TEXT NOT NULL,
+                invoke TEXT NOT NULL,
+                command TEXT NOT NULL,
+                PRIMARY KEY (user_id, name)
+            )
+            """
+        )
+
+    
+
+    @staticmethod
+    async def add_selfalias(
+        db: Any, user_id: int, name: str, invoke: str, command: str
+    ) -> None:
+        await db.execute(
+            """
+            INSERT INTO selfaliases (user_id, name, invoke, command)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (user_id, name) DO UPDATE
+            SET invoke = EXCLUDED.invoke, command = EXCLUDED.command
+            """,
+            user_id,
+            name,
+            invoke,
+            command,
+        )
+
+    @staticmethod
+    async def remove_selfalias(db: Any, user_id: int, name: str) -> int:
+        result = await db.execute(
+            "DELETE FROM selfaliases WHERE user_id = $1 AND name = $2",
+            user_id,
+            name,
+        )
+        try:
+            return int(str(result).split()[-1])
+        except Exception:
+            return 0
+
+    @staticmethod
+    async def get_selfalias(db: Any, user_id: int, name: str) -> str | None:
+        row = await db.fetchrow(
+            "SELECT invoke FROM selfaliases WHERE user_id = $1 AND name = $2",
+            user_id,
+            name,
+        )
+        if not row:
+            return None
+        return row["invoke"] if hasattr(row, "keys") else row[0]
+
+    @staticmethod
+    async def clear_selfaliases(db: Any, user_id: int) -> int:
+        result = await db.execute(
+            "DELETE FROM selfaliases WHERE user_id = $1",
+            user_id,
+        )
+        try:
+            return int(str(result).split()[-1])
+        except Exception:
+            return 0
+
+    @staticmethod
+    async def fetch_selfaliases(db: Any, user_id: int) -> list[dict[str, Any]]:
+        rows = await db.fetch(
+            """
+            SELECT name, invoke FROM selfaliases
+            WHERE user_id = $1
+            ORDER BY name ASC
+            """,
+            user_id,
+        )
+        return [dict(r) for r in rows]
+
     async def insert(self, **kwargs: Any) -> Settings:
         if kwargs:
             await self.add(**kwargs)

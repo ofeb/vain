@@ -5,6 +5,7 @@ import contextlib
 import discord
 
 from core.discord.package import Package
+from ..settings import Settings
 
 
 class VoiceMasterEvents:
@@ -20,10 +21,9 @@ class VoiceMasterEvents:
         if after.channel is None:
             return
 
-        config = await self.bot.db.fetchrow(
-            "SELECT * FROM voicemaster_configuration WHERE guild_id = $1",
-            member.guild.id,
-        )
+        await self._handle_join2unmute(member, after.channel)
+
+        config = await Settings.fetch_voice_config(self.bot.db, member.guild.id)
         if not config or config["channel_id"] != after.channel.id:
             return
 
@@ -35,13 +35,31 @@ class VoiceMasterEvents:
 
         await self._create_member_channel(member, config, after.channel)
 
+    async def _handle_join2unmute(self, member: discord.Member, channel: discord.VoiceChannel):
+        """Auto-unmute server-muted users joining a join2unmute channel."""
+        if not member.guild_permissions.mute_members:
+            pass
+        row = await Settings.check_join2unmute(self.bot.db, member.guild.id, channel.id)
+        if not row:
+            return
+        if member.voice is None or member.voice.channel != channel:
+            return
+        if not member.is_timed_out() and not any(
+            r.name.lower() == "muted" for r in member.roles
+        ):
+            return
+        muted_role = discord.utils.get(member.guild.roles, name="Muted")
+        if muted_role and muted_role in member.roles:
+            with contextlib.suppress(discord.HTTPException):
+                await member.remove_roles(muted_role, reason="VoiceMaster: join2unmute")
+        if member.is_timed_out():
+            with contextlib.suppress(discord.HTTPException):
+                await member.timeout(None, reason="VoiceMaster: join2unmute")
+
     async def _handle_leave(self, member: discord.Member, channel: discord.VoiceChannel):
         """Handle user leaving a voice channel."""
-        config = await self.bot.db.fetchrow(
-            "SELECT role_id FROM voicemaster_configuration WHERE guild_id = $1",
-            member.guild.id
-        )
-        
+        config = await Settings.fetch_voice_config(self.bot.db, member.guild.id)
+
         if config and (role_id := config.get("role_id")):
             role = member.guild.get_role(role_id)
             if role and role in member.roles:
@@ -49,19 +67,15 @@ class VoiceMasterEvents:
                     await member.remove_roles(role, reason="VoiceMaster: Left voice channel")
                 except discord.HTTPException:
                     pass
-        
+
         human_members = [m for m in channel.members if not m.bot]
         if human_members:
             return
-        
-        owner_id = await self.bot.db.fetchval(
-            "DELETE FROM voicemaster_channels WHERE channel_id = $1 RETURNING owner_id",
-            channel.id
-        )
-        
+
+        owner_id = await Settings.delete_channel(self.bot.db, channel.id)
+
         if owner_id:
             try:
                 await channel.delete(reason="VoiceMaster: Empty channel")
             except discord.HTTPException:
                 pass
-

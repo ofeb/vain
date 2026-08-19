@@ -12,85 +12,110 @@ if TYPE_CHECKING:
 
 DEFAULT_INVOKE_DM: dict[str, str] = {
     "ban": (
-        "{embed}$v{title: You have been banned}$v"
-        "{description: > **Server:** {guild.name}\n"
-        "> **Staff:** {moderator.mention}\n"
-        "> **Reason:** {reason}\n"
-        "-# Case **#{case_id}**}"
+        "{container}$v{content: {user.mention}}$v"
+        "{description: You have been **banned** in {guild.name}\n"
+        "\n"
+        "> -# **moderator**: {moderator.mention}\n"
+        "> -# **date**: {timestamp}\n"
+        "> -# **reason**: {reason}}"
     ),
     "kick": (
-        "{embed}$v{title: You have been kicked}$v"
-        "{description: > **Server:** {guild.name}\n"
-        "> **Staff:** {moderator.mention}\n"
-        "> **Reason:** {reason}\n"
-        "-# Case **#{case_id}**}"
+        "{container}$v{content: {user.mention}}$v"
+        "{description: You have been **kicked** in {guild.name}\n"
+        "\n"
+        "> -# **moderator**: {moderator.mention}\n"
+        "> -# **date**: {timestamp}\n"
+        "> -# **reason**: {reason}}"
     ),
     "softban": (
-        "{embed}$v{title: You have been softbanned}$v"
-        "{description: > **Server:** {guild.name}\n"
-        "> **Staff:** {moderator.mention}\n"
-        "> **Reason:** {reason}\n"
-        "-# Case **#{case_id}**}"
+        "{container}$v{content: {user.mention}}$v"
+        "{description: You have been **softbanned** in {guild.name}\n"
+        "\n"
+        "> -# **moderator**: {moderator.mention}\n"
+        "> -# **date**: {timestamp}\n"
+        "> -# **reason**: {reason}}"
     ),
     "tempban": (
-        "{embed}$v{title: You have been temporarily banned}$v"
-        "{description: > **Server:** {guild.name}\n"
-        "> **Staff:** {moderator.mention}\n"
-        "> **Reason:** {reason}\n"
-        "> **Duration:** {duration}\n"
-        "-# Case **#{case_id}**}"
+        "{container}$v{content: {user.mention}}$v"
+        "{description: You have been **temporarily banned** in {guild.name}\n"
+        "\n"
+        "> -# **moderator**: {moderator.mention}\n"
+        "> -# **date**: {timestamp}\n"
+        "> -# **duration**: {duration}\n"
+        "> -# **reason**: {reason}}"
     ),
     "warn": (
-        "{embed}$v{title: You received a warning}$v"
-        "{description: > **Server:** {guild.name}\n"
-        "> **Staff:** {moderator.mention}\n"
-        "> **Reason:** {reason}\n"
-        "-# Case **#{case_id}**}"
+        "{container}$v{content: {user.mention}}$v"
+        "{description: You have been **warned** in {guild.name}\n"
+        "\n"
+        "> -# **moderator**: {moderator.mention}\n"
+        "> -# **date**: {timestamp}\n"
+        "> -# **reason**: {reason}}"
     ),
     "jail": (
-        "{embed}$v{title: You have been jailed}$v"
-        "{description: > **Server:** {guild.name}\n"
-        "> **Staff:** {moderator.mention}\n"
-        "> **Reason:** {reason}\n"
-        "-# Case **#{case_id}**}"
+        "{container}$v{content: {user.mention}}$v"
+        "{description: You have been **jailed** in {guild.name}\n"
+        "\n"
+        "> -# **moderator**: {moderator.mention}\n"
+        "> -# **date**: {timestamp}\n"
+        "> -# **reason**: {reason}}"
     ),
     "unjail": (
-        "{embed}$v{title: You have been unjailed}$v"
-        "{description: > **Server:** {guild.name}\n"
-        "> **Staff:** {moderator.mention}\n"
-        "> **Reason:** {reason}}"
+        "{container}$v{content: {user.mention}}$v"
+        "{description: You have been **unjailed** in {guild.name}\n"
+        "\n"
+        "> -# **moderator**: {moderator.mention}\n"
+        "> -# **date**: {timestamp}\n"
+        "> -# **reason**: {reason}}"
     ),
     "mute": (
-        "{embed}$v{title: You have been muted}$v"
-        "{description: > **Server:** {guild.name}\n"
-        "> **Staff:** {moderator.mention}\n"
-        "> **Reason:** {reason}\n"
-        "-# Case **#{case_id}**}"
+        "{container}$v{content: {user.mention}}$v"
+        "{description: You have been **muted** in {guild.name}\n"
+        "\n"
+        "> -# **moderator**: {moderator.mention}\n"
+        "> -# **date**: {timestamp}\n"
+        "> -# **reason**: {reason}}"
     ),
     "unmute": (
-        "{embed}$v{title: You have been unmuted}$v"
-        "{description: > **Server:** {guild.name}\n"
-        "> **Staff:** {moderator.mention}\n"
-        "> **Reason:** {reason}}"
+        "{container}$v{content: {user.mention}}$v"
+        "{description: You have been **unmuted** in {guild.name}\n"
+        "\n"
+        "> -# **moderator**: {moderator.mention}\n"
+        "> -# **date**: {timestamp}\n"
+        "> -# **reason**: {reason}}"
     ),
     "timeout": (
-        "{embed}$v{title: You have been timed out}$v"
-        "{description: > **Server:** {guild.name}\n"
-        "> **Staff:** {moderator.mention}\n"
-        "> **Reason:** {reason}\n"
-        "> **Duration:** {duration}}"
+        "{container}$v{content: {user.mention}}$v"
+        "{description: You have been **timed out** in {guild.name}\n"
+        "\n"
+        "> -# **moderator**: {moderator.mention}\n"
+        "> -# **date**: {timestamp}\n"
+        "> -# **duration**: {duration}\n"
+        "> -# **reason**: {reason}}"
     ),
     "untimeout": (
-        "{embed}$v{title: Your timeout was removed}$v"
-        "{description: > **Server:** {guild.name}\n"
-        "> **Staff:** {moderator.mention}\n"
-        "> **Reason:** {reason}}"
+        "{container}$v{content: {user.mention}}$v"
+        "{description: Your **timeout was removed** in {guild.name}\n"
+        "\n"
+        "> -# **moderator**: {moderator.mention}\n"
+        "> -# **date**: {timestamp}\n"
+        "> -# **reason**: {reason}}"
     ),
     "unban": (
-        "{embed}$v{title: You have been unbanned}$v"
-        "{description: > **Server:** {guild.name}\n"
-        "> **Staff:** {moderator.mention}\n"
-        "> **Reason:** {reason}}"
+        "{container}$v{content: {user.mention}}$v"
+        "{description: You have been **unbanned** in {guild.name}\n"
+        "\n"
+        "> -# **moderator**: {moderator.mention}\n"
+        "> -# **date**: {timestamp}\n"
+        "> -# **reason**: {reason}}"
+    ),
+    "hardban": (
+        "{container}$v{content: {user.mention}}$v"
+        "{description: You have been **hardbanned** in {guild.name}\n"
+        "\n"
+        "> -# **moderator**: {moderator.mention}\n"
+        "> -# **date**: {timestamp}\n"
+        "> -# **reason**: {reason}}"
     ),
 }
 
@@ -266,6 +291,7 @@ async def send_invoke_dm(
         "reason": reason or "no reason provided",
         "case_id": case_id if case_id is not None else "N/A",
         "duration": duration or "N/A",
+        "timestamp": f"<t:{int(discord.utils.utcnow().timestamp())}:R>",
     }
     with contextlib.suppress(discord.Forbidden, discord.HTTPException, Exception):
         await bot.send_embed(member, script, **kwargs)

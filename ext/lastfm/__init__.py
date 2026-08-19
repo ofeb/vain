@@ -26,6 +26,7 @@ from core.discord.ctx import Context
 from core.discord.package import Package
 
 from .events import LastfmEvents
+from .settings import Settings
 from config import emojis, api as api_values, lastfm_color as lastfm_color_config, lastfm_callback
 from core.tools.guild_members import collect_guild_members
 from core.tools import embed as embed_builder
@@ -141,7 +142,7 @@ class Lastfm(LastfmEvents, Package):
 
     async def _resolve_color(self, user_id: int) -> discord.Color:
         if getattr(self.bot, "db", None):
-            stored = await self.bot.db.get_lastfm_color(user_id)
+            stored = await Settings.get_color(self.bot, user_id)
             if stored:
                 raw = stored.strip()
                 if raw:
@@ -153,7 +154,7 @@ class Lastfm(LastfmEvents, Package):
 
     async def _resolve_mode(self, user_id: int) -> str:
         if getattr(self.bot, "db", None):
-            stored = await self.bot.db.get_lastfm_mode(user_id)
+            stored = await Settings.get_mode(self.bot, user_id)
             if stored:
                 return stored.strip().lower()
         return "default"
@@ -684,7 +685,7 @@ class Lastfm(LastfmEvents, Package):
             await ctx.warn(f"Could not find Last.fm user **{username}**.")
             return
         actual = self._text_value(user_data.get("name")) or username
-        await self.bot.db.set_lastfm_user(ctx.author.id, actual, None)
+        await Settings.set_user(self.bot, ctx.author.id, actual, None)
         await ctx.success(f"Linked your account to **[{actual}](https://www.last.fm/user/{quote_plus(actual)})**.")
 
     @lastfm.command(name="logout")
@@ -695,14 +696,14 @@ class Lastfm(LastfmEvents, Package):
         if not getattr(self.bot, "db", None):
             await ctx.warn("Last.fm is not configured on this bot.")
             return
-        data = await self.bot.db.get_lastfm_user(ctx.author.id)
+        data = await Settings.get_user(self.bot, ctx.author.id)
         if not data:
             await ctx.warn(
                 f"You do not have a **Last.fm** account linked yet. "
                 f"You can link it with `{ctx.clean_prefix}lastfm login`."
             )
             return
-        await self.bot.db.remove_lastfm_user(ctx.author.id)
+        await Settings.remove_user(self.bot, ctx.author.id)
         await ctx.success("Successfully **removed** your Last.fm account.")
 
     @lastfm.command(name="whois")
@@ -982,9 +983,9 @@ class Lastfm(LastfmEvents, Package):
 
         message = await ctx.send(embed=embed, raw_embed=True)
         if getattr(self.bot, "db", None):
-            reactions = await self.bot.db.get_lastfm_guild_reactions(ctx.guild.id) if ctx.guild else None
+            reactions = await Settings.get_guild_reactions(self.bot, ctx.guild.id) if ctx.guild else None
             if not reactions:
-                reactions = await self.bot.db.get_lastfm_reactions(target_user.id)
+                reactions = await Settings.get_reactions(self.bot, target_user.id)
             if reactions:
                 for emoji in (reactions.get("upvote"), reactions.get("downvote")):
                     if emoji:
@@ -1688,7 +1689,7 @@ class Lastfm(LastfmEvents, Package):
             await ctx.info(f"{ctx.author.mention}: No **crown** was found for `{artist}`.")
             return
 
-        linked_rows = await self.bot.db.get_lastfm_users()
+        linked_rows = await Settings.get_users(self.bot)
         linked_by_id = {int(row["user_id"]): row.get("lastfm_username", "") for row in linked_rows}
         owner_id = int(crown["user_id"])
         owner_member = ctx.guild.get_member(owner_id)
@@ -2247,12 +2248,12 @@ class Lastfm(LastfmEvents, Package):
         """
         if not getattr(self.bot, "db", None):
             return
-        hidden_ids = set(await self.bot.db.list_lastfm_hidden(ctx.guild.id))
+        hidden_ids = set(await Settings.list_hidden(self.bot, ctx.guild.id))
         if member.id in hidden_ids:
-            await self.bot.db.remove_lastfm_hidden(ctx.guild.id, member.id)
+            await Settings.remove_hidden(self.bot, ctx.guild.id, member.id)
             await ctx.success(f"Removed {member.mention} from **hidden Last.fm members**.")
             return
-        await self.bot.db.set_lastfm_hidden(ctx.guild.id, member.id)
+        await Settings.set_hidden(self.bot, ctx.guild.id, member.id)
         await ctx.success(f"Hidden {member.mention} from **Last.fm whoknows** results.")
 
     @lastfm_hide.command(name="list")
@@ -2262,7 +2263,7 @@ class Lastfm(LastfmEvents, Package):
         """
         if not ctx.guild or not getattr(self.bot, "db", None):
             return
-        hidden_ids = await self.bot.db.list_lastfm_hidden(ctx.guild.id)
+        hidden_ids = await Settings.list_hidden(self.bot, ctx.guild.id)
         if not hidden_ids:
             await ctx.info(f"{ctx.author.mention}: No **hidden members** are set.")
             return
@@ -2321,7 +2322,7 @@ class Lastfm(LastfmEvents, Package):
         """
         if not getattr(self.bot, "db", None):
             return
-        users = await self.bot.db.get_lastfm_users()
+        users = await Settings.get_users(self.bot)
         if not users:
             await ctx.warn("No linked **Last.fm** users were found.")
             return
@@ -2418,7 +2419,7 @@ class Lastfm(LastfmEvents, Package):
         artist, title = resolved
         if not getattr(self.bot, "db", None):
             return
-        rows = await self._fetch_track_rows(await self.bot.db.get_lastfm_users(), artist, title)
+        rows = await self._fetch_track_rows(await Settings.get_users(self.bot), artist, title)
         if not rows:
             await ctx.info(f"{ctx.author.mention}: No **listeners** were found.")
             return
@@ -2443,7 +2444,7 @@ class Lastfm(LastfmEvents, Package):
         artist, title = resolved
         if not getattr(self.bot, "db", None):
             return
-        rows = await self._fetch_album_rows(await self.bot.db.get_lastfm_users(), artist, title)
+        rows = await self._fetch_album_rows(await Settings.get_users(self.bot), artist, title)
         if not rows:
             await ctx.info(f"{ctx.author.mention}: No **listeners** were found.")
             return
@@ -2591,7 +2592,7 @@ class Lastfm(LastfmEvents, Package):
         """
         if not getattr(self.bot, "db", None):
             return
-        users = await self.bot.db.get_lastfm_users()
+        users = await Settings.get_users(self.bot)
         members = await collect_guild_members(ctx.guild)
         guild_members = {member.id: member for member in members}
         linked = [u for u in users if u["user_id"] in guild_members]
@@ -2675,7 +2676,7 @@ class Lastfm(LastfmEvents, Package):
         """
         if not getattr(self.bot, "db", None):
             return
-        current = await self.bot.db.get_lastfm_custom_command(ctx.guild.id, ctx.author.id)
+        current = await Settings.get_custom_command(self.bot, ctx.guild.id, ctx.author.id)
         if not substring:
             if not current:
                 await ctx.info(
@@ -2690,10 +2691,10 @@ class Lastfm(LastfmEvents, Package):
             )
             return
         if self._is_clear_token(substring):
-            await self.bot.db.remove_lastfm_custom_command(ctx.guild.id, ctx.author.id)
+            await Settings.remove_custom_command(self.bot, ctx.guild.id, ctx.author.id)
             await ctx.success("Cleared your **custom now playing command**.")
             return
-        await self.bot.db.set_lastfm_custom_command(ctx.guild.id, ctx.author.id, substring)
+        await Settings.set_custom_command(self.bot, ctx.guild.id, ctx.author.id, substring)
         await ctx.success(f"Set your **custom now playing command** to `{substring}`.")
 
     @lastfm_customcommand.command(name="public")
@@ -2705,7 +2706,7 @@ class Lastfm(LastfmEvents, Package):
         if not getattr(self.bot, "db", None):
             return
         if not substring:
-            current = await self.bot.db.get_lastfm_custom_command(ctx.guild.id, ctx.author.id)
+            current = await Settings.get_custom_command(self.bot, ctx.guild.id, ctx.author.id)
             if not current or not current.get("public"):
                 await ctx.info(
                     f"{ctx.author.mention}: You do not have a **public custom now playing command** yet. "
@@ -2717,8 +2718,8 @@ class Lastfm(LastfmEvents, Package):
                 f"`{current.get('command')}`."
             )
             return
-        await self.bot.db.set_lastfm_custom_command(ctx.guild.id, ctx.author.id, substring)
-        await self.bot.db.set_lastfm_custom_public(ctx.guild.id, ctx.author.id, True)
+        await Settings.set_custom_command(self.bot, ctx.guild.id, ctx.author.id, substring)
+        await Settings.set_custom_public(self.bot, ctx.guild.id, ctx.author.id, True)
         await ctx.success(f"Set your **public custom now playing command** to `{substring}`.")
 
     @lastfm_customcommand.command(name="list")
@@ -2729,7 +2730,7 @@ class Lastfm(LastfmEvents, Package):
         """
         if not getattr(self.bot, "db", None):
             return
-        rows = await self.bot.db.list_lastfm_custom_commands(ctx.guild.id)
+        rows = await Settings.list_custom_commands(self.bot, ctx.guild.id)
         if not rows:
             await ctx.info(f"{ctx.author.mention}: No **custom commands** are set.")
             return
@@ -2749,7 +2750,7 @@ class Lastfm(LastfmEvents, Package):
         """
         if not getattr(self.bot, "db", None):
             return
-        await self.bot.db.remove_lastfm_custom_command(ctx.guild.id, member.id)
+        await Settings.remove_custom_command(self.bot, ctx.guild.id, member.id)
         await ctx.success(f"Removed {member.mention}'s **custom now playing command**.")
 
     @lastfm_customcommand.command(name="reset")
@@ -2760,7 +2761,7 @@ class Lastfm(LastfmEvents, Package):
         """
         if not getattr(self.bot, "db", None):
             return
-        await self.bot.db.reset_lastfm_custom_commands(ctx.guild.id)
+        await Settings.reset_custom_commands(self.bot, ctx.guild.id)
         await ctx.success("Reset **all custom now playing commands**.")
 
     @lastfm_customcommand.command(name="cleanup")
@@ -2771,11 +2772,11 @@ class Lastfm(LastfmEvents, Package):
         """
         if not getattr(self.bot, "db", None):
             return
-        rows = await self.bot.db.list_lastfm_custom_commands(ctx.guild.id)
+        rows = await Settings.list_custom_commands(self.bot, ctx.guild.id)
         removed = 0
         for row in rows:
             if not ctx.guild.get_member(row["user_id"]):
-                await self.bot.db.remove_lastfm_custom_command(ctx.guild.id, row["user_id"])
+                await Settings.remove_custom_command(self.bot, ctx.guild.id, row["user_id"])
                 removed += 1
         await ctx.success(f"Successfully **removed** {removed} custom commands.")
 
@@ -2787,12 +2788,12 @@ class Lastfm(LastfmEvents, Package):
         """
         if not getattr(self.bot, "db", None):
             return
-        ids = set(await self.bot.db.list_lastfm_blacklist(ctx.guild.id))
+        ids = set(await Settings.list_blacklist(self.bot, ctx.guild.id))
         if member.id in ids:
-            await self.bot.db.remove_lastfm_blacklist(ctx.guild.id, member.id)
+            await Settings.remove_blacklist(self.bot, ctx.guild.id, member.id)
             await ctx.success(f"Successfully **removed** {member.mention} from the custom command blacklist.")
             return
-        await self.bot.db.set_lastfm_blacklist(ctx.guild.id, member.id)
+        await Settings.set_blacklist(self.bot, ctx.guild.id, member.id)
         await ctx.success(f"Successfully **blacklisted** {member.mention}.")
 
     @lastfm_customcommand_blacklist.command(name="list")
@@ -2803,7 +2804,7 @@ class Lastfm(LastfmEvents, Package):
         """
         if not getattr(self.bot, "db", None):
             return
-        ids = await self.bot.db.list_lastfm_blacklist(ctx.guild.id)
+        ids = await Settings.list_blacklist(self.bot, ctx.guild.id)
         if not ids:
             await ctx.info(f"{ctx.author.mention}: No **blacklisted users** are set.")
             return
@@ -2826,7 +2827,7 @@ class Lastfm(LastfmEvents, Package):
         """
         if not getattr(self.bot, "db", None):
             return
-        current = await self.bot.db.get_lastfm_reactions(ctx.author.id)
+        current = await Settings.get_reactions(self.bot, ctx.author.id)
         if not upvote and not downvote:
             if not current or not current.get("upvote") or not current.get("downvote"):
                 await ctx.info(
@@ -2841,13 +2842,13 @@ class Lastfm(LastfmEvents, Package):
             )
             return
         if self._is_clear_token(upvote):
-            await self.bot.db.set_lastfm_reactions(ctx.author.id, None, None)
+            await Settings.set_reactions(self.bot, ctx.author.id, None, None)
             await ctx.success("Disabled your **personal Last.fm reactions**.")
             return
         if not upvote or not downvote:
             await ctx.warn("Please provide both reaction emojis or use `off`.")
             return
-        await self.bot.db.set_lastfm_reactions(ctx.author.id, upvote, downvote)
+        await Settings.set_reactions(self.bot, ctx.author.id, upvote, downvote)
         await ctx.success(
             f"Set your **personal Last.fm reactions** to `{upvote}` and `{downvote}`."
         )
@@ -2866,7 +2867,7 @@ class Lastfm(LastfmEvents, Package):
         """
         if not getattr(self.bot, "db", None):
             return
-        current = await self.bot.db.get_lastfm_guild_reactions(ctx.guild.id)
+        current = await Settings.get_guild_reactions(self.bot, ctx.guild.id)
         if not upvote and not downvote:
             if not current or not current.get("upvote") or not current.get("downvote"):
                 await ctx.info(
@@ -2881,13 +2882,13 @@ class Lastfm(LastfmEvents, Package):
             )
             return
         if self._is_clear_token(upvote):
-            await self.bot.db.set_lastfm_guild_reactions(ctx.guild.id, None, None)
+            await Settings.set_guild_reactions(self.bot, ctx.guild.id, None, None)
             await ctx.success("Disabled **server Last.fm reactions**.")
             return
         if not upvote or not downvote:
             await ctx.warn("Please provide both reaction emojis or use `off`.")
             return
-        await self.bot.db.set_lastfm_guild_reactions(ctx.guild.id, upvote, downvote)
+        await Settings.set_guild_reactions(self.bot, ctx.guild.id, upvote, downvote)
         await ctx.success(
             f"Set **server Last.fm reactions** to `{upvote}` and `{downvote}`."
         )
@@ -3039,7 +3040,7 @@ class Lastfm(LastfmEvents, Package):
         """
         if not getattr(self.bot, "db", None):
             return
-        current = await self.bot.db.get_lastfm_color(ctx.author.id)
+        current = await Settings.get_color(self.bot, ctx.author.id)
         if not hexc:
             if not current:
                 await ctx.info(
@@ -3053,14 +3054,14 @@ class Lastfm(LastfmEvents, Package):
             )
             return
         if self._is_clear_token(hexc):
-            await self.bot.db.set_lastfm_color(ctx.author.id, None)
+            await Settings.set_color(self.bot, ctx.author.id, None)
             await ctx.success("Cleared your **Last.fm color** override.")
             return
         value = hexc.strip().lstrip("#")
         if len(value) != 6 or any(char not in "0123456789abcdefABCDEF" for char in value):
             await ctx.warn("Please provide a valid **hex** color like `#c1272d`.")
             return
-        await self.bot.db.set_lastfm_color(ctx.author.id, value)
+        await Settings.set_color(self.bot, ctx.author.id, value)
         await ctx.success(f"Set your **Last.fm color** to `#{value}`.")
 
     @lastfm.command(name="mode")
@@ -3078,7 +3079,7 @@ class Lastfm(LastfmEvents, Package):
             )
             return
         if self._is_clear_token(mode):
-            await self.bot.db.set_lastfm_mode(ctx.author.id, "default")
+            await Settings.set_mode(self.bot, ctx.author.id, "default")
             await ctx.success("Reset your **Last.fm mode** to `default`.")
             return
         value = mode.strip().lower()
@@ -3090,7 +3091,7 @@ class Lastfm(LastfmEvents, Package):
             )
             return
         if value == "custom":
-            script = await self.bot.db.get_lastfm_custom_embed(ctx.author.id)
+            script = await Settings.get_custom_embed(self.bot, ctx.author.id)
             if not script:
                 await ctx.warn(
                     f"Set a **custom script** first with `{ctx.clean_prefix}lastfm embed` "
@@ -3098,7 +3099,7 @@ class Lastfm(LastfmEvents, Package):
                     "before switching to `custom` mode."
                 )
                 return
-        await self.bot.db.set_lastfm_mode(ctx.author.id, value)
+        await Settings.set_mode(self.bot, ctx.author.id, value)
         await ctx.success(f"Set your **Last.fm mode** to `{value}`.")
 
     @lastfm.command(name="embed", aliases=["customembed"])
@@ -3111,7 +3112,7 @@ class Lastfm(LastfmEvents, Package):
         if not getattr(self.bot, "db", None):
             return
         if not script:
-            current = await self.bot.db.get_lastfm_custom_embed(ctx.author.id)
+            current = await Settings.get_custom_embed(self.bot, ctx.author.id)
             if not current:
                 await ctx.info(
                     f"{ctx.author.mention}: You do not have a **custom Last.fm embed** yet. "
@@ -3126,10 +3127,10 @@ class Lastfm(LastfmEvents, Package):
         script, np_reply_flag = self._strip_lastfm_embed_reply_flag(script)
         lowered = script.strip().lower()
         if self._is_clear_token(lowered):
-            await self.bot.db.set_lastfm_custom_embed(ctx.author.id, None)
+            await Settings.set_custom_embed(self.bot, ctx.author.id, None)
             current_mode = await self._resolve_mode(ctx.author.id)
             if current_mode == "custom":
-                await self.bot.db.set_lastfm_mode(ctx.author.id, "default")
+                await Settings.set_mode(self.bot, ctx.author.id, "default")
                 await ctx.success(
                     "Cleared your **custom Last.fm embed** and reset your mode to `default`."
                 )
@@ -3138,8 +3139,8 @@ class Lastfm(LastfmEvents, Package):
             return
         
         normalized = embed_builder.maybe_wrap_embed_script(script)
-        await self.bot.db.set_lastfm_custom_embed(
-            ctx.author.id, normalized, np_reply=np_reply_flag
+        await Settings.set_custom_embed(
+            self.bot, ctx.author.id, normalized, np_reply=np_reply_flag
         )
         mode = await self._resolve_mode(ctx.author.id)
         suffix = (
@@ -3274,7 +3275,7 @@ class Lastfm(LastfmEvents, Package):
             return
         if not getattr(self.bot, "db", None):
             return
-        linked = await self.bot.db.get_lastfm_users()
+        linked = await Settings.get_users(self.bot)
         members = await collect_guild_members(ctx.guild)
         guild_members = {member.id: member for member in members}
         rows = [row for row in linked if int(row["user_id"]) in guild_members]
@@ -3298,7 +3299,7 @@ class Lastfm(LastfmEvents, Package):
         """
         if not getattr(self.bot, "db", None):
             return
-        linked = await self.bot.db.get_lastfm_users()
+        linked = await Settings.get_users(self.bot)
         if not linked:
             await ctx.info(f"{ctx.author.mention}: No **linked** Last.fm users were found.")
             return

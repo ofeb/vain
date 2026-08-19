@@ -19,7 +19,7 @@ class Record(TypedDict, total=False):
 
 
 class Settings:
-    """Guild settings for `lastfm_guild_settings`."""
+    """Facade for all Last.fm database operations."""
 
     bot: Vain
     guild: Guild
@@ -109,6 +109,126 @@ class Settings:
         data = self._default_config()
         data["guild_id"] = self.guild.id
         self.record = data
+
+    
+    
+    
+
+    @staticmethod
+    async def get_user(bot: Vain, user_id: int) -> dict | None:
+        return await bot.db.get_lastfm_user(user_id)
+
+    @staticmethod
+    async def set_user(bot: Vain, user_id: int, username: str, session_key: str | None) -> None:
+        await bot.db.set_lastfm_user(user_id, username, session_key)
+
+    @staticmethod
+    async def remove_user(bot: Vain, user_id: int) -> None:
+        await bot.db.remove_lastfm_user(user_id)
+
+    @staticmethod
+    async def get_users(bot: Vain) -> list[dict]:
+        return await bot.db.get_lastfm_users()
+
+    @staticmethod
+    async def get_color(bot: Vain, user_id: int) -> str | None:
+        return await bot.db.get_lastfm_color(user_id)
+
+    @staticmethod
+    async def set_color(bot: Vain, user_id: int, color: str | None) -> None:
+        await bot.db.set_lastfm_color(user_id, color)
+
+    @staticmethod
+    async def get_mode(bot: Vain, user_id: int) -> str | None:
+        return await bot.db.get_lastfm_mode(user_id)
+
+    @staticmethod
+    async def set_mode(bot: Vain, user_id: int, mode: str | None) -> None:
+        await bot.db.set_lastfm_mode(user_id, mode)
+
+    @staticmethod
+    async def get_reactions(bot: Vain, user_id: int) -> dict | None:
+        return await bot.db.get_lastfm_reactions(user_id)
+
+    @staticmethod
+    async def set_reactions(bot: Vain, user_id: int, upvote: str | None, downvote: str | None) -> None:
+        await bot.db.set_lastfm_reactions(user_id, upvote, downvote)
+
+    @staticmethod
+    async def get_custom_embed(bot: Vain, user_id: int) -> str | None:
+        return await bot.db.get_lastfm_custom_embed(user_id)
+
+    @staticmethod
+    async def get_custom_embed_settings(bot: Vain, user_id: int) -> tuple[str | None, bool]:
+        return await bot.db.get_lastfm_custom_embed_settings(user_id)
+
+    @staticmethod
+    async def set_custom_embed(bot: Vain, user_id: int, script: str | None, *, np_reply: bool = False) -> None:
+        await bot.db.set_lastfm_custom_embed(user_id, script, np_reply=np_reply)
+
+    @staticmethod
+    async def mark_login_used(bot: Vain, token: str) -> None:
+        await bot.db.mark_lastfm_login_used(token)
+
+    
+    
+    
+
+    @staticmethod
+    async def get_guild_reactions(bot: Vain, guild_id: int) -> dict | None:
+        return await bot.db.get_lastfm_guild_reactions(guild_id)
+
+    @staticmethod
+    async def set_guild_reactions(bot: Vain, guild_id: int, upvote: str | None, downvote: str | None) -> None:
+        await bot.db.set_lastfm_guild_reactions(guild_id, upvote, downvote)
+
+    @staticmethod
+    async def get_custom_command(bot: Vain, guild_id: int, user_id: int) -> dict | None:
+        return await bot.db.get_lastfm_custom_command(guild_id, user_id)
+
+    @staticmethod
+    async def set_custom_command(bot: Vain, guild_id: int, user_id: int, command: str) -> None:
+        await bot.db.set_lastfm_custom_command(guild_id, user_id, command)
+
+    @staticmethod
+    async def remove_custom_command(bot: Vain, guild_id: int, user_id: int) -> None:
+        await bot.db.remove_lastfm_custom_command(guild_id, user_id)
+
+    @staticmethod
+    async def list_custom_commands(bot: Vain, guild_id: int) -> list[dict]:
+        return await bot.db.list_lastfm_custom_commands(guild_id)
+
+    @staticmethod
+    async def reset_custom_commands(bot: Vain, guild_id: int) -> None:
+        await bot.db.reset_lastfm_custom_commands(guild_id)
+
+    @staticmethod
+    async def set_custom_public(bot: Vain, guild_id: int, user_id: int, public: bool) -> None:
+        await bot.db.set_lastfm_custom_public(guild_id, user_id, public)
+
+    @staticmethod
+    async def list_blacklist(bot: Vain, guild_id: int) -> list[int]:
+        return await bot.db.list_lastfm_blacklist(guild_id)
+
+    @staticmethod
+    async def set_blacklist(bot: Vain, guild_id: int, user_id: int) -> None:
+        await bot.db.set_lastfm_blacklist(guild_id, user_id)
+
+    @staticmethod
+    async def remove_blacklist(bot: Vain, guild_id: int, user_id: int) -> None:
+        await bot.db.remove_lastfm_blacklist(guild_id, user_id)
+
+    @staticmethod
+    async def list_hidden(bot: Vain, guild_id: int) -> list[int]:
+        return await bot.db.list_lastfm_hidden(guild_id)
+
+    @staticmethod
+    async def set_hidden(bot: Vain, guild_id: int, user_id: int) -> None:
+        await bot.db.set_lastfm_hidden(guild_id, user_id)
+
+    @staticmethod
+    async def remove_hidden(bot: Vain, guild_id: int, user_id: int) -> None:
+        await bot.db.remove_lastfm_hidden(guild_id, user_id)
 
 
 async def fetch(bot: Vain, guild: Guild) -> Settings:
