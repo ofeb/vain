@@ -1504,7 +1504,7 @@ class Utility(Remind):
                 if m.bot and m.id == getattr(self.bot.user, "id", None):
                     continue
                 mention_ids.add(m.id)
-                _add(f"avatar:{m.id}", _avatar_url(m))
+                _add(f"avatar:{m.id}:{m.name}", _avatar_url(m))
 
         url_re = _re.compile(r"https?://\S+", _re.I)
         mention_re = _re.compile(r"<@!?(\d{15,25})>")
@@ -1527,7 +1527,7 @@ class Utility(Remind):
             if user is None:
                 continue
             mention_ids.add(uid)
-            _add(f"avatar:{uid}", _avatar_url(user))
+            _add(f"avatar:{uid}:{getattr(user, 'name', uid)}", _avatar_url(user))
 
         
         text = mention_re.sub(" ", rest or "")
@@ -1553,7 +1553,7 @@ class Utility(Remind):
                 if user is None:
                     continue
                 mention_ids.add(uid)
-                _add(f"avatar:{uid}", _avatar_url(user))
+                _add(f"avatar:{uid}:{getattr(user, 'name', uid)}", _avatar_url(user))
                 continue
 
             
@@ -1581,7 +1581,7 @@ class Utility(Remind):
                 if user.id in mention_ids:
                     continue
                 mention_ids.add(user.id)
-                _add(f"avatar:{user.id}", _avatar_url(user))
+                _add(f"avatar:{user.id}:{getattr(user, 'name', user.id)}", _avatar_url(user))
 
         if not sources:
             if rest:
@@ -1590,7 +1590,7 @@ class Utility(Remind):
                     "> -# try a mention, user id, image url, or attach a file"
                 )
             _add(
-                f"avatar:{ctx.author.id}",
+                f"avatar:{ctx.author.id}:{ctx.author.name}",
                 _avatar_url(ctx.author),
             )
 
@@ -1676,51 +1676,22 @@ class Utility(Remind):
                 continue
             any_ok = True
             if kind.startswith("avatar:"):
-                uid = kind.split(":", 1)[1]
-                title = f"[**dominant colors for <@{uid}>'s avatar**]({url})"
+                parts = kind.split(":", 2)
+                uname = parts[2] if len(parts) > 2 else parts[1]
+                label = f"{uname}'s avatar"
+                title = f"[**dominant colors for {label}**]({url}" + chr(10) + ")"
             elif kind == "url":
                 if sum(1 for k, _ in sources if k == "url") == 1:
-                    title = f"[**dominant colors for this url**]({url})"
+                    title = f"[**dominant colors for this url**]({url}" + chr(10) + ")"
                 else:
                     url_n = sum(1 for k, _ in sources[:idx] if k == "url")
-                    title = f"[**dominant colors for URL #{url_n}**]({url})"
+                    title = f"[**dominant colors for URL #{url_n}**]({url}" + chr(10) + ")"
             elif kind == "this attachment":
-                title = f"[**dominant colors for this attachment**]({url})"
+                title = f"[**dominant colors for this attachment**]({url}" + chr(10) + ")"
             else:
-                title = f"[**dominant colors for {kind}**]({url})"
+                title = f"[**dominant colors for {kind}**]({url}" + chr(10) + ")"
             color_bits = " ".join(f"`{c}`" for c in colors)
-            blocks.append(f"-# {title}:\n{color_bits}")
-
-        if not any_ok:
-            if any(k.startswith("avatar:") for k, _ in sources):
-                return await ctx.warn(
-                    "Could not read **avatar** color data\n"
-                    "> -# the avatar may be unavailable — try again in a moment"
-                )
-            return await ctx.warn(
-                "Attachments or URLs **must** be **GIFs** or **Images**"
-            )
-
-        from discord import ui as _ui
-        from core.discord.ctx import layout_from_items
-
-        container = _ui.Container()
-        for attr in ("accent_color", "accent_colour"):
-            if hasattr(container, attr):
-                try:
-                    setattr(container, attr, None)
-                except Exception:
-                    pass
-        container.add_item(_ui.TextDisplay("\n\n".join(blocks)))
-        view = layout_from_items([container], timeout=None)
-        await ctx.send(view=view, allowed_mentions=discord.AllowedMentions.none())
+            blocks.append(f"-# {title}:
+{color_bits}")
 
 
-async def setup(bot: commands.Bot):
-    from .events import SnipeEvents
-
-    await bot.add_cog(Snipe(bot))
-    await bot.add_cog(Utility(bot))
-
-    if bot.get_cog("SnipeEvents") is None:
-        await bot.add_cog(SnipeEvents(bot))
