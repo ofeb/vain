@@ -160,11 +160,16 @@ class InformationCommands(Package):
         latency = round(bot.latency * 1000)
         uptime = discord.utils.format_dt(bot.started_at, style="R")
         shard_count = bot.shard_count or 1
-        created = (
-            discord.utils.format_dt(bot.user.created_at, style="F")
-            if bot.user and bot.user.created_at
-            else "Unknown"
-        )
+        if bot.user and bot.user.created_at:
+            _dt = bot.user.created_at
+            _day = _dt.day
+            if 11 <= _day <= 13:
+                _suf = "th"
+            else:
+                _suf = {1: "st", 2: "nd", 3: "rd"}.get(_day % 10, "th")
+            created = _dt.strftime(f"%A, {_day}{_suf} %B %Y")
+        else:
+            created = "Unknown"
 
         try:
             dom_color = await get_bot_dominant_color(bot)
