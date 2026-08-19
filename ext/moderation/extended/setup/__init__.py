@@ -116,23 +116,21 @@ class SetupView(ui.LayoutView):
         self.clear_items()
         container = ui.Container()
         _clear_accent(container)
-        container.add_item(ui.TextDisplay("**Server setup**"))
+        container.add_item(ui.TextDisplay("**vain setup**"))
         container.add_item(
-            ui.TextDisplay(
-                f"-# default prefix · `{self.prefix}` · guild owner only · expires in 5m"
-            )
+            ui.TextDisplay(f"-# default prefix: `{self.prefix}`")
         )
         _sep(container)
         body = (
-            f"-# `1.` move my role to the **top** of the hierarchy\n"
-            f"-# `2.` grant me **Administrator** so every module can configure\n"
-            f"-# `3.` press **setup vain** to install the modules below\n\n"
-            f"-# · **voicemaster** — join-to-create voice + interface\n"
-            f"-# · **jail** — jailed role + isolated channel\n"
-            f"-# · **image muted** / **reaction muted** roles\n"
-            f"-# · **logging** — shared `#logs` for mod + security events\n"
-            f"-# · **antinuke** — recommended protection defaults\n"
-            f"-# · **antiraid** — join protection when available"
+            f"> -# `1.` move my role to the **top** of the hierarchy\n"
+            f"> -# `2.` grant me **Administrator** so every module can configure\n"
+            f"> -# `3.` press **setup vain** to install the modules below\n\n"
+            f"> -# · **voicemaster** - join-to-create voice + interface\n"
+            f"> -# · **jail** - jailed role + isolated `#jail` channel\n"
+            f"> -# · **image muted** / **reaction muted** roles\n"
+            f"> -# · **logging** - `#antinuke-logs` · `#antiraid-logs` · `#jail-logs` · `#modlogs` · `#logs`\n"
+            f"> -# · **antinuke** - recommended protection\n"
+            f"> -# · **antiraid** - join protection when available"
         )
         container.add_item(ui.TextDisplay(body))
         row = ui.ActionRow()
@@ -162,7 +160,7 @@ class SetupView(ui.LayoutView):
         self.clear_items()
         container = ui.Container()
         _clear_accent(container)
-        container.add_item(ui.TextDisplay("**Setup complete**"))
+        container.add_item(ui.TextDisplay("**setup complete**"))
         container.add_item(
             ui.TextDisplay(
                 f"-# modules configured · rename channels or roles anytime · prefix `{self.prefix}`"
@@ -170,23 +168,23 @@ class SetupView(ui.LayoutView):
         )
         _sep(container)
         notes = self._notes or [
-            "voicemaster",
-            "jail",
-            "image muted / reaction muted",
-            "logging",
-            "antinuke",
-            "antiraid",
+            "**voicemaster**",
+            "**jail**",
+            "**image muted** / **reaction muted**",
+            "**logging**",
+            "**antinuke**",
+            "**antiraid**",
         ]
-        lines = [f"-# `{i}.` {n}" for i, n in enumerate(notes, start=1)]
+        lines = [f"> -# `{i}.` {n}" for i, n in enumerate(notes, start=1)]
         lines.append("")
         lines.append(
-            f"-# fine-tune with `{self.prefix}antinuke setup` · `{self.prefix}antiraid setup`"
+            f"> -# fine-tune with `{self.prefix}antinuke setup` · `{self.prefix}antiraid setup`"
         )
         lines.append(
-            f"-# design embeds with **embedbuilder** · **containerbuilder**"
+            f"> -# design embeds with **embedbuilder** · **containerbuilder**"
         )
         lines.append(
-            f"-# run `{self.prefix}unsetup` to revert all configurations done by {BOT_NAME}"
+            f"> -# run `{self.prefix}unsetup` to revert all configurations done by {BOT_NAME}"
         )
         container.add_item(ui.TextDisplay(chr(10).join(lines)))
         row = ui.ActionRow()
@@ -216,11 +214,11 @@ class SetupView(ui.LayoutView):
         self.clear_items()
         container = ui.Container()
         _clear_accent(container)
-        container.add_item(ui.TextDisplay("**Setup reverted**"))
+        container.add_item(ui.TextDisplay("**setup reverted**"))
         container.add_item(
             ui.TextDisplay(
-                f"-# channels and roles from automatic setup were removed\n"
-                f"-# press the button or run `{self.prefix}setup` again to set {BOT_NAME} up in this server"
+                f"> -# channels and roles from automatic setup were removed\n"
+                f"> -# press the button or run `{self.prefix}setup` again to set {BOT_NAME} up in this server"
             )
         )
         row = ui.ActionRow()
@@ -240,20 +238,20 @@ class SetupView(ui.LayoutView):
         container.add_item(ui.TextDisplay("**you were too late!**"))
         container.add_item(
             ui.TextDisplay(
-                f"-# this setup panel expired after **5 minutes**\n"
-                f"-# run `{self.prefix}setup` to set {BOT_NAME} up in this guild"
+                f"> -# this setup panel expired after **5 minutes**\n"
+                f"> -# run `{self.prefix}setup` to set {BOT_NAME} up in this guild"
             )
         )
         self.add_item(container)
 
     def _build_expired_done(self) -> None:
-        """Thank-you panel after 5m — same content, revert button removed."""
+        """Thank-you panel after 5m - same content, revert button removed."""
         self._phase = "expired"
         self._cancel_expire()
         self.clear_items()
         container = ui.Container()
         _clear_accent(container)
-        container.add_item(ui.TextDisplay("**Setup complete**"))
+        container.add_item(ui.TextDisplay("**setup complete**"))
         container.add_item(
             ui.TextDisplay(
                 f"-# modules configured · rename channels or roles anytime · prefix `{self.prefix}`"
@@ -261,39 +259,39 @@ class SetupView(ui.LayoutView):
         )
         _sep(container)
         notes = self._notes or [
-            "voicemaster",
-            "jail",
-            "image muted / reaction muted",
-            "logging",
-            "antinuke",
-            "antiraid",
+            "**voicemaster**",
+            "**jail**",
+            "**image muted** / **reaction muted**",
+            "**logging**",
+            "**antinuke**",
+            "**antiraid**",
         ]
-        lines = [f"-# `{i}.` {n}" for i, n in enumerate(notes, start=1)]
+        lines = [f"> -# `{i}.` {n}" for i, n in enumerate(notes, start=1)]
         lines.append("")
         lines.append(
-            f"-# fine-tune with `{self.prefix}antinuke setup` · `{self.prefix}antiraid setup`"
+            f"> -# fine-tune with `{self.prefix}antinuke setup` · `{self.prefix}antiraid setup`"
         )
         lines.append(
-            f"-# design embeds with **embedbuilder** · **containerbuilder**"
+            f"> -# design embeds with **embedbuilder** · **containerbuilder**"
         )
         lines.append(
-            f"-# run `{self.prefix}unsetup` to revert all configurations done by {BOT_NAME}"
+            f"> -# run `{self.prefix}unsetup` to revert all configurations done by {BOT_NAME}"
         )
         container.add_item(ui.TextDisplay(chr(10).join(lines)))
         self.add_item(container)
 
     def _build_expired_reverted(self) -> None:
-        """Reverted panel after 5m — setup button removed."""
+        """Reverted panel after 5m - setup button removed."""
         self._phase = "expired"
         self._cancel_expire()
         self.clear_items()
         container = ui.Container()
         _clear_accent(container)
-        container.add_item(ui.TextDisplay("**Setup reverted**"))
+        container.add_item(ui.TextDisplay("**setup reverted**"))
         container.add_item(
             ui.TextDisplay(
-                f"-# channels and roles from automatic setup were removed\n"
-                f"-# run `{self.prefix}setup` to configure {BOT_NAME} in this guild"
+                f"> -# channels and roles from automatic setup were removed\n"
+                f"> -# run `{self.prefix}setup` to configure {BOT_NAME} in this guild"
             )
         )
         self.add_item(container)
@@ -304,7 +302,7 @@ class SetupView(ui.LayoutView):
         self.clear_items()
         container = ui.Container()
         _clear_accent(container)
-        container.add_item(ui.TextDisplay("**Setup failed**"))
+        container.add_item(ui.TextDisplay("**setup failed**"))
         container.add_item(
             ui.TextDisplay(
                 f"> -# `{error}`\n"
@@ -519,10 +517,35 @@ class SetupView(ui.LayoutView):
                 overwrites_logs[role] = discord.PermissionOverwrite(view_channel=True)
 
         logs_cat = await self._ensure_category("logs", overwrites_logs)
-        log_ch = await self._ensure_text(
+        # Order: antinuke-logs, antiraid-logs, jail-logs, modlogs, logs
+        antinuke_logs = await self._ensure_text(
+            "antinuke-logs",
+            logs_cat,
+            topic="Antinuke events",
+            overwrites=overwrites_logs,
+        )
+        antiraid_logs = await self._ensure_text(
+            "antiraid-logs",
+            logs_cat,
+            topic="Antiraid events",
+            overwrites=overwrites_logs,
+        )
+        jail_logs = await self._ensure_text(
+            "jail-logs",
+            logs_cat,
+            topic="Jail events",
+            overwrites=overwrites_logs,
+        )
+        modlogs = await self._ensure_text(
+            "modlogs",
+            logs_cat,
+            topic="Moderation cases",
+            overwrites=overwrites_logs,
+        )
+        all_logs = await self._ensure_text(
             "logs",
             logs_cat,
-            topic="All server logs",
+            topic="All server events",
             overwrites=overwrites_logs,
         )
         with contextlib.suppress(Exception):
@@ -531,13 +554,13 @@ class SetupView(ui.LayoutView):
                    VALUES ($1, $2)
                    ON CONFLICT (guild_id) DO UPDATE SET channel_id = $2""",
                 guild.id,
-                log_ch.id,
+                modlogs.id,
             )
         with contextlib.suppress(Exception):
             await self.bot.db.set_security_log_channels(
                 guild.id,
-                antinuke_channel_id=log_ch.id,
-                antiraid_channel_id=log_ch.id,
+                antinuke_channel_id=antinuke_logs.id,
+                antiraid_channel_id=antiraid_logs.id,
             )
         with contextlib.suppress(Exception):
             await self.bot.db.execute(
@@ -545,9 +568,21 @@ class SetupView(ui.LayoutView):
                    VALUES ($1, $2)
                    ON CONFLICT (guild_id) DO UPDATE SET channel_id = $2""",
                 guild.id,
-                log_ch.id,
+                all_logs.id,
             )
-        self._notes.append(f"logging → {log_ch.mention}")
+        # Best-effort: store jail-logs id if a column exists
+        with contextlib.suppress(Exception):
+            await self.bot.db.execute(
+                """UPDATE server_settings
+                   SET jail_log_channel_id = $2
+                   WHERE guild_id = $1""",
+                guild.id,
+                jail_logs.id,
+            )
+        self._notes.append(
+            f"**logging** - {antinuke_logs.mention} · {antiraid_logs.mention} · "
+            f"{jail_logs.mention} · {modlogs.mention} · {all_logs.mention}"
+        )
 
         jail_role = await self._ensure_role("Jailed")
         overwrites_jail = {
@@ -568,8 +603,8 @@ class SetupView(ui.LayoutView):
                 )
 
         jail_cat = await self._ensure_category("jail", overwrites_jail)
-        jailed_ch = await self._ensure_text(
-            "jailed",
+        jail_ch = await self._ensure_text(
+            "jail",
             jail_cat,
             topic="Jail channel",
             overwrites=overwrites_jail,
@@ -581,7 +616,7 @@ class SetupView(ui.LayoutView):
                    ON CONFLICT (guild_id) DO UPDATE
                    SET jail_channel_id = $2, jail_role_id = $3""",
                 guild.id,
-                jailed_ch.id,
+                jail_ch.id,
                 jail_role.id,
             )
         for channel in list(guild.channels):
@@ -599,7 +634,7 @@ class SetupView(ui.LayoutView):
                     connect=False,
                     reason=reason,
                 )
-        self._notes.append(f"jail → {jail_role.mention} · {jailed_ch.mention}")
+        self._notes.append(f"**jail** - {jail_role.mention} · {jail_ch.mention}")
 
         imuted = await self._ensure_role("Image Muted")
         rmuted = await self._ensure_role("Reaction Muted")
@@ -628,7 +663,7 @@ class SetupView(ui.LayoutView):
                     reason=reason,
                 )
         self._notes.append(
-            f"image muted · reaction muted → {imuted.mention} · {rmuted.mention}"
+            f"**image muted** · **reaction muted** - {imuted.mention} · {rmuted.mention}"
         )
 
         try:
@@ -664,12 +699,12 @@ class SetupView(ui.LayoutView):
                             view=VoiceInterface(cog),
                         )
                 self._notes.append(
-                    f"voicemaster → {vm_cat.name} · {interface.mention} · {join_vc.mention}"
+                    f"**voicemaster** - {vm_cat.name} · {interface.mention} · {join_vc.mention}"
                 )
             else:
-                self._notes.append("voicemaster → already configured")
+                self._notes.append("**voicemaster** - already configured")
         except Exception as e:
-            self._notes.append(f"voicemaster → skipped (`{str(e)[:60]}`)")
+            self._notes.append(f"**voicemaster** - skipped (`{str(e)[:60]}`)")
 
         try:
             cog = self.bot.get_cog("Antinuke") or self.bot.get_cog("Security")
@@ -688,11 +723,11 @@ class SetupView(ui.LayoutView):
                     await cog._commit_module(guild.id, module, {**payload, "status": True})
                 if hasattr(cog, "_load_config"):
                     await cog._load_config(guild.id)
-                self._notes.append("antinuke → recommended defaults enabled")
+                self._notes.append("**antinuke** - recommended protection enabled")
             else:
-                self._notes.append("antinuke → module unavailable")
+                self._notes.append("**antinuke** - module unavailable")
         except Exception as e:
-            self._notes.append(f"antinuke → skipped (`{str(e)[:60]}`)")
+            self._notes.append(f"**antinuke** - skipped (`{str(e)[:60]}`)")
 
         try:
             cog = self.bot.get_cog("Antiraid") or self.bot.get_cog("Security")
@@ -705,10 +740,12 @@ class SetupView(ui.LayoutView):
                     await cog._enable_antiraid(guild.id)
                     done = True
             self._notes.append(
-                "antiraid → enabled" if done else "antiraid → configure with antiraid setup"
+                "**antiraid** - enabled"
+                if done
+                else f"**antiraid** - configure with `{self.prefix}antiraid setup`"
             )
         except Exception as e:
-            self._notes.append(f"antiraid → skipped (`{str(e)[:60]}`)")
+            self._notes.append(f"**antiraid** - skipped (`{str(e)[:60]}`)")
 
     async def _run_revert(self) -> None:
         guild = self.guild
