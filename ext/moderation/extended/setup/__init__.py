@@ -22,82 +22,24 @@ def _clear_accent(container: ui.Container) -> None:
                 setattr(container, attr, None)
 
 
-def build_setup_intro(*, prefix: str = ",") -> ui.LayoutView:
-    body = (
-        f"> -# {BOT_NAME.title()}'s default prefix is set to `{prefix}`\n"
-        f"> -# This prefix can be changed by using `{prefix}prefix set {{prefix}}`\n"
-        f"> -# Move my role as high as possible in your role list\n"
-        f"> -# Make sure my role has **Administrator** permissions\n"
-        f"> -# Click **Automatic Setup** to configure the following:\n"
-        f"> -# - VoiceMaster\n"
-        f"> -# - jail configuration\n"
-        f"> -# - mute roles\n"
-        f"> -# - logging\n"
-        f"> -# - antinuke\n"
-        f"> -# - antiraid"
-    )
-    container = ui.Container()
-    _clear_accent(container)
-    container.add_item(ui.TextDisplay(f"**{BOT_NAME} setup**"))
+def _sep(container: ui.Container) -> None:
     try:
         container.add_item(ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small))
     except Exception:
-        try:
+        with contextlib.suppress(Exception):
             container.add_item(ui.Separator(visible=True))
-        except Exception:
-            pass
-    container.add_item(ui.TextDisplay(body))
-    return layout_from_items([container], timeout=None)
 
 
-def build_setup_loading() -> ui.LayoutView:
+def _layout(*text_blocks: str, button: ui.Button | None = None) -> ui.LayoutView:
     container = ui.Container()
     _clear_accent(container)
-    container.add_item(
-        ui.TextDisplay(
-            f"{LOADING} Setting up **{BOT_NAME}**...\n"
-            f"> -# Configuring VoiceMaster, logs, jail, mute roles, antinuke and antiraid"
-        )
-    )
-    return layout_from_items([container], timeout=None)
-
-
-def build_setup_done(*, prefix: str = ",") -> ui.LayoutView:
-    body = (
-        f"Thank you for setting up **{BOT_NAME}**\n"
-        f"> -# Feel free to move around and change any of the channels, categories or role names\n"
-        f"> -# Use `{prefix}antinuke setup` and `{prefix}antiraid setup` to fine-tune protection\n"
-        f"> -# Use `{prefix}prefix set` to change the guild prefix anytime\n"
-        f"> -# Use **embedbuilder** and **containerbuilder** to design your own embeds and containers"
-    )
-    container = ui.Container()
-    _clear_accent(container)
-    container.add_item(ui.TextDisplay(body))
-    return layout_from_items([container], timeout=None)
-
-
-def build_setup_reverting() -> ui.LayoutView:
-    container = ui.Container()
-    _clear_accent(container)
-    container.add_item(
-        ui.TextDisplay(
-            f"{LOADING} **Reverting changes**...\n"
-            f"> -# Removing setup channels, categories and related configuration"
-        )
-    )
-    return layout_from_items([container], timeout=None)
-
-
-def build_setup_reverted(*, prefix: str = ",") -> ui.LayoutView:
-    container = ui.Container()
-    _clear_accent(container)
-    container.add_item(
-        ui.TextDisplay(
-            f"**Setup reverted**\n"
-            f"> -# Categories and channels created by automatic setup were removed\n"
-            f"> -# Run `{prefix}setup` anytime to configure again"
-        )
-    )
+    for block in text_blocks:
+        if block:
+            container.add_item(ui.TextDisplay(block))
+    if button is not None:
+        row = ui.ActionRow()
+        row.add_item(button)
+        container.add_item(row)
     return layout_from_items([container], timeout=None)
 
 
@@ -120,34 +62,34 @@ class SetupView(ui.LayoutView):
         self.prefix = prefix
         self.message = message
         self._created: list[tuple[str, int]] = []
+        self._notes: list[str] = []
         self._build_intro()
 
     def _build_intro(self) -> None:
         self.clear_items()
-        body = (
-            f"> -# {BOT_NAME.title()}'s default prefix is set to `{self.prefix}`\n"
-            f"> -# This prefix can be changed by using `{self.prefix}prefix set {{prefix}}`\n"
-            f"> -# Move my role as high as possible in your role list\n"
-            f"> -# Make sure my role has **Administrator** permissions\n"
-            f"> -# Click **Automatic Setup** to configure the following:\n"
-            f"> -# - VoiceMaster\n"
-            f"> -# - jail configuration\n"
-            f"> -# - mute roles\n"
-            f"> -# - logging\n"
-            f"> -# - antinuke\n"
-            f"> -# - antiraid"
-        )
         container = ui.Container()
         _clear_accent(container)
-        container.add_item(ui.TextDisplay(f"**{BOT_NAME} setup**"))
-        try:
-            container.add_item(ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small))
-        except Exception:
-            with contextlib.suppress(Exception):
-                container.add_item(ui.Separator(visible=True))
+        container.add_item(ui.TextDisplay("**Server setup**"))
+        container.add_item(
+            ui.TextDisplay(
+                f"-# default prefix · `{self.prefix}` · run `{self.prefix}setup` anytime to reconfigure"
+            )
+        )
+        _sep(container)
+        body = (
+            f"-# `1.` move my role to the **top** of the hierarchy\n"
+            f"-# `2.` grant me **Administrator** so every module can configure\n"
+            f"-# `3.` press **run setup** to install the modules below\n\n"
+            f"-# · **voicemaster** — join-to-create voice + interface\n"
+            f"-# · **jail** — jailed role + isolated channel\n"
+            f"-# · **image muted** / **reaction muted** roles\n"
+            f"-# · **logging** — shared `#logs` for mod + security events\n"
+            f"-# · **antinuke** — recommended protection defaults\n"
+            f"-# · **antiraid** — join protection when available"
+        )
         container.add_item(ui.TextDisplay(body))
         row = ui.ActionRow()
-        btn = ui.Button(label="Automatic Setup", style=discord.ButtonStyle.primary)
+        btn = ui.Button(label="run setup", style=discord.ButtonStyle.primary)
         btn.callback = self._on_automatic
         row.add_item(btn)
         container.add_item(row)
@@ -159,26 +101,42 @@ class SetupView(ui.LayoutView):
         _clear_accent(container)
         container.add_item(
             ui.TextDisplay(
-                f"{LOADING} Setting up **{BOT_NAME}**...\n"
-                f"> -# Configuring VoiceMaster, logs, jail, mute roles, antinuke and antiraid"
+                f"{LOADING} **setting up {BOT_NAME}**\n"
+                f"> -# voicemaster · jail · image/reaction mute · logs · antinuke · antiraid"
             )
         )
         self.add_item(container)
 
     def _build_done(self) -> None:
         self.clear_items()
-        body = (
-            f"Thank you for setting up **{BOT_NAME}**\n"
-            f"> -# Feel free to move around and change any of the channels, categories or role names\n"
-            f"> -# Use `{self.prefix}antinuke setup` and `{self.prefix}antiraid setup` to fine-tune protection\n"
-            f"> -# Use `{self.prefix}prefix set` to change the guild prefix anytime\n"
-            f"> -# Use **embedbuilder** and **containerbuilder** to design your own embeds and containers"
-        )
         container = ui.Container()
         _clear_accent(container)
-        container.add_item(ui.TextDisplay(body))
+        container.add_item(ui.TextDisplay("**Setup complete**"))
+        container.add_item(
+            ui.TextDisplay(
+                f"-# modules configured · rename channels or roles anytime · prefix `{self.prefix}`"
+            )
+        )
+        _sep(container)
+        notes = self._notes or [
+            "voicemaster",
+            "jail",
+            "image muted / reaction muted",
+            "logging",
+            "antinuke",
+            "antiraid",
+        ]
+        lines = [f"-# `{i}.` {n}" for i, n in enumerate(notes, start=1)]
+        lines.append("")
+        lines.append(
+            f"-# fine-tune with `{self.prefix}antinuke setup` · `{self.prefix}antiraid setup`"
+        )
+        lines.append(
+            f"-# design embeds with **embedbuilder** · **containerbuilder**"
+        )
+        container.add_item(ui.TextDisplay(chr(10).join(lines)))
         row = ui.ActionRow()
-        btn = ui.Button(label="Revert changes", style=discord.ButtonStyle.primary)
+        btn = ui.Button(label="revert changes", style=discord.ButtonStyle.primary)
         btn.callback = self._on_revert
         row.add_item(btn)
         container.add_item(row)
@@ -190,8 +148,8 @@ class SetupView(ui.LayoutView):
         _clear_accent(container)
         container.add_item(
             ui.TextDisplay(
-                f"{LOADING} **Reverting changes**...\n"
-                f"> -# Removing setup channels, categories and related configuration"
+                f"{LOADING} **reverting setup**\n"
+                f"> -# removing categories · channels · roles created by automatic setup"
             )
         )
         self.add_item(container)
@@ -200,11 +158,24 @@ class SetupView(ui.LayoutView):
         self.clear_items()
         container = ui.Container()
         _clear_accent(container)
+        container.add_item(ui.TextDisplay("**Setup reverted**"))
         container.add_item(
             ui.TextDisplay(
-                f"**Setup reverted**\n"
-                f"> -# Categories and channels created by automatic setup were removed\n"
-                f"> -# Run `{self.prefix}setup` anytime to configure again"
+                f"-# channels and roles from automatic setup were removed\n"
+                f"-# run `{self.prefix}setup` whenever you want to configure again"
+            )
+        )
+        self.add_item(container)
+
+    def _build_failed(self, error: str) -> None:
+        self.clear_items()
+        container = ui.Container()
+        _clear_accent(container)
+        container.add_item(ui.TextDisplay("**Setup failed**"))
+        container.add_item(
+            ui.TextDisplay(
+                f"> -# `{error}`\n"
+                f"> -# make sure my role is high and has **Administrator**, then try again"
             )
         )
         self.add_item(container)
@@ -235,20 +206,13 @@ class SetupView(ui.LayoutView):
                 await self.message.edit(view=self)
 
     async def _on_automatic(self, interaction: discord.Interaction) -> None:
+        self._notes = []
         self._build_loading()
         await self._edit(interaction)
         try:
             await self._run_setup()
         except Exception as e:
-            self.clear_items()
-            container = ui.Container()
-            _clear_accent(container)
-            container.add_item(
-                ui.TextDisplay(
-                    f"**Setup failed**\n> -# `{e}`\n> -# Fix permissions and try again"
-                )
-            )
-            self.add_item(container)
+            self._build_failed(str(e)[:180])
             await self._edit()
             return
         self._build_done()
@@ -260,48 +224,107 @@ class SetupView(ui.LayoutView):
         try:
             await self._run_revert()
         except Exception as e:
-            self.clear_items()
-            container = ui.Container()
-            _clear_accent(container)
-            container.add_item(
-                ui.TextDisplay(f"**Revert failed**\n> -# `{e}`")
-            )
-            self.add_item(container)
+            self._build_failed(str(e)[:180])
             await self._edit()
             return
         self._build_reverted()
         await self._edit()
 
+    async def _ensure_role(self, name: str, *, colour: discord.Colour | None = None) -> discord.Role:
+        role = discord.utils.get(self.guild.roles, name=name)
+        if role is not None:
+            return role
+        role = await self.guild.create_role(
+            name=name,
+            colour=colour or discord.Colour.dark_grey(),
+            permissions=discord.Permissions.none(),
+            reason=f"{BOT_NAME} automatic setup",
+        )
+        self._created.append(("role", role.id))
+        return role
+
+    async def _ensure_category(
+        self,
+        name: str,
+        overwrites: dict | None = None,
+    ) -> discord.CategoryChannel:
+        cat = discord.utils.get(self.guild.categories, name=name)
+        if cat is not None:
+            if overwrites:
+                with contextlib.suppress(Exception):
+                    await cat.edit(overwrites=overwrites)
+            return cat
+        cat = await self.guild.create_category(
+            name,
+            overwrites=overwrites or {},
+            reason=f"{BOT_NAME} automatic setup",
+        )
+        self._created.append(("category", cat.id))
+        return cat
+
+    async def _ensure_text(
+        self,
+        name: str,
+        category: discord.CategoryChannel,
+        *,
+        topic: str = "",
+        overwrites: dict | None = None,
+    ) -> discord.TextChannel:
+        ch = discord.utils.get(category.text_channels, name=name)
+        if ch is not None:
+            if overwrites:
+                with contextlib.suppress(Exception):
+                    await ch.edit(overwrites=overwrites)
+            return ch
+        ch = await category.create_text_channel(
+            name,
+            topic=topic or None,
+            overwrites=overwrites or {},
+            reason=f"{BOT_NAME} automatic setup",
+        )
+        self._created.append(("channel", ch.id))
+        return ch
+
+    async def _ensure_voice(
+        self,
+        name: str,
+        category: discord.CategoryChannel,
+    ) -> discord.VoiceChannel:
+        ch = discord.utils.get(category.voice_channels, name=name)
+        if ch is not None:
+            return ch
+        ch = await category.create_voice_channel(
+            name,
+            reason=f"{BOT_NAME} automatic setup",
+        )
+        self._created.append(("channel", ch.id))
+        return ch
+
     async def _run_setup(self) -> None:
         guild = self.guild
-        me = guild.me
+        me = guild.me or guild.get_member(self.bot.user.id)
         if me is None:
-            me = guild.get_member(self.bot.user.id)
+            raise RuntimeError("bot member not found in this guild")
         reason = f"{BOT_NAME} automatic setup"
 
-        
+        # ── logging ──────────────────────────────────────────────
         overwrites_logs = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
-            me: discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_messages=True),
+            me: discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, manage_messages=True
+            ),
         }
         for role in guild.roles:
             if role.permissions.administrator:
                 overwrites_logs[role] = discord.PermissionOverwrite(view_channel=True)
 
-        logs_cat = discord.utils.get(guild.categories, name="logs")
-        if logs_cat is None:
-            logs_cat = await guild.create_category("logs", overwrites=overwrites_logs, reason=reason)
-            self._created.append(("category", logs_cat.id))
-        else:
-            with contextlib.suppress(Exception):
-                await logs_cat.edit(overwrites=overwrites_logs)
-
-        log_ch = discord.utils.get(logs_cat.text_channels, name="logs")
-        if log_ch is None:
-            log_ch = await logs_cat.create_text_channel("logs", topic="All server logs", reason=reason)
-            self._created.append(("channel", log_ch.id))
-
-        
+        logs_cat = await self._ensure_category("logs", overwrites_logs)
+        log_ch = await self._ensure_text(
+            "logs",
+            logs_cat,
+            topic="All server logs",
+            overwrites=overwrites_logs,
+        )
         with contextlib.suppress(Exception):
             await self.bot.db.execute(
                 """INSERT INTO modlog_config (guild_id, channel_id)
@@ -316,48 +339,42 @@ class SetupView(ui.LayoutView):
                 antinuke_channel_id=log_ch.id,
                 antiraid_channel_id=log_ch.id,
             )
-        
         with contextlib.suppress(Exception):
             await self.bot.db.execute(
-                """
-                INSERT INTO log_channels (guild_id, channel_id)
-                VALUES ($1, $2)
-                ON CONFLICT (guild_id) DO UPDATE SET channel_id = $2
-                """,
+                """INSERT INTO log_channels (guild_id, channel_id)
+                   VALUES ($1, $2)
+                   ON CONFLICT (guild_id) DO UPDATE SET channel_id = $2""",
                 guild.id,
                 log_ch.id,
             )
+        self._notes.append(f"logging → {log_ch.mention}")
 
-        
-        jail_role = discord.utils.get(guild.roles, name="Jailed")
-        if jail_role is None:
-            jail_role = await guild.create_role(
-                name="Jailed",
-                colour=discord.Colour.dark_grey(),
-                reason=reason,
-            )
-            self._created.append(("role", jail_role.id))
-
+        # ── jail ─────────────────────────────────────────────────
+        jail_role = await self._ensure_role("Jailed")
         overwrites_jail = {
-            guild.default_role: discord.PermissionOverwrite(view_channel=False, send_messages=False),
-            me: discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_messages=True),
-            jail_role: discord.PermissionOverwrite(view_channel=True, send_messages=True),
+            guild.default_role: discord.PermissionOverwrite(
+                view_channel=False, send_messages=False
+            ),
+            me: discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, manage_messages=True
+            ),
+            jail_role: discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, read_message_history=True
+            ),
         }
         for role in guild.roles:
             if role.permissions.administrator:
-                overwrites_jail[role] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
+                overwrites_jail[role] = discord.PermissionOverwrite(
+                    view_channel=True, send_messages=True
+                )
 
-        jail_cat = discord.utils.get(guild.categories, name="jail")
-        if jail_cat is None:
-            jail_cat = await guild.create_category("jail", overwrites=overwrites_jail, reason=reason)
-            self._created.append(("category", jail_cat.id))
-        jailed_ch = discord.utils.get(jail_cat.text_channels, name="jailed")
-        if jailed_ch is None:
-            jailed_ch = await jail_cat.create_text_channel("jailed", reason=reason)
-            self._created.append(("channel", jailed_ch.id))
-        with contextlib.suppress(Exception):
-            await jailed_ch.edit(overwrites=overwrites_jail)
-
+        jail_cat = await self._ensure_category("jail", overwrites_jail)
+        jailed_ch = await self._ensure_text(
+            "jailed",
+            jail_cat,
+            topic="Jail channel",
+            overwrites=overwrites_jail,
+        )
         with contextlib.suppress(Exception):
             await self.bot.db.execute(
                 """INSERT INTO server_settings (guild_id, jail_channel_id, jail_role_id)
@@ -368,62 +385,62 @@ class SetupView(ui.LayoutView):
                 jailed_ch.id,
                 jail_role.id,
             )
+        for channel in list(guild.channels):
+            if not isinstance(
+                channel, (discord.TextChannel, discord.VoiceChannel, discord.ForumChannel)
+            ):
+                continue
+            if channel.category_id == jail_cat.id:
+                continue
+            with contextlib.suppress(Exception):
+                await channel.set_permissions(
+                    jail_role,
+                    view_channel=False,
+                    send_messages=False,
+                    connect=False,
+                    reason=reason,
+                )
+        self._notes.append(f"jail → {jail_role.mention} · {jailed_ch.mention}")
 
-        
-        for channel in guild.channels:
-            if isinstance(channel, (discord.TextChannel, discord.VoiceChannel, discord.ForumChannel)):
-                if channel.category_id == jail_cat.id:
-                    continue
-                with contextlib.suppress(Exception):
-                    await channel.set_permissions(
-                        jail_role,
-                        view_channel=False,
-                        send_messages=False,
-                        connect=False,
-                        reason=reason,
-                    )
-
-        
-        mute_role = discord.utils.get(guild.roles, name="Muted")
-        if mute_role is None:
-            mute_role = await guild.create_role(
-                name="Muted",
-                colour=discord.Colour.dark_grey(),
-                reason=reason,
-            )
-            self._created.append(("role", mute_role.id))
+        # ── image / reaction mute (no generic Muted role) ───────
+        imuted = await self._ensure_role("Image Muted")
+        rmuted = await self._ensure_role("Reaction Muted")
         with contextlib.suppress(Exception):
             await self.bot.db.execute(
-                """INSERT INTO server_settings (guild_id, mute_role_id)
-                   VALUES ($1, $2)
-                   ON CONFLICT (guild_id) DO UPDATE SET mute_role_id = $2""",
+                """INSERT INTO server_settings (guild_id, imuted_role_id, rmuted_role_id)
+                   VALUES ($1, $2, $3)
+                   ON CONFLICT (guild_id) DO UPDATE
+                   SET imuted_role_id = $2, rmuted_role_id = $3""",
                 guild.id,
-                mute_role.id,
+                imuted.id,
+                rmuted.id,
             )
-        for channel in guild.channels:
-            if isinstance(channel, (discord.TextChannel, discord.VoiceChannel, discord.ForumChannel)):
-                with contextlib.suppress(Exception):
-                    await channel.set_permissions(
-                        mute_role,
-                        send_messages=False,
-                        add_reactions=False,
-                        speak=False,
-                        reason=reason,
-                    )
-
-        
-        with contextlib.suppress(Exception):
-            from ext.server.extended.voicemaster.settings import VoiceMasterSettings
-            exists = False
+        for channel in list(guild.text_channels):
             with contextlib.suppress(Exception):
-                exists = await VoiceMasterSettings.exists(self.bot, guild)
+                await channel.set_permissions(
+                    imuted,
+                    attach_files=False,
+                    embed_links=False,
+                    reason=reason,
+                )
+            with contextlib.suppress(Exception):
+                await channel.set_permissions(
+                    rmuted,
+                    add_reactions=False,
+                    reason=reason,
+                )
+        self._notes.append(f"image muted · reaction muted → {imuted.mention} · {rmuted.mention}")
+
+        # ── voicemaster ──────────────────────────────────────────
+        vm_ok = False
+        try:
+            from ext.server.extended.voicemaster.settings import Settings as VMSettings
+
+            exists = await VMSettings.exists(self.bot, guild)
             if not exists:
-                vm_cat = await guild.create_category("Voice Channels", reason=reason)
-                self._created.append(("category", vm_cat.id))
-                interface = await vm_cat.create_text_channel("interface", reason=reason)
-                self._created.append(("channel", interface.id))
-                join_vc = await vm_cat.create_voice_channel("Join to Create", reason=reason)
-                self._created.append(("channel", join_vc.id))
+                vm_cat = await self._ensure_category("Voice Channels")
+                interface = await self._ensure_text("interface", vm_cat)
+                join_vc = await self._ensure_voice("Join to Create", vm_cat)
                 everyone = guild.default_role
                 with contextlib.suppress(Exception):
                     await interface.set_permissions(
@@ -433,24 +450,32 @@ class SetupView(ui.LayoutView):
                         create_public_threads=False,
                         create_private_threads=False,
                     )
-                settings = await VoiceMasterSettings.fetch(self.bot, guild)
+                settings = await VMSettings.fetch(self.bot, guild)
                 await settings.upsert(
                     category_id=vm_cat.id,
                     interface_id=interface.id,
                     channel_id=join_vc.id,
                 )
-                
                 cog = self.bot.get_cog("VoiceMaster") or self.bot.get_cog("Voicemaster")
                 if cog is not None and hasattr(cog, "_interface_embed"):
                     with contextlib.suppress(Exception):
                         from ext.server.extended.voicemaster import VoiceInterface
+
                         await interface.send(
                             embed=cog._interface_embed(guild),
                             view=VoiceInterface(cog),
                         )
+                self._notes.append(
+                    f"voicemaster → {vm_cat.name} · {interface.mention} · {join_vc.mention}"
+                )
+            else:
+                self._notes.append("voicemaster → already configured")
+            vm_ok = True
+        except Exception as e:
+            self._notes.append(f"voicemaster → skipped (`{str(e)[:60]}`)")
 
-        
-        with contextlib.suppress(Exception):
+        # ── antinuke ─────────────────────────────────────────────
+        try:
             cog = self.bot.get_cog("Antinuke") or self.bot.get_cog("Security")
             if cog is not None and hasattr(cog, "_commit_module"):
                 defaults = {
@@ -467,20 +492,36 @@ class SetupView(ui.LayoutView):
                     await cog._commit_module(guild.id, module, {**payload, "status": True})
                 if hasattr(cog, "_load_config"):
                     await cog._load_config(guild.id)
+                self._notes.append("antinuke → recommended defaults enabled")
+            else:
+                self._notes.append("antinuke → module unavailable")
+        except Exception as e:
+            self._notes.append(f"antinuke → skipped (`{str(e)[:60]}`)")
 
-        
-        with contextlib.suppress(Exception):
+        # ── antiraid ─────────────────────────────────────────────
+        try:
             cog = self.bot.get_cog("Antiraid") or self.bot.get_cog("Security")
+            done = False
             if cog is not None:
                 if hasattr(cog, "enable_antiraid_defaults"):
                     await cog.enable_antiraid_defaults(guild.id)
+                    done = True
                 elif hasattr(cog, "_enable_antiraid"):
                     await cog._enable_antiraid(guild.id)
+                    done = True
+            self._notes.append(
+                "antiraid → enabled" if done else "antiraid → configure with antiraid setup"
+            )
+        except Exception as e:
+            self._notes.append(f"antiraid → skipped (`{str(e)[:60]}`)")
+
+        if not vm_ok:
+            pass
 
     async def _run_revert(self) -> None:
         guild = self.guild
         reason = f"{BOT_NAME} setup revert"
-        
+
         for kind, oid in reversed(self._created):
             try:
                 if kind == "channel":
@@ -500,6 +541,7 @@ class SetupView(ui.LayoutView):
                         await role.delete(reason=reason)
             except Exception:
                 continue
+
         for cat_name in ("logs", "jail", "Voice Channels"):
             cat = discord.utils.get(guild.categories, name=cat_name)
             if cat:
@@ -508,14 +550,27 @@ class SetupView(ui.LayoutView):
                         await ch.delete(reason=reason)
                 with contextlib.suppress(Exception):
                     await cat.delete(reason=reason)
-        for role_name in ("Jailed", "Muted"):
+
+        for role_name in ("Jailed", "Muted", "Image Muted", "Reaction Muted"):
             role = discord.utils.get(guild.roles, name=role_name)
             if role:
                 with contextlib.suppress(Exception):
                     await role.delete(reason=reason)
+
         with contextlib.suppress(Exception):
-            await self.bot.db.execute("DELETE FROM modlog_config WHERE guild_id = $1", guild.id)
+            await self.bot.db.execute(
+                "DELETE FROM modlog_config WHERE guild_id = $1", guild.id
+            )
         with contextlib.suppress(Exception):
-            from ext.server.extended.voicemaster.settings import VoiceMasterSettings
-            settings = await VoiceMasterSettings.fetch(self.bot, guild)
+            await self.bot.db.execute(
+                """UPDATE server_settings
+                   SET jail_channel_id = NULL, jail_role_id = NULL,
+                       muted_role_id = NULL, imuted_role_id = NULL, rmuted_role_id = NULL
+                   WHERE guild_id = $1""",
+                guild.id,
+            )
+        with contextlib.suppress(Exception):
+            from ext.server.extended.voicemaster.settings import Settings as VMSettings
+
+            settings = await VMSettings.fetch(self.bot, guild)
             await settings.delete()
