@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import contextlib
-from typing import TYPE_CHECKING
+import time
+from typing import TYPE_CHECKING, Literal
 
 import discord
 from discord import ui
@@ -13,6 +14,10 @@ if TYPE_CHECKING:
 
 LOADING = "<a:loading:1534646618693963807>"
 BOT_NAME = "vain"
+SETUP_TIMEOUT = 300
+SETUP_COOLDOWN = 120
+
+_setup_cooldown: dict[int, float] = {}
 
 
 def _clear_accent(container: ui.Container) -> None:
@@ -30,17 +35,20 @@ def _sep(container: ui.Container) -> None:
             container.add_item(ui.Separator(visible=True))
 
 
-def _layout(*text_blocks: str, button: ui.Button | None = None) -> ui.LayoutView:
-    container = ui.Container()
-    _clear_accent(container)
-    for block in text_blocks:
-        if block:
-            container.add_item(ui.TextDisplay(block))
-    if button is not None:
-        row = ui.ActionRow()
-        row.add_item(button)
-        container.add_item(row)
-    return layout_from_items([container], timeout=None)
+def setup_on_cooldown(guild_id: int) -> float | None:
+    """Return remaining cooldown seconds, or None if ready."""
+    until = _setup_cooldown.get(guild_id)
+    if until is None:
+        return None
+    left = until - time.monotonic()
+    if left <= 0:
+        _setup_cooldown.pop(guild_id, None)
+        return None
+    return left
+
+
+def mark_setup_cooldown(guild_id: int) -> None:
+    _setup_cooldown[guild_id] = time.monotonic() + SETUP_COOLDOWN
 
 
 class SetupView(ui.LayoutView):
@@ -55,7 +63,7 @@ class SetupView(ui.LayoutView):
         prefix: str = ",",
         message: discord.Message | None = None,
     ) -> None:
-        super().__init__(timeout=600)
+        super().__init__(timeout=SETUP_TIMEOUT)
         self.bot = bot
         self.guild = guild
         self.author_id = author_id
@@ -63,23 +71,27 @@ class SetupView(ui.LayoutView):
         self.message = message
         self._created: list[tuple[str, int]] = []
         self._notes: list[str] = []
+        self._phase: Literal[
+            "intro", "loading", "done", "reverting", "reverted", "expired", "failed"
+        ] = "intro"
         self._build_intro()
 
     def _build_intro(self) -> None:
+        self._phase = "intro"
         self.clear_items()
         container = ui.Container()
         _clear_accent(container)
         container.add_item(ui.TextDisplay("**Server setup**"))
         container.add_item(
             ui.TextDisplay(
-                f"-# default prefix · `{self.prefix}` · run `{self.prefix}setup` anytime to reconfigure"
+                f"-# default prefix · `{self.prefix}` · guild owner only · expires in 5m"
             )
         )
         _sep(container)
         body = (
             f"-# `1.` move my role to the **top** of the hierarchy\n"
             f"-# `2.` grant me **Administrator** so every module can configure\n"
-            f"-# `3.` press **run setup** to install the modules below\n\n"
+            f"-# `3.` press **setup vain** to install the modules below\n\n"
             f"-# · **voicemaster** — join-to-create voice + interface\n"
             f"-# · **jail** — jailed role + isolated channel\n"
             f"-# · **image muted** / **reaction muted** roles\n"
@@ -89,13 +101,14 @@ class SetupView(ui.LayoutView):
         )
         container.add_item(ui.TextDisplay(body))
         row = ui.ActionRow()
-        btn = ui.Button(label="run setup", style=discord.ButtonStyle.primary)
-        btn.callback = self._on_automatic
+        btn = ui.Button(label="setup vain", style=discord.ButtonStyle.primary)
+        btn.callback = self._on_setup
         row.add_item(btn)
         container.add_item(row)
         self.add_item(container)
 
     def _build_loading(self) -> None:
+        self._phase = "loading"
         self.clear_items()
         container = ui.Container()
         _clear_accent(container)
@@ -108,6 +121,7 @@ class SetupView(ui.LayoutView):
         self.add_item(container)
 
     def _build_done(self) -> None:
+        self._phase = "done"
         self.clear_items()
         container = ui.Container()
         _clear_accent(container)
@@ -134,27 +148,32 @@ class SetupView(ui.LayoutView):
         lines.append(
             f"-# design embeds with **embedbuilder** · **containerbuilder**"
         )
+        lines.append(
+            f"-# run `{self.prefix}unsetup` to revert all configurations done by {BOT_NAME}"
+        )
         container.add_item(ui.TextDisplay(chr(10).join(lines)))
         row = ui.ActionRow()
-        btn = ui.Button(label="revert changes", style=discord.ButtonStyle.primary)
+        btn = ui.Button(label="revert", style=discord.ButtonStyle.primary)
         btn.callback = self._on_revert
         row.add_item(btn)
         container.add_item(row)
         self.add_item(container)
 
     def _build_reverting(self) -> None:
+        self._phase = "reverting"
         self.clear_items()
         container = ui.Container()
         _clear_accent(container)
         container.add_item(
             ui.TextDisplay(
                 f"{LOADING} **reverting setup**\n"
-                f"> -# removing categories · channels · roles created by automatic setup"
+                f"> -# removing categories · channels · roles created by setup"
             )
         )
         self.add_item(container)
 
     def _build_reverted(self) -> None:
+        self._phase = "reverted"
         self.clear_items()
         container = ui.Container()
         _clear_accent(container)
@@ -162,12 +181,80 @@ class SetupView(ui.LayoutView):
         container.add_item(
             ui.TextDisplay(
                 f"-# channels and roles from automatic setup were removed\n"
-                f"-# run `{self.prefix}setup` whenever you want to configure again"
+                f"-# press **setup** or run `{self.prefix}setup` to set {BOT_NAME} up in this server"
+            )
+        )
+        row = ui.ActionRow()
+        btn = ui.Button(label="setup", style=discord.ButtonStyle.primary)
+        btn.callback = self._on_setup_again
+        row.add_item(btn)
+        container.add_item(row)
+        self.add_item(container)
+
+    def _build_expired_intro(self) -> None:
+        self._phase = "expired"
+        self.clear_items()
+        container = ui.Container()
+        _clear_accent(container)
+        container.add_item(ui.TextDisplay("**you were too late!**"))
+        container.add_item(
+            ui.TextDisplay(
+                f"-# this setup panel expired after **5 minutes**\n"
+                f"-# run `{self.prefix}setup` to set {BOT_NAME} up in this guild"
+            )
+        )
+        self.add_item(container)
+
+    def _build_expired_done(self) -> None:
+        self._phase = "expired"
+        self.clear_items()
+        container = ui.Container()
+        _clear_accent(container)
+        container.add_item(ui.TextDisplay("**Setup complete**"))
+        container.add_item(
+            ui.TextDisplay(
+                f"-# modules configured · rename channels or roles anytime · prefix `{self.prefix}`"
+            )
+        )
+        _sep(container)
+        notes = self._notes or [
+            "voicemaster",
+            "jail",
+            "image muted / reaction muted",
+            "logging",
+            "antinuke",
+            "antiraid",
+        ]
+        lines = [f"-# `{i}.` {n}" for i, n in enumerate(notes, start=1)]
+        lines.append("")
+        lines.append(
+            f"-# fine-tune with `{self.prefix}antinuke setup` · `{self.prefix}antiraid setup`"
+        )
+        lines.append(
+            f"-# design embeds with **embedbuilder** · **containerbuilder**"
+        )
+        lines.append(
+            f"-# run `{self.prefix}unsetup` to revert all configurations done by {BOT_NAME}"
+        )
+        container.add_item(ui.TextDisplay(chr(10).join(lines)))
+        self.add_item(container)
+
+    def _build_expired_reverted(self) -> None:
+        self._phase = "expired"
+        self.clear_items()
+        container = ui.Container()
+        _clear_accent(container)
+        container.add_item(ui.TextDisplay("**Setup reverted**"))
+        container.add_item(
+            ui.TextDisplay(
+                f"-# channels and roles from automatic setup were removed\n"
+                f"-# run `{self.prefix}setup` to configure {BOT_NAME} in this guild"
             )
         )
         self.add_item(container)
 
     def _build_failed(self, error: str) -> None:
+        self._phase = "failed"
         self.clear_items()
         container = ui.Container()
         _clear_accent(container)
@@ -180,20 +267,38 @@ class SetupView(ui.LayoutView):
         )
         self.add_item(container)
 
+    async def on_timeout(self) -> None:
+        if self._phase == "intro":
+            self._build_expired_intro()
+        elif self._phase == "done":
+            self._build_expired_done()
+        elif self._phase == "reverted":
+            self._build_expired_reverted()
+        else:
+            return
+        if self.message is not None:
+            with contextlib.suppress(Exception):
+                await self.message.edit(view=self)
+
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if self.author_id is None:
+        if interaction.guild is None:
+            return False
+        owner_id = interaction.guild.owner_id
+        if interaction.user and interaction.user.id == owner_id:
             return True
-        if interaction.user and interaction.user.id == self.author_id:
-            return True
-        if interaction.user and interaction.guild:
-            member = interaction.guild.get_member(interaction.user.id)
-            if member and member.guild_permissions.administrator:
-                return True
         with contextlib.suppress(Exception):
-            await interaction.response.send_message(
-                "Only an **administrator** can use this setup.",
-                ephemeral=True,
-            )
+            if not interaction.response.is_done():
+                await interaction.response.send_message(
+                    "You are **missing** the permission to **setup** vain\n"
+                    "> -# **Permission Needed: Guild Owner**",
+                    ephemeral=True,
+                )
+            else:
+                await interaction.followup.send(
+                    "You are **missing** the permission to **setup** vain\n"
+                    "> -# **Permission Needed: Guild Owner**",
+                    ephemeral=True,
+                )
         return False
 
     async def _edit(self, interaction: discord.Interaction | None = None) -> None:
@@ -205,7 +310,29 @@ class SetupView(ui.LayoutView):
             with contextlib.suppress(Exception):
                 await self.message.edit(view=self)
 
-    async def _on_automatic(self, interaction: discord.Interaction) -> None:
+    async def _check_cooldown(self, interaction: discord.Interaction) -> bool:
+        left = setup_on_cooldown(self.guild.id)
+        if left is None:
+            return True
+        mins = int(left // 60)
+        secs = int(left % 60)
+        wait = f"{mins}m {secs}s" if mins else f"{secs}s"
+        with contextlib.suppress(Exception):
+            if not interaction.response.is_done():
+                await interaction.response.send_message(
+                    f"Setup is on cooldown\n> -# **try again in** `{wait}`",
+                    ephemeral=True,
+                )
+            else:
+                await interaction.followup.send(
+                    f"Setup is on cooldown\n> -# **try again in** `{wait}`",
+                    ephemeral=True,
+                )
+        return False
+
+    async def _on_setup(self, interaction: discord.Interaction) -> None:
+        if not await self._check_cooldown(interaction):
+            return
         self._notes = []
         self._build_loading()
         await self._edit(interaction)
@@ -215,10 +342,30 @@ class SetupView(ui.LayoutView):
             self._build_failed(str(e)[:180])
             await self._edit()
             return
+        mark_setup_cooldown(self.guild.id)
+        self._build_done()
+        await self._edit()
+
+    async def _on_setup_again(self, interaction: discord.Interaction) -> None:
+        if not await self._check_cooldown(interaction):
+            return
+        self._created = []
+        self._notes = []
+        self._build_loading()
+        await self._edit(interaction)
+        try:
+            await self._run_setup()
+        except Exception as e:
+            self._build_failed(str(e)[:180])
+            await self._edit()
+            return
+        mark_setup_cooldown(self.guild.id)
         self._build_done()
         await self._edit()
 
     async def _on_revert(self, interaction: discord.Interaction) -> None:
+        if not await self._check_cooldown(interaction):
+            return
         self._build_reverting()
         await self._edit(interaction)
         try:
@@ -227,6 +374,7 @@ class SetupView(ui.LayoutView):
             self._build_failed(str(e)[:180])
             await self._edit()
             return
+        mark_setup_cooldown(self.guild.id)
         self._build_reverted()
         await self._edit()
 
@@ -307,7 +455,6 @@ class SetupView(ui.LayoutView):
             raise RuntimeError("bot member not found in this guild")
         reason = f"{BOT_NAME} automatic setup"
 
-        # ── logging ──────────────────────────────────────────────
         overwrites_logs = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
             me: discord.PermissionOverwrite(
@@ -349,7 +496,6 @@ class SetupView(ui.LayoutView):
             )
         self._notes.append(f"logging → {log_ch.mention}")
 
-        # ── jail ─────────────────────────────────────────────────
         jail_role = await self._ensure_role("Jailed")
         overwrites_jail = {
             guild.default_role: discord.PermissionOverwrite(
@@ -402,7 +548,6 @@ class SetupView(ui.LayoutView):
                 )
         self._notes.append(f"jail → {jail_role.mention} · {jailed_ch.mention}")
 
-        # ── image / reaction mute (no generic Muted role) ───────
         imuted = await self._ensure_role("Image Muted")
         rmuted = await self._ensure_role("Reaction Muted")
         with contextlib.suppress(Exception):
@@ -429,10 +574,10 @@ class SetupView(ui.LayoutView):
                     add_reactions=False,
                     reason=reason,
                 )
-        self._notes.append(f"image muted · reaction muted → {imuted.mention} · {rmuted.mention}")
+        self._notes.append(
+            f"image muted · reaction muted → {imuted.mention} · {rmuted.mention}"
+        )
 
-        # ── voicemaster ──────────────────────────────────────────
-        vm_ok = False
         try:
             from ext.server.extended.voicemaster.settings import Settings as VMSettings
 
@@ -470,11 +615,9 @@ class SetupView(ui.LayoutView):
                 )
             else:
                 self._notes.append("voicemaster → already configured")
-            vm_ok = True
         except Exception as e:
             self._notes.append(f"voicemaster → skipped (`{str(e)[:60]}`)")
 
-        # ── antinuke ─────────────────────────────────────────────
         try:
             cog = self.bot.get_cog("Antinuke") or self.bot.get_cog("Security")
             if cog is not None and hasattr(cog, "_commit_module"):
@@ -498,7 +641,6 @@ class SetupView(ui.LayoutView):
         except Exception as e:
             self._notes.append(f"antinuke → skipped (`{str(e)[:60]}`)")
 
-        # ── antiraid ─────────────────────────────────────────────
         try:
             cog = self.bot.get_cog("Antiraid") or self.bot.get_cog("Security")
             done = False
@@ -514,9 +656,6 @@ class SetupView(ui.LayoutView):
             )
         except Exception as e:
             self._notes.append(f"antiraid → skipped (`{str(e)[:60]}`)")
-
-        if not vm_ok:
-            pass
 
     async def _run_revert(self) -> None:
         guild = self.guild
