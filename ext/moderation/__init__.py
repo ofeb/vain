@@ -1343,7 +1343,7 @@ class ModerationCommands(Package):
         if not await self._ensure_targetable(ctx, member):
             return
 
-        seconds = parsed.duration_seconds or (60 * 60)
+        seconds = parsed.duration_seconds if parsed.duration_seconds is not None else (28 * 86400)
         if seconds < 60:
             return await ctx.warn("Please provide a **valid duration**\n> -# **minimum timeout is `60 seconds` (e.g. `5m`, `1h`, `1d`)**")
         if seconds > 28 * 86400:
