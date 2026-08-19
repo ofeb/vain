@@ -469,6 +469,24 @@ class ModerationCommands(Package):
 
         return "\n".join(lines)
 
+    async def _action_c2(self, ctx, message: str):
+        """Colorless C2 confirm for mod actions (jailed / banned / etc.)."""
+        from discord import ui as _ui
+        from core.discord.ctx import layout_from_items
+        import contextlib
+        text = (message or "").strip()
+        if not text:
+            return None
+        container = _ui.Container()
+        for attr in ("accent_color", "accent_colour", "color", "colour"):
+            if hasattr(container, attr):
+                with contextlib.suppress(Exception):
+                    setattr(container, attr, None)
+        container.add_item(_ui.TextDisplay(text))
+        view = layout_from_items([container], timeout=None)
+        return await ctx.send(view=view, allowed_mentions=discord.AllowedMentions.none())
+
+
     async def _build_case_embed(self, ctx, case_id: int) -> discord.Embed | None:
         if getattr(self.db, "pool", None) is None:
             return None
@@ -651,9 +669,7 @@ class ModerationCommands(Package):
             duration=duration_label,
         ):
             return
-        return await ctx.success(
-            f"Tempbanned **{target_display}** for {duration_label}\n> -# **reason:** {self._default_reason(reason)}"
-        )
+        return await self._action_c2(ctx, "Tempbanned **{target_display}** for {duration_label}\n> -# **reason:** {self._default_reason(reason)}")
 
     @group(
         name="tempban",
@@ -766,9 +782,7 @@ class ModerationCommands(Package):
         )
         if await self._invoke_response(ctx, "warn", user=member, reason=reason, case_id=case_id):
             return
-        return await ctx.success(
-            f"Warned **{member}**\n> -# **reason:** {self._default_reason(reason)}"
-        )
+        return await self._action_c2(ctx, "Warned **{member}**\n> -# **reason:** {self._default_reason(reason)}")
 
     @warn.group(
         name="invoke",
@@ -911,9 +925,7 @@ class ModerationCommands(Package):
         if not removed:
             return await ctx.warn(f"No dangerous roles\n> -# **{member.mention} has none to strip**")
 
-        return await ctx.success(
-            f"Stripped **{len(removed)}** dangerous roles from {member.mention}\n> -# **{', '.join(removed)}**"
-        )
+        return await self._action_c2(ctx, "Stripped **{len(removed)}** dangerous roles from {member.mention}\n> -# **{', '.join(removed)}**")
 
     @group(
         name="jail",
@@ -1009,9 +1021,7 @@ class ModerationCommands(Package):
 
         if await self._invoke_response(ctx, "jail", user=member, reason=reason, case_id=case_id):
             return
-        return await ctx.success(
-            f"Jailed **{member}** in {jail_channel.mention}\n> -# **reason:** {self._default_reason(reason)}"
-        )
+        return await self._action_c2(ctx, "Jailed **{member}** in {jail_channel.mention}\n> -# **reason:** {self._default_reason(reason)}")
 
     @jail.group(
         name="invoke",
@@ -1136,7 +1146,7 @@ class ModerationCommands(Package):
         )
         if await self._invoke_response(ctx, "unjail", user=member, reason=reason, case_id=case_id):
             return
-        return await ctx.success(f"Unjailed **{member}**\n> -# **reason:** {self._default_reason(reason)}")
+        return await self._action_c2(ctx, f"Unjailed **{member}**\n> -# **reason:** {self._default_reason(reason)}")
 
     @unjail.group(name="invoke", description="customize unjail messages", invoke_without_command=True)
     @has_permissions(manage_guild=True)
@@ -1377,9 +1387,7 @@ class ModerationCommands(Package):
             ctx, "timeout", user=member, reason=reason, case_id=case_id, duration=duration_label,
         ):
             return
-        return await ctx.success(
-            f"Timed out **{member}** for {duration_label}\n> -# **reason:** {self._default_reason(reason)}"
-        )
+        return await self._action_c2(ctx, "Timed out **{member}** for {duration_label}\n> -# **reason:** {self._default_reason(reason)}")
 
     @timeout.command(
         name="list",
@@ -1536,9 +1544,7 @@ class ModerationCommands(Package):
         )
         if await self._invoke_response(ctx, "untimeout", user=member, reason=reason, case_id=case_id):
             return
-        return await ctx.success(
-            f"Removed timeout for **{member}**\n> -# **reason:** {self._default_reason(reason)}"
-        )
+        return await self._action_c2(ctx, "Removed timeout for **{member}**\n> -# **reason:** {self._default_reason(reason)}")
 
     @untimeout.group(name="invoke", description="customize untimeout messages", invoke_without_command=True)
     @has_permissions(manage_guild=True)
@@ -1692,7 +1698,7 @@ class ModerationCommands(Package):
         if duration_label:
             parts.append(f"> -# **Duration: {duration_label}**")
         parts.append(f"> -# **Reason: {self._default_reason(reason)}**")
-        return await ctx.success("\n".join(parts))
+        return await self._action_c2(ctx, "\n".join(parts))
 
     async def _unmute_member(
         self,
@@ -2149,9 +2155,7 @@ class ModerationCommands(Package):
         )
         if await self._invoke_response(ctx, "hardban", user=target, reason=reason, case_id=case_id):
             return
-        return await ctx.success(
-            f"Hardbanned **{target}**\n> -# **reason:** {self._default_reason(reason)}"
-        )
+        return await self._action_c2(ctx, "Hardbanned **{target}**\n> -# **reason:** {self._default_reason(reason)}")
 
     @hardban.group(
         name="invoke",
@@ -2375,9 +2379,7 @@ class ModerationCommands(Package):
         )
         if await self._invoke_response(ctx, "unban", user=user, reason=reason, case_id=case_id):
             return
-        return await ctx.success(
-            f"Unbanned **{user}** - {self._default_reason(reason)}"
-        )
+        return await self._action_c2(ctx, "Unbanned **{user}** - {self._default_reason(reason)}")
 
     @unban.group(name="invoke", description="customize unban messages", invoke_without_command=True)
     @has_permissions(manage_guild=True)
@@ -2508,9 +2510,7 @@ class ModerationCommands(Package):
         )
         if await self._invoke_response(ctx, "softban", user=member, reason=reason, case_id=case_id):
             return
-        return await ctx.success(
-            f"Softbanned **{target_display}** - {self._default_reason(reason)}"
-        )
+        return await self._action_c2(ctx, "Softbanned **{target_display}** - {self._default_reason(reason)}")
 
     @softban.group(
         name="invoke",
@@ -2656,9 +2656,7 @@ class ModerationCommands(Package):
         if await self._invoke_response(ctx, "ban", user=target, reason=reason, case_id=case_id):
             return
         purge = f" (purged **{delete_days}d**)" if delete_days else ""
-        return await ctx.success(
-            f"Banned **{target_display}**{purge} - {self._default_reason(reason)}"
-        )
+        return await self._action_c2(ctx, "Banned **{target_display}**{purge} - {self._default_reason(reason)}")
 
     @ban.group(
         name="invoke",
@@ -2786,9 +2784,7 @@ class ModerationCommands(Package):
         )
         if await self._invoke_response(ctx, "kick", user=member, reason=reason, case_id=case_id):
             return
-        return await ctx.success(
-            f"Kicked **{target_display}** - {self._default_reason(reason)}"
-        )
+        return await self._action_c2(ctx, "Kicked **{target_display}** - {self._default_reason(reason)}")
 
     @kick.group(
         name="invoke",
@@ -2900,7 +2896,7 @@ class ModerationCommands(Package):
                 ctx, member, reason=reason, delete_days=0, action="ban", respond=False,
             ):
                 banned += 1
-        return await ctx.success(f"Banned **{banned}** recently joined member(s)")
+        return await self._action_c2(ctx, f"Banned **{banned}** recently joined member(s)")
 
     @command(
         name="ban purge",
@@ -2931,9 +2927,7 @@ class ModerationCommands(Package):
                 respond=False,
             ):
                 banned += 1
-        return await ctx.success(
-            f"Banned **{banned}** member(s) with **{delete_days}d** message purge"
-        )
+        return await self._action_c2(ctx, "Banned **{banned}** member(s) with **{delete_days}d** message purge")
 
     @command(
         name="temprole",
@@ -3044,7 +3038,7 @@ class ModerationCommands(Package):
                 ctx, member, reason=reason, action="ban", respond=False,
             ):
                 banned += 1
-        return await ctx.success(f"Banned **{banned}** recent member(s)")
+        return await self._action_c2(ctx, f"Banned **{banned}** recent member(s)")
 
     @command(
         name="talk",
