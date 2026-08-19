@@ -529,21 +529,19 @@ class Remind(Package):
                 continue
 
     async def _deliver_reminder(self, user: discord.abc.User, row) -> bool:
-        """Send the reminder DM. Returns True if delivered (or permanently undeliverable)."""
+        """Send the reminder as a C2 LayoutView (no embed color). Returns True if done."""
         msg = (row["message"] or "").strip() or "something"
         msg = _JUMP_RE.sub("", msg).strip()
-        jump = (row.get("jump_url") or "").strip() if hasattr(row, "get") else (row["jump_url"] or "").strip()
-        if isinstance(jump, str):
-            pass
-        else:
+        jump = row["jump_url"] or ""
+        if not isinstance(jump, str):
             jump = ""
+        jump = jump.strip()
 
         body = (
-            "**oi wake up**, I'm here to **remind** you to start your **chore**\n\n"
+            f"**oi wake up**, I'm here to **remind** you to start your **chore**\n\n"
             f"> -# **chore:** {msg}"
         )
 
-        
         try:
             from discord import ui as _ui
             from core.discord.ctx import layout_from_items
@@ -553,57 +551,44 @@ class Remind(Package):
                 if hasattr(container, _attr):
                     with contextlib.suppress(Exception):
                         setattr(container, _attr, None)
+
             container.add_item(_ui.TextDisplay(body))
-            items: list = [container]
             if jump.startswith("http"):
-                items.append(
-                    _ui.ActionRow(
-                        _ui.Button(
-                            label="When did I say this?",
-                            style=discord.ButtonStyle.link,
-                            url=jump,
+                try:
+                    container.add_item(
+                        _ui.ActionRow(
+                            _ui.Button(
+                                label="When did I say this?",
+                                style=discord.ButtonStyle.link,
+                                url=jump,
+                            )
                         )
                     )
-                )
-            layout = layout_from_items(items, timeout=None)
-            await user.send(content=user.mention, view=layout)
-            return True
-        except discord.Forbidden:
-            return True  
-        except Exception:
-            pass
+                except Exception:
+                    pass
 
-        try:
-            embed = c2(message=body, timestamp=False)
-            embed.color = None
-            kwargs = {"content": user.mention, "embed": embed}
-            if jump.startswith("http"):
-                view = discord.ui.View()
-                view.add_item(
-                    discord.ui.Button(
-                        label="When did I say this?",
-                        style=discord.ButtonStyle.link,
-                        url=jump,
-                    )
-                )
-                kwargs["view"] = view
-            await user.send(**kwargs)
-            return True
-        except discord.Forbidden:
-            return True
-        except Exception:
-            pass
+            layout = layout_from_items([container], timeout=None)
 
-        try:
-            text = f"{user.mention}\n{body}"
-            if jump.startswith("http"):
-                text += f"\n{jump}"
-            await user.send(text)
+            
+            with contextlib.suppress(Exception):
+                await user.send(content=user.mention)
+
+            await user.send(view=layout)
             return True
         except discord.Forbidden:
             return True
         except Exception:
-            return False
+            
+            try:
+                text = f"{user.mention}\n{body}"
+                if jump.startswith("http"):
+                    text += f"\n{jump}"
+                await user.send(text)
+                return True
+            except discord.Forbidden:
+                return True
+            except Exception:
+                return False
 
     @_remind_loop.before_loop
     async def _before_remind_loop(self) -> None:
