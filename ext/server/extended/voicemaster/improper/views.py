@@ -257,17 +257,17 @@ class VoiceInterface(ui.LayoutView):
         )
 
         controls = (
-            "### Voice Controls\n"
-            f"{VM['lock']} — **lock** the channel\n"
-            f"{VM['unlock']} — **unlock** the channel\n"
-            f"{VM['hide']} — **hide** the channel\n"
-            f"{VM['reveal']} — **reveal** the channel\n"
-            f"{VM['claim']} — **claim** the channel\n"
-            f"{VM['status']} — set the channel **status**\n"
-            f"{VM['disconnect']} — **disconnect** members\n"
-            f"{VM['limit']} — set the channel **limit**\n"
-            f"{VM['rename']} — **rename** the channel\n"
-            f"{VM['delete']} — **delete** the channel"
+            "### button usage\n"
+            f"> {VM['lock']} - **lock** the channel\n"
+            f"> {VM['unlock']} - **unlock** the channel\n"
+            f"> {VM['hide']} - **hide** the channel\n"
+            f"> {VM['reveal']} - **reveal** the channel\n"
+            f"> {VM['claim']} - **claim** the channel\n"
+            f"> {VM['status']} - set the channel **status**\n"
+            f"> {VM['disconnect']} - **disconnect** members\n"
+            f"> {VM['limit']} - set the channel **limit**\n"
+            f"> {VM['rename']} - **rename** the channel\n"
+            f"> {VM['delete']} - **delete** the channel"
         )
 
         if server_icon:
