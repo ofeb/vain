@@ -200,40 +200,79 @@ class LogEvents:
             return
         if await self._is_ignored(guild.id, channel.id):
             return
-        authors = {}
-        transcript = []
+
+        from datetime import timezone as _tz
+
+        authors: dict[int, discord.abc.User] = {}
+        ordered = sorted(
+            messages,
+            key=lambda m: m.created_at or discord.utils.utcnow(),
+        )
         uncached = 0
-        for msg in messages:
+        file_blocks: list[str] = []
+
+        for msg in ordered:
             author = msg.author
             if author is None:
                 uncached += 1
-                transcript.append(f"[unknown] (uncached {msg.id})")
+                file_blocks.append(f"[unknown] (id {msg.id})")
+                file_blocks.append("")
                 continue
-            text = (msg.content or "").strip()
-            if not text and msg.attachments:
-                text = f"[{len(msg.attachments)} attachment(s)]"
-            ts = msg.created_at.strftime("%Y-%m-%d %H:%M:%S") if msg.created_at else "?"
-            transcript.append(f"[{ts}] {author}: {text}")
+
             authors[author.id] = author
-        now = int(discord.utils.utcnow().timestamp())
+            text = (msg.content or "").strip() or "*empty*"
+            file_blocks.append(f"{author}: {text}")
+            att_urls = [a.url for a in (msg.attachments or []) if getattr(a, "url", None)]
+            if att_urls:
+                file_blocks.append("attachments: " + " ".join(att_urls))
+            file_blocks.append("")
+
+        now_dt = discord.utils.utcnow()
+        if now_dt.tzinfo is None:
+            now_dt = now_dt.replace(tzinfo=_tz.utc)
+        time_24 = now_dt.strftime("%H:%M")
+        day = now_dt.day
+        if 11 <= day <= 13:
+            suffix = "th"
+        else:
+            suffix = {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
+        date_str = now_dt.strftime(f"{day}{suffix} of %B, %Y")
+
+        ch_label = getattr(channel, "name", None) or str(getattr(channel, "id", "unknown"))
+        header = [
+            "vain logs",
+            f"in: #{ch_label}",
+            f"purged @ {time_24} UTC",
+            f"date: {date_str}",
+            "",
+            "---",
+            "",
+        ]
+        file_text = "\n".join(header + file_blocks).rstrip() + "\n"
+        file_content = file_text.encode("utf-8", errors="replace")
+
+        id_list = ", ".join(f"`{uid}`" for uid in authors.keys())
+        people = " ".join(a.mention for a in authors.values()) if authors else "*none resolved*"
+        ch_mention = channel.mention if hasattr(channel, "mention") else f"#{ch_label}"
+
         lines = [
-            _when_line(now),
-            f"-# **channel**: {channel.mention}",
+            _when_line(int(now_dt.timestamp())),
+            f"-# **channel**: {ch_mention}",
             f"-# **count**: `{len(messages)}` messages",
         ]
         if uncached:
             lines.append(f"-# **uncached**: `{uncached}`")
+        lines.append(f"-# **people**: {people}")
         if authors:
-            lines.append("-# **people**: " + " ".join(a.mention for a in authors.values()))
-            lines.append("-# **ids**: `" + ", ".join(str(i) for i in authors) + "`")
-        else:
-            lines.append("-# **people**: *none resolved*")
+            lines.append(f"-# **ids**: {id_list}")
+
         view = _log_container("Multiple messages deleted", lines)
-        file_content = ("\n".join(transcript)).encode("utf-8", errors="replace") if transcript else None
         await self._log(
-            guild.id, "messages", view,
+            guild.id,
+            "messages",
+            view,
             file_content=file_content,
-            file_name="multiple-deleted.txt" if file_content else None,
+            file_name="multiple-deleted.txt",
         )
 
 

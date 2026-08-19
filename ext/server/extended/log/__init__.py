@@ -240,26 +240,51 @@ class Log(LogEvents, Package):
                     except Exception:
                         pass
 
-            file_kw = {}
-            if file_content is not None and file_name:
-                file_kw["file"] = discord.File(io.BytesIO(file_content), filename=file_name)
-
             sent = False
             if channel is not None and hasattr(channel, "send"):
-                with contextlib.suppress(discord.HTTPException, discord.Forbidden, Exception):
-                    await channel.send(
-                        view=view,
-                        silent=True,
-                        allowed_mentions=discord.AllowedMentions.none(),
-                        **file_kw,
-                    )
-                    sent = True
+                if file_content is not None and file_name:
+                    try:
+                        await channel.send(
+                            view=view,
+                            file=discord.File(io.BytesIO(file_content), filename=file_name),
+                            silent=True,
+                            allowed_mentions=discord.AllowedMentions.none(),
+                        )
+                        sent = True
+                    except Exception:
+                        with contextlib.suppress(discord.HTTPException, discord.Forbidden, Exception):
+                            await channel.send(
+                                view=view,
+                                silent=True,
+                                allowed_mentions=discord.AllowedMentions.none(),
+                            )
+                            sent = True
+                        with contextlib.suppress(discord.HTTPException, discord.Forbidden, Exception):
+                            await channel.send(
+                                file=discord.File(io.BytesIO(file_content), filename=file_name),
+                                silent=True,
+                                allowed_mentions=discord.AllowedMentions.none(),
+                            )
+                else:
+                    with contextlib.suppress(discord.HTTPException, discord.Forbidden, Exception):
+                        await channel.send(
+                            view=view,
+                            silent=True,
+                            allowed_mentions=discord.AllowedMentions.none(),
+                        )
+                        sent = True
             if sent:
                 continue
 
-            
             embed = payload if isinstance(payload, discord.Embed) else None
             if embed is None:
+                if channel is not None and file_content is not None and file_name:
+                    with contextlib.suppress(Exception):
+                        await channel.send(
+                            file=discord.File(io.BytesIO(file_content), filename=file_name),
+                            silent=True,
+                            allowed_mentions=discord.AllowedMentions.none(),
+                        )
                 continue
             embed.color = custom_color if custom_color is not None else None
             wh = await self._get_webhook(channel_id)
@@ -271,8 +296,10 @@ class Log(LogEvents, Package):
                         "silent": True,
                         "allowed_mentions": discord.AllowedMentions.none(),
                     }
-                    sk.update(file_kw)
+                    if file_content is not None and file_name:
+                        sk["file"] = discord.File(io.BytesIO(file_content), filename=file_name)
                     await wh.send(**sk)
+
 
 
     @group(
