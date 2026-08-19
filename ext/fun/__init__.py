@@ -13,7 +13,7 @@ from uwuipy import Uwuipy
 
 from core.discord.package import Package
 from core.discord.ctx import Context
-from core.discord.hybrid import hybrid, describe, linked_family
+from core.discord.hybrid import command, describe, hybrid, linked_family
 from core.discord.views.paginate import send_pages
 from config import color, emojis
 
@@ -93,7 +93,7 @@ class Fun(Package):
             return
         await send_pages(ctx, pages)
 
-    @hybrid(
+    @command(
         name="8ball",
         description="Ask the magic 8-ball a question",
     )
@@ -174,7 +174,7 @@ class Fun(Package):
         )
         await ctx.send(embed=embed)
 
-    @hybrid(
+    @command(
         name="choose",
         description="Choose from a list of options",
     )
@@ -211,12 +211,11 @@ class Fun(Package):
         )
         await ctx.send(embed=embed)
 
-    @hybrid(
+    @command(
         name="uwuify",
         description="Uwuify your text",
         aliases=["uwu"],
         example=",uwuify hello world",
-        **_CONTEXTS,
     )
     @describe(text="Text to uwuify")
     async def uwuify(self, ctx: Context, *, text: str) -> None:

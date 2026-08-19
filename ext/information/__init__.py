@@ -553,14 +553,14 @@ class InformationCommands(Package):
             await ctx.fail("Dictionary service is unavailable\n> -# **service:** dictionary")
 
     @hybrid(
-        name="urbandictionary",
+        name="urban",
         description="Get the definition of a word or slang from Urban Dictionary",
-        aliases=["ud", "urban"],
-        example=",urbandictionary chav",
+        aliases=["ud", "urbandictionary"],
+        example=",urban chav",
         **_CONTEXTS,
     )
     @describe(word="Word or slang to look up")
-    async def urbandictionary(self, ctx: Context, *, word: str) -> None:
+    async def urban(self, ctx: Context, *, word: str) -> None:
         try:
             async with aiohttp.ClientSession() as session:
                 results = await fetch_urban_dictionary(session, word)

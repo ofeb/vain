@@ -17,6 +17,7 @@ from discord.ext.commands import CommandError
 
 from core.discord.package import Package
 from core.discord.views.paginate import send_pages
+from core.tools.convert.member import resolve_user
 from core.tools.human.time import human_date
 from core.discord.ctx import Context
 from core.discord.hybrid import group, command, describe
@@ -182,8 +183,9 @@ class Owner(Package):
             pass
 
     async def _resolve_user(self, argument: str) -> discord.User:
-        """resolve a user from mention, ID, or name"""
-        mention = argument.strip("<@!>")
+        """Resolve user from mention, ID, username, or display name."""
+        arg = (argument or "").strip()
+        mention = arg.strip("<@!>")
         if mention.isdigit():
             user = self.bot.get_user(int(mention))
             if user:
@@ -192,8 +194,28 @@ class Owner(Package):
                 return await self.bot.fetch_user(int(mention))
             except discord.NotFound:
                 raise CommandError(f"User `{argument}` not found")
+        q = arg.lstrip("@").lower()
+        matches = [
+            u for u in self.bot.users
+            if (u.name and u.name.lower() == q)
+            or (getattr(u, "global_name", None) and str(u.global_name).lower() == q)
+            or (u.display_name and u.display_name.lower() == q)
+        ]
+        if not matches:
+            matches = [
+                u for u in self.bot.users
+                if (u.name and q in u.name.lower())
+                or (getattr(u, "global_name", None) and q in str(u.global_name).lower())
+                or (u.display_name and q in u.display_name.lower())
+            ]
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            raise CommandError(
+                f"Multiple users match `{argument}` — use a mention or ID"
+            )
         raise CommandError(
-            f"Could not resolve `{argument}` as a user - use a mention or ID"
+            f"Could not resolve `{argument}` as a user — use a mention, ID, or username"
         )
 
     def _resolve_ext(self, name: str) -> str:
@@ -863,12 +885,10 @@ class Owner(Package):
                 lines.append(f"-# **reason**: {reason}")
                 nlist = notes_map.get(row["hash"]) or []
                 if nlist:
-                    for n in nlist:
-                        lines.append(f"-# **note** `#{n['id']}`: {(n['content'] or '')[:180]}")
+                    note_text = (nlist[-1]["content"] or "").strip() or "none"
+                    lines.append(f"-# **note**: {note_text[:200]}")
                 else:
-                    lines.append(
-                        f"-# **note**: unavailable *(add with `{ctx.prefix}devlogs notes add {row['hash']} <text>`)*"
-                    )
+                    lines.append("-# **note**: none")
                 if idx < len(chunk) - 1:
                     lines.append("\u200b")
             container.add_item(ui.TextDisplay("\n".join(lines)))
@@ -941,6 +961,10 @@ class Owner(Package):
                 return await ctx.warn("No history entry found for that user")
             history_hash = row["hash"]
 
+        await self.bot.db.execute(
+            "DELETE FROM blacklist_history_notes WHERE history_hash = $1",
+            history_hash,
+        )
         note_id = await self.bot.db.fetchval(
             """
             INSERT INTO blacklist_history_notes (history_hash, content, moderator_id)
@@ -952,7 +976,7 @@ class Owner(Package):
             ctx.author.id,
         )
         return await ctx.success(
-            f"Added note `#{note_id}` on history `{history_hash}`"
+            f"Set note on history `{history_hash}`"
         )
 
     @devlogs_notes.command(name="remove", aliases=["del", "delete", "rm"], description="Remove a history note")
