@@ -196,6 +196,9 @@ class Owner(Package):
             f"Could not resolve `{argument}` as a user - use a mention or ID"
         )
 
+    def _resolve_ext(self, name: str) -> str:
+        return self.bot._normalize_extension(name)
+
     @command(
         name="reload",
         description="Reload all or a specific extension",
@@ -203,44 +206,75 @@ class Owner(Package):
     )
     @describe(extension="Extension name to reload, or 'all'")
     async def reload(self, ctx: Context, *, extension: str = "all") -> None:
-        if extension == "all":
-            success = []
-            failed = []
-            for ext in list(self.bot.extensions.keys()):
-                try:
-                    await self.bot.reload_extension(ext)
+        raw = (extension or "all").strip()
+        if raw.lower() in ("all", "*", "~"):
+            before = set(self.bot.extensions.keys())
+            
+            ordered = sorted(before, key=lambda n: (n == "jishaku", n.startswith("ext.owner"), n))
+            success: list[str] = []
+            failed: list[tuple[str, str]] = []
+            for ext in ordered:
+                ok, err = await self.bot.safe_reload_extension(ext)
+                if ok:
                     success.append(ext)
-                except Exception as e:
-                    failed.append((ext, str(e)))
+                else:
+                    failed.append((ext, err or "unknown error"))
+
+            
+            missing = before - set(self.bot.extensions.keys())
+            recovered = []
+            for ext in sorted(missing):
+                ok, err = await self.bot.safe_reload_extension(ext)
+                if ok:
+                    recovered.append(ext)
+                else:
+                    failed.append((ext, err or "failed recovery"))
+
             msg = f"Reloaded **{len(success)}** extensions."
+            if recovered:
+                msg += f"\nRecovered **{len(recovered)}** after unload."
             if failed:
-                msg += f"\nFailed **{len(failed)}**: " + ", ".join(
-                    f"`{f[0]}` ({f[1]})" for f in failed[:3]
-                )
-            await ctx.success(msg)
-        else:
-            ext_name = f"ext.{extension}"
-            if ext_name not in self.bot.extensions:
-                await ctx.fail(f"Extension `{extension}` is not loaded.")
-                return
-            try:
-                await self.bot.reload_extension(ext_name)
-                await ctx.success(f"Reloaded `{extension}`")
-            except Exception as e:
-                await ctx.fail(f"Failed to reload `{extension}`: {e}")
+                detail = ", ".join(f"`{n}` ({e})" for n, e in failed[:5])
+                msg += f"\nFailed **{len(failed)}**: {detail}"
+            return await ctx.success(msg)
+
+        try:
+            ext_name = self._resolve_ext(raw)
+        except ValueError as e:
+            return await ctx.fail(str(e))
+
+        if ext_name not in self.bot.extensions and not ext_name.startswith("ext."):
+            return await ctx.fail(f"Extension `{raw}` is not loaded.")
+
+        ok, err = await self.bot.safe_reload_extension(ext_name)
+        if ok:
+            return await ctx.success(f"Reloaded `{ext_name}`")
+        
+        if ext_name not in self.bot.extensions:
+            ok2, err2 = await self.bot.safe_reload_extension(ext_name)
+            if ok2:
+                return await ctx.success(f"Reloaded `{ext_name}` (recovered)")
+            return await ctx.fail(f"Failed to reload `{ext_name}`\n> -# {err2 or err}")
+        return await ctx.fail(f"Failed to reload `{ext_name}`\n> -# {err}")
 
     @command(
         name="load",
-        description="Load a new extension",
+        description="Load an extension",
         aliases=["extload"],
     )
-    @describe(extension="Extension name to load")
+    @describe(extension="Extension name to load (e.g. utility or utility.extended.afk)")
     async def load(self, ctx: Context, *, extension: str) -> None:
         try:
-            await self.bot.load_extension(f"ext.{extension}")
-            await ctx.success(f"Loaded `{extension}`")
+            ext_name = self._resolve_ext(extension)
+        except ValueError as e:
+            return await ctx.fail(str(e))
+        if ext_name in self.bot.extensions:
+            return await ctx.warn(f"`{ext_name}` is already loaded")
+        try:
+            await self.bot.load_extension(ext_name)
+            return await ctx.success(f"Loaded `{ext_name}`")
         except Exception as e:
-            await ctx.fail(f"Failed to load `{extension}`: {e}")
+            return await ctx.fail(f"Failed to load `{ext_name}`\n> -# {type(e).__name__}: {e}")
 
     @command(
         name="unload",
@@ -250,10 +284,16 @@ class Owner(Package):
     @describe(extension="Extension name to unload")
     async def unload(self, ctx: Context, *, extension: str) -> None:
         try:
-            await self.bot.unload_extension(f"ext.{extension}")
-            await ctx.success(f"Unloaded `{extension}`")
+            ext_name = self._resolve_ext(extension)
+        except ValueError as e:
+            return await ctx.fail(str(e))
+        if ext_name not in self.bot.extensions:
+            return await ctx.warn(f"`{ext_name}` is not loaded")
+        try:
+            await self.bot.unload_extension(ext_name)
+            return await ctx.success(f"Unloaded `{ext_name}`")
         except Exception as e:
-            await ctx.fail(f"Failed to unload `{extension}`: {e}")
+            return await ctx.fail(f"Failed to unload `{ext_name}`\n> -# {type(e).__name__}: {e}")
 
     @command(
         name="sync",

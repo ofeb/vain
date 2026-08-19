@@ -442,6 +442,53 @@ class Vain(commands.AutoShardedBot):
             log.debug("extension load traceback for %s", ext_name, exc_info=True)
             return False
 
+    def _normalize_extension(self, name: str) -> str:
+        """Accept ``utility``, ``ext.utility``, or dotted subpaths."""
+        raw = (name or "").strip().strip("`").strip()
+        if not raw:
+            raise ValueError("missing extension name")
+        if raw in ("all", "*", "~"):
+            return raw
+        if raw.startswith("ext."):
+            return raw
+        if raw == "jishaku" or raw.startswith("jishaku."):
+            return raw
+        return f"ext.{raw}"
+
+    async def reload_extension(self, name: str, *, package: str | None = None) -> None:
+        """Reload an extension; if setup fails after unload, attempt recovery load."""
+        try:
+            await super().reload_extension(name, package=package)
+            return
+        except TypeError:
+            try:
+                await super().reload_extension(name)
+                return
+            except Exception as first:
+                err = first
+        except Exception as first:
+            err = first
+
+        if name in self.extensions:
+            raise err
+
+        try:
+            await super().load_extension(name)
+            log.warning("reload of %s failed (%s); recovered via load_extension", name, err)
+        except Exception as second:
+            raise err from second
+
+    async def safe_reload_extension(self, name: str) -> tuple[bool, str | None]:
+        try:
+            if name not in self.extensions:
+                await self.load_extension(name)
+                return True, None
+            await self.reload_extension(name)
+            return True, None
+        except Exception as e:
+            return False, f"{type(e).__name__}: {e}"
+
+
     async def _sync_global_commands(self) -> None:
         try:
             synced = await self.tree.sync()
