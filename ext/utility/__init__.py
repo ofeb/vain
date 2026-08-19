@@ -946,6 +946,7 @@ class Utility(Remind):
             with contextlib.suppress(Exception):
                 self.bot.tree.remove_command(menu.name, type=discord.AppCommandType.message)
         self._menus.clear()
+        await super().cog_unload()
 
     def _gemini(self) -> GeminiClient:
         return GeminiClient()
@@ -955,8 +956,6 @@ class Utility(Remind):
 
     def _transcriber(self) -> WhisperTranscribeClient:
         return WhisperTranscribeClient(self.bot)
-
-        await super().cog_unload()
 
     async def _transcribe_bytes(self, audio: bytes, *, mime_type: str = "audio/ogg") -> str:
         try:
