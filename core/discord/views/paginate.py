@@ -732,6 +732,10 @@ async def send_pages(
 
     if not needs_pagination(pages) and on_delete_page is None:
         page = pages[0]
+        if isinstance(page, ui.LayoutView):
+            if message is not None:
+                return await message.edit(view=page, embed=None, content=None)
+            return await ctx.send(view=page)
         if isinstance(page, ui.Container):
             layout = layout_from_items([page], timeout=timeout)
             if message is not None:
