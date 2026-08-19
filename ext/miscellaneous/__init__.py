@@ -168,8 +168,7 @@ class Miscellaneous(MiscellaneousEvents, Package):
 
     @command(
         name="randomhex",
-        description="generate a random hex (color
-    )",
+        description="generate a random hex color",
     )
     async def randomhex(self, ctx: Context) -> None:
         hex_val = f"{random.randint(0, 0xFFFFFF):06x}"
