@@ -96,76 +96,61 @@ DEFAULT_INVOKE_DM: dict[str, str] = {
 
 DEFAULT_INVOKE_RESPONSE: dict[str, str] = {
     "ban": (
-        "{embed}$v{description: > -# **Banned** {user.mention}\n"
-        "> **Reason:** {reason}}"
+        "{container}$v{description: > -# **Banned** {user.mention}\n"
+        "> -# **reason:** {reason}}"
     ),
     "kick": (
-        "{embed}$v{description: > -# **Kicked** {user.mention}\n"
-        "> **Reason:** {reason}}"
+        "{container}$v{description: > -# **Kicked** {user.mention}\n"
+        "> -# **reason:** {reason}}"
     ),
     "softban": (
-        "{embed}$v{description: > -# **Softbanned** {user.mention}\n"
-        "> **Reason:** {reason}}"
+        "{container}$v{description: > -# **Softbanned** {user.mention}\n"
+        "> -# **reason:** {reason}}"
     ),
     "tempban": (
-        "{embed}$v{description: > -# **Tempbanned** {user.mention}\n"
-        "> **Duration:** {duration}\n"
-        "> **Reason:** {reason}}"
+        "{container}$v{description: > -# **Tempbanned** {user.mention}\n"
+        "> -# **duration:** {duration}\n"
+        "> -# **reason:** {reason}}"
     ),
     "warn": (
-        "{embed}$v{description: > -# **Warned** {user.mention}\n"
-        "> **Reason:** {reason}}"
+        "{container}$v{description: > -# **Warned** {user.mention}\n"
+        "> -# **reason:** {reason}}"
     ),
     "jail": (
-        "{embed}$v{description: > -# **Jailed** {user.mention}\n"
-        "> **Reason:** {reason}}"
+        "{container}$v{description: > -# **Jailed** {user.mention}\n"
+        "> -# **reason:** {reason}}"
     ),
     "unjail": (
-        "{embed}$v{description: > -# **Unjailed** {user.mention}\n"
-        "> **Reason:** {reason}}"
+        "{container}$v{description: > -# **Unjailed** {user.mention}\n"
+        "> -# **reason:** {reason}}"
     ),
     "mute": (
-        "{embed}$v{description: > -# **Muted** {user.mention}\n"
-        "> **Reason:** {reason}}"
+        "{container}$v{description: > -# **Muted** {user.mention}\n"
+        "> -# **reason:** {reason}}"
     ),
     "unmute": (
-        "{embed}$v{description: > -# **Unmuted** {user.mention}\n"
-        "> **Reason:** {reason}}"
+        "{container}$v{description: > -# **Unmuted** {user.mention}\n"
+        "> -# **reason:** {reason}}"
     ),
     "timeout": (
-        "{embed}$v{description: > -# **Timed out** {user.mention}\n"
-        "> **Duration:** {duration}\n"
-        "> **Reason:** {reason}}"
+        "{container}$v{description: > -# **Timed out** {user.mention}\n"
+        "> -# **duration:** {duration}\n"
+        "> -# **reason:** {reason}}"
     ),
     "untimeout": (
-        "{embed}$v{description: > -# **Timeout removed** {user.mention}\n"
-        "> **Reason:** {reason}}"
+        "{container}$v{description: > -# **Timeout removed** {user.mention}\n"
+        "> -# **reason:** {reason}}"
     ),
     "unban": (
-        "{embed}$v{description: > -# **Unbanned** {user.mention}\n"
-        "> **Reason:** {reason}}"
+        "{container}$v{description: > -# **Unbanned** {user.mention}\n"
+        "> -# **reason:** {reason}}"
     ),
     "hardban": (
-        "{embed}$v{description: > -# **Hardbanned** {user.mention}\n"
-        "> **Reason:** {reason}}"
-    ),
-    "imute": (
-        "{embed}$v{description: > -# **Image muted** {user.mention}\n"
-        "> **Reason:** {reason}}"
-    ),
-    "iunmute": (
-        "{embed}$v{description: > -# **Image unmuted** {user.mention}\n"
-        "> **Reason:** {reason}}"
-    ),
-    "rmute": (
-        "{embed}$v{description: > -# **Reaction muted** {user.mention}\n"
-        "> **Reason:** {reason}}"
-    ),
-    "runmute": (
-        "{embed}$v{description: > -# **Reaction unmuted** {user.mention}\n"
-        "> **Reason:** {reason}}"
+        "{container}$v{description: > -# **Hardbanned** {user.mention}\n"
+        "> -# **reason:** {reason}}"
     ),
 }
+
 
 
 def build_modlog_embed(

@@ -81,36 +81,57 @@ class AliasCommands(Package):
     @has_permissions(manage_guild=True)
     async def alias_list(self, ctx):
         """list all server aliases"""
+        from discord import ui as _ui
+        from core.discord.ctx import layout_from_items
+        from core.discord.views.embed import body as _body
+
         entries = await self.db.fetch(
             """SELECT alias, command_name FROM aliases WHERE guild_id = $1 ORDER BY alias ASC""",
             ctx.guild.id,
         )
         if not entries:
             return await ctx.warn("No aliases have been added")
-        from discord import ui as _ui
-        from core.discord.ctx import layout_from_items
+        
+        seen = set()
+        clean = []
+        for e in entries:
+            alias = str(e["alias"] if hasattr(e, "keys") else e[0]).strip().rstrip(",")
+            cmd = str(e["command_name"] if hasattr(e, "keys") else e[1]).strip()
+            key = alias.lower()
+            if not alias or key in seen:
+                continue
+            seen.add(key)
+            clean.append((alias, cmd))
+        if not clean:
+            return await ctx.warn("No aliases have been added")
 
         pages = []
         chunk = 10
-        total = len(entries)
+        total = len(clean)
         page_count = max(1, (total + chunk - 1) // chunk)
         for start in range(0, total, chunk):
-            batch = entries[start : start + chunk]
-            lines = []
-            for e in batch:
-                alias = e["alias"] if hasattr(e, "keys") else getattr(e, "alias", e[0])
-                cmd = e["command_name"] if hasattr(e, "keys") else getattr(e, "command_name", e[1])
-                lines.append(f"> **`{alias}`** · `{cmd}`")
-            body = chr(10).join(lines) + chr(10) + chr(10) + f"> -# page {start // chunk + 1}/{page_count}"
+            batch = clean[start : start + chunk]
+            lines = [
+                f"-# `{i}.` **{alias}** · `{cmd}`"
+                for i, (alias, cmd) in enumerate(batch, start=start + 1)
+            ]
             container = _ui.Container()
             for attr in ("accent_color", "accent_colour"):
                 if hasattr(container, attr):
                     with contextlib.suppress(Exception):
                         setattr(container, attr, None)
-            container.add_item(_ui.TextDisplay("**Server aliases**"))
-            container.add_item(_ui.TextDisplay(body))
+            container.add_item(_ui.TextDisplay(f"**Aliases in {ctx.guild.name}**"))
+            container.add_item(
+                _ui.TextDisplay(f"-# Alias count · {total} · Page {start // chunk + 1}/{page_count}")
+            )
+            try:
+                container.add_item(_ui.Separator(visible=True))
+            except Exception:
+                pass
+            container.add_item(_ui.TextDisplay(chr(10).join(lines)))
             pages.append(layout_from_items([container], timeout=None))
         return await ctx.paginate(pages)
+
 
     @alias.command(
         name="add",
@@ -204,15 +225,15 @@ class AliasCommands(Package):
         return bool(name) and not _SPACE.search(name) and name.isprintable()
 
     def _split_alias_command(self, raw: str) -> tuple[str, str]:
-        """Parse `<alias>, <command>` or `<alias> <command>`."""
+        """Parse `<alias>, <command>` (comma required by callers)."""
         text = (raw or "").strip()
         if "," in text:
             left, right = text.split(",", 1)
-            return left.strip(), right.strip()
+            return left.strip().rstrip(",").lower(), right.strip()
         parts = text.split(None, 1)
         if len(parts) < 2:
-            return parts[0] if parts else "", ""
-        return parts[0].strip(), parts[1].strip()
+            return (parts[0].strip().rstrip(",").lower() if parts else ""), ""
+        return parts[0].strip().rstrip(",").lower(), parts[1].strip()
 
     @alias_self.command(
         name="add",
@@ -310,6 +331,9 @@ class AliasCommands(Package):
         description="list your personal aliases",
     )
     async def alias_self_list(self, ctx):
+        from discord import ui as _ui
+        from core.discord.ctx import layout_from_items
+
         rows = await self.db.fetch(
             """
             SELECT name, invoke FROM selfaliases
@@ -320,27 +344,38 @@ class AliasCommands(Package):
         )
         if not rows:
             return await ctx.warn("You have no personal aliases")
-        from discord import ui as _ui
-        from core.discord.ctx import layout_from_items
-
+        clean = []
+        seen = set()
+        for e in rows:
+            name = str(e["name"] if hasattr(e, "keys") else e[0]).strip().rstrip(",")
+            inv = str(e["invoke"] if hasattr(e, "keys") else e[1]).strip()
+            if not name or name.lower() in seen:
+                continue
+            seen.add(name.lower())
+            clean.append((name, inv))
         pages = []
         chunk = 10
-        total = len(rows)
+        total = len(clean)
         page_count = max(1, (total + chunk - 1) // chunk)
         for start in range(0, total, chunk):
-            batch = rows[start : start + chunk]
-            lines = []
-            for e in batch:
-                name = e["name"] if hasattr(e, "keys") else e[0]
-                inv = e["invoke"] if hasattr(e, "keys") else e[1]
-                lines.append(f"> **`{name}`** · `{inv}`")
-            body = chr(10).join(lines) + chr(10) + chr(10) + f"> -# page {start // chunk + 1}/{page_count}"
+            batch = clean[start : start + chunk]
+            lines = [
+                f"-# `{i}.` **{name}** · `{inv}`"
+                for i, (name, inv) in enumerate(batch, start=start + 1)
+            ]
             container = _ui.Container()
             for attr in ("accent_color", "accent_colour"):
                 if hasattr(container, attr):
                     with contextlib.suppress(Exception):
                         setattr(container, attr, None)
-            container.add_item(_ui.TextDisplay("**Your self aliases**"))
-            container.add_item(_ui.TextDisplay(body))
+            container.add_item(_ui.TextDisplay(f"**Your self aliases**"))
+            container.add_item(
+                _ui.TextDisplay(f"-# Alias count · {total} · Page {start // chunk + 1}/{page_count}")
+            )
+            try:
+                container.add_item(_ui.Separator(visible=True))
+            except Exception:
+                pass
+            container.add_item(_ui.TextDisplay(chr(10).join(lines)))
             pages.append(layout_from_items([container], timeout=None))
         return await ctx.paginate(pages)

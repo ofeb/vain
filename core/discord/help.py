@@ -1564,6 +1564,10 @@ class VainHelp(commands.HelpCommand):
             return
 
         cmd = self._find(bot, query)
+        if cmd is None:
+            resolved = await self._resolve_alias_query(ctx, query)
+            if resolved:
+                cmd = self._find(bot, resolved)
         if cmd is None or _cmd_hidden(cmd, owner=owner):
             await self._not_found(ctx, query)
             return
@@ -1572,6 +1576,42 @@ class VainHelp(commands.HelpCommand):
             await self._send_group(ctx, cmd, targets=family)
         else:
             await self._send_cmd(ctx, cmd)
+
+    async def _resolve_alias_query(self, ctx: Context, query: str) -> str | None:
+        """Map guild/self alias names to the real command path for help."""
+        q = (query or "").strip().lower().rstrip(",")
+        if not q or not getattr(ctx, "bot", None):
+            return None
+        db = getattr(ctx.bot, "db", None)
+        if db is None:
+            return None
+        root = q.split()[0]
+        try:
+            row = await db.fetchrow(
+                "SELECT invoke FROM selfaliases WHERE user_id = $1 AND name = $2",
+                ctx.author.id,
+                root,
+            )
+            if row:
+                inv = row["invoke"] if hasattr(row, "keys") else row[0]
+                rest = q[len(root) :].lstrip()
+                return f"{inv} {rest}".strip() if rest else str(inv)
+            if ctx.guild is not None:
+                row = await db.fetchrow(
+                    """
+                    SELECT command_name FROM aliases
+                    WHERE guild_id = $1 AND lower(trim(both ',' from alias)) = $2
+                    """,
+                    ctx.guild.id,
+                    root,
+                )
+                if row:
+                    inv = row["command_name"] if hasattr(row, "keys") else row[0]
+                    rest = q[len(root) :].lstrip()
+                    return f"{inv} {rest}".strip() if rest else str(inv)
+        except Exception:
+            return None
+        return None
 
     def _find(self, bot: Vain, query: str) -> Command | None:
         direct = bot.get_command(query.strip())

@@ -662,34 +662,50 @@ class Vain(commands.AutoShardedBot):
             ):
                 rest = origin.content[len(str(ctx.prefix)) :].lstrip()
                 if rest:
-                    name = rest.split(None, 1)[0].lower()
-                    tail = rest[len(name) :].lstrip()
+                    raw_name = rest.split(None, 1)[0]
+                    name = raw_name.lower().strip().rstrip(",").lstrip(",")
+                    tail = rest[len(raw_name) :].lstrip()
                     inv = None
-                    
-                    row = await self.db.fetchrow(
-                        "SELECT invoke FROM selfaliases WHERE user_id = $1 AND name = $2",
-                        origin.author.id,
-                        name,
-                    )
-                    if row:
-                        inv = row["invoke"] if hasattr(row, "keys") else row[0]
-                    
-                    if inv is None and getattr(origin, "guild", None) is not None:
+                    try:
                         row = await self.db.fetchrow(
-                            """
-                            SELECT command_name FROM aliases
-                            WHERE guild_id = $1 AND lower(alias) = $2
-                            """,
-                            origin.guild.id,
+                            "SELECT invoke FROM selfaliases WHERE user_id = $1 AND name = $2",
+                            origin.author.id,
                             name,
                         )
                         if row:
-                            inv = row["command_name"] if hasattr(row, "keys") else row[0]
+                            inv = row["invoke"] if hasattr(row, "keys") else row[0]
+                    except Exception:
+                        inv = None
+                    if inv is None and getattr(origin, "guild", None) is not None:
+                        try:
+                            row = await self.db.fetchrow(
+                                """
+                                SELECT command_name FROM aliases
+                                WHERE guild_id = $1 AND lower(trim(both ',' from alias)) = $2
+                                """,
+                                origin.guild.id,
+                                name,
+                            )
+                            if not row:
+                                row = await self.db.fetchrow(
+                                    """
+                                    SELECT command_name FROM aliases
+                                    WHERE guild_id = $1 AND lower(alias) = $2
+                                    """,
+                                    origin.guild.id,
+                                    name,
+                                )
+                            if row:
+                                inv = row["command_name"] if hasattr(row, "keys") else row[0]
+                        except Exception:
+                            inv = None
                     if inv:
+                        inv = str(inv).strip()
                         new_content = f"{ctx.prefix}{inv}" + (f" {tail}" if tail else "")
                         origin = copy.copy(origin)
                         origin._update({"content": new_content})
                         ctx = await super().get_context(origin, cls=cls)
+
         except Exception:
             pass
         return ctx

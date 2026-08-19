@@ -1097,19 +1097,31 @@ class ModerationCommands(Package):
                     reason=self._default_reason(reason),
                 )
         else:
-            embed = build_modlog_embed(
-                color=None,
-                action="jailed",
-                target_label=member.mention,
-                moderator_label=ctx.author.mention,
-                reason=self._default_reason(reason),
-                case_id=case_id,
+            from discord import ui as _ui
+            from core.discord.ctx import layout_from_items
+            container = _ui.Container()
+            for attr in ("accent_color", "accent_colour", "color", "colour"):
+                if hasattr(container, attr):
+                    with contextlib.suppress(Exception):
+                        setattr(container, attr, None)
+            container.add_item(
+                _ui.TextDisplay(
+                    "you have been **jailed**\n> -# please **wait** for a staff to address the situation"
+                )
             )
-            await send_c2_embed(jail_channel, embed, content=member.mention)
+            with contextlib.suppress(Exception):
+                await jail_channel.send(
+                    content=member.mention,
+                    view=layout_from_items([container], timeout=None),
+                    allowed_mentions=discord.AllowedMentions(users=True),
+                )
 
         if await self._invoke_response(ctx, "jail", user=member, reason=reason, case_id=case_id):
             return
-        return await self._action_c2(ctx, f"Jailed **{member}** in {jail_channel.mention}\n> -# **reason:** {self._default_reason(reason)}")
+        return await self._action_c2(
+            ctx,
+            self._action_line("Jailed", member, reason=reason, extra=f"in {jail_channel.mention}"),
+        )
 
     @jail.group(
         name="invoke",
