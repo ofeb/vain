@@ -289,7 +289,7 @@ class VoiceMaster(VoiceMasterEvents, Package):
             raise commands.CommandError("you **don't** own this **voice channel**!")
         return True
 
-    @hybrid(name="voicemaster", description="manage temporary voice channels in your server", guild_only=True, invoke_without_command=True)
+    @group(name="voicemaster", description="manage temporary voice channels in your server", guild_only=True, invoke_without_command=True)
     async def voicemaster(self, ctx: Context) -> None:
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
