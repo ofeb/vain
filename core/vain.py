@@ -505,44 +505,120 @@ class Vain(commands.AutoShardedBot):
             return False, f"{type(e).__name__}: {e}"
 
 
-    def ensure_hybrid_tree(self) -> int:
-        """Re-register every top-level HybridCommand/HybridGroup app_command onto the tree."""
+    def ensure_hybrid_tree(self) -> dict:
+        """Re-register every top-level HybridCommand/HybridGroup onto the tree.
+
+        Returns a detailed report dict used by `,sync` / sync.txt.
+        """
         from discord.ext.commands import HybridCommand, HybridGroup
-        added = 0
+
+        report: dict = {
+            "hybrids_found": [],
+            "hybrids_missing_app": [],
+            "tree_added": [],
+            "tree_failed": [],
+            "prefix_only": [],
+            "tree_before": [],
+            "tree_after": [],
+        }
+
+        try:
+            report["tree_before"] = sorted(
+                c.name for c in self.tree.get_commands()
+            )
+        except Exception as e:
+            report["tree_before"] = [f"<error listing tree: {e}>"]
+
         seen: set[str] = set()
         for cmd in list(self.walk_commands()):
-            if cmd.parent is not None:
+            if getattr(cmd, "parent", None) is not None:
                 continue
-            if not isinstance(cmd, (HybridCommand, HybridGroup)):
-                continue
+            is_hybrid = isinstance(cmd, (HybridCommand, HybridGroup))
+            qname = getattr(cmd, "qualified_name", None) or cmd.name
             app = getattr(cmd, "app_command", None)
-            if app is None:
-                log.warning("hybrid /%s has no app_command", cmd.qualified_name)
+
+            if not is_hybrid:
                 continue
+
+            entry = {
+                "name": cmd.name,
+                "qualified": qname,
+                "type": type(cmd).__name__,
+                "cog": getattr(getattr(cmd, "cog", None), "qualified_name", None)
+                or getattr(getattr(cmd, "cog", None), "__class__", type("x", (), {})).__name__,
+                "has_app_command": app is not None,
+                "children": [],
+            }
+            if isinstance(cmd, HybridGroup):
+                for child in getattr(cmd, "commands", []) or []:
+                    entry["children"].append(
+                        {
+                            "name": child.name,
+                            "has_app": getattr(child, "app_command", None) is not None,
+                            "type": type(child).__name__,
+                        }
+                    )
+
+            report["hybrids_found"].append(entry)
+
+            if app is None:
+                report["hybrids_missing_app"].append(qname)
+                log.warning("hybrid /%s has no app_command", qname)
+                continue
+
             name = getattr(app, "name", None) or cmd.name
             if name in seen:
                 continue
             seen.add(name)
+
             with contextlib.suppress(Exception):
                 self.tree.remove_command(name)
-            try:
-                self.tree.add_command(app, override=True)
-                added += 1
-            except TypeError:
-                with contextlib.suppress(Exception):
-                    self.tree.add_command(app)
-                    added += 1
-            except Exception as e:
-                log.warning("could not tree-add /%s: %s", name, e)
-        log.info("ensure_hybrid_tree registered %s slash commands", added)
-        return added
 
-    async def _sync_global_commands(self) -> None:
+            try:
+                try:
+                    self.tree.add_command(app, override=True)
+                except TypeError:
+                    self.tree.add_command(app)
+                report["tree_added"].append(name)
+            except Exception as e:
+                report["tree_failed"].append(f"{name}: {type(e).__name__}: {e}")
+                log.warning("could not tree-add /%s: %s", name, e)
+
+        
+        for cmd in list(self.commands):
+            if isinstance(cmd, (HybridCommand, HybridGroup)):
+                continue
+            if getattr(cmd, "parent", None) is not None:
+                continue
+            
+            pass
+
+        try:
+            report["tree_after"] = sorted(
+                c.name for c in self.tree.get_commands()
+            )
+        except Exception as e:
+            report["tree_after"] = [f"<error listing tree: {e}>"]
+
+        log.info(
+            "ensure_hybrid_tree: found=%s added=%s missing_app=%s failed=%s tree=%s",
+            len(report["hybrids_found"]),
+            len(report["tree_added"]),
+            len(report["hybrids_missing_app"]),
+            len(report["tree_failed"]),
+            len(report["tree_after"]),
+        )
+        return report
+
+
+    async def _sync_global_commands(self) -> list:
         try:
             synced = await self.tree.sync()
             log.info(f"synced {len(synced)} global slash commands")
+            return list(synced)
         except Exception as e:
             log.exception(f"slash sync failed: {e}")
+            return []
 
     async def get_context(self, origin, /, *, cls=Context) -> Context:
         if isinstance(origin, discord.Message):

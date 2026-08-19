@@ -143,6 +143,21 @@ def _try_register(factory, prepared, *, name, attrs):
     """Register a hybrid command/group. Prefer keeping an app_command always."""
     attrs = dict(attrs)
     attrs.setdefault("with_app_command", True)
+    
+    for junk in (
+        "guilds",
+        "dms",
+        "groupchats",
+        "guild_only",
+        "slash",
+        "group",
+        "example",
+        "parameters",
+        "dm_enabled",
+        "cls",
+    ):
+        attrs.pop(junk, None)
+
     try:
         cmd = factory(name=name, **attrs)(prepared)
     except (TypeError, ValueError, AttributeError) as e:
@@ -170,10 +185,21 @@ def _try_register(factory, prepared, *, name, attrs):
         try:
             cmd = factory(name=name, **minimal)(prepared)
         except Exception as e2:
-            log.warning("hybrid /%s slash failed (%s), prefix-only", name or "?", e2)
-            minimal["with_app_command"] = False
-            cmd = factory(name=name, **minimal)(prepared)
-            return cmd
+            log.warning(
+                "hybrid /%s still failing (%s); last try name+description only",
+                name or "?",
+                e2,
+            )
+            last = {"with_app_command": True}
+            if "description" in minimal:
+                last["description"] = minimal["description"]
+            try:
+                cmd = factory(name=name, **last)(prepared)
+            except Exception as e3:
+                log.warning("hybrid /%s slash failed (%s), prefix-only", name or "?", e3)
+                last["with_app_command"] = False
+                cmd = factory(name=name, **last)(prepared)
+                return cmd
     if not getattr(cmd, "app_command", None) and attrs.get("with_app_command", True):
         log.warning("hybrid /%s has no app_command after register", getattr(cmd, "name", name))
     return cmd

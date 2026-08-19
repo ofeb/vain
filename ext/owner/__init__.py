@@ -323,17 +323,138 @@ class Owner(Package):
     )
     @describe(guild_id="Guild ID to sync to (leave empty for global)")
     async def sync(self, ctx: Context, guild_id: str = None) -> None:
-        with contextlib.suppress(Exception):
-            self.bot.ensure_hybrid_tree()
-        if guild_id:
-            guild = discord.Object(id=int(guild_id))
-            synced = await self.bot.tree.sync(guild=guild)
-            await ctx.success(
-                f"Synced **{len(synced)}** commands to guild `{guild_id}`"
-            )
+        import io
+        from datetime import datetime, timezone
+        from discord.ext.commands import HybridCommand, HybridGroup
+
+        lines: list[str] = []
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+        lines.append(f"vain slash sync report — {now}")
+        lines.append("=" * 60)
+
+        report: dict = {}
+        try:
+            report = self.bot.ensure_hybrid_tree() or {}
+        except Exception as e:
+            lines.append(f"ensure_hybrid_tree FAILED: {type(e).__name__}: {e}")
+            report = {}
+
+        lines.append("")
+        lines.append("[1] HYBRID PREFIX COMMANDS (top-level)")
+        lines.append("-" * 60)
+        hybrids = report.get("hybrids_found") or []
+        if not hybrids:
+            lines.append("(none found via report — dumping walk_commands)")
+            for cmd in sorted(self.bot.walk_commands(), key=lambda c: c.qualified_name):
+                if cmd.parent:
+                    continue
+                is_h = isinstance(cmd, (HybridCommand, HybridGroup))
+                app = getattr(cmd, "app_command", None)
+                lines.append(
+                    f"  {cmd.qualified_name:40} hybrid={is_h} app={app is not None} type={type(cmd).__name__}"
+                )
         else:
-            synced = await self.bot.tree.sync()
-            await ctx.success(f"Synced **{len(synced)}** commands globally")
+            for h in sorted(hybrids, key=lambda x: x.get("qualified") or x.get("name") or ""):
+                flag = "OK " if h.get("has_app_command") else "NO APP"
+                lines.append(
+                    f"  [{flag}] /{h.get('name')}  ({h.get('qualified')})  "
+                    f"type={h.get('type')}  cog={h.get('cog')}"
+                )
+                for ch in h.get("children") or []:
+                    cflag = "OK " if ch.get("has_app") else "NO APP"
+                    lines.append(
+                        f"           └─ [{cflag}] {ch.get('name')}  type={ch.get('type')}"
+                    )
+
+        lines.append("")
+        lines.append("[2] TREE REGISTRATION")
+        lines.append("-" * 60)
+        lines.append(f"  added   ({len(report.get('tree_added') or [])}):")
+        for n in report.get("tree_added") or []:
+            lines.append(f"    + {n}")
+        lines.append(f"  failed  ({len(report.get('tree_failed') or [])}):")
+        for n in report.get("tree_failed") or ["(none)"]:
+            lines.append(f"    ! {n}")
+        lines.append(f"  missing app_command ({len(report.get('hybrids_missing_app') or [])}):")
+        for n in report.get("hybrids_missing_app") or ["(none)"]:
+            lines.append(f"    ? {n}")
+
+        lines.append("")
+        lines.append("[3] TREE CONTENTS")
+        lines.append("-" * 60)
+        before = report.get("tree_before") or []
+        after = report.get("tree_after") or []
+        lines.append(f"  before ({len(before)}): {', '.join(before) or '(empty)'}")
+        lines.append(f"  after  ({len(after)}): {', '.join(after) or '(empty)'}")
+
+        lines.append("")
+        lines.append("[4] DISCORD SYNC")
+        lines.append("-" * 60)
+        sync_error = None
+        synced: list = []
+        target = "global"
+        try:
+            if guild_id:
+                target = f"guild:{guild_id}"
+                guild = discord.Object(id=int(guild_id))
+                synced = list(await self.bot.tree.sync(guild=guild))
+            else:
+                synced = list(await self.bot.tree.sync())
+        except Exception as e:
+            sync_error = f"{type(e).__name__}: {e}"
+            lines.append(f"  SYNC FAILED: {sync_error}")
+
+        if sync_error is None:
+            lines.append(f"  target: {target}")
+            lines.append(f"  discord accepted {len(synced)} command(s):")
+            for c in sorted(synced, key=lambda x: getattr(x, "name", str(x))):
+                cname = getattr(c, "name", str(c))
+                ctype = type(c).__name__
+                nopts = 0
+                try:
+                    nopts = len(getattr(c, "options", []) or [])
+                except Exception:
+                    pass
+                lines.append(f"    * /{cname}  ({ctype}, options={nopts})")
+
+            wanted = {"define", "urban", "reminder", "inviteinfo", "translate", "ocr", "ask"}
+            got = {getattr(c, "name", "") for c in synced}
+            lines.append("")
+            lines.append("[5] KEY COMMAND CHECK")
+            lines.append("-" * 60)
+            for w in sorted(wanted):
+                status = "PRESENT" if w in got else "MISSING"
+                lines.append(f"  /{w}: {status}")
+
+        lines.append("")
+        lines.append("[6] NOTES")
+        lines.append("-" * 60)
+        lines.append("  - Discord global slash limit is 100 chat-input commands.")
+        lines.append("  - If tree size exceeds 100, some commands will not appear.")
+        lines.append("  - Commands marked NO APP never reach Discord.")
+        lines.append("  - User installs need allowed_installs(users=True) for DMs/GCs.")
+        lines.append("=" * 60)
+
+        text = "\n".join(lines) + "\n"
+        file = discord.File(io.BytesIO(text.encode("utf-8")), filename="sync.txt")
+
+        if sync_error:
+            await ctx.fail(
+                f"Slash sync **failed**\n> -# {sync_error}\n> -# full report attached as `sync.txt`",
+                file=file,
+            )
+            return
+
+        miss = len(report.get("hybrids_missing_app") or [])
+        fail = len(report.get("tree_failed") or [])
+        extra = ""
+        if miss or fail:
+            extra = f"\n> -# missing app: **{miss}** · tree failed: **{fail}**"
+        await ctx.success(
+            f"Synced **{len(synced)}** commands ({target}){extra}\n> -# full report attached as `sync.txt`",
+            file=file,
+        )
+
 
 
     @command(
