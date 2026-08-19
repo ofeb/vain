@@ -549,7 +549,7 @@ class Remind(Package):
             from core.discord.ctx import layout_from_items
 
             container = _ui.Container()
-            for _attr in ("accent_color", "accent_colour"):
+            for _attr in ("accent_color", "accent_colour", "color", "colour"):
                 if hasattr(container, _attr):
                     with contextlib.suppress(Exception):
                         setattr(container, _attr, None)
@@ -575,6 +575,7 @@ class Remind(Package):
 
         try:
             embed = c2(message=body, timestamp=False)
+            embed.color = None
             kwargs = {"content": user.mention, "embed": embed}
             if jump.startswith("http"):
                 view = discord.ui.View()
