@@ -258,6 +258,12 @@ class VoiceInterface(ui.View):
         self,
         interaction: discord.Interaction,
     ) -> bool:
+        print(
+            "VM INTERACTION:",
+            interaction.data,
+            type(interaction.user).__name__,
+        )
+
         user = interaction.user
 
         if (
