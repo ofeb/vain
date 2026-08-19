@@ -1691,7 +1691,37 @@ class Utility(Remind):
             else:
                 title = f"[**dominant colors for {kind}**]({url}" + chr(10) + ")"
             color_bits = " ".join(f"`{c}`" for c in colors)
-            blocks.append(f"-# {title}:
-{color_bits}")
+            blocks.append("-# " + title + ":" + chr(10) + color_bits)
+        if not any_ok:
+            if any(k.startswith("avatar:") for k, _ in sources):
+                return await ctx.warn(
+                    "Could not read **avatar** color data\n"
+                    "> -# the avatar may be unavailable — try again in a moment"
+                )
+            return await ctx.warn(
+                "Attachments or URLs **must** be **GIFs** or **Images**"
+            )
+
+        from discord import ui as _ui
+        from core.discord.ctx import layout_from_items
+
+        container = _ui.Container()
+        for attr in ("accent_color", "accent_colour"):
+            if hasattr(container, attr):
+                try:
+                    setattr(container, attr, None)
+                except Exception:
+                    pass
+        container.add_item(_ui.TextDisplay("\n\n".join(blocks)))
+        view = layout_from_items([container], timeout=None)
+        await ctx.send(view=view, allowed_mentions=discord.AllowedMentions.none())
 
 
+async def setup(bot: commands.Bot):
+    from .events import SnipeEvents
+
+    await bot.add_cog(Snipe(bot))
+    await bot.add_cog(Utility(bot))
+
+    if bot.get_cog("SnipeEvents") is None:
+        await bot.add_cog(SnipeEvents(bot))
