@@ -44,74 +44,6 @@ class VoiceMaster(VoiceMasterEvents, Package):
     def __init__(self, bot: Vain):
         super().__init__(bot)
         self._cooldowns: dict = {}
-        self.bot.add_view(VoiceInterface(self))
-
-    def _panel_view(self, guild: discord.Guild) -> discord.ui.LayoutView:
-        VM = {
-            "claim": "<:voicemaster_claim:1539664937188597810>",
-            "delete": "<:voicemaster_delete:1539664938673635428>",
-            "disconnect": "<:voicemaster_disconnect:1539664940112019577>",
-            "hide": "<:voicemaster_hide:1539664941714383023>",
-            "limit": "<:voicemaster_limit:1539664942645518500>",
-            "lock": "<:voicemaster_lock:1539664944293740646>",
-            "rename": "<:voicemaster_rename:1539664945346781205>",
-            "unlock": "<:voicemaster_unlock:1539664948236390450>",
-            "reveal": "<:voicemaster_reveal:1539664946957262989>",
-            "status": "<:voicemaster_status:1539689399896375336>",
-        }
-        container = discord.ui.Container()
-        for attr in ("accent_color", "accent_colour"):
-            if hasattr(container, attr):
-                with contextlib.suppress(Exception):
-                    setattr(container, attr, None)
-
-        server_icon = guild.icon.url if guild.icon else None
-        header_text = (
-            f"## {guild.name}\n"
-            f"-# Manage temporary voice channels in **{guild.name}**."
-        )
-        if server_icon:
-            container.add_item(discord.ui.Section(
-                discord.ui.TextDisplay(header_text),
-                accessory=discord.ui.Thumbnail(media=server_icon),
-            ))
-        else:
-            container.add_item(discord.ui.TextDisplay(header_text))
-        container.add_item(discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small))
-
-        controls = (
-            f">>> **Controls**\n"
-            f"{VM['lock']} — **Lock** the channel\n"
-            f"{VM['unlock']} — **Unlock** the channel\n"
-            f"{VM['claim']} — **Claim** the channel\n"
-            f"{VM['delete']} — **Delete** the channel\n"
-            f"{VM['disconnect']} — **Disconnect** member(s)\n"
-            f"{VM['hide']} — **Hide** the channel\n"
-            f"{VM['reveal']} — **Reveal** the channel\n"
-            f"{VM['limit']} — Set a user **limit**\n"
-            f"{VM['rename']} — **Rename** the channel"
-        )
-        container.add_item(discord.ui.TextDisplay(controls))
-        container.add_item(discord.ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small))
-
-        row1 = discord.ui.ActionRow(
-            discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=VM["lock"], custom_id="voicemaster:lock"),
-            discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=VM["unlock"], custom_id="voicemaster:unlock"),
-            discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=VM["claim"], custom_id="voicemaster:claim"),
-            discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=VM["delete"], custom_id="voicemaster:delete"),
-            discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=VM["disconnect"], custom_id="voicemaster:disconnect"),
-        )
-        container.add_item(row1)
-        row2 = discord.ui.ActionRow(
-            discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=VM["hide"], custom_id="voicemaster:hide"),
-            discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=VM["reveal"], custom_id="voicemaster:reveal"),
-            discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=VM["limit"], custom_id="voicemaster:limit"),
-            discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=VM["rename"], custom_id="voicemaster:rename"),
-            discord.ui.Button(style=discord.ButtonStyle.secondary, emoji=VM["status"], custom_id="voicemaster:status"),
-        )
-        container.add_item(row2)
-        container.add_item(discord.ui.TextDisplay("-# You must own the voice channel to use these controls."))
-        return layout_from_items([container], timeout=None)
 
     async def cog_load(self) -> None:
         if getattr(self.bot.db, "pool", None) is None:
@@ -186,7 +118,7 @@ class VoiceMaster(VoiceMasterEvents, Package):
                     old_msg = await channel.fetch_message(old_msg_id)
                     await old_msg.delete()
             try:
-                msg = await channel.send(view=self._panel_view(guild))
+                msg = await channel.send(view=VoiceInterface(self, guild))
                 settings = await VoiceMasterSettings.fetch(self.bot, guild)
                 await settings.upsert(panel_message_id=msg.id)
             except Exception:
@@ -200,7 +132,7 @@ class VoiceMaster(VoiceMasterEvents, Package):
         if not settings.record.get("interface_id"):
             return
         try:
-            msg = await new_channel.send(view=self._panel_view(new_channel.guild))
+            msg = await new_channel.send(view=VoiceInterface(self, new_channel.guild))
             await settings.upsert(panel_message_id=msg.id)
         except Exception:
             pass
@@ -332,7 +264,7 @@ class VoiceMaster(VoiceMasterEvents, Package):
         everyone = ctx.guild.default_role
         await interface.set_permissions(everyone, send_messages=False, send_messages_in_threads=False, create_public_threads=False, create_private_threads=False)
         await channel.set_permissions(everyone, connect=True)
-        panel_msg = await interface.send(view=self._panel_view(ctx.guild))
+        panel_msg = await interface.send(view=VoiceInterface(self, ctx.guild))
         settings = await VoiceMasterSettings.fetch(self.bot, ctx.guild)
         await settings.upsert(category_id=category.id, interface_id=interface.id, channel_id=channel.id, panel_message_id=panel_msg.id)
         await ctx.send(view=_vm_container(f"{ctx.author.mention}: voicemaster **setup complete**"))
@@ -633,7 +565,7 @@ class VoiceMaster(VoiceMasterEvents, Package):
         interface = ctx.guild.get_channel(config["interface_id"])
         if not interface:
             return await ctx.send(view=_vm_container(f"{ctx.author.mention}: interface channel **not found**"))
-        panel_msg = await interface.send(view=self._panel_view(ctx.guild))
+        panel_msg = await interface.send(view=VoiceInterface(self, ctx.guild))
         settings = await VoiceMasterSettings.fetch(self.bot, ctx.guild)
         await settings.upsert(panel_message_id=panel_msg.id)
         await ctx.send(view=_vm_container(f"{ctx.author.mention}: interface **resent**"))
