@@ -132,8 +132,62 @@ def _log_container(title: str, lines: list[str]) -> "discord.ui.LayoutView":
 
 def _when_line(ts=None) -> str:
     if ts is None:
-        ts = int(discord.utils.utcnow().timestamp())
+        import time as _time
+        ts = int(_time.time())
+    else:
+        ts = int(ts)
     return f"-# **when**: <t:{ts}:F> · <t:{ts}:R>"
+
+
+
+def _components_to_container_script(message: discord.Message) -> list[str]:
+    """Best-effort {container} scripts from Components V2 message items."""
+    scripts: list[str] = []
+    components = list(getattr(message, "components", None) or [])
+    if not components:
+        return scripts
+
+    def _walk(node, acc: list[str]) -> None:
+        if node is None:
+            return
+        
+        content = getattr(node, "content", None)
+        if content is None and hasattr(node, "text"):
+            content = getattr(node, "text", None)
+        tname = type(node).__name__
+        if content and tname in ("TextDisplay", "Text"):
+            acc.append(str(content))
+        
+        for attr in ("children", "items", "components", "accessory"):
+            child = getattr(node, attr, None)
+            if child is None:
+                continue
+            if isinstance(child, (list, tuple)):
+                for c in child:
+                    _walk(c, acc)
+            else:
+                _walk(child, acc)
+
+    
+    tops = components
+    for top in tops:
+        texts: list[str] = []
+        _walk(top, texts)
+        if not texts:
+            continue
+        parts = ["{container}"]
+        for i, tx in enumerate(texts):
+            if i:
+                parts.append("$v{separator: true}")
+            
+            parts.append(f"$v{{description: {tx}}}")
+        scripts.append("".join(parts))
+    return scripts
+
+
+def _author_label(author: discord.abc.User) -> str:
+    name = getattr(author, "display_name", None) or getattr(author, "name", None) or "unknown"
+    return f"@{name} ({author.id})"
 
 
 def _embed_to_ce_script(embed: discord.Embed) -> str:
@@ -243,7 +297,8 @@ class LogEvents:
         if await self._is_ignored(guild.id, channel.id):
             return
 
-        from datetime import timezone as _tz
+        import time as _time
+        from datetime import datetime as _dt, timezone as _tz
 
         authors: dict[int, discord.abc.User] = {}
         ordered = sorted(
@@ -255,22 +310,23 @@ class LogEvents:
 
         for msg in ordered:
             author = msg.author
+            
             if author is None:
                 uncached += 1
-                file_blocks.append(f"[unknown] (id {msg.id})")
+                file_blocks.append(f"[unknown] (message id {msg.id})")
                 file_blocks.append("")
                 continue
 
             authors[author.id] = author
+            label = _author_label(author)
             text = (msg.content or "").strip()
-            embeds = list(msg.embeds or [])
-            att_urls = [a.url for a in (msg.attachments or []) if getattr(a, "url", None)]
+            embeds = list(getattr(msg, "embeds", None) or [])
+            att_urls = [a.url for a in (getattr(msg, "attachments", None) or []) if getattr(a, "url", None)]
 
-            
             if text:
-                file_blocks.append(f"{author}: {text}")
+                file_blocks.append(f"{label}: {text}")
             else:
-                file_blocks.append(f"{author}:")
+                file_blocks.append(f"{label}:")
 
             for emb in embeds:
                 try:
@@ -279,27 +335,40 @@ class LogEvents:
                     script = "{embed}$v{description: *could not serialize embed*}"
                 file_blocks.append(f"embed (recreate using ,ce): {script}")
 
+            
+            try:
+                for cscript in _components_to_container_script(msg):
+                    file_blocks.append(f"container (recreate using ,cb): {cscript}")
+            except Exception:
+                pass
+
             if att_urls:
                 file_blocks.append("attachments: " + ", ".join(att_urls))
 
             
+            stickers = list(getattr(msg, "stickers", None) or [])
+            if stickers:
+                names = ", ".join(getattr(s, "name", str(s)) for s in stickers)
+                file_blocks.append(f"stickers: {names}")
+
             file_blocks.append("")
 
-        now_dt = discord.utils.utcnow()
-        if now_dt.tzinfo is None:
-            now_dt = now_dt.replace(tzinfo=_tz.utc)
+        
+        now_ts = int(_time.time())
+        now_dt = _dt.fromtimestamp(now_ts, tz=_tz.utc)
         time_24 = now_dt.strftime("%H:%M")
         day = now_dt.day
         if 11 <= day <= 13:
             suffix = "th"
         else:
             suffix = {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
-        date_str = now_dt.strftime(f"{day}{suffix} of %B, %Y")
+        date_str = f"{day}{suffix} of {now_dt.strftime('%B, %Y')}"
 
         ch_label = getattr(channel, "name", None) or str(getattr(channel, "id", "unknown"))
+        ch_id = getattr(channel, "id", "unknown")
         header = [
             "vain logs",
-            f"in: #{ch_label}",
+            f"in: #{ch_label} ({ch_id})",
             f"purged @ {time_24} UTC",
             f"date: {date_str}",
             "",
@@ -314,8 +383,8 @@ class LogEvents:
         ch_mention = channel.mention if hasattr(channel, "mention") else f"#{ch_label}"
 
         lines = [
-            _when_line(int(now_dt.timestamp())),
-            f"-# **channel**: {ch_mention}",
+            _when_line(now_ts),
+            f"-# **channel**: {ch_mention} (`{ch_id}`)",
             f"-# **count**: `{len(messages)}` messages",
         ]
         if uncached:
