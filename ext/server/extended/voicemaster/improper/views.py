@@ -55,18 +55,21 @@ async def _reply(
     *,
     view: ui.LayoutView,
 ) -> None:
+    allowed_mentions = discord.AllowedMentions.none()
+
     if interaction.response.is_done():
         await interaction.followup.send(
             view=view,
             ephemeral=True,
+            allowed_mentions=allowed_mentions,
         )
         return
 
     await interaction.response.send_message(
         view=view,
         ephemeral=True,
+        allowed_mentions=allowed_mentions,
     )
-
 
 def _kick_response(
     interaction: discord.Interaction,
@@ -74,7 +77,11 @@ def _kick_response(
     members: list[discord.Member],
 ) -> ui.LayoutView:
     word = "user" if count == 1 else "users"
-    mentions = " ".join(member.mention for member in members)
+
+    mentions = " ".join(
+        member.mention
+        for member in members
+    )
 
     return _container_msg(
         f"{interaction.user.mention}: i have **kicked** the {word} from your voice channel",
@@ -119,6 +126,34 @@ class StatusModal(ui.Modal, title="Channel Status"):
             self.status_emoji.default = current_emoji
 
 
+class LimitModal(ui.Modal, title="Voice Channel Limit"):
+    amount = ui.TextInput(
+        label="Amount to allow",
+        placeholder="Enter a number from 0 to 99",
+        max_length=2,
+        required=False,
+    )
+
+    has_limit = ui.TextInput(
+        label="Will the voice channel have a limit on how many can join?",
+        placeholder="yes or no",
+        max_length=3,
+        required=False,
+    )
+
+    def __init__(
+        self,
+        *,
+        current_limit: int = 0,
+    ) -> None:
+        super().__init__()
+
+        if current_limit:
+            self.amount.default = str(current_limit)
+
+        self.has_limit.default = "yes"
+
+
 class DisconnectMembers(ui.Select):
     def __init__(
         self,
@@ -132,18 +167,20 @@ class DisconnectMembers(ui.Select):
 
         members = list(self.channel.members)
 
+        options = [
+            discord.SelectOption(
+                value=str(target.id),
+                label=f"{target} ({target.id})",
+                emoji="👤",
+            )
+            for target in members
+        ]
+
         super().__init__(
             placeholder="Choose members...",
             min_values=1,
-            max_values=max(1, len(members)),
-            options=[
-                discord.SelectOption(
-                    value=str(target.id),
-                    label=f"{target} ({target.id})",
-                    emoji="👤",
-                )
-                for target in members
-            ],
+            max_values=max(1, len(options)),
+            options=options,
         )
 
     async def callback(
@@ -197,26 +234,20 @@ class VoiceInterface(ui.LayoutView):
         container = ui.Container()
         _clear(container)
 
-        server_icon = self.guild.icon.url if self.guild.icon else None
-
-        header = (
-            f"## {self.guild.name}\n"
-            f"-# Manage temporary voice channels in **{self.guild.name}**."
+        server_icon = (
+            self.guild.icon.url
+            if self.guild.icon
+            else None
         )
 
-        if server_icon:
-            container.add_item(
-                ui.Section(
-                    ui.TextDisplay(header),
-                    accessory=ui.Thumbnail(
-                        media=server_icon,
-                    ),
-                )
-            )
-        else:
-            container.add_item(
-                ui.TextDisplay(header),
-            )
+        header = (
+            "## Voice Controls\n"
+            "-# Manage your voice channel using the controls or use `help voicemaster` to see all commands"
+        )
+
+        container.add_item(
+            ui.TextDisplay(header)
+        )
 
         container.add_item(
             ui.Separator(
@@ -226,16 +257,17 @@ class VoiceInterface(ui.LayoutView):
         )
 
         controls = (
-            "### Controls\n"
-            f"{VM['claim']} — **Claim** the channel\n"
-            f"{VM['delete']} — **Delete** the channel\n"
-            f"{VM['disconnect']} — **Disconnect** member(s)\n"
-            f"{VM['hide']} — **Hide** the channel\n"
-            f"{VM['reveal']} — **Reveal** the channel\n"
-            f"{VM['limit']} — Set a user **limit**\n"
+            "### Voice Controls\n"
             f"{VM['lock']} — **Lock** the channel\n"
             f"{VM['unlock']} — **Unlock** the channel\n"
-            f"{VM['rename']} — **Rename** the channel"
+            f"{VM['hide']} — **Hide** the channel\n"
+            f"{VM['reveal']} — **Reveal** the channel\n"
+            f"{VM['claim']} — **Claim** the channel\n"
+            f"{VM['status']} — Set the channel **status**\n"
+            f"{VM['disconnect']} — **Disconnect** member(s)\n"
+            f"{VM['limit']} — Set the channel **limit**\n"
+            f"{VM['rename']} — **Rename** the channel\n"
+            f"{VM['delete']} — **Delete** the channel"
         )
 
         if server_icon:
@@ -249,7 +281,7 @@ class VoiceInterface(ui.LayoutView):
             )
         else:
             container.add_item(
-                ui.TextDisplay(controls),
+                ui.TextDisplay(controls)
             )
 
         container.add_item(
@@ -260,20 +292,15 @@ class VoiceInterface(ui.LayoutView):
         )
 
         buttons = {
-            "claim": ui.Button(
+            "lock": ui.Button(
                 style=discord.ButtonStyle.secondary,
-                emoji=VM["claim"],
-                custom_id="voicemaster:claim",
+                emoji=VM["lock"],
+                custom_id="voicemaster:lock",
             ),
-            "delete": ui.Button(
+            "unlock": ui.Button(
                 style=discord.ButtonStyle.secondary,
-                emoji=VM["delete"],
-                custom_id="voicemaster:delete",
-            ),
-            "disconnect": ui.Button(
-                style=discord.ButtonStyle.secondary,
-                emoji=VM["disconnect"],
-                custom_id="voicemaster:disconnect",
+                emoji=VM["unlock"],
+                custom_id="voicemaster:unlock",
             ),
             "hide": ui.Button(
                 style=discord.ButtonStyle.secondary,
@@ -285,58 +312,63 @@ class VoiceInterface(ui.LayoutView):
                 emoji=VM["reveal"],
                 custom_id="voicemaster:reveal",
             ),
-            "limit": ui.Button(
+            "claim": ui.Button(
                 style=discord.ButtonStyle.secondary,
-                emoji=VM["limit"],
-                custom_id="voicemaster:limit",
-            ),
-            "lock": ui.Button(
-                style=discord.ButtonStyle.secondary,
-                emoji=VM["lock"],
-                custom_id="voicemaster:lock",
-            ),
-            "unlock": ui.Button(
-                style=discord.ButtonStyle.secondary,
-                emoji=VM["unlock"],
-                custom_id="voicemaster:unlock",
-            ),
-            "rename": ui.Button(
-                style=discord.ButtonStyle.secondary,
-                emoji=VM["rename"],
-                custom_id="voicemaster:rename",
+                emoji=VM["claim"],
+                custom_id="voicemaster:claim",
             ),
             "status": ui.Button(
                 style=discord.ButtonStyle.secondary,
                 emoji=VM["status"],
                 custom_id="voicemaster:status",
             ),
+            "disconnect": ui.Button(
+                style=discord.ButtonStyle.secondary,
+                emoji=VM["disconnect"],
+                custom_id="voicemaster:disconnect",
+            ),
+            "limit": ui.Button(
+                style=discord.ButtonStyle.secondary,
+                emoji=VM["limit"],
+                custom_id="voicemaster:limit",
+            ),
+            "rename": ui.Button(
+                style=discord.ButtonStyle.secondary,
+                emoji=VM["rename"],
+                custom_id="voicemaster:rename",
+            ),
+            "delete": ui.Button(
+                style=discord.ButtonStyle.secondary,
+                emoji=VM["delete"],
+                custom_id="voicemaster:delete",
+            ),
         }
 
-        buttons["claim"].callback = self._claim
-        buttons["delete"].callback = self._delete
-        buttons["disconnect"].callback = self._disconnect
-        buttons["hide"].callback = self._hide
-        buttons["reveal"].callback = self._reveal
-        buttons["limit"].callback = self._limit
         buttons["lock"].callback = self._lock
         buttons["unlock"].callback = self._unlock
-        buttons["rename"].callback = self._rename
+        buttons["hide"].callback = self._hide
+        buttons["reveal"].callback = self._reveal
+        buttons["claim"].callback = self._claim
         buttons["status"].callback = self._status
+        buttons["disconnect"].callback = self._disconnect
+        buttons["limit"].callback = self._limit
+        buttons["rename"].callback = self._rename
+        buttons["delete"].callback = self._delete
 
         row1 = ui.ActionRow(
             buttons["lock"],
             buttons["unlock"],
+            buttons["hide"],
+            buttons["reveal"],
             buttons["claim"],
-            buttons["delete"],
-            buttons["disconnect"],
         )
 
         row2 = ui.ActionRow(
-            buttons["hide"],
-            buttons["reveal"],
+            buttons["status"],
+            buttons["disconnect"],
             buttons["limit"],
             buttons["rename"],
-            buttons["status"],
+            buttons["delete"],
         )
 
         container.add_item(row1)
@@ -391,7 +423,9 @@ class VoiceInterface(ui.LayoutView):
             )
             return False
 
-        custom_id = (interaction.data or {}).get("custom_id")
+        custom_id = (interaction.data or {}).get(
+            "custom_id"
+        )
 
         if custom_id == "voicemaster:claim":
             if user.id == owner_id:
@@ -444,7 +478,7 @@ class VoiceInterface(ui.LayoutView):
         if channel.name.endswith("channel"):
             with contextlib.suppress(discord.HTTPException):
                 await channel.edit(
-                    name=f"{interaction.user.display_name}'s channel",
+                    name=f"{interaction.user.display_name}'s channel"
                 )
 
         await _reply(
@@ -489,6 +523,7 @@ class VoiceInterface(ui.LayoutView):
         )
 
         row = ui.ActionRow()
+
         row.add_item(
             DisconnectMembers(
                 interaction.user,
@@ -549,28 +584,102 @@ class VoiceInterface(ui.LayoutView):
         interaction: discord.Interaction,
     ) -> None:
         channel = interaction.user.voice.channel
-        current = channel.user_limit or 0
 
-        if current >= 99:
-            await _reply(
-                interaction,
-                view=_container_msg(
-                    f"{interaction.user.mention}: limit can't exceed **99 members**"
-                ),
+        modal = LimitModal(
+            current_limit=channel.user_limit,
+        )
+
+        async def callback(
+            modal_interaction: discord.Interaction,
+        ) -> None:
+            raw_amount = (
+                modal.amount.value.strip()
+                if modal.amount.value
+                else ""
             )
-            return
 
-        await channel.edit(
-            user_limit=current + 1,
-            reason=f"VoiceMaster: {interaction.user} increased limit",
-        )
+            raw_has_limit = (
+                modal.has_limit.value.strip().lower()
+                if modal.has_limit.value
+                else "yes"
+            )
 
-        await _reply(
-            interaction,
-            view=_container_msg(
-                f"{interaction.user.mention}: limit updated to **{current + 1}**"
-            ),
-        )
+            if not raw_amount:
+                amount = 0
+            else:
+                try:
+                    amount = int(raw_amount)
+                except ValueError:
+                    await _reply(
+                        modal_interaction,
+                        view=_container_msg(
+                            f"{modal_interaction.user.mention}: "
+                            "amount must be a valid **number**"
+                        ),
+                    )
+                    return
+
+            if amount < 0 or amount > 99:
+                await _reply(
+                    modal_interaction,
+                    view=_container_msg(
+                        f"{modal_interaction.user.mention}: "
+                        "amount must be between **0** and **99**"
+                    ),
+                )
+                return
+
+            if raw_has_limit in {
+                "no",
+                "n",
+                "false",
+                "0",
+            }:
+                has_limit = False
+            elif raw_has_limit in {
+                "",
+                "yes",
+                "y",
+                "true",
+                "1",
+            }:
+                has_limit = True
+            else:
+                await _reply(
+                    modal_interaction,
+                    view=_container_msg(
+                        f"{modal_interaction.user.mention}: "
+                        "the limit option must be **yes** or **no**"
+                    ),
+                )
+                return
+
+            user_limit = amount if has_limit else 0
+
+            await channel.edit(
+                user_limit=user_limit,
+                reason=f"VoiceMaster: {modal_interaction.user} changed channel limit",
+            )
+
+            if has_limit:
+                message = (
+                    f"{modal_interaction.user.mention}: "
+                    f"voice channel limit set to **{amount}** users"
+                )
+            else:
+                message = (
+                    f"{modal_interaction.user.mention}: "
+                    "voice channel limit has been **disabled**"
+                )
+
+            await _reply(
+                modal_interaction,
+                view=_container_msg(message),
+            )
+
+        modal.on_submit = callback
+
+        await interaction.response.send_modal(modal)
 
     async def _lock(
         self,
@@ -632,9 +741,12 @@ class VoiceInterface(ui.LayoutView):
             new_name = name_input.value.strip()
 
             if not new_name:
-                await modal_interaction.response.send_message(
-                    "name cannot be empty",
-                    ephemeral=True,
+                await _reply(
+                    modal_interaction,
+                    view=_container_msg(
+                        f"{modal_interaction.user.mention}: "
+                        "name cannot be empty"
+                    ),
                 )
                 return
 
