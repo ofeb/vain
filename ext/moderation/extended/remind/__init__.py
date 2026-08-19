@@ -85,7 +85,30 @@ class Remind(Package):
         self._register_menus()
         if not self._remind_loop.is_running():
             self._remind_loop.start()
+        with contextlib.suppress(Exception):
+            self._force_reminder_contexts()
         await super().cog_load()
+
+    def _force_reminder_contexts(self) -> None:
+        """Ensure /reminder is installable in guilds, DMs, and group DMs."""
+        cmd = getattr(self, "reminder", None)
+        if cmd is None:
+            return
+        for target in (cmd, getattr(cmd, "app_command", None)):
+            if target is None:
+                continue
+            with contextlib.suppress(Exception):
+                from discord import app_commands as _ac
+                _ac.allowed_contexts(guilds=True, dms=True, private_channels=True)(target)
+                _ac.allowed_installs(guilds=True, users=True)(target)
+            for child in getattr(cmd, "commands", []) or []:
+                app = getattr(child, "app_command", None)
+                if app is None:
+                    continue
+                with contextlib.suppress(Exception):
+                    from discord import app_commands as _ac
+                    _ac.allowed_contexts(guilds=True, dms=True, private_channels=True)(app)
+                    _ac.allowed_installs(guilds=True, users=True)(app)
 
     async def cog_unload(self) -> None:
         for menu in self._menus:
@@ -244,17 +267,16 @@ class Remind(Package):
         aliases=["remind", "remindme"],
         description="Set a personal reminder",
         group=True,
+        invoke_without_command=True,
         example=",reminder add 2h check tickets",
         guilds=True,
         dms=True,
         groupchats=True,
     )
-    async def reminder(self, ctx, *, reminder: str = None):
+    async def reminder(self, ctx):
         if ctx.invoked_subcommand is not None:
             return
-        if not reminder or not str(reminder).strip():
-            return await ctx.send_help(ctx.command)
-        return await self._reminder_add_impl(ctx, reminder)
+        return await ctx.send_help(ctx.command)
 
     @reminder.command(
         name="add",
@@ -313,6 +335,9 @@ class Remind(Package):
         aliases=["ls", "all"],
         description="List your active reminders",
         example=",reminder list",
+        guilds=True,
+        dms=True,
+        groupchats=True,
     )
     async def reminder_list(self, ctx):
         await self._ensure_schema()
@@ -356,6 +381,9 @@ class Remind(Package):
         aliases=["rm", "delete", "del", "cancel"],
         description="Remove a reminder by id",
         example=",reminder remove 1",
+        guilds=True,
+        dms=True,
+        groupchats=True,
     )
     async def reminder_remove(self, ctx, id: int):
         await self._ensure_schema()
