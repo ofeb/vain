@@ -3554,9 +3554,9 @@ class ModerationCommands(Package):
 
         view = ConfirmView(ctx)
         ok = await view.prompt(
-            "Remove the **moderation system** setup? "
-            "This **deletes** the `logs` and `jail` categories and their channels "
-            "and clears the modlog configuration. **This can't be undone.**"
+            "> Remove the **moderation system** setup? "
+            "> -# This **deletes** the `logs` and `jail` categories and their channels "
+            "> -# and clears the modlog configuration. **This can't be undone.**"
         )
         if not ok:
             return await ctx.warn("Cancelled\n> -# **moderation unsetup was cancelled**")
@@ -3580,7 +3580,7 @@ class ModerationCommands(Package):
 
         if removed:
             await ctx.success(
-                f"Removed: {', '.join(removed)}\n"
+                f"Removed all channels and roles\n"
                 f"Use `{ctx.clean_prefix}setup` to recreate them."
             )
         else:
