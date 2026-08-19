@@ -508,46 +508,57 @@ class Vain(commands.AutoShardedBot):
     def ensure_hybrid_tree(self) -> dict:
         """Re-register every top-level HybridCommand/HybridGroup onto the tree.
 
+        Priority commands (define, urban, reminder, …) are registered first so
+        they survive Discord's 100 global chat-input limit.
         Returns a detailed report dict used by `,sync` / sync.txt.
         """
         from discord.ext.commands import HybridCommand, HybridGroup
+
+        PRIORITY = (
+            "define",
+            "urban",
+            "reminder",
+            "translate",
+            "ask",
+            "ocr",
+            "inviteinfo",
+            "help",
+        )
+        MAX_TREE = 95
 
         report: dict = {
             "hybrids_found": [],
             "hybrids_missing_app": [],
             "tree_added": [],
             "tree_failed": [],
+            "tree_skipped": [],
             "prefix_only": [],
             "tree_before": [],
             "tree_after": [],
         }
 
         try:
-            report["tree_before"] = sorted(
-                c.name for c in self.tree.get_commands()
-            )
+            report["tree_before"] = sorted(c.name for c in self.tree.get_commands())
         except Exception as e:
             report["tree_before"] = [f"<error listing tree: {e}>"]
 
-        seen: set[str] = set()
+        hybrids: list = []
         for cmd in list(self.walk_commands()):
             if getattr(cmd, "parent", None) is not None:
                 continue
-            is_hybrid = isinstance(cmd, (HybridCommand, HybridGroup))
-            qname = getattr(cmd, "qualified_name", None) or cmd.name
-            app = getattr(cmd, "app_command", None)
-
-            if not is_hybrid:
+            if not isinstance(cmd, (HybridCommand, HybridGroup)):
                 continue
-
+            app = getattr(cmd, "app_command", None)
             entry = {
                 "name": cmd.name,
-                "qualified": qname,
+                "qualified": getattr(cmd, "qualified_name", None) or cmd.name,
                 "type": type(cmd).__name__,
                 "cog": getattr(getattr(cmd, "cog", None), "qualified_name", None)
-                or getattr(getattr(cmd, "cog", None), "__class__", type("x", (), {})).__name__,
+                or type(getattr(cmd, "cog", None) or object()).__name__,
                 "has_app_command": app is not None,
                 "children": [],
+                "cmd": cmd,
+                "app": app,
             }
             if isinstance(cmd, HybridGroup):
                 for child in getattr(cmd, "commands", []) or []:
@@ -558,22 +569,44 @@ class Vain(commands.AutoShardedBot):
                             "type": type(child).__name__,
                         }
                     )
-
-            report["hybrids_found"].append(entry)
-
+            hybrids.append(entry)
+            report["hybrids_found"].append(
+                {k: v for k, v in entry.items() if k not in ("cmd", "app")}
+            )
             if app is None:
-                report["hybrids_missing_app"].append(qname)
-                log.warning("hybrid /%s has no app_command", qname)
-                continue
+                report["hybrids_missing_app"].append(entry["qualified"])
+                log.warning("hybrid /%s has no app_command", entry["qualified"])
 
-            name = getattr(app, "name", None) or cmd.name
+        def _prio_key(entry: dict) -> tuple:
+            name = entry["name"]
+            try:
+                idx = PRIORITY.index(name)
+            except ValueError:
+                idx = 1000
+            return (idx, name)
+
+        hybrids_sorted = sorted(hybrids, key=_prio_key)
+
+        
+        try:
+            for existing in list(self.tree.get_commands()):
+                with contextlib.suppress(Exception):
+                    self.tree.remove_command(existing.name)
+        except Exception:
+            pass
+
+        seen: set[str] = set()
+        for entry in hybrids_sorted:
+            app = entry["app"]
+            if app is None:
+                continue
+            name = getattr(app, "name", None) or entry["name"]
             if name in seen:
                 continue
+            if len(seen) >= MAX_TREE and entry["name"] not in PRIORITY:
+                report["tree_skipped"].append(f"{name} (over limit {MAX_TREE})")
+                continue
             seen.add(name)
-
-            with contextlib.suppress(Exception):
-                self.tree.remove_command(name)
-
             try:
                 try:
                     self.tree.add_command(app, override=True)
@@ -583,29 +616,20 @@ class Vain(commands.AutoShardedBot):
             except Exception as e:
                 report["tree_failed"].append(f"{name}: {type(e).__name__}: {e}")
                 log.warning("could not tree-add /%s: %s", name, e)
-
-        
-        for cmd in list(self.commands):
-            if isinstance(cmd, (HybridCommand, HybridGroup)):
-                continue
-            if getattr(cmd, "parent", None) is not None:
-                continue
-            
-            pass
+                seen.discard(name)
 
         try:
-            report["tree_after"] = sorted(
-                c.name for c in self.tree.get_commands()
-            )
+            report["tree_after"] = sorted(c.name for c in self.tree.get_commands())
         except Exception as e:
             report["tree_after"] = [f"<error listing tree: {e}>"]
 
         log.info(
-            "ensure_hybrid_tree: found=%s added=%s missing_app=%s failed=%s tree=%s",
+            "ensure_hybrid_tree: found=%s added=%s missing_app=%s failed=%s skipped=%s tree=%s",
             len(report["hybrids_found"]),
             len(report["tree_added"]),
             len(report["hybrids_missing_app"]),
             len(report["tree_failed"]),
+            len(report["tree_skipped"]),
             len(report["tree_after"]),
         )
         return report

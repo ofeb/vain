@@ -16,7 +16,7 @@ import discord
 from discord import ui
 
 from core.discord.ctx import Context
-from core.discord.hybrid import hybrid
+from core.discord.hybrid import hybrid, command
 from core.managers.permissions import has_permissions
 
 if TYPE_CHECKING:

@@ -11,7 +11,7 @@ import discord
 from discord.ext import commands
 
 from core.discord.ctx import Context
-from core.discord.hybrid import describe, hybrid, group
+from core.discord.hybrid import describe, hybrid, group, command
 from core.discord.package import Package
 
 from .events import MiscellaneousEvents
@@ -35,7 +35,7 @@ class Miscellaneous(MiscellaneousEvents, Package):
         latency = round(self.bot.latency * 1000)
         await ctx.success(f"Pong! **{latency}ms**")
 
-    @hybrid(
+    @command(
         name="uptime",
         description="check how long the bot has been online",
     )
@@ -77,7 +77,7 @@ class Miscellaneous(MiscellaneousEvents, Package):
         ))
         await ctx.send(embed=embed, view=view)
 
-    @hybrid(
+    @command(
         name="poll",
         description="create a poll with upvote and downvote reactions",
     )
@@ -110,13 +110,10 @@ class Miscellaneous(MiscellaneousEvents, Package):
         await msg.add_reaction("👎")
         await ctx.success("Added reactions to that message.")
 
-    @hybrid(
+    @command(
         name="avatar",
         description="View a user's avatar",
         aliases=["av"],
-        guilds=True,
-        dms=True,
-        groupchats=True,
     )
     @describe(user="User whose avatar to view")
     async def avatar(self, ctx: Context, *, user: discord.User = None) -> None:
@@ -130,7 +127,7 @@ class Miscellaneous(MiscellaneousEvents, Package):
         embed.set_image(url=user.display_avatar.url)
         await ctx.send(embed=embed)
 
-    @hybrid(
+    @command(
         name="color",
         description="show a hex codes color in an embed",
         aliases=["colour"],
@@ -152,7 +149,7 @@ class Miscellaneous(MiscellaneousEvents, Package):
         embed.set_thumbnail(url=f"https://singlecolorimage.com/get/{hex_clean}/200x200")
         await ctx.send(embed=embed)
 
-    @hybrid(
+    @command(
         name="charinfo",
         description="get information about a character/symbol",
     )
@@ -169,9 +166,10 @@ class Miscellaneous(MiscellaneousEvents, Package):
         )
         await ctx.send(embed=embed)
 
-    @hybrid(
+    @command(
         name="randomhex",
-        description="generate a random hex (color)",
+        description="generate a random hex (color
+    )",
     )
     async def randomhex(self, ctx: Context) -> None:
         hex_val = f"{random.randint(0, 0xFFFFFF):06x}"

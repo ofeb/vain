@@ -3,7 +3,7 @@ from typing import Optional
 from discord.ext.commands import group
 from discord import Embed, TextChannel
 from core.discord.package import Package
-from core.discord.hybrid import hybrid, describe
+from core.discord.hybrid import hybrid, describe, command
 
 from core.managers.permissions import has_permissions
 from .settings import Settings
@@ -18,7 +18,7 @@ class ImgonlyCommands(Package):
     async def cog_load(self) -> None:
         await self._ensure_schema()
 
-    @hybrid(
+    @command(
         name="imgonly",
         aliases=["gallery", "imageonly"],
         description="set up image + caption only channels",

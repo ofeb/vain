@@ -10,7 +10,7 @@ from discord.ext import commands
 from discord.ext.commands import hybrid_command, CommandError
 
 from core.discord.package import Package
-from core.discord.hybrid import hybrid, describe
+from core.discord.hybrid import hybrid, describe, command
 from core.managers.permissions import has_permissions
 from config import color
 
@@ -131,7 +131,7 @@ def _apply_script_to_builder(builder: Any, code: str) -> None:
 class Embedcode(Package):
     """copy embed or container code from a message"""
 
-    @hybrid(
+    @command(
         name="embedcode",
         aliases=["copyembed", "ec"],
         description="copy the embed code (or container code) from a message",
@@ -168,7 +168,7 @@ class Embedcode(Package):
 
         await self._deliver_code(ctx, title=title, code=code, kind=kind)
 
-    @hybrid(
+    @command(
         name="containercode",
         aliases=["ccode", "containerc", "copycontainer"],
         description="copy the container code (or embed code) from a message",

@@ -1412,7 +1412,7 @@ class Utility(commands.Cog):
 
 
 
-    @hybrid(
+    @command(
         name="dominant",
         aliases=["dom", "domcolor", "palette"],
         description="get dominant color(s) from avatars, image urls, or attachments",

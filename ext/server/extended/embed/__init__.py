@@ -7,7 +7,7 @@ import discord
 from discord.ext.commands import CommandError
 
 from core.discord.ctx import Context
-from core.discord.hybrid import describe, hybrid
+from core.discord.hybrid import describe, hybrid, command
 from core.discord.package import Package
 from core.managers.permissions import has_permissions
 from config import color
@@ -21,12 +21,11 @@ if TYPE_CHECKING:
 class EmbedCommands(Package):
     """saved embed templates and management"""
 
-    @hybrid(
+    @command(
         name="embed",
         description="create and manage saved embed templates",
         group=True,
         aliases=["savedembed"],
-        guild_only=True,
     )
     @has_permissions(manage_messages=True)
     async def embed(self, ctx: Context) -> None:
@@ -169,11 +168,10 @@ class EmbedCommands(Package):
             return await ctx.warn(f"No embed template named **`{name}`**.")
         await ctx.success(f"Deleted embed template **`{name}`**.")
 
-    @hybrid(
+    @command(
         name="editembed",
         description="edit a saved embed template",
         aliases=["embededit"],
-        guild_only=True,
     )
     @describe(name="Template name", script="New embed script")
     @has_permissions(manage_messages=True)

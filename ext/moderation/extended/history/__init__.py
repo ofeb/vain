@@ -4,7 +4,7 @@ import discord
 from discord.ext.commands import CommandError
 
 from core.discord.package import Package
-from core.discord.hybrid import hybrid, describe
+from core.discord.hybrid import hybrid, describe, command
 from core.managers.permissions import has_permissions
 
 from core.discord.views.embed import panel_embed
@@ -159,11 +159,10 @@ class History(Package):
                 out[cid] = (row["content"] or "")[:500]
         return out
 
-    @hybrid(
+    @command(
         name="history",
         description="view moderation history for a user",
         group=True,
-        guild_only=True,
     )
     @has_permissions(manage_messages=True)
     @describe(target="User ID, mention, or username to check", command="Filter by action type")

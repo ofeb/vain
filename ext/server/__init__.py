@@ -11,7 +11,7 @@ from colorthief import ColorThief
 
 from urllib.parse import urlparse
 
-from core.discord.hybrid import hybrid
+from core.discord.hybrid import hybrid, command
 from core.discord.package import Package
 from core.discord.views.paginate import send_pages
 from core.discord.views.rolepages import build_inrole_pages, build_roles_pages
@@ -580,13 +580,12 @@ class ServerCommands(Package):
             search_placeholder="Jump to category…",
         )
 
-    @hybrid(
+    @command(
         name="serverinfo",
         description="view detailed information about the current server",
         aliases=["si", "server", "guildinfo", "gi"],
         usage="",
         example=",serverinfo",
-        guild_only=True,
     )
     async def serverinfo(self, ctx):
         """show server info"""

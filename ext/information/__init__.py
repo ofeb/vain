@@ -9,7 +9,7 @@ from discord import ui
 from discord.ext import commands
 
 from core.discord.ctx import Context
-from core.discord.hybrid import describe, hybrid
+from core.discord.hybrid import describe, hybrid, command
 from core.discord.package import Package
 from core.discord.views.paginate import send_pages
 from core.discord.views.rolepages import build_roleinfo_pages
@@ -582,11 +582,10 @@ class InformationCommands(Package):
         ]
         await send_pages(ctx, pages)
 
-    @hybrid(
+    @command(
         name="seen",
         description="see when a member was last seen in the server",
         example=",seen @member",
-        guild_only=True,
     )
     @describe(member="Member to check")
     @commands.cooldown(1, 2, commands.BucketType.user)

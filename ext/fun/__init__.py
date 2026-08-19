@@ -195,7 +195,7 @@ class Fun(Package):
         )
         await ctx.send(embed=embed)
 
-    @hybrid(
+    @command(
         name="rate",
         description="rate something out of 10",
     )
@@ -229,13 +229,10 @@ class Fun(Package):
         result = result[:2000]
         await ctx.send(content=result)
 
-    @hybrid(
+    @command(
         name="banner",
         description="Get a user's banner",
         aliases=["userbanner"],
-        guilds=True,
-        dms=True,
-        groupchats=True,
     )
     @describe(user="User to get banner from (defaults to you)")
     async def banner(self, ctx: Context, user: discord.User = None) -> None:
@@ -258,7 +255,7 @@ class Fun(Package):
         embed.set_image(url=fetched.banner.url)
         await ctx.send(embed=embed)
 
-    @hybrid(
+    @command(
         name="ship",
         description="ship two people together",
     )
@@ -491,7 +488,7 @@ class Fun(Package):
         )
         await ctx.send(embed=embed)
 
-    @hybrid(
+    @command(
         name="wikihow",
         description="how to...?",
         aliases=["whow"],
@@ -507,7 +504,7 @@ class Fun(Package):
         )
         await ctx.send(embed=embed)
 
-    @hybrid(
+    @command(
         name="brainly",
         description="search brainly for answers",
     )
@@ -618,7 +615,7 @@ class Fun(Package):
     async def connect4(self, ctx, member: Optional[discord.User] = None) -> None:
         await start_connect4(ctx, opponent=member, vs_me=member is None)
 
-    @hybrid(
+    @command(
         name="wouldyourather",
         description="would you rather?",
         aliases=["wyr"],

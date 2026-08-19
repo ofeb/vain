@@ -8,7 +8,7 @@ from discord.ext import commands
 
 from core.discord.package import Package
 from core.discord.ctx import Context
-from core.discord.hybrid import describe, group, hybrid
+from core.discord.hybrid import describe, group, hybrid, command
 from config import color, emojis, music_enabled
 
 from .improper.api import SpotifyUserAPI, redirect_uri
@@ -511,7 +511,7 @@ class Spotify(Package):
             embed.set_thumbnail(url=album["images"][0]["url"])
         await ctx.send(embed=embed)
 
-    @hybrid(
+    @command(
         name="spotifyalbum",
         description="search for an album on spotify",
         aliases=["spalbum"],
@@ -548,7 +548,7 @@ class Spotify(Package):
         )
         await ctx.send(embed=embed, view=view)
 
-    @hybrid(
+    @command(
         name="spotifytrack",
         description="search for a track on spotify",
         aliases=["sptrack"],

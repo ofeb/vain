@@ -20,7 +20,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 from core.discord.package import Package
 
 from core.discord.ctx import Context
-from core.discord.hybrid import describe, group, hybrid
+from core.discord.hybrid import describe, group, hybrid, command
 from core.managers.permissions import has_permissions
 from config import color
 
@@ -1122,15 +1122,12 @@ class Socials(Package):
     
     
 
-    @hybrid(
+    @command(
         name="twitch",
         description="twitch profiles, live status & videos",
         aliases=["ttv"],
         group=True,
         invoke_without_command=True,
-        guilds=True,
-        dms=True,
-        groupchats=True,
     )
     @describe(username="Twitch login")
     async def twitch(self, ctx: Context, *, username: str | None = None) -> None:
@@ -1384,14 +1381,11 @@ class Socials(Package):
                 embed=c2(color=color.base, title=f"Pinterest · {query}", message="\n".join(lines))
             )
 
-    @hybrid(
+    @command(
         name="brave",
         description="brave search & page scrape",
         group=True,
         invoke_without_command=True,
-        guilds=True,
-        dms=True,
-        groupchats=True,
     )
     @describe(query="Search query")
     async def brave(self, ctx: Context, *, query: str | None = None) -> None:

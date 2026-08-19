@@ -11,7 +11,7 @@ from discord.ext import commands
 
 from core.discord.package import Package
 from core.discord.ctx import Context
-from core.discord.hybrid import describe, hybrid
+from core.discord.hybrid import describe, hybrid, command
 from config import color
 
 from core.discord.views.embed import panel_embed
@@ -162,7 +162,7 @@ class Fortnite(Package):
             return None
         return self._parse_fortnite_api_item(rows[0])
 
-    @hybrid(
+    @command(
         name="fortnite",
         description="fortnite shop and cosmetic lookup",
         group=True,
