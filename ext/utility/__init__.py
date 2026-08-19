@@ -1418,7 +1418,7 @@ class Utility(Remind):
     @command(
         name="dominant",
         aliases=["dom", "domcolor", "palette"],
-        description="get dominant color(s) from avatars, image urls, or attachments",
+        description="find the dominant colors of an users **avatar**, **URLs** of **Images** or **GIFs** and **attachments**",
         example=",dominant @user --colors 3",
         guilds=True,
         dms=True,
