@@ -539,7 +539,7 @@ class Remind(Package):
             jump = ""
 
         body = (
-            "> **oi wake up**, I'm here to **remind** you to start your **chore**\n\n"
+            "**oi wake up**, I'm here to **remind** you to start your **chore**\n\n"
             f"> -# **chore:** {msg}"
         )
 
