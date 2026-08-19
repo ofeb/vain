@@ -289,33 +289,87 @@ class Remind(Package):
         aliases=["set", "create", "new"],
         description="add a personal reminder",
         example=",reminder add 2h check tickets",
+        guilds=True,
+        dms=True,
+        groupchats=True,
     )
-    async def reminder_add(self, ctx, *, reminder: str = None):
-        if not reminder or not str(reminder).strip():
-            return await ctx.warn(
-                "Provide a duration and message\n"
-                f"> -# **usage:** {ctx.cmd('reminder add 2h check tickets')}"
-            )
-        return await self._reminder_add_impl(ctx, reminder)
+    @app_commands.describe(
+        chore="what to be reminded about",
+        in_="when (e.g. 30s, 5m, 5h, 1d)",
+    )
+    @app_commands.rename(in_="in")
+    async def reminder_add(self, ctx, chore: str = None, in_: str = None):
+        await self._ensure_schema()
 
-    async def _reminder_add_impl(self, ctx, reminder: str):
-        seconds, message, err = self._parse_reminder_args(reminder)
-        if err == "duration":
+        seconds = None
+        message = None
+
+        if getattr(ctx, "interaction", None) is not None:
+            if not chore or not str(chore).strip():
+                return await ctx.warn(
+                    "Provide a **chore** to be reminded about\n"
+                    f"> -# **usage:** /reminder add chore:… in:30m"
+                )
+            if not in_ or not str(in_).strip():
+                return await ctx.warn(
+                    "Provide **when** to remind you\n"
+                    f"> -# **examples:** `30s`, `5m`, `5h`, `1d`"
+                )
+            seconds = parse_duration_seconds(str(in_).strip())
+            message = str(chore).strip()
+            if not seconds or seconds < 30:
+                return await ctx.warn(
+                    "Please provide a **valid duration**\n"
+                    f"> -# **minimum:** 30 seconds (e.g. `30m`, `2h`, `1d`)"
+                )
+            if seconds > 30 * 86400:
+                return await ctx.warn(
+                    "Reminders can't exceed **30 days**\n> -# **maximum:** 30 days"
+                )
+        else:
+            rest = self._prefix_rest(ctx)
+            if not rest:
+                if chore or in_:
+                    rest = " ".join(x for x in (chore, in_) if x).strip()
+            if not rest:
+                return await ctx.warn(
+                    "Provide a duration and message\n"
+                    f"> -# **usage:** {ctx.cmd('reminder add 2h check tickets')}"
+                )
+            seconds, message, err = self._parse_reminder_args(rest)
+            if err == "duration":
+                return await ctx.warn(
+                    "Please provide a **valid duration**\n"
+                    f"> -# **minimum:** 30 seconds (e.g. `30m`, `2h`, `1d`)"
+                )
+            if err == "max":
+                return await ctx.warn(
+                    "Reminders can't exceed **30 days**\n> -# **maximum:** 30 days"
+                )
+            if err == "message" or not message:
+                return await ctx.warn(
+                    "Please provide a **reminder message**\n"
+                    f"> -# **usage:** {ctx.cmd('reminder add 2h check tickets')}"
+                )
+            if err or not seconds:
+                return await ctx.send_help(ctx.command)
+
+        if not message or not seconds:
             return await ctx.warn(
-                "Please provide a **valid duration**\n"
-                f"> -# **minimum:** 30 seconds (e.g. `30m`, `2h`, `1d`)"
-            )
-        if err == "max":
-            return await ctx.warn(
-                "Reminders can't exceed **30 days**\n> -# **maximum:** 30 days"
-            )
-        if err == "message" or not message:
-            return await ctx.warn(
-                "Please provide a **reminder message**\n"
+                "Provide a **chore** and **when**\n"
                 f"> -# **usage:** {ctx.cmd('reminder add 2h check tickets')}"
             )
-        if err or not seconds:
-            return await ctx.send_help(ctx.command)
+
+        
+        try:
+            dm = ctx.author.dm_channel
+            if dm is None:
+                dm = await ctx.author.create_dm()
+        except (discord.Forbidden, discord.HTTPException):
+            return await ctx.warn(
+                "I **can't DM you**\n"
+                "> -# open your DMs with this bot, then try again"
+            )
 
         guild_id = ctx.guild.id if ctx.guild else 0
         try:
@@ -332,9 +386,34 @@ class Remind(Package):
 
         return await ctx.success(
             f"I'll remind you in **{pretty}**\n"
-            f"> -# **message:** {message}\n"
+            f"> -# **chore:** {message}\n"
             f"> -# **id:** #{rid}"
         )
+
+    def _prefix_rest(self, ctx) -> str:
+        """Remaining text after the invoked command path (prefix only)."""
+        msg = getattr(ctx, "message", None)
+        if msg is None or not getattr(msg, "content", None):
+            return ""
+        content = msg.content
+        inv = (ctx.invoked_with or "").lower()
+        if not inv:
+            return ""
+        low = content.lower()
+        idx = low.find(inv)
+        if idx < 0:
+            return ""
+        rest = content[idx + len(inv) :].strip()
+        
+        
+        
+        
+        parent = getattr(ctx, "command", None)
+        if parent is not None and getattr(parent, "parent", None) is not None:
+            
+            return rest
+        
+        return rest
 
     @reminder.command(
         name="list",
@@ -405,7 +484,7 @@ class Remind(Package):
             )
         return await ctx.success(f"Removed reminder\n> -# **id:** #{id}")
 
-    @tasks.loop(seconds=20.0)
+    @tasks.loop(seconds=5.0)
     async def _remind_loop(self) -> None:
         if getattr(self.db, "pool", None) is None:
             return
@@ -415,54 +494,115 @@ class Remind(Package):
                 """SELECT id, user_id, number, message, jump_url, time
                    FROM reminders
                    WHERE time <= $1
-                   ORDER BY time ASC
-                   LIMIT 50""",
+                   ORDER BY time ASC, id ASC
+                   LIMIT 100""",
                 now,
             )
         except Exception:
             return
 
+        if not rows:
+            return
+
         for row in rows:
             try:
-                await self.db.execute("DELETE FROM reminders WHERE id = $1", row["id"])
                 user = self.bot.get_user(row["user_id"])
                 if user is None:
                     with contextlib.suppress(Exception):
                         user = await self.bot.fetch_user(row["user_id"])
                 if user is None:
+                    
+                    with contextlib.suppress(Exception):
+                        await self.db.execute(
+                            "DELETE FROM reminders WHERE id = $1", row["id"]
+                        )
                     continue
 
-                with contextlib.suppress(discord.Forbidden, discord.HTTPException):
-                    msg = (row["message"] or "").strip() or "something"
-                    msg = _JUMP_RE.sub("", msg).strip()
-                    jump = (row["jump_url"] or "").strip()
-                    body = (
-                        "> **oi wake up**, I'm here to **remind** you to start your **chore**\n\n"
-                        f"> -# **chore:** {msg}"
-                    )
-                    from discord import ui as _ui
-                    from core.discord.ctx import layout_from_items
-                    container = _ui.Container()
-                    for _attr in ("accent_color", "accent_colour"):
-                        if hasattr(container, _attr):
-                            with contextlib.suppress(Exception):
-                                setattr(container, _attr, None)
-                    container.add_item(_ui.TextDisplay(body))
-                    items: list = [container]
-                    if jump:
-                        items.append(
-                            _ui.ActionRow(
-                                _ui.Button(
-                                    label="When did I say this?",
-                                    style=discord.ButtonStyle.link,
-                                    url=jump,
-                                )
-                            )
+                delivered = await self._deliver_reminder(user, row)
+                if delivered:
+                    with contextlib.suppress(Exception):
+                        await self.db.execute(
+                            "DELETE FROM reminders WHERE id = $1", row["id"]
                         )
-                    layout = layout_from_items(items, timeout=None)
-                    await user.send(content=user.mention, view=layout)
+                
             except Exception:
                 continue
+
+    async def _deliver_reminder(self, user: discord.abc.User, row) -> bool:
+        """Send the reminder DM. Returns True if delivered (or permanently undeliverable)."""
+        msg = (row["message"] or "").strip() or "something"
+        msg = _JUMP_RE.sub("", msg).strip()
+        jump = (row.get("jump_url") or "").strip() if hasattr(row, "get") else (row["jump_url"] or "").strip()
+        if isinstance(jump, str):
+            pass
+        else:
+            jump = ""
+
+        body = (
+            "> **oi wake up**, I'm here to **remind** you to start your **chore**\n\n"
+            f"> -# **chore:** {msg}"
+        )
+
+        
+        try:
+            from discord import ui as _ui
+            from core.discord.ctx import layout_from_items
+
+            container = _ui.Container()
+            for _attr in ("accent_color", "accent_colour"):
+                if hasattr(container, _attr):
+                    with contextlib.suppress(Exception):
+                        setattr(container, _attr, None)
+            container.add_item(_ui.TextDisplay(body))
+            items: list = [container]
+            if jump.startswith("http"):
+                items.append(
+                    _ui.ActionRow(
+                        _ui.Button(
+                            label="When did I say this?",
+                            style=discord.ButtonStyle.link,
+                            url=jump,
+                        )
+                    )
+                )
+            layout = layout_from_items(items, timeout=None)
+            await user.send(content=user.mention, view=layout)
+            return True
+        except discord.Forbidden:
+            return True  
+        except Exception:
+            pass
+
+        try:
+            embed = c2(message=body, timestamp=False)
+            kwargs = {"content": user.mention, "embed": embed}
+            if jump.startswith("http"):
+                view = discord.ui.View()
+                view.add_item(
+                    discord.ui.Button(
+                        label="When did I say this?",
+                        style=discord.ButtonStyle.link,
+                        url=jump,
+                    )
+                )
+                kwargs["view"] = view
+            await user.send(**kwargs)
+            return True
+        except discord.Forbidden:
+            return True
+        except Exception:
+            pass
+
+        try:
+            text = f"{user.mention}\n{body}"
+            if jump.startswith("http"):
+                text += f"\n{jump}"
+            await user.send(text)
+            return True
+        except discord.Forbidden:
+            return True
+        except Exception:
+            return False
 
     @_remind_loop.before_loop
     async def _before_remind_loop(self) -> None:
