@@ -3506,6 +3506,7 @@ class ModerationCommands(Package):
 
     @command(
         name="setup",
+        aliases=["setup", "setme"]
         description="start process for setting up the moderation system",
     )
     async def setup(self, ctx):
@@ -3544,7 +3545,7 @@ class ModerationCommands(Package):
 
     @command(
         name="unsetup",
-        aliases=["unsetme", "reset"],
+        aliases=["unsetme", "reset", "unset"],
         description="remove moderation system setup (categories and channels)",
     )
     @has_permissions(administrator=True)
@@ -3554,9 +3555,10 @@ class ModerationCommands(Package):
 
         view = ConfirmView(ctx)
         ok = await view.prompt(
-            "Remove the **moderation system** setup?\n"
-            "> -# This **deletes** the `logs` and `jail` categories and their channels\n"
-            "> -# and clears the modlog configuration. **This can't be undone.**"
+            "Remove the **moderation system** setup?\n\n"
+            "> -# This **removes** the configured channels and roles created\n"
+            "> -# however this does **not** affect **voicemaster**, **antinuke** and **antiraid**.\n"
+            "> -# **this action can't be undone**, proceed with caution"
         )
         if not ok:
             return await ctx.warn("Cancelled\n> -# **moderation unsetup was cancelled**")
