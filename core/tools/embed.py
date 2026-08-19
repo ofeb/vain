@@ -132,6 +132,7 @@ _SMART_EMBED_HINTS = (
 
 def is_container_script(raw: str) -> bool:
     """Return True when a template is Components V2 container script."""
+    raw = _strip_code_fences(raw)
     stripped = str(raw).strip().lower()
     if stripped.startswith("{container}") or stripped.startswith("container$v"):
         return True
@@ -140,12 +141,43 @@ def is_container_script(raw: str) -> bool:
     return False
 
 
+def _strip_code_fences(text: str) -> str:
+    """Strip surrounding single/triple backticks so fenced scripts still parse."""
+    s = str(text or "").strip()
+    if not s:
+        return s
+    if s.startswith("```"):
+        s = s[3:]
+        nl = s.find(chr(10))
+        if nl != -1:
+            first, rest = s[:nl], s[nl + 1:]
+            if first.strip() and " " not in first.strip() and "{" not in first:
+                s = rest
+            else:
+                s = first + chr(10) + rest
+        s = s.rstrip()
+        if s.endswith("```"):
+            s = s[:-3].rstrip()
+        return s.strip()
+    if s.startswith("`") and s.endswith("`") and len(s) >= 2:
+        while len(s) >= 2 and s[0] == "`" and s[-1] == "`":
+            inner = s[1:-1].strip()
+            if not inner:
+                break
+            s = inner
+            if s.startswith("{") or s.startswith("$v") or s.lower().startswith(("embed", "container")):
+                break
+        return s.strip()
+    return s
+
+
 def is_embed_script(raw: str) -> bool:
     """Return True when a template should be parsed as vain embed code.
 
     Smart default: bare ``{title:}`` / ``{description:}`` (etc.) scripts without
     an explicit ``{embed}`` or ``{container}`` tag are treated as embeds.
     """
+    raw = _strip_code_fences(raw)
     if is_container_script(raw):
         return False
     stripped = str(raw).strip()
@@ -335,10 +367,10 @@ def maybe_wrap_embed_script(text: str) -> str:
     - ``{embed}`` / ``embed$v`` / bare ``{title:}`` etc. → classic embed
     - plain text with no field tags → plain content message (no wrap)
     """
-    stripped = str(text).strip()
+    stripped = _strip_code_fences(str(text).strip())
     if not stripped:
         return stripped
-    
+
     converted = discohook_to_script(stripped)
     if converted is not None:
         return converted
@@ -1474,6 +1506,7 @@ async def parse(raw: str, sendable: bool = False) -> dict:
 
 async def parse_embed_script(raw: str, _ctx: Context | None = None) -> ParsedEmbedScript:
     """Return a compatibility object for embed-script consumers."""
+    raw = _strip_code_fences(raw)
     payload = await parse(raw, sendable=True)
     embed = payload.get("embed")
     embeds = payload.get("embeds") or []
