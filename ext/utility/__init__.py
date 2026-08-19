@@ -907,6 +907,7 @@ class Utility(Remind):
             self.bot.tree.add_command(menu)
             self._menus.append(menu)
         self._ensure_hybrid_contexts()
+        await super().cog_load()
 
     def _ensure_hybrid_contexts(self) -> None:
         names = ("ask", "translate", "ocr")
@@ -938,8 +939,6 @@ class Utility(Remind):
                             param.required = False
                 except Exception:
                     pass
-
-        await super().cog_load()
 
     async def cog_unload(self) -> None:
         for menu in self._menus:
