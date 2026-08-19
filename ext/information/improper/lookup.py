@@ -156,8 +156,6 @@ def build_urban_embed(
     word = entry.get("word", "unknown")
     definition = _clean_ud_text(entry.get("definition", ""))
     example = _clean_ud_text(entry.get("example", ""), limit=500)
-    thumbs_up = int(entry.get("thumbs_up", 0))
-    thumbs_down = int(entry.get("thumbs_down", 0))
     permalink = entry.get("permalink") or f"https://www.urbandictionary.com/define.php?term={quote(word)}"
 
     body_parts: list[str] = []
