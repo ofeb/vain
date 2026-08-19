@@ -774,32 +774,59 @@ class ServerCommands(Package):
     @command(
         name="icon",
         aliases=["servericon", "guildicon"],
-        description="View the server's icon",
+        description="view the server icon",
+        guild_only=True,
     )
     async def icon(self, ctx):
-        """show server icon"""
-        if not ctx.guild.icon:
-            from discord.ext.commands import CommandError
-            raise CommandError("this server has no icon")
-        e = c2(color=self.color, message="", timestamp=False)
-        e.set_image(url=ctx.guild.icon.url)
-        e.set_author(name=ctx.guild.name)
-        await ctx.send(embed=e)
+        return await self.serveravatar(ctx)
+
+    @command(
+        name="serveravatar",
+        aliases=["sav"],
+        description="view the server avatar",
+        guild_only=True,
+    )
+    async def serveravatar(self, ctx):
+        if not ctx.guild or not ctx.guild.icon:
+            return await ctx.warn("this server has no avatar")
+        url = str(ctx.guild.icon.replace(size=4096).url)
+        from discord import ui as _ui
+        from core.discord.ctx import layout_from_items
+        container = _ui.Container()
+        for attr in ("accent_color", "accent_colour"):
+            if hasattr(container, attr):
+                with contextlib.suppress(Exception):
+                    setattr(container, attr, None)
+        container.add_item(_ui.TextDisplay(f"**{ctx.guild.name}'s server avatar**"))
+        try:
+            container.add_item(_ui.MediaGallery(discord.MediaGalleryItem(url)))
+        except Exception:
+            container.add_item(_ui.TextDisplay(f"[open avatar]({url})"))
+        await ctx.send(view=layout_from_items([container], timeout=None))
 
     @command(
         name="serverbanner",
-        aliases=["guildbanner"],
-        description="View the server's banner",
+        aliases=["sbanner", "guildbanner"],
+        description="view the server banner",
+        guild_only=True,
     )
     async def serverbanner(self, ctx):
-        """show server banner"""
-        if not ctx.guild.banner:
-            from discord.ext.commands import CommandError
-            raise CommandError("this server has no banner")
-        e = c2(color=self.color, message="", timestamp=False)
-        e.set_image(url=ctx.guild.banner.url)
-        e.set_author(name=ctx.guild.name)
-        await ctx.send(embed=e)
+        if not ctx.guild or not ctx.guild.banner:
+            return await ctx.warn("this server has no banner")
+        url = str(ctx.guild.banner.replace(size=4096).url)
+        from discord import ui as _ui
+        from core.discord.ctx import layout_from_items
+        container = _ui.Container()
+        for attr in ("accent_color", "accent_colour"):
+            if hasattr(container, attr):
+                with contextlib.suppress(Exception):
+                    setattr(container, attr, None)
+        container.add_item(_ui.TextDisplay(f"**{ctx.guild.name}'s server banner**"))
+        try:
+            container.add_item(_ui.MediaGallery(discord.MediaGalleryItem(url)))
+        except Exception:
+            container.add_item(_ui.TextDisplay(f"[open banner]({url})"))
+        await ctx.send(view=layout_from_items([container], timeout=None))
 
     @command(
         name="seticon",

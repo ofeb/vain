@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import contextlib
+
 import random
 import re
 import urllib.parse
@@ -229,14 +231,16 @@ class Fun(Package):
         result = result[:2000]
         await ctx.send(content=result)
 
-    @command(
+    @hybrid(
         name="banner",
-        description="Get a user's banner",
+        description="view a user's banner",
         aliases=["userbanner"],
+        guilds=True,
+        dms=True,
+        groupchats=True,
     )
-    @describe(user="User to get banner from (defaults to you)")
+    @describe(user="user whose banner to view")
     async def banner(self, ctx: Context, user: discord.User = None) -> None:
-        """Get a user's banner (works with mentions, IDs, and DMs)."""
         target = user or ctx.author
         try:
             fetched = await self.bot.fetch_user(target.id)
@@ -246,14 +250,21 @@ class Fun(Package):
         if not fetched.banner:
             return await ctx.warn(f"{target.mention} doesn't have a banner")
 
-        embed = c2(
-            title=f"{fetched.display_name}'s banner",
-            color=color.base,
-            message="",
-            timestamp=False,
-        )
-        embed.set_image(url=fetched.banner.url)
-        await ctx.send(embed=embed)
+        url = str(fetched.banner.replace(size=4096).url)
+        from discord import ui as _ui
+        from core.discord.ctx import layout_from_items
+        container = _ui.Container()
+        for attr in ("accent_color", "accent_colour"):
+            if hasattr(container, attr):
+                with contextlib.suppress(Exception):
+                    setattr(container, attr, None)
+        container.add_item(_ui.TextDisplay(f"**{fetched.name}'s banner**"))
+        try:
+            container.add_item(_ui.MediaGallery(discord.MediaGalleryItem(url)))
+        except Exception:
+            container.add_item(_ui.TextDisplay(f"[open banner]({url})"))
+        view = layout_from_items([container], timeout=None)
+        await ctx.send(view=view)
 
     @command(
         name="ship",

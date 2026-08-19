@@ -1427,6 +1427,19 @@ class Utility(Remind):
     async def dominant(self, ctx: Context, *, query: str = None) -> None:
         """Extract dominant colors via ColorThief. Flag: --colors / --colour (1-5, default 1)."""
         import re as _re
+        from io import BytesIO
+        from PIL import Image
+        from colorthief import ColorThief
+
+        def _avatar_url(user: discord.abc.User) -> str:
+            av = user.display_avatar
+            try:
+                return str(av.replace(size=1024, format="png").url)
+            except Exception:
+                try:
+                    return str(av.replace(size=1024).url)
+                except Exception:
+                    return str(av.url)
 
         rest = (query or "").strip()
         if not rest and ctx.message and ctx.message.content:
@@ -1491,7 +1504,7 @@ class Utility(Remind):
                 if m.bot and m.id == getattr(self.bot.user, "id", None):
                     continue
                 mention_ids.add(m.id)
-                _add(f"avatar:{m.id}", str(m.display_avatar.replace(size=256, format="png").url))
+                _add(f"avatar:{m.id}", _avatar_url(m))
 
         url_re = _re.compile(r"https?://\S+", _re.I)
         mention_re = _re.compile(r"<@!?(\d{15,25})>")
@@ -1514,7 +1527,7 @@ class Utility(Remind):
             if user is None:
                 continue
             mention_ids.add(uid)
-            _add(f"avatar:{uid}", str(user.display_avatar.replace(size=256, format="png").url))
+            _add(f"avatar:{uid}", _avatar_url(user))
 
         
         text = mention_re.sub(" ", rest or "")
@@ -1540,7 +1553,7 @@ class Utility(Remind):
                 if user is None:
                     continue
                 mention_ids.add(uid)
-                _add(f"avatar:{uid}", str(user.display_avatar.replace(size=256, format="png").url))
+                _add(f"avatar:{uid}", _avatar_url(user))
                 continue
 
             
@@ -1568,7 +1581,7 @@ class Utility(Remind):
                 if user.id in mention_ids:
                     continue
                 mention_ids.add(user.id)
-                _add(f"avatar:{user.id}", str(user.display_avatar.replace(size=256, format="png").url))
+                _add(f"avatar:{user.id}", _avatar_url(user))
 
         if not sources:
             if rest:
@@ -1578,7 +1591,7 @@ class Utility(Remind):
                 )
             _add(
                 f"avatar:{ctx.author.id}",
-                str(ctx.author.display_avatar.replace(size=256, format="png").url),
+                _avatar_url(ctx.author),
             )
 
         sources = sources[:10]
@@ -1588,7 +1601,7 @@ class Utility(Remind):
                 "User-Agent": "Mozilla/5.0 (compatible; VainBot/1.0)",
                 "Accept": "image/png,image/webp,image/jpeg,image/gif,image/*;q=0.8",
             }
-            # Prefer PNG for Discord CDN avatars
+            
             fetch_url = url
             if "cdn.discordapp.com" in url or "media.discordapp.net" in url:
                 if "?" in fetch_url:
@@ -1633,7 +1646,7 @@ class Utility(Remind):
                         img = bg
                     else:
                         img = img.convert("RGB")
-                    # ColorThief needs a seekable file-like with a real name sometimes
+                    
                     buf = BytesIO()
                     img.save(buf, format="PNG")
                     buf.seek(0)

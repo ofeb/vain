@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import datetime
 import json
 import random
@@ -110,22 +111,32 @@ class Miscellaneous(MiscellaneousEvents, Package):
         await msg.add_reaction("👎")
         await ctx.success("Added reactions to that message.")
 
-    @command(
+    @hybrid(
         name="avatar",
-        description="View a user's avatar",
+        description="view a user's avatar",
         aliases=["av"],
+        guilds=True,
+        dms=True,
+        groupchats=True,
     )
-    @describe(user="User whose avatar to view")
-    async def avatar(self, ctx: Context, *, user: discord.User = None) -> None:
+    @describe(user="user whose avatar to view")
+    async def avatar(self, ctx: Context, user: discord.User = None) -> None:
         user = user or ctx.author
-        embed = c2(
-            title=f"{user.display_name}'s avatar",
-            color=color.base,
-            message="",
-            timestamp=False,
-        )
-        embed.set_image(url=user.display_avatar.url)
-        await ctx.send(embed=embed)
+        url = str(user.display_avatar.replace(size=4096).url)
+        from discord import ui as _ui
+        from core.discord.ctx import layout_from_items
+        container = _ui.Container()
+        for attr in ("accent_color", "accent_colour"):
+            if hasattr(container, attr):
+                with contextlib.suppress(Exception):
+                    setattr(container, attr, None)
+        container.add_item(_ui.TextDisplay(f"**{user.name}'s avatar**"))
+        try:
+            container.add_item(_ui.MediaGallery(discord.MediaGalleryItem(url)))
+        except Exception:
+            container.add_item(_ui.TextDisplay(f"[open avatar]({url})"))
+        view = layout_from_items([container], timeout=None)
+        await ctx.send(view=view)
 
     @command(
         name="color",
