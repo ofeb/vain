@@ -143,7 +143,7 @@ class Embedcode(Package):
     @describe(message="Message link, id, or leave empty to use a reply")
     @has_permissions(manage_messages=True)
     async def embedcode(self, ctx, *, message: str = None):
-        msg = await self._resolve_message(ctx, message)
+        msg = await self._resolve_code_message(ctx, message)
         if msg is None:
             return await ctx.warn(
                 "Reply to a message or pass a link / id\n"
@@ -180,7 +180,7 @@ class Embedcode(Package):
     @describe(message="Message link, id, or leave empty to use a reply")
     @has_permissions(manage_messages=True)
     async def containercode(self, ctx, *, message: str = None):
-        msg = await self._resolve_message(ctx, message)
+        msg = await self._resolve_code_message(ctx, message)
         if msg is None:
             return await ctx.warn(
                 "Reply to a message or pass a link / id\n"
@@ -215,27 +215,26 @@ class Embedcode(Package):
                 view=view,
             )
 
-    async def _resolve_message(self, ctx, raw: str | None) -> discord.Message | None:
-        
+    async def _resolve_code_message(self, ctx, raw: str | None) -> discord.Message | None:
         if ctx.message and ctx.message.reference:
             ref = ctx.message.reference.resolved
             if isinstance(ref, discord.Message):
                 return ref
             mid = ctx.message.reference.message_id
-            if mid:
+            channel = ctx.channel
+            if mid and channel is not None:
                 with contextlib.suppress(Exception):
-                    return await ctx.channel.fetch_message(mid)
+                    return await channel.fetch_message(mid)
 
         if not raw or not str(raw).strip():
             return None
 
         text = str(raw).strip()
-        
         msg = await self._fetch_message(ctx, text)
         if msg is not None:
             return msg
-        
-        if text.isdigit():
+
+        if text.isdigit() and ctx.channel is not None:
             with contextlib.suppress(Exception):
                 return await ctx.channel.fetch_message(int(text))
         return None
