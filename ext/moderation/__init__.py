@@ -3508,10 +3508,29 @@ class ModerationCommands(Package):
         name="setup",
         description="start process for setting up the moderation system",
     )
-    @has_permissions(administrator=True)
     async def setup(self, ctx):
-        """interactive automatic setup for vain"""
-        from .extended.setup import SetupView
+        """interactive automatic setup for vain — guild owner only"""
+        from .extended.setup import (
+            SetupView,
+            format_cooldown_left,
+            setup_on_cooldown,
+        )
+
+        if ctx.guild is None:
+            return
+        owners = getattr(self.bot, "owners", None) or []
+        if ctx.author.id != ctx.guild.owner_id and ctx.author.id not in owners:
+            return await ctx.warn(
+                "You are **missing** the permission to **setup** vain\n"
+                "> -# **Permission Needed: Guild Owner**"
+            )
+
+        left = setup_on_cooldown(ctx.guild.id)
+        if left is not None:
+            wait = format_cooldown_left(left)
+            return await ctx.warn(
+                f"Setup is on cooldown\n> -# **try again in** `{wait}`"
+            )
 
         prefix = getattr(ctx, "clean_prefix", None) or getattr(ctx, "prefix", None) or ","
         view = SetupView(

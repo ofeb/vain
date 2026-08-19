@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import time
 from typing import TYPE_CHECKING, Literal
@@ -7,15 +8,13 @@ from typing import TYPE_CHECKING, Literal
 import discord
 from discord import ui
 
-from core.discord.ctx import layout_from_items
-
 if TYPE_CHECKING:
     from core.vain import Vain
 
 LOADING = "<a:loading:1534646618693963807>"
 BOT_NAME = "vain"
-SETUP_TIMEOUT = 300
-SETUP_COOLDOWN = 120
+SETUP_TIMEOUT = 300  # 5 minutes — buttons expire after this
+SETUP_COOLDOWN = 120  # 2 minutes between setup / revert actions
 
 _setup_cooldown: dict[int, float] = {}
 
@@ -29,7 +28,9 @@ def _clear_accent(container: ui.Container) -> None:
 
 def _sep(container: ui.Container) -> None:
     try:
-        container.add_item(ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small))
+        container.add_item(
+            ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small)
+        )
     except Exception:
         with contextlib.suppress(Exception):
             container.add_item(ui.Separator(visible=True))
@@ -51,8 +52,14 @@ def mark_setup_cooldown(guild_id: int) -> None:
     _setup_cooldown[guild_id] = time.monotonic() + SETUP_COOLDOWN
 
 
+def format_cooldown_left(left: float) -> str:
+    mins = int(left // 60)
+    secs = int(left % 60)
+    return f"{mins}m {secs}s" if mins else f"{secs}s"
+
+
 class SetupView(ui.LayoutView):
-    """Interactive vain automatic setup."""
+    """Interactive vain automatic setup with 5m phase timeouts and 2m action cooldown."""
 
     def __init__(
         self,
@@ -63,7 +70,8 @@ class SetupView(ui.LayoutView):
         prefix: str = ",",
         message: discord.Message | None = None,
     ) -> None:
-        super().__init__(timeout=SETUP_TIMEOUT)
+        # We manage phase timeouts ourselves so each stage gets a full 5 minutes.
+        super().__init__(timeout=None)
         self.bot = bot
         self.guild = guild
         self.author_id = author_id
@@ -71,10 +79,37 @@ class SetupView(ui.LayoutView):
         self.message = message
         self._created: list[tuple[str, int]] = []
         self._notes: list[str] = []
+        self._expire_task: asyncio.Task | None = None
         self._phase: Literal[
             "intro", "loading", "done", "reverting", "reverted", "expired", "failed"
         ] = "intro"
         self._build_intro()
+
+    # ── phase timeout (5 minutes per interactive panel) ──────────────────────
+
+    def _cancel_expire(self) -> None:
+        if self._expire_task is not None and not self._expire_task.done():
+            self._expire_task.cancel()
+        self._expire_task = None
+
+    def _arm_expire(self) -> None:
+        """Start a fresh 5-minute timer for the current interactive phase."""
+        self._cancel_expire()
+
+        async def _runner() -> None:
+            try:
+                await asyncio.sleep(SETUP_TIMEOUT)
+                await self.on_timeout()
+            except asyncio.CancelledError:
+                return
+
+        try:
+            loop = asyncio.get_running_loop()
+            self._expire_task = loop.create_task(_runner())
+        except RuntimeError:
+            self._expire_task = None
+
+    # ── builders ─────────────────────────────────────────────────────────────
 
     def _build_intro(self) -> None:
         self._phase = "intro"
@@ -106,9 +141,11 @@ class SetupView(ui.LayoutView):
         row.add_item(btn)
         container.add_item(row)
         self.add_item(container)
+        self._arm_expire()
 
     def _build_loading(self) -> None:
         self._phase = "loading"
+        self._cancel_expire()
         self.clear_items()
         container = ui.Container()
         _clear_accent(container)
@@ -158,9 +195,11 @@ class SetupView(ui.LayoutView):
         row.add_item(btn)
         container.add_item(row)
         self.add_item(container)
+        self._arm_expire()
 
     def _build_reverting(self) -> None:
         self._phase = "reverting"
+        self._cancel_expire()
         self.clear_items()
         container = ui.Container()
         _clear_accent(container)
@@ -181,7 +220,7 @@ class SetupView(ui.LayoutView):
         container.add_item(
             ui.TextDisplay(
                 f"-# channels and roles from automatic setup were removed\n"
-                f"-# press **setup** or run `{self.prefix}setup` to set {BOT_NAME} up in this server"
+                f"-# press the button or run `{self.prefix}setup` again to set {BOT_NAME} up in this server"
             )
         )
         row = ui.ActionRow()
@@ -190,9 +229,11 @@ class SetupView(ui.LayoutView):
         row.add_item(btn)
         container.add_item(row)
         self.add_item(container)
+        self._arm_expire()
 
     def _build_expired_intro(self) -> None:
         self._phase = "expired"
+        self._cancel_expire()
         self.clear_items()
         container = ui.Container()
         _clear_accent(container)
@@ -206,7 +247,9 @@ class SetupView(ui.LayoutView):
         self.add_item(container)
 
     def _build_expired_done(self) -> None:
+        """Thank-you panel after 5m — same content, revert button removed."""
         self._phase = "expired"
+        self._cancel_expire()
         self.clear_items()
         container = ui.Container()
         _clear_accent(container)
@@ -240,7 +283,9 @@ class SetupView(ui.LayoutView):
         self.add_item(container)
 
     def _build_expired_reverted(self) -> None:
+        """Reverted panel after 5m — setup button removed."""
         self._phase = "expired"
+        self._cancel_expire()
         self.clear_items()
         container = ui.Container()
         _clear_accent(container)
@@ -255,6 +300,7 @@ class SetupView(ui.LayoutView):
 
     def _build_failed(self, error: str) -> None:
         self._phase = "failed"
+        self._cancel_expire()
         self.clear_items()
         container = ui.Container()
         _clear_accent(container)
@@ -266,6 +312,8 @@ class SetupView(ui.LayoutView):
             )
         )
         self.add_item(container)
+
+    # ── lifecycle ────────────────────────────────────────────────────────────
 
     async def on_timeout(self) -> None:
         if self._phase == "intro":
@@ -279,26 +327,28 @@ class SetupView(ui.LayoutView):
         if self.message is not None:
             with contextlib.suppress(Exception):
                 await self.message.edit(view=self)
+        self.stop()
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.guild is None:
             return False
-        owner_id = interaction.guild.owner_id
-        if interaction.user and interaction.user.id == owner_id:
+        user = interaction.user
+        if user is None:
+            return False
+        owners = getattr(self.bot, "owners", None) or []
+        if user.id == interaction.guild.owner_id or user.id in owners:
             return True
+        msg = (
+            "You are **missing** the permission to **setup** vain\n"
+            "> -# **Permission Needed: Guild Owner**"
+        )
         with contextlib.suppress(Exception):
-            if not interaction.response.is_done():
-                await interaction.response.send_message(
-                    "You are **missing** the permission to **setup** vain\n"
-                    "> -# **Permission Needed: Guild Owner**",
-                    ephemeral=True,
-                )
+            if hasattr(interaction, "warning"):
+                await interaction.warning(msg)
+            elif not interaction.response.is_done():
+                await interaction.response.send_message(msg, ephemeral=True)
             else:
-                await interaction.followup.send(
-                    "You are **missing** the permission to **setup** vain\n"
-                    "> -# **Permission Needed: Guild Owner**",
-                    ephemeral=True,
-                )
+                await interaction.followup.send(msg, ephemeral=True)
         return False
 
     async def _edit(self, interaction: discord.Interaction | None = None) -> None:
@@ -314,21 +364,18 @@ class SetupView(ui.LayoutView):
         left = setup_on_cooldown(self.guild.id)
         if left is None:
             return True
-        mins = int(left // 60)
-        secs = int(left % 60)
-        wait = f"{mins}m {secs}s" if mins else f"{secs}s"
+        wait = format_cooldown_left(left)
+        msg = f"Setup is on cooldown\n> -# **try again in** `{wait}`"
         with contextlib.suppress(Exception):
-            if not interaction.response.is_done():
-                await interaction.response.send_message(
-                    f"Setup is on cooldown\n> -# **try again in** `{wait}`",
-                    ephemeral=True,
-                )
+            if hasattr(interaction, "warning"):
+                await interaction.warning(msg)
+            elif not interaction.response.is_done():
+                await interaction.response.send_message(msg, ephemeral=True)
             else:
-                await interaction.followup.send(
-                    f"Setup is on cooldown\n> -# **try again in** `{wait}`",
-                    ephemeral=True,
-                )
+                await interaction.followup.send(msg, ephemeral=True)
         return False
+
+    # ── button callbacks ─────────────────────────────────────────────────────
 
     async def _on_setup(self, interaction: discord.Interaction) -> None:
         if not await self._check_cooldown(interaction):
@@ -378,7 +425,11 @@ class SetupView(ui.LayoutView):
         self._build_reverted()
         await self._edit()
 
-    async def _ensure_role(self, name: str, *, colour: discord.Colour | None = None) -> discord.Role:
+    # ── ensure helpers ───────────────────────────────────────────────────────
+
+    async def _ensure_role(
+        self, name: str, *, colour: discord.Colour | None = None
+    ) -> discord.Role:
         role = discord.utils.get(self.guild.roles, name=name)
         if role is not None:
             return role
@@ -447,6 +498,8 @@ class SetupView(ui.LayoutView):
         )
         self._created.append(("channel", ch.id))
         return ch
+
+    # ── setup / revert logic ─────────────────────────────────────────────────
 
     async def _run_setup(self) -> None:
         guild = self.guild
