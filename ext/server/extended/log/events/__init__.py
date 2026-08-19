@@ -135,6 +135,48 @@ def _when_line(ts=None) -> str:
         ts = int(discord.utils.utcnow().timestamp())
     return f"-# **when**: <t:{ts}:F> · <t:{ts}:R>"
 
+
+def _embed_to_ce_script(embed: discord.Embed) -> str:
+    """Convert a discord.Embed to a vain {embed} script for ,ce recreation."""
+    parts: list[str] = ["{embed}"]
+    if embed.title:
+        parts.append(f"$v{{title: {embed.title}}}")
+    if embed.description:
+        parts.append(f"$v{{description: {embed.description}}}")
+    if embed.color is not None:
+        try:
+            parts.append(f"$v{{color: #{int(embed.color.value):06x}}}")
+        except Exception:
+            pass
+    if embed.url:
+        parts.append(f"$v{{url: {embed.url}}}")
+    if embed.timestamp:
+        parts.append("$v{timestamp}")
+    if embed.author and embed.author.name:
+        section = f"author: {embed.author.name}"
+        if embed.author.icon_url:
+            section += f" && {embed.author.icon_url}"
+        if embed.author.url:
+            section += f" && {embed.author.url}"
+        parts.append(f"$v{{{section}}}")
+    if embed.footer and embed.footer.text:
+        section = f"footer: {embed.footer.text}"
+        if embed.footer.icon_url:
+            section += f" && {embed.footer.icon_url}"
+        parts.append(f"$v{{{section}}}")
+    if embed.image and embed.image.url:
+        parts.append(f"$v{{image: {embed.image.url}}}")
+    if embed.thumbnail and embed.thumbnail.url:
+        parts.append(f"$v{{thumbnail: {embed.thumbnail.url}}}")
+    for field in embed.fields:
+        name = field.name or "field"
+        value = field.value or ""
+        inline = " && true" if field.inline else ""
+        parts.append(f"$v{{field: {name} && {value}{inline}}}")
+    return "".join(parts)
+
+
+
 class LogEvents:
     _BULK_THRESHOLD: int = 3
     _BULK_WINDOW: float = 10.0
@@ -220,11 +262,27 @@ class LogEvents:
                 continue
 
             authors[author.id] = author
-            text = (msg.content or "").strip() or "*empty*"
-            file_blocks.append(f"{author}: {text}")
+            text = (msg.content or "").strip()
+            embeds = list(msg.embeds or [])
             att_urls = [a.url for a in (msg.attachments or []) if getattr(a, "url", None)]
+
+            
+            if text:
+                file_blocks.append(f"{author}: {text}")
+            else:
+                file_blocks.append(f"{author}:")
+
+            for emb in embeds:
+                try:
+                    script = _embed_to_ce_script(emb)
+                except Exception:
+                    script = "{embed}$v{description: *could not serialize embed*}"
+                file_blocks.append(f"embed (recreate using ,ce): {script}")
+
             if att_urls:
-                file_blocks.append("attachments: " + " ".join(att_urls))
+                file_blocks.append("attachments: " + ", ".join(att_urls))
+
+            
             file_blocks.append("")
 
         now_dt = discord.utils.utcnow()
@@ -248,7 +306,7 @@ class LogEvents:
             "---",
             "",
         ]
-        file_text = "\n".join(header + file_blocks).rstrip() + "\n"
+        file_text = chr(10).join(header + file_blocks).rstrip() + chr(10)
         file_content = file_text.encode("utf-8", errors="replace")
 
         id_list = ", ".join(f"`{uid}`" for uid in authors.keys())
