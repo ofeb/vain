@@ -142,33 +142,67 @@ def is_container_script(raw: str) -> bool:
 
 
 def _strip_code_fences(text: str) -> str:
-    """Strip surrounding single/triple backticks so fenced scripts still parse."""
+    """Strip outer code fences and matching quotes wrapping an embed/container script."""
     s = str(text or "").strip()
     if not s:
         return s
-    if s.startswith("```"):
-        s = s[3:]
-        nl = s.find(chr(10))
-        if nl != -1:
-            first, rest = s[:nl], s[nl + 1:]
-            if first.strip() and " " not in first.strip() and "{" not in first:
-                s = rest
-            else:
-                s = first + chr(10) + rest
-        s = s.rstrip()
-        if s.endswith("```"):
-            s = s[:-3].rstrip()
-        return s.strip()
-    if s.startswith("`") and s.endswith("`") and len(s) >= 2:
-        while len(s) >= 2 and s[0] == "`" and s[-1] == "`":
-            inner = s[1:-1].strip()
-            if not inner:
-                break
-            s = inner
-            if s.startswith("{") or s.startswith("$v") or s.lower().startswith(("embed", "container")):
-                break
-        return s.strip()
-    return s
+
+    openers = {
+        '"': '"',
+        "'": "'",
+        "\u201c": "\u201d",
+        "\u2018": "\u2019",
+        "`": "`",
+    }
+    
+    openers = {
+        '"': '"',
+        "'": "'",
+        "“": "”",
+        "‘": "’",
+        "`": "`",
+    }
+
+    def _unwrap_once(val: str):
+        v = val.strip()
+        if not v:
+            return None
+        if v.startswith("```"):
+            body = v[3:]
+            nl = body.find(chr(10))
+            if nl != -1:
+                first, rest = body[:nl], body[nl + 1:]
+                if first.strip() and " " not in first.strip() and "{" not in first and "$" not in first:
+                    body = rest
+                else:
+                    body = first + chr(10) + rest
+            body = body.rstrip()
+            if body.endswith("```"):
+                body = body[:-3].rstrip()
+            return body.strip()
+        first = v[0]
+        if first in openers:
+            close = openers[first]
+            if len(v) >= 2 and v.endswith(close):
+                inner = v[1:-1].strip()
+                low = inner[:40].lower()
+                if (
+                    inner.startswith("{")
+                    or inner.startswith("$v")
+                    or low.startswith("embed")
+                    or low.startswith("container")
+                    or "$v{" in inner
+                ):
+                    return inner
+        return None
+
+    for _ in range(8):
+        nxt = _unwrap_once(s)
+        if nxt is None or nxt == s:
+            break
+        s = nxt
+
+    return s.strip()
 
 
 def is_embed_script(raw: str) -> bool:

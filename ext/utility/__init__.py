@@ -1679,17 +1679,17 @@ class Utility(Remind):
                 parts = kind.split(":", 2)
                 uname = parts[2] if len(parts) > 2 else parts[1]
                 label = f"{uname}'s avatar"
-                title = f"[**dominant colors for {label}**]({url}" + chr(10) + ")"
+                title = f"[**dominant colors for {label}**]({url}" + " )"
             elif kind == "url":
                 if sum(1 for k, _ in sources if k == "url") == 1:
-                    title = f"[**dominant colors for this url**]({url}" + chr(10) + ")"
+                    title = f"[**dominant colors for this url**]({url}" + " )"
                 else:
                     url_n = sum(1 for k, _ in sources[:idx] if k == "url")
-                    title = f"[**dominant colors for URL #{url_n}**]({url}" + chr(10) + ")"
+                    title = f"[**dominant colors for URL #{url_n}**]({url}" + " )"
             elif kind == "this attachment":
-                title = f"[**dominant colors for this attachment**]({url}" + chr(10) + ")"
+                title = f"[**dominant colors for this attachment**]({url}" + " )"
             else:
-                title = f"[**dominant colors for {kind}**]({url}" + chr(10) + ")"
+                title = f"[**dominant colors for {kind}**]({url}" + " )"
             color_bits = " ".join(f"`{c}`" for c in colors)
             blocks.append("-# " + title + ":" + chr(10) + color_bits)
         if not any_ok:

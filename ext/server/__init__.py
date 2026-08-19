@@ -185,7 +185,8 @@ class ServerCommands(Package):
             maybe_wrap_embed_script,
         )
 
-        value = str(script).strip()
+        from core.tools.embed import _strip_code_fences
+        value = _strip_code_fences(str(script).strip())
         if not value:
             return value
         if is_container_script(value):
