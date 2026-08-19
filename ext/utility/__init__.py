@@ -1425,7 +1425,7 @@ class Utility(Remind):
         groupchats=True,
     )
     async def dominant(self, ctx: Context, *, query: str = None) -> None:
-        """Extract dominant colors via ColorThief. Flag: --colors / --colour (1-5, default 1)."""
+        """find the dominant colors of an users **avatar**, **URLs** of **Images** or **GIFs** and **attachments**"""
         import re as _re
         from io import BytesIO
         from PIL import Image
