@@ -3554,8 +3554,8 @@ class ModerationCommands(Package):
 
         view = ConfirmView(ctx)
         ok = await view.prompt(
-            "> Remove the **moderation system** setup? "
-            "> -# This **deletes** the `logs` and `jail` categories and their channels "
+            "Remove the **moderation system** setup?\n"
+            "> -# This **deletes** the `logs` and `jail` categories and their channels\n"
             "> -# and clears the modlog configuration. **This can't be undone.**"
         )
         if not ok:
