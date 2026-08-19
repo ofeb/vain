@@ -80,12 +80,9 @@ def build_weather_embed(data: dict[str, Any], author: discord.User) -> discord.E
     lines.append(label_line("Visibility", f"{visibility_km:.1f} km"))
 
     icon = weather.get("icon")
+    lines = [f"**weather in {place}** · {description}", *lines]
     return panel_embed(
-        title=f"{description} in {place}",
-        url=f"http://openweathermap.org/city/{data['id']}",
-        color=WEATHER_COLOR,
-        author=author.display_name,
-        author_icon=author.display_avatar.url,
+        color=None,
         lines=lines,
         timestamp=False,
         thumbnail=f"https://openweathermap.org/img/w/{icon}.png" if icon else None,
@@ -123,13 +120,11 @@ def build_define_embed(entry: dict[str, Any], author: discord.User) -> discord.E
             break
 
     slug = word.replace(" ", "_")
+    wiki = f"https://en.wiktionary.org/wiki/{slug}"
+    head = f"**[{title}]({wiki})**" if title else f"**[{word}]({wiki})**"
     return panel_embed(
-        title=title,
-        url=f"https://en.wiktionary.org/wiki/{slug}",
-        color=DEFINE_COLOR,
-        author=author.display_name,
-        author_icon=author.display_avatar.url,
-        lines=[description[:4096]],
+        color=None,
+        lines=[head, description[:3500]],
         timestamp=False,
     )
 
@@ -154,7 +149,7 @@ def _clean_ud_text(text: str, *, limit: int = 900) -> str:
 def build_urban_embed(
     entry: dict[str, Any],
     *,
-    author: discord.User,
+    author: discord.User | None = None,
     page: int,
     total: int,
 ) -> discord.Embed:
@@ -163,26 +158,19 @@ def build_urban_embed(
     example = _clean_ud_text(entry.get("example", ""), limit=500)
     thumbs_up = int(entry.get("thumbs_up", 0))
     thumbs_down = int(entry.get("thumbs_down", 0))
-    permalink = entry.get("permalink") or f"https://www.urbandictionary.com/define.php?term={word}"
+    permalink = entry.get("permalink") or f"https://www.urbandictionary.com/define.php?term={quote(word)}"
 
-    lines = [definition]
+    body_parts: list[str] = []
+    if definition:
+        body_parts.append(definition)
     if example:
-        lines.append(label_line("Example", example))
-    lines.append(label_line("Votes", f"👍 `{thumbs_up} / {thumbs_down}` 👎"))
-
-    embed = panel_embed(
-        title=word,
-        url=permalink,
-        color=DEFINE_COLOR,
-        author=author.display_name,
-        author_icon=author.display_avatar.url,
-        lines=lines,
-        timestamp=False,
-    )
-    embed.set_footer(
-        text=f"> -# Page {page}/{total} of Urban Dictionary Results",
-        icon_url=UD_FOOTER_ICON,
-    )
+        body_parts.append(f"**example:** {example}")
+    body_parts.append(f"**votes:** 👍 `{thumbs_up}` · 👎 `{thumbs_down}`")
+    body = "\n\n".join(body_parts)
+    body = f"{body}\n\n> -# page {page}/{total}"
+    
+    embed = discord.Embed(description=body[:4090], url=permalink)
+    embed.color = None
     return embed
 
 def normalize_cashtag(username: str) -> str:
@@ -280,16 +268,14 @@ def build_cashapp_embed(profile: dict[str, Any], author: discord.User) -> discor
     image_url = avatar.get("image_url")
 
     embed = panel_embed(
-        title=f"{display_name} (@{tag})",
-        url=profile_url,
-        color=profile.get("_embed_color", CASHAPP_GREEN),
-        author=author.display_name,
-        author_icon=author.display_avatar.url,
-        lines=[f"Pay [{formatted}]({profile_url}) here."],
+        color=None,
+        lines=[
+            f"**[{display_name}]({profile_url})** · `{formatted}`",
+            f"pay [{formatted}]({profile_url}) here",
+        ],
         timestamp=False,
         thumbnail=image_url,
     )
-    embed.set_footer(text="> -# CashApp", icon_url=CASHAPP_FOOTER_ICON)
     return embed
 
 def _format_github_repo_date(iso: str) -> str:
@@ -372,25 +358,22 @@ def build_github_embed(user: dict[str, Any], author: discord.User) -> discord.Em
             )
         )
 
-    embed = panel_embed(
-        title=f"{display_name} (@{login})",
-        url=profile_url,
-        author=author.display_name,
-        author_icon=author.display_avatar.url,
-        lines=lines,
-        timestamp=False,
-        thumbnail=user.get("avatar_url"),
-    )
     from core.tools.human import human_date, parse_dt
 
     if created := user.get("created_at"):
         dt = parse_dt(created)
         if dt is not None:
-            embed.timestamp = dt
-            embed.set_footer(
-                text=f"Created on {human_date(dt)}",
-                icon_url=GITHUB_CREATED_ICON,
-            )
-            return embed
-    embed.set_footer(text="Created on", icon_url=GITHUB_CREATED_ICON)
+            lines.append(f"> -# created {human_date(dt)}")
+        else:
+            lines.append("> -# github")
+    else:
+        lines.append("> -# github")
+
+    head = f"**[{display_name}]({profile_url})** · `@{login}`"
+    embed = panel_embed(
+        color=None,
+        lines=[head, *lines],
+        timestamp=False,
+        thumbnail=user.get("avatar_url"),
+    )
     return embed
