@@ -328,19 +328,20 @@ class LogEvents:
             else:
                 file_blocks.append(f"{label}:")
 
-            for emb in embeds:
+            if embeds:
+                for emb in embeds:
+                    try:
+                        script = _embed_to_ce_script(emb)
+                    except Exception:
+                        script = "{embed}$v{description: *could not serialize embed*}"
+                    file_blocks.append(f"embed (recreate using ,ce): {script}")
+            else:
                 try:
-                    script = _embed_to_ce_script(emb)
+                    for cscript in _components_to_container_script(msg):
+                        if cscript and str(cscript).strip() not in ("", "{container}"):
+                            file_blocks.append(f"container (recreate using ,cb): {cscript}")
                 except Exception:
-                    script = "{embed}$v{description: *could not serialize embed*}"
-                file_blocks.append(f"embed (recreate using ,ce): {script}")
-
-            
-            try:
-                for cscript in _components_to_container_script(msg):
-                    file_blocks.append(f"container (recreate using ,cb): {cscript}")
-            except Exception:
-                pass
+                    pass
 
             if att_urls:
                 file_blocks.append("attachments: " + ", ".join(att_urls))
