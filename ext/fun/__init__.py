@@ -624,7 +624,7 @@ class Fun(Package):
                 )
                 pages.append(embed)
 
-            await ctx.paginator(pages)
+            await ctx.paginate(pages)
 
     @hybrid(
         name="rockpaperscissors",
