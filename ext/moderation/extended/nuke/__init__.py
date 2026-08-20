@@ -144,43 +144,49 @@ class Nuke(Package):
             with contextlib.suppress(Exception):
                 await vm.reconfigure_after_nuke(old_id, new_channel)
 
-        script = message if message is not None else await self._get_default_message(guild.id)
-        if not script:
-            script = _DEFAULT_MESSAGE
-
-        reconfigured = (
-            "welcome, leave, boost, logs, jail, tickets, starboard, "
-            "clownboard, giveaways, counters, suggest, and related systems"
+        interface_id = await self.db.fetchval(
+            "SELECT interface_channel_id FROM voicemaster_config WHERE guild_id = $1",
+            guild.id,
         )
-        kwargs = {
-            "guild": guild,
-            "channel": new_channel,
-            "nuke": {
-                "interval": naturaldelta(interval) if interval else "n/a",
-                "threshold": naturaldelta(interval) if interval else "n/a",
-                "reconfigured": reconfigured,
-                "channel": new_channel,
-                "old": old_name,
-            },
-            "nuke.interval": naturaldelta(interval) if interval else "n/a",
-            "nuke.threshold": naturaldelta(interval) if interval else "n/a",
-            "nuke.reconfigured": reconfigured,
-            "nuke.channel": new_channel.mention,
-            "nuke.channel.name": new_channel.name,
-            "nuke.channel.id": str(new_channel.id),
-            "nuke.old": old_name,
-        }
-        if author is not None:
-            kwargs["user"] = author
-            kwargs["member"] = author
 
-        try:
-            await self.bot.send_embed(new_channel, script, **kwargs)
-        except Exception:
+        if interface_id != new_channel.id:
+            script = message if message is not None else await self._get_default_message(guild.id)
+            if not script:
+                script = _DEFAULT_MESSAGE
+
+            reconfigured = (
+                "welcome, leave, boost, logs, jail, tickets, starboard, "
+                "clownboard, giveaways, counters, suggest, and related systems"
+            )
+            kwargs = {
+                "guild": guild,
+                "channel": new_channel,
+                "nuke": {
+                    "interval": naturaldelta(interval) if interval else "n/a",
+                    "threshold": naturaldelta(interval) if interval else "n/a",
+                    "reconfigured": reconfigured,
+                    "channel": new_channel,
+                    "old": old_name,
+                },
+                "nuke.interval": naturaldelta(interval) if interval else "n/a",
+                "nuke.threshold": naturaldelta(interval) if interval else "n/a",
+                "nuke.reconfigured": reconfigured,
+                "nuke.channel": new_channel.mention,
+                "nuke.channel.name": new_channel.name,
+                "nuke.channel.id": str(new_channel.id),
+                "nuke.old": old_name,
+            }
+            if author is not None:
+                kwargs["user"] = author
+                kwargs["member"] = author
+
             try:
-                await new_channel.send(content=(script or _DEFAULT_MESSAGE)[:2000])
-            except (discord.NotFound, discord.HTTPException):
-                pass
+                await self.bot.send_embed(new_channel, script, **kwargs)
+            except Exception:
+                try:
+                    await new_channel.send(content=(script or _DEFAULT_MESSAGE)[:2000])
+                except (discord.NotFound, discord.HTTPException):
+                    pass
 
         return new_channel
 
