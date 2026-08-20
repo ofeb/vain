@@ -246,7 +246,7 @@ class Nuke(Package):
             ("leveling", "channel_id", False),
             ("voicemaster", "channel_id", False),
             ("voicemaster_configuration", "category_id", False),
-            ("voicemaster_configuration", "interface_channel_id", False),
+            ("voicemaster_configuration", "interface_id", False),
         ]
 
         for table, column, is_array in tables:
