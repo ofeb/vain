@@ -303,8 +303,8 @@ class VoiceMaster(VoiceMasterEvents, Package):
         """setup the voicemaster channel creation system"""
         if await VoiceMasterSettings.exists(self.bot, ctx.guild):
             return await ctx.send(view=_vm_container(f"{ctx.author.display_name}: voicemaster is already **configured**, use `voicemaster reset` to reset"))
-        category = await ctx.guild.create_category("Voice Channels")
-        interface = await category.create_text_channel("interface")
+        category = await ctx.guild.create_category("voice channels")
+        interface = await category.create_text_channel("panel")
         channel = await category.create_voice_channel("create vc")
         everyone = ctx.guild.default_role
         await interface.set_permissions(everyone, send_messages=False, send_messages_in_threads=False, create_public_threads=False, create_private_threads=False)
