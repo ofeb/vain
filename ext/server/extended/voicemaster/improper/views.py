@@ -376,7 +376,7 @@ class VoiceInterface(ui.LayoutView):
 
         container.add_item(
             ui.TextDisplay(
-                "-# You must own the voice channel to use these controls."
+                "-# to use the controls, you must **own** the voice channel you are in"
             )
         )
 
