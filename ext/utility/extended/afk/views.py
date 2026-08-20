@@ -37,7 +37,6 @@ def _mention_line(
     channel_id = entry.get("channel_id")
     guild_id = entry.get("guild_id")
 
-    # Hide server name if mention is from the current server
     is_same_guild = current_guild_id and guild_id and int(guild_id) == int(current_guild_id)
 
     location_str = ""
