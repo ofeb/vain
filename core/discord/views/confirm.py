@@ -21,7 +21,6 @@ from typing import Any
 import discord
 from discord import ui
 
-
 def _build_confirm_layout(message: str, view: ui.View) -> ui.LayoutView:
     container = ui.Container()
 
@@ -32,13 +31,15 @@ def _build_confirm_layout(message: str, view: ui.View) -> ui.LayoutView:
 
     container.add_item(ui.TextDisplay(message or "Are you sure you want to do this?"))
 
+    action_row = ui.ActionRow()
     for child in list(view.children):
-        container.add_item(child)
+        action_row.add_item(child)
+
+    container.add_item(action_row)
 
     layout = ui.LayoutView(timeout=None)
     layout.add_item(container)
     return layout
-
 
 def _build_confirm_container(message: str) -> discord.Embed:
     """Build a C2 container embed for confirm prompts."""
