@@ -606,7 +606,7 @@ class Fun(Package):
             for i, chunk in enumerate(chunks, 1):
                 embed = panel_container(
                     title=title,
-                    lines=[f"```yaml\n{chunk}```"],
+                    lines=[f"```{chunk}```"],
                     author=artist,
                     footer=f"{i}/{len(chunks)}",
                 )
