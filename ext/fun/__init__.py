@@ -593,34 +593,22 @@ class Fun(Package):
             if not lyrics_text:
                 return await ctx.warn("No lyrics found for that track.")
 
-            section_pattern = re.compile(r"(\[.*?\])")
-            parts = section_pattern.split(lyrics_text)
+            all_lines = lyrics_text.splitlines()
+            lines_per_page = 20
+            chunks = []
+            for i in range(0, len(all_lines), lines_per_page):
+                chunks.append("\n".join(all_lines[i:i + lines_per_page]))
 
-            organized_sections = []
-            current_section = ""
-            current_header = ""
-            for part in parts:
-                if section_pattern.match(part):
-                    if current_section:
-                        organized_sections.append((current_header, current_section.strip()))
-                    current_header = part
-                    current_section = ""
-                else:
-                    current_section += part
-            if current_section:
-                organized_sections.append((current_header, current_section.strip()))
-
-            if not organized_sections:
-                organized_sections = [("", lyrics_text)]
+            if not chunks:
+                chunks = [lyrics_text]
 
             pages = []
-            for i, (header, content) in enumerate(organized_sections, 1):
-                section_text = f"{header}\n{content}" if header else content
+            for i, chunk in enumerate(chunks, 1):
                 embed = panel_container(
                     title=title,
-                    lines=[f"```yaml\n{section_text}```"],
+                    lines=[f"```yaml\n{chunk}```"],
                     author=artist,
-                    footer=f"{i}/{len(organized_sections)}",
+                    footer=f"{i}/{len(chunks)}",
                 )
                 pages.append(embed)
 
