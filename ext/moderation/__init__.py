@@ -102,6 +102,7 @@ class ModerationCommands(Package):
 
     def __init__(self, bot) -> None:
         super().__init__(bot)
+        self.tasks: dict[str, asyncio.Task] = {}
         self._unbanall_tasks: dict[int, asyncio.Task] = {}
         self._naughty_tasks: dict[int, asyncio.Task] = {}
 
