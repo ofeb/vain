@@ -19,6 +19,12 @@ from core.discord.package import Package, tasks
 
 from .events import VoiceMasterEvents
 
+VALID_REGIONS = {
+    "brazil", "hongkong", "india", "japan", "rotterdam",
+    "singapore", "south-korea", "southafrica", "sydney",
+    "us-central", "us-east", "us-south", "us-west", "auto",
+}
+
 from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe, group
 from config import bot as bot_config, color
@@ -182,6 +188,40 @@ class VoiceMaster(VoiceMasterEvents, Package):
             return min(bitrate, guild_limit)
         return bitrate
 
+    async def _move_to_private_category(self, channel: discord.VoiceChannel) -> None:
+        """Move a voice channel into the private category if use_private is enabled."""
+        settings = await VoiceMasterSettings.fetch(self.bot, channel.guild)
+        if not settings.use_private:
+            return
+        private_cat_id = settings.private_category_id
+        if not private_cat_id:
+            return
+        private_cat = channel.guild.get_channel(private_cat_id)
+        if not private_cat or not isinstance(private_cat, discord.CategoryChannel):
+            return
+        if channel.category_id == private_cat_id:
+            return
+        try:
+            await channel.edit(category=private_cat, reason="VoiceMaster: Moved to private category")
+        except discord.HTTPException:
+            pass
+
+    async def _move_to_original_category(self, channel: discord.VoiceChannel) -> None:
+        """Move a voice channel back to the main VM category."""
+        settings = await VoiceMasterSettings.fetch(self.bot, channel.guild)
+        main_cat_id = settings.category_id
+        if not main_cat_id:
+            return
+        main_cat = channel.guild.get_channel(main_cat_id)
+        if not main_cat or not isinstance(main_cat, discord.CategoryChannel):
+            return
+        if channel.category_id == main_cat_id:
+            return
+        try:
+            await channel.edit(category=main_cat, reason="VoiceMaster: Moved back to main category")
+        except discord.HTTPException:
+            pass
+
     async def _create_member_channel(
         self, member: discord.Member, config, trigger_channel: discord.VoiceChannel,
     ) -> None:
@@ -202,6 +242,11 @@ class VoiceMaster(VoiceMasterEvents, Package):
             member, read_messages=True, connect=True,
             reason=f"VoiceMaster: Owner permissions for {member}",
         )
+        if config.get("deny_messages"):
+            await channel.set_permissions(
+                member.guild.default_role, send_messages=False,
+                reason="VoiceMaster: Messages denied (deny_messages enabled)",
+            )
         await VoiceMasterSettings.insert_channel(
             self.bot.db, member.guild.id, channel.id, member.id,
         )
@@ -251,37 +296,37 @@ class VoiceMaster(VoiceMasterEvents, Package):
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    @voicemaster.command(name="setup", aliases=["set", "setme"])
+    @voicemaster.command(name="setup", aliases=["set", "setme"], usage="", example="setup")
     @has_permissions(manage_guild=True)
     @commands.cooldown(1, 30, commands.BucketType.guild)
     async def voicemaster_setup(self, ctx: Context) -> None:
         """setup the voicemaster channel creation system"""
         if await VoiceMasterSettings.exists(self.bot, ctx.guild):
-            return await ctx.send(view=_vm_container(f"{ctx.author.mention}: server is already **configured**, use `voicemaster reset` to reset"))
+            return await ctx.send(view=_vm_container(f"{ctx.author.display_name}: voicemaster is already **configured**, use `voicemaster reset` to reset"))
         category = await ctx.guild.create_category("Voice Channels")
         interface = await category.create_text_channel("interface")
-        channel = await category.create_voice_channel("Join to Create")
+        channel = await category.create_voice_channel("create vc")
         everyone = ctx.guild.default_role
         await interface.set_permissions(everyone, send_messages=False, send_messages_in_threads=False, create_public_threads=False, create_private_threads=False)
         await channel.set_permissions(everyone, connect=True)
         panel_msg = await interface.send(view=VoiceInterface(self, ctx.guild))
         settings = await VoiceMasterSettings.fetch(self.bot, ctx.guild)
         await settings.upsert(category_id=category.id, interface_id=interface.id, channel_id=channel.id, panel_message_id=panel_msg.id)
-        await ctx.send(view=_vm_container(f"{ctx.author.mention}: voicemaster **setup complete**"))
+        await ctx.send(view=_vm_container(f"{ctx.author.display_name}: voicemaster **setup complete**"))
 
-    @voicemaster.command(name="reset")
+    @voicemaster.command(name="reset", usage="", example="reset")
     @has_permissions(manage_guild=True)
     @commands.cooldown(1, 60, commands.BucketType.guild)
     async def voicemaster_reset(self, ctx: Context) -> None:
         """reset the voicemaster configuration and delete channels"""
         existing = await VoiceMasterSettings.fetch_existing_config(self.bot.db, ctx.guild.id)
         if not existing:
-            return await ctx.send(view=_vm_container(f"{ctx.author.mention}: server is **not configured**"))
+            return await ctx.send(view=_vm_container(f"{ctx.author.display_name}: voicemaster is **not configured** in this guild"))
         from core.discord.views.confirm import ConfirmView
         view = ConfirmView(ctx)
-        ok = await view.prompt("reset voicemaster and **delete** its category/channels? this action **can't be undone**")
+        ok = await view.prompt("**reset** voicemaster and **delete** its channels?\n> -# this action **can't be undone**")
         if not ok:
-            return await ctx.send(view=_vm_container(f"{ctx.author.mention}: reset **cancelled**"))
+            return await ctx.send(view=_vm_container(f"{ctx.author.display_name}: reset **cancelled**"))
         row = await VoiceMasterSettings.delete_config_returning(self.bot.db, ctx.guild.id)
         if row:
             for channel_id in row:
@@ -289,21 +334,21 @@ class VoiceMaster(VoiceMasterEvents, Package):
                 if channel:
                     with contextlib.suppress(discord.HTTPException):
                         await channel.delete()
-            await ctx.send(view=_vm_container(f"{ctx.author.mention}: voicemaster **reset**"))
+            await ctx.send(view=_vm_container(f"{ctx.author.display_name}: voicemaster **reset**"))
         else:
-            await ctx.send(view=_vm_container(f"{ctx.author.mention}: server is **not configured**"))
+            await ctx.send(view=_vm_container(f"{ctx.author.display_name}: voicemaster is **not configured** in this guild"))
 
-    @voicemaster.command(name="unset", aliases=["remove"])
+    @voicemaster.command(name="unset", aliases=["remove"], usage="", example="unset")
     @has_permissions(manage_guild=True)
     async def voicemaster_unset(self, ctx: Context) -> None:
         """remove voicemaster configuration without deleting channels"""
         row = await VoiceMasterSettings.delete_config_returning_category(self.bot.db, ctx.guild.id)
         if row:
-            await ctx.send(view=_vm_container(f"{ctx.author.mention}: configuration **removed**, channels kept"))
+            await ctx.send(view=_vm_container(f"{ctx.author.display_name}: configuration **removed**, channels kept"))
         else:
-            await ctx.send(view=_vm_container(f"{ctx.author.mention}: server is **not configured**"))
+            await ctx.send(view=_vm_container(f"{ctx.author.display_name}: voicemaster is **not configured** in this guild"))
 
-    @voicemaster.command(name="category")
+    @voicemaster.command(name="category", usage="<channel>", example="category #voice-channels")
     @has_permissions(manage_guild=True)
     @describe(channel="voice channel category")
     async def voicemaster_category(self, ctx: Context, channel: discord.CategoryChannel) -> None:
@@ -312,11 +357,11 @@ class VoiceMaster(VoiceMasterEvents, Package):
             await VoiceMasterSettings.update_config_field(
                 self.bot.db, ctx.guild.id, "category_id", channel.id,
             )
-            await ctx.send(view=_vm_container(f"{ctx.author.mention}: set {channel.mention} as the voice category"))
+            await ctx.send(view=_vm_container(f"{ctx.author.display_name}: set {channel.mention} as the voice category"))
         except Exception:
-            await ctx.send(view=_vm_container(f"{ctx.author.mention}: server is **not configured**"))
+            await ctx.send(view=_vm_container(f"{ctx.author.display_name}: voicemaster is **not configured** in this guild"))
 
-    @voicemaster.command(name="category private", slash=False)
+    @voicemaster.command(name="category private", slash=False, usage="<channel>", example="category private #private-vc")
     @has_permissions(manage_guild=True)
     @describe(channel="private voice channel category")
     async def voicemaster_category_private(self, ctx: Context, channel: discord.CategoryChannel) -> None:
@@ -325,25 +370,25 @@ class VoiceMaster(VoiceMasterEvents, Package):
             await VoiceMasterSettings.update_config_field(
                 self.bot.db, ctx.guild.id, "private_category_id", channel.id,
             )
-            await ctx.send(view=_vm_container(f"{ctx.author.mention}: set {channel.mention} as the private category"))
+            await ctx.send(view=_vm_container(f"{ctx.author.display_name}: set {channel.mention} as the private category"))
         except Exception:
-            await ctx.send(view=_vm_container(f"{ctx.author.mention}: server is **not configured**"))
+            await ctx.send(view=_vm_container(f"{ctx.author.display_name}: voicemaster is **not configured** in this guild"))
 
-    @voicemaster.command(name="default")
+    @voicemaster.command(name="default", usage="", example="default")
     async def voicemaster_default(self, ctx: Context) -> None:
         """view default voicemaster settings"""
         config = await VoiceMasterSettings.get_config(self.bot.db, ctx.guild.id)
         if not config:
-            return await ctx.send(view=_vm_container(f"{ctx.author.mention}: server is **not configured**"))
+            return await ctx.send(view=_vm_container(f"{ctx.author.display_name}: voicemaster is **not configured** in this guild"))
         lines = (
-            f"> **bitrate**: `{config.get('bitrate', 64000) // 1000}kbps`\n"
-            f"> **region**: `{config.get('region', 'auto')}`\n"
-            f"> **role**: <@{config.get('role_id', 0)}>\n"
-            f"> **default name**: `{config.get('default_name', 'none')}`"
+            f"> -#**bitrate**: `{config.get('bitrate', 64000) // 1000}kbps`\n"
+            f"> -#**region**: `{config.get('region', 'auto')}`\n"
+            f"> -#**role**: <@{config.get('role_id', 0)}>\n"
+            f"> -#**default name**: `{config.get('default_name', 'none')}`"
         )
-        await ctx.send(view=_vm_container(f"{ctx.author.mention}:\n{lines}"))
+        await ctx.send(view=_vm_container(f"{ctx.author.display_name}:\n{lines}"))
 
-    @voicemaster.command(name="default interface", slash=False)
+    @voicemaster.command(name="default interface", slash=False, usage="<on/off>", example="default interface on")
     @describe(setting="enable or disable interface")
     async def voicemaster_default_interface(self, ctx: Context, setting: bool) -> None:
         """send interface to new voice channels"""
@@ -352,11 +397,11 @@ class VoiceMaster(VoiceMasterEvents, Package):
                 self.bot.db, ctx.guild.id, "send_interface", setting,
             )
             state = "enabled" if setting else "disabled"
-            await ctx.send(view=_vm_container(f"{ctx.author.mention}: interface sending **{state}**"))
+            await ctx.send(view=_vm_container(f"{ctx.author.display_name}: interface sending **{state}**"))
         except Exception:
-            await ctx.send(view=_vm_container(f"{ctx.author.mention}: server is **not configured**"))
+            await ctx.send(view=_vm_container(f"{ctx.author.display_name}: voicemaster is **not configured** in this guild"))
 
-    @voicemaster.command(name="default role", slash=False)
+    @voicemaster.command(name="default role", slash=False, usage="<role>", example="default role @Member")
     @has_permissions(manage_guild=True, manage_roles=True)
     @describe(role="default role for voice channels")
     async def voicemaster_default_role(self, ctx: Context, role: discord.Role) -> None:
@@ -365,11 +410,11 @@ class VoiceMaster(VoiceMasterEvents, Package):
             await VoiceMasterSettings.update_config_field(
                 self.bot.db, ctx.guild.id, "role_id", role.id,
             )
-            await ctx.send(view=_vm_container(f"{ctx.author.mention}: set {role.mention} as default role"))
+            await ctx.send(view=_vm_container(f"{ctx.author.display_name}: set {role.mention} as default role"))
         except Exception:
-            await ctx.send(view=_vm_container(f"{ctx.author.mention}: server is **not configured**"))
+            await ctx.send(view=_vm_container(f"{ctx.author.display_name}: voicemaster is **not configured** in this guild"))
 
-    @voicemaster.command(name="default bitrate", slash=False)
+    @voicemaster.command(name="default bitrate", slash=False, usage="<kbps>", example="default bitrate 128")
     @has_permissions(manage_guild=True)
     @describe(bitrate="default bitrate in kbps")
     async def voicemaster_default_bitrate(self, ctx: Context, bitrate: int) -> None:
@@ -378,11 +423,11 @@ class VoiceMaster(VoiceMasterEvents, Package):
             await VoiceMasterSettings.update_config_field(
                 self.bot.db, ctx.guild.id, "bitrate", bitrate * 1000,
             )
-            await ctx.send(view=_vm_container(f"{ctx.author.mention}: set default bitrate to **{bitrate}kbps**"))
+            await ctx.send(view=_vm_container(f"{ctx.author.display_name}: set default bitrate to **{bitrate}kbps**"))
         except Exception:
-            await ctx.send(view=_vm_container(f"{ctx.author.mention}: server is **not configured**"))
+            await ctx.send(view=_vm_container(f"{ctx.author.display_name}: voicemaster is **not configured** in this guild"))
 
-    @voicemaster.command(name="default name", slash=False)
+    @voicemaster.command(name="default name", slash=False, usage="<name>", example="default name Gaming Session")
     @has_permissions(manage_guild=True)
     @describe(name="default name for new channels")
     async def voicemaster_default_name(self, ctx: Context, name: str) -> None:
@@ -391,24 +436,31 @@ class VoiceMaster(VoiceMasterEvents, Package):
             await VoiceMasterSettings.update_config_field(
                 self.bot.db, ctx.guild.id, "default_name", name,
             )
-            await ctx.send(view=_vm_container(f"{ctx.author.mention}: set default name to **{name}**"))
+            await ctx.send(view=_vm_container(f"{ctx.author.display_name}: set default name to **{name}**"))
         except Exception:
-            await ctx.send(view=_vm_container(f"{ctx.author.mention}: server is **not configured**"))
+            await ctx.send(view=_vm_container(f"{ctx.author.display_name}: voicemaster is **not configured** in this guild"))
 
-    @voicemaster.command(name="default region", slash=False)
+    @voicemaster.command(name="default region", slash=False, usage="<region>", example="default region us-west")
     @has_permissions(manage_guild=True)
     @describe(region="voice region")
     async def voicemaster_default_region(self, ctx: Context, region: str) -> None:
         """set default region for new voice channels"""
+        region_lower = region.lower()
+        if region_lower not in VALID_REGIONS:
+            options = ", ".join(sorted(VALID_REGIONS - {"auto"}))
+            return await ctx.warn(
+                f"Invalid region **{region}**\n"
+                f"> -# **options**: `{options}`, or `auto`"
+            )
         try:
             await VoiceMasterSettings.update_config_field(
-                self.bot.db, ctx.guild.id, "region", region.lower(),
+                self.bot.db, ctx.guild.id, "region", region_lower,
             )
-            await ctx.send(view=_vm_container(f"{ctx.author.mention}: set default region to **{region}**"))
+            await ctx.send(view=_vm_container(f"{ctx.author.display_name}: set default region to **{region}**"))
         except Exception:
-            await ctx.send(view=_vm_container(f"{ctx.author.mention}: server is **not configured**"))
+            await ctx.send(view=_vm_container(f"{ctx.author.display_name}: voicemaster is **not configured** in this guild"))
 
-    @voicemaster.command(name="claim")
+    @voicemaster.command(name="claim", usage="", example="claim")
     async def voicemaster_claim(self, ctx: Context) -> None:
         """claim ownership of the voice channel"""
         await VoiceMasterSettings.update_channel_owner(
@@ -417,82 +469,86 @@ class VoiceMaster(VoiceMasterEvents, Package):
         if ctx.author.voice.channel.name.endswith("channel"):
             with contextlib.suppress(discord.HTTPException):
                 await ctx.author.voice.channel.edit(name=f"{ctx.author.display_name}'s channel")
-        await ctx.send(view=_vm_container(f"{ctx.author.mention}: you now **own** this channel"))
+        await ctx.send(view=_vm_container(f"{ctx.author.display_name}: you now **own** this channel"))
 
-    @voicemaster.command(name="transfer")
+    @voicemaster.command(name="transfer", usage="<member>", example="transfer @user")
     @describe(member="member to transfer ownership to")
     async def voicemaster_transfer(self, ctx: Context, member: discord.Member) -> None:
         """transfer ownership of your voice channel"""
         if member == ctx.author or member.bot:
-            return await ctx.send(view=_vm_container(f"{ctx.author.mention}: invalid member"))
+            return await ctx.send(view=_vm_container(f"{ctx.author.display_name}: invalid member"))
         if not member.voice or member.voice.channel != ctx.author.voice.channel:
-            return await ctx.send(view=_vm_container(f"{ctx.author.mention}: {member.mention} is not in your channel"))
+            return await ctx.send(view=_vm_container(f"{ctx.author.display_name}: {member.mention} is not in your channel"))
         await VoiceMasterSettings.update_channel_owner(
             self.bot.db, ctx.author.voice.channel.id, member.id,
         )
         if ctx.author.voice.channel.name.endswith("channel"):
             with contextlib.suppress(discord.HTTPException):
                 await ctx.author.voice.channel.edit(name=f"{member.display_name}'s channel")
-        await ctx.send(view=_vm_container(f"{ctx.author.mention}: ownership **transferred** to {member.mention}"))
+        await ctx.send(view=_vm_container(f"{ctx.author.display_name}: ownership **transferred** to {member.mention}"))
 
-    @voicemaster.command(name="rename")
+    @voicemaster.command(name="rename", usage="<name>", example="rename Chill Zone")
     @describe(name="new channel name")
     async def voicemaster_rename(self, ctx: Context, name: str) -> None:
         """rename your voice channel"""
         if len(name) > 100:
-            return await ctx.send(view=_vm_container(f"{ctx.author.mention}: name too long (max 100 characters)"))
+            return await ctx.send(view=_vm_container(f"{ctx.author.display_name}: name too long (max 100 characters)"))
         try:
             await ctx.author.voice.channel.edit(name=name, reason=f"VoiceMaster: {ctx.author} renamed")
-            await ctx.send(view=_vm_container(f"{ctx.author.mention}: channel renamed to **{name}**"))
+            await ctx.send(view=_vm_container(f"{ctx.author.display_name}: channel renamed to **{name}**"))
         except discord.HTTPException:
-            await ctx.send(view=_vm_container(f"{ctx.author.mention}: failed to rename channel"))
+            await ctx.send(view=_vm_container(f"{ctx.author.display_name}: failed to rename channel"))
 
-    @voicemaster.command(name="lock")
+    @voicemaster.command(name="lock", usage="<channel>", example="lock")
     async def voicemaster_lock(self, ctx: Context) -> None:
         """deny members from joining your voice channel"""
         await ctx.author.voice.channel.set_permissions(
             ctx.guild.default_role, connect=False,
             reason=f"VoiceMaster: {ctx.author} locked channel",
         )
-        await ctx.send(view=_vm_container(f"{ctx.author.mention}: voice channel **locked**"))
+        await self._move_to_private_category(ctx.author.voice.channel)
+        await ctx.send(view=_vm_container(f"{ctx.author.display_name}: voice channel **locked**"))
 
-    @voicemaster.command(name="unlock")
+    @voicemaster.command(name="unlock", usage="<channel>", example="unlock")
     async def voicemaster_unlock(self, ctx: Context) -> None:
         """allow members to join your voice channel"""
         await ctx.author.voice.channel.set_permissions(
             ctx.guild.default_role, connect=None,
             reason=f"VoiceMaster: {ctx.author} unlocked channel",
         )
-        await ctx.send(view=_vm_container(f"{ctx.author.mention}: voice channel **unlocked**"))
+        await self._move_to_original_category(ctx.author.voice.channel)
+        await ctx.send(view=_vm_container(f"{ctx.author.display_name}: voice channel **unlocked**"))
 
-    @voicemaster.command(name="hide")
+    @voicemaster.command(name="hide", usage="<channel>", example="hide")
     async def voicemaster_hide(self, ctx: Context) -> None:
         """hide your voice channel from the channel list"""
         await ctx.author.voice.channel.set_permissions(
             ctx.guild.default_role, view_channel=False,
             reason=f"VoiceMaster: {ctx.author} hid channel",
         )
-        await ctx.send(view=_vm_container(f"{ctx.author.mention}: voice channel **hidden**"))
+        await self._move_to_private_category(ctx.author.voice.channel)
+        await ctx.send(view=_vm_container(f"{ctx.author.display_name}: voice channel **hidden**"))
 
-    @voicemaster.command(name="reveal")
+    @voicemaster.command(name="reveal", usage="<channel>", example="reveal")
     async def voicemaster_reveal(self, ctx: Context) -> None:
         """reveal your voice channel in the channel list"""
         await ctx.author.voice.channel.set_permissions(
             ctx.guild.default_role, view_channel=None,
             reason=f"VoiceMaster: {ctx.author} revealed channel",
         )
-        await ctx.send(view=_vm_container(f"{ctx.author.mention}: voice channel **revealed**"))
+        await self._move_to_original_category(ctx.author.voice.channel)
+        await ctx.send(view=_vm_container(f"{ctx.author.display_name}: voice channel **revealed**"))
 
-    @voicemaster.command(name="limit")
+    @voicemaster.command(name="limit", usage="<0-99>", example="limit 5")
     @describe(limit="user limit (0-99)")
     async def voicemaster_limit(self, ctx: Context, limit: int) -> None:
         """set a user limit for your voice channel"""
         if limit < 0 or limit > 99:
-            return await ctx.send(view=_vm_container(f"{ctx.author.mention}: limit must be between **0** and **99**"))
+            return await ctx.send(view=_vm_container(f"{ctx.author.display_name}: limit must be between **0** and **99**"))
         await ctx.author.voice.channel.edit(user_limit=limit, reason=f"VoiceMaster: {ctx.author} set limit")
-        await ctx.send(view=_vm_container(f"{ctx.author.mention}: limit set to **{limit}**"))
+        await ctx.send(view=_vm_container(f"{ctx.author.display_name}: limit set to **{limit}**"))
 
-    @voicemaster.command(name="status")
+    @voicemaster.command(name="status", usage="<text> [emoji]", example="status vibing 🎵")
     @describe(text="status text", emoji="status emoji")
     async def voicemaster_status(self, ctx: Context, text: str = "", emoji: str = "") -> None:
         """set the status/description of your voice channel"""
@@ -501,9 +557,9 @@ class VoiceMaster(VoiceMasterEvents, Package):
             self.bot.db, channel.id, text, emoji,
         )
         display = f"{emoji} {text}" if emoji and text else text or emoji or "status **cleared**"
-        await ctx.send(view=_vm_container(f"{ctx.author.mention}: channel status set to **{display}**"))
+        await ctx.send(view=_vm_container(f"{ctx.author.display_name}: channel status set to **{display}**"))
 
-    @voicemaster.command(name="permit")
+    @voicemaster.command(name="permit", usage="<member|role>", example="permit @user")
     @describe(target="member or role to permit")
     async def voicemaster_permit(self, ctx: Context, target: Union[discord.Member, discord.Role]) -> None:
         """allow a member or role to join your voice channel"""
@@ -511,9 +567,9 @@ class VoiceMaster(VoiceMasterEvents, Package):
             target, connect=True, view_channel=True,
             reason=f"VoiceMaster: {ctx.author} permitted {target}",
         )
-        await ctx.send(view=_vm_container(f"{ctx.author.mention}: permitted {target.mention}"))
+        await ctx.send(view=_vm_container(f"{ctx.author.display_name}: permitted {target.mention}"))
 
-    @voicemaster.command(name="reject")
+    @voicemaster.command(name="reject", usage="<member|role>", example="reject @user")
     @describe(target="member or role to reject")
     async def voicemaster_reject(self, ctx: Context, target: Union[discord.Member, discord.Role]) -> None:
         """deny a member or role from joining your voice channel"""
@@ -525,9 +581,9 @@ class VoiceMaster(VoiceMasterEvents, Package):
             if target.voice and target.voice.channel == ctx.author.voice.channel:
                 with contextlib.suppress(discord.HTTPException):
                     await target.move_to(None)
-        await ctx.send(view=_vm_container(f"{ctx.author.mention}: rejected {target.mention}"))
+        await ctx.send(view=_vm_container(f"{ctx.author.display_name}: rejected {target.mention}"))
 
-    @voicemaster.command(name="bitrate")
+    @voicemaster.command(name="bitrate", usage="<kbps>", example="bitrate 128")
     @describe(bitrate="bitrate in kbps")
     async def voicemaster_bitrate(self, ctx: Context, bitrate: int) -> None:
         """set the bitrate of your voice channel"""
@@ -535,18 +591,9 @@ class VoiceMaster(VoiceMasterEvents, Package):
             bitrate=bitrate * 1000,
             reason=f"VoiceMaster: {ctx.author} set bitrate",
         )
-        await ctx.send(view=_vm_container(f"{ctx.author.mention}: bitrate set to **{bitrate}kbps**"))
+        await ctx.send(view=_vm_container(f"{ctx.author.display_name}: bitrate set to **{bitrate}kbps**"))
 
-    @voicemaster.command(name="role")
-    @describe(role="role to grant on join")
-    async def voicemaster_role(self, ctx: Context, role: discord.Role) -> None:
-        """set the role granted to members who join your channel"""
-        await VoiceMasterSettings.update_channel_field(
-            self.bot.db, ctx.author.voice.channel.id, "role_id", role.id,
-        )
-        await ctx.send(view=_vm_container(f"{ctx.author.mention}: set {role.mention} as join role"))
-
-    @voicemaster.command(name="music")
+    @voicemaster.command(name="music", usage="<on/off>", example="music on")
     @describe(setting="enable or disable music mode")
     async def voicemaster_music(self, ctx: Context, setting: bool) -> None:
         """toggle music mode for your voice channel"""
@@ -554,37 +601,37 @@ class VoiceMaster(VoiceMasterEvents, Package):
             self.bot.db, ctx.author.voice.channel.id, "music_mode", setting,
         )
         state = "enabled" if setting else "disabled"
-        await ctx.send(view=_vm_container(f"{ctx.author.mention}: music mode **{state}**"))
+        await ctx.send(view=_vm_container(f"{ctx.author.display_name}: music mode **{state}**"))
 
-    @voicemaster.command(name="sendinterface")
+    @voicemaster.command(name="sendinterface", usage="", example="sendinterface")
     async def voicemaster_sendinterface(self, ctx: Context) -> None:
         """resend the voicemaster interface panel"""
         config = await VoiceMasterSettings.fetch_interface_id(self.bot.db, ctx.guild.id)
         if not config:
-            return await ctx.send(view=_vm_container(f"{ctx.author.mention}: server **not configured**"))
+            return await ctx.send(view=_vm_container(f"{ctx.author.display_name}: server **not configured**"))
         interface = ctx.guild.get_channel(config["interface_id"])
         if not interface:
-            return await ctx.send(view=_vm_container(f"{ctx.author.mention}: interface channel **not found**"))
+            return await ctx.send(view=_vm_container(f"{ctx.author.display_name}: interface channel **not found**"))
         panel_msg = await interface.send(view=VoiceInterface(self, ctx.guild))
         settings = await VoiceMasterSettings.fetch(self.bot, ctx.guild)
         await settings.upsert(panel_message_id=panel_msg.id)
-        await ctx.send(view=_vm_container(f"{ctx.author.mention}: interface **resent**"))
+        await ctx.send(view=_vm_container(f"{ctx.author.display_name}: interface **resent**"))
 
-    @voicemaster.command(name="configuration")
+    @voicemaster.command(name="configuration", usage="", example="configuration")
     async def voicemaster_configuration(self, ctx: Context) -> None:
         """view configuration for your current voice channel"""
         channel = ctx.author.voice.channel
         locked = channel.permissions_for(ctx.guild.default_role).connect is False
         lines = (
-            f"> **owner**: {ctx.author.mention}\n"
-            f"> **locked**: {'yes' if locked else 'no'}\n"
-            f"> **members**: `{len(channel.members)}`\n"
-            f"> **bitrate**: `{channel.bitrate // 1000}kbps`\n"
-            f"> **limit**: `{channel.user_limit or 'unlimited'}`"
+            f"> -#**owner**: {ctx.author.mention}\n"
+            f"> -#**locked**: {'yes' if locked else 'no'}\n"
+            f"> -#**members**: `{len(channel.members)}`\n"
+            f"> -#**bitrate**: `{channel.bitrate // 1000}kbps`\n"
+            f"> -#**limit**: `{channel.user_limit or 'unlimited'}`"
         )
-        await ctx.send(view=_vm_container(f"{ctx.author.mention} - **{channel.name}**\n{lines}"))
+        await ctx.send(view=_vm_container(f"{ctx.author.display_name} - **{channel.name}**\n{lines}"))
 
-    @voicemaster.command(name="join2unmute")
+    @voicemaster.command(name="join2unmute", usage="<channel>", example="join2unmute #join-to-unmute")
     @has_permissions(manage_guild=True)
     @describe(channel="voice channel to use as join2unmute")
     async def voicemaster_join2unmute(self, ctx: Context, channel: discord.VoiceChannel) -> None:
@@ -593,22 +640,22 @@ class VoiceMaster(VoiceMasterEvents, Package):
             self.bot.db, ctx.guild.id, channel.id,
         )
         if added:
-            await ctx.send(view=_vm_container(f"{ctx.author.mention}: {channel.mention} set as **join2unmute** channel"))
+            await ctx.send(view=_vm_container(f"{ctx.author.display_name}: {channel.mention} set as **join2unmute** channel"))
         else:
-            await ctx.send(view=_vm_container(f"{ctx.author.mention}: {channel.mention} **removed** from join2unmute"))
+            await ctx.send(view=_vm_container(f"{ctx.author.display_name}: {channel.mention} **removed** from join2unmute"))
 
-    @voicemaster.command(name="ban")
+    @voicemaster.command(name="ban", usage="<member>", example="ban @user")
     @has_permissions(manage_guild=True)
     @describe(member="member to ban from voicemaster channels")
     async def voicemaster_ban(self, ctx: Context, member: discord.Member) -> None:
         """ban a user from joining your voicemaster channels"""
         if member == ctx.author:
-            return await ctx.send(view=_vm_container(f"{ctx.author.mention}: you can't **ban yourself**"))
+            return await ctx.send(view=_vm_container(f"{ctx.author.display_name}: you can't **ban yourself**"))
         existing = await VoiceMasterSettings.check_ban(
             self.bot.db, ctx.guild.id, member.id,
         )
         if existing:
-            return await ctx.send(view=_vm_container(f"{ctx.author.mention}: {member.mention} is **already banned**"))
+            return await ctx.send(view=_vm_container(f"{ctx.author.display_name}: {member.mention} is **already banned**"))
         await VoiceMasterSettings.insert_ban(
             self.bot.db, ctx.guild.id, member.id, ctx.author.id,
         )
@@ -619,9 +666,9 @@ class VoiceMaster(VoiceMasterEvents, Package):
             if member.voice.channel.id in vm_channel_ids:
                 with contextlib.suppress(discord.HTTPException):
                     await member.move_to(None, reason="VoiceMaster: banned from voicemaster")
-        await ctx.send(view=_vm_container(f"{ctx.author.mention}: {member.mention} **banned** from voicemaster channels"))
+        await ctx.send(view=_vm_container(f"Banned {member.mention}\n> -# **from voicemaster channels**"))
 
-    @voicemaster.command(name="unban")
+    @voicemaster.command(name="unban", usage="<member>", example="unban @user")
     @has_permissions(manage_guild=True)
     @describe(member="member to unban from voicemaster channels")
     async def voicemaster_unban(self, ctx: Context, member: discord.Member) -> None:
@@ -630,21 +677,21 @@ class VoiceMaster(VoiceMasterEvents, Package):
             self.bot.db, ctx.guild.id, member.id,
         )
         if deleted:
-            await ctx.send(view=_vm_container(f"{ctx.author.mention}: {member.mention} **unbanned** from voicemaster channels"))
+            await ctx.send(view=_vm_container(f"Unbanned {member.mention}\n> -# **can now join voicemaster channels**"))
         else:
-            await ctx.send(view=_vm_container(f"{ctx.author.mention}: {member.mention} is **not banned**"))
+            await ctx.send(view=_vm_container(f"{member.mention} is **not banned**"))
 
-    @voicemaster.command(name="bans")
+    @voicemaster.command(name="bans", usage="", example="bans")
     @has_permissions(manage_guild=True)
     async def voicemaster_bans(self, ctx: Context) -> None:
         """view users banned from your voicemaster channels"""
         rows = await VoiceMasterSettings.get_bans(self.bot.db, ctx.guild.id)
         if not rows:
-            return await ctx.send(view=_vm_container(f"{ctx.author.mention}: no **banned** users"))
-        lines = [f"> <@{r['user_id']}>" for r in rows[:25]]
-        await ctx.send(view=_vm_container(f"{ctx.author.mention}:\n" + "\n".join(lines)))
+            return await ctx.send(view=_vm_container(f"{ctx.author.display_name}: no **banned** users"))
+        lines = [f"> -#<@{r['user_id']}>" for r in rows[:25]]
+        await ctx.send(view=_vm_container(f"{ctx.author.display_name}:\n" + "\n".join(lines)))
 
-    @voicemaster.command(name="messages")
+    @voicemaster.command(name="messages", usage="<on/off>", example="messages on")
     @has_permissions(manage_guild=True)
     @describe(setting="enable or disable")
     async def voicemaster_messages(self, ctx: Context, setting: bool) -> None:
@@ -653,12 +700,18 @@ class VoiceMaster(VoiceMasterEvents, Package):
             await VoiceMasterSettings.update_config_field(
                 self.bot.db, ctx.guild.id, "deny_messages", setting,
             )
-            state = "enabled" if setting else "disabled"
-            await ctx.send(view=_vm_container(f"{ctx.author.mention}: message deny **{state}**"))
+            if setting:
+                await ctx.send(view=_vm_container(
+                    f"{ctx.author.display_name}: message deny **enabled**\n"
+                    f"> -# your current and future voice channels will have **send_messages denied**\n"
+                    f"> -# members won't be able to type in text chats linked to your vc"
+                ))
+            else:
+                await ctx.send(view=_vm_container(f"{ctx.author.display_name}: message deny **disabled**"))
         except Exception:
-            await ctx.send(view=_vm_container(f"{ctx.author.mention}: server is **not configured**"))
+            await ctx.send(view=_vm_container(f"{ctx.author.display_name}: voicemaster is **not configured** in this guild"))
 
-    @voicemaster.command(name="bypassed")
+    @voicemaster.command(name="bypassed", usage="", example="bypassed")
     @has_permissions(manage_guild=True)
     async def voicemaster_bypassed(self, ctx: Context) -> None:
         """view all users and roles who can bypass locked channels"""
@@ -668,10 +721,10 @@ class VoiceMaster(VoiceMasterEvents, Package):
             if overwrite.connect is True:
                 bypassed.append(target.mention)
         if not bypassed:
-            return await ctx.send(view=_vm_container(f"{ctx.author.mention}: no **bypassed** users or roles"))
-        await ctx.send(view=_vm_container(f"{ctx.author.mention}:\n" + ", ".join(bypassed)))
+            return await ctx.send(view=_vm_container(f"{ctx.author.display_name}: no **bypassed** users or roles"))
+        await ctx.send(view=_vm_container(f"{ctx.author.display_name}:\n" + ", ".join(bypassed)))
 
-    @voicemaster.command(name="private", slash=False)
+    @voicemaster.command(name="private", slash=False, usage="<on/off>", example="private on")
     @has_permissions(manage_guild=True)
     @describe(setting="enable or disable")
     async def voicemaster_private(self, ctx: Context, setting: bool) -> None:
@@ -681,41 +734,69 @@ class VoiceMaster(VoiceMasterEvents, Package):
                 self.bot.db, ctx.guild.id, "use_private", setting,
             )
             state = "enabled" if setting else "disabled"
-            await ctx.send(view=_vm_container(f"{ctx.author.mention}: private category **{state}**"))
+            await ctx.send(view=_vm_container(f"{ctx.author.display_name}: private category **{state}**"))
         except Exception:
-            await ctx.send(view=_vm_container(f"{ctx.author.mention}: server is **not configured**"))
+            await ctx.send(view=_vm_container(f"{ctx.author.display_name}: voicemaster is **not configured** in this guild"))
 
-    @voicemaster.command(name="invite")
+    @voicemaster.command(name="invite", usage="", example="invite")
     async def voicemaster_invite(self, ctx: Context) -> None:
         """create an invite link to your voice channel"""
         try:
             invite = await ctx.author.voice.channel.create_invite(
                 max_age=3600, reason=f"VoiceMaster: {ctx.author} created invite",
             )
-            await ctx.send(view=_vm_container(f"{ctx.author.mention}: [click here to join]({invite.url})"))
+            await ctx.send(view=_vm_container(f"{ctx.author.display_name}: [click here to join]({invite.url})"))
         except discord.HTTPException:
-            await ctx.send(view=_vm_container(f"{ctx.author.mention}: failed to create **invite**"))
+            await ctx.send(view=_vm_container(f"{ctx.author.display_name}: failed to create **invite**"))
 
-    @voicemaster.command(name="region")
+    @voicemaster.command(name="random", slash=False, usage="[member] [--private on/off]", example="random @user --private on")
+    @has_permissions(manage_guild=True)
+    @describe(member="member to move to a random channel", private="only move to private channels")
+    async def voicemaster_random(self, ctx: Context, member: discord.Member = None, private: bool = False) -> None:
+        """move a member to a random voice channel"""
+        target = member or ctx.author
+        if not target.voice or not target.voice.channel:
+            return await ctx.send(view=_vm_container(f"{ctx.author.display_name}: {target.mention} is not in a **voice channel**"))
+        all_ids = await VoiceMasterSettings.fetch_guild_channel_ids(self.bot.db, ctx.guild.id)
+        if not all_ids:
+            return await ctx.send(view=_vm_container(f"{ctx.author.display_name}: no **voicemaster** channels found"))
+        channels = []
+        settings = await VoiceMasterSettings.fetch(self.bot, ctx.guild)
+        for cid in all_ids:
+            ch = ctx.guild.get_channel(cid)
+            if ch and isinstance(ch, discord.VoiceChannel) and ch.id != target.voice.channel.id:
+                if private:
+                    if settings.private_category_id and ch.category_id == settings.private_category_id:
+                        channels.append(ch)
+                else:
+                    channels.append(ch)
+        if not channels:
+            return await ctx.send(view=_vm_container(f"{ctx.author.display_name}: no **available** channels found"))
+        import random as _random
+        chosen = _random.choice(channels)
+        try:
+            await target.move_to(chosen, reason=f"VoiceMaster: {ctx.author} moved to random channel")
+            await ctx.send(view=_vm_container(f"{ctx.author.display_name}: moved {target.mention} to **{chosen.name}**"))
+        except discord.HTTPException:
+            await ctx.send(view=_vm_container(f"{ctx.author.display_name}: failed to move {target.mention}"))
+
+    @voicemaster.command(name="region", usage="<region>", example="region us-west")
     @describe(region="voice region")
     async def voicemaster_region(self, ctx: Context, region: str) -> None:
         """set the region of your voice channel"""
+        region_lower = region.lower()
+        if region_lower not in VALID_REGIONS:
+            options = ", ".join(sorted(VALID_REGIONS - {"auto"}))
+            return await ctx.warn(
+                f"Invalid region **{region}**\n"
+                f"> -# **options**: `{options}`, or `auto`"
+            )
         await ctx.author.voice.channel.edit(
-            rtc_region=region.lower() if region.lower() != "auto" else None,
+            rtc_region=region_lower if region_lower != "auto" else None,
             reason=f"VoiceMaster: {ctx.author} set region",
         )
-        await ctx.send(view=_vm_container(f"{ctx.author.mention}: region set to **{region}**"))
+        await ctx.send(view=_vm_container(f"{ctx.author.display_name}: region set to **{region}**"))
 
-    @voicemaster.command(name="nsfw")
-    @describe(setting="enable or disable")
-    async def voicemaster_nsfw(self, ctx: Context, setting: bool) -> None:
-        """toggle nsfw mode for your voice channel"""
-        await ctx.author.voice.channel.edit(
-            nsfw=setting,
-            reason=f"VoiceMaster: {ctx.author} toggled nsfw",
-        )
-        state = "enabled" if setting else "disabled"
-        await ctx.send(view=_vm_container(f"{ctx.author.mention}: nsfw mode **{state}**"))
 
 
 async def setup(bot: Vain):

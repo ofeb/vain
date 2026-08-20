@@ -8,7 +8,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 import aiohttp
 import discord
 
-from core.discord.views.embed import compose, body
+from core.discord.views.embed import compose, body, panel_container
 
 DDG_ICON = "https://vain.bot/img/duckduckgo.png"
 GOOGLE_ICON = "https://vain.bot/img/google.png"
@@ -88,18 +88,16 @@ def build_ddg_search_pages(
     for index in range(0, len(results), _RESULTS_PER_PAGE):
         chunk = results[index : index + _RESULTS_PER_PAGE]
         page_num = index // _RESULTS_PER_PAGE + 1
-        embed = discord.Embed(title="Search Results")
-        embed.set_author(name=author.display_name, icon_url=author.display_avatar.url)
+        lines: list[str] = []
         for item in chunk:
             snippet = item["snippet"] or "No description available."
-            embed.add_field(
-                name=f"**{item['title']}**",
-                value=compose(body(f"**{item['url']}**", snippet[:900])),
-                inline=False,
-            )
-        embed.set_footer(
-            text=f"Page {page_num}/{total_pages} of Duck Duck Go Results",
-            icon_url=DDG_ICON,
+            lines.append(f"**{item['title']}**\n> **{item['url']}**\n> {snippet[:900]}")
+        embed = panel_container(
+            title="Search Results",
+            lines=lines,
+            author=author.display_name,
+            author_icon=str(author.display_avatar.url),
+            footer=f"Page {page_num}/{total_pages} of Duck Duck Go Results",
         )
         pages.append(embed)
     return pages

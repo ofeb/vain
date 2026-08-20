@@ -75,16 +75,25 @@ class ManipulationEvents(Package):
 
         personal = data.get("user")
         if len(guild_pfxs) == 1:
-            guild_line = f"My prefix is: `{guild_pfxs[0]}`"
+            guild_line = f"my prefix is: `{guild_pfxs[0]}`"
         else:
             shown = " ".join(f"`{p}`" for p in guild_pfxs)
-            guild_line = f"My prefixes are: {shown}"
+            guild_line = f"my prefixes are: {shown}"
 
         if personal:
-            personal_line = f"Your personal prefix is: `{personal}`"
+            personal_line = f"your personal prefix is: `{personal}`"
         else:
-            personal_line = "Your personal prefix is: *not set*"
+            personal_line = "you don't have a personal prefix"
 
         embed = c2(message=f"{guild_line}\n{personal_line}")
         with contextlib.suppress(Exception):
-            await message.channel.send(embed=embed)
+            from discord import ui as _ui
+            from core.discord.ctx import layout_from_items
+            container = _ui.Container()
+            for attr in ("accent_color", "accent_colour", "color", "colour"):
+                if hasattr(container, attr):
+                    with contextlib.suppress(Exception):
+                        setattr(container, attr, None)
+            container.add_item(_ui.TextDisplay(f"{guild_line}\n{personal_line}"))
+            layout = layout_from_items([container], timeout=None)
+            await message.channel.send(view=layout)

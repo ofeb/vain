@@ -1806,16 +1806,15 @@ class Script:
             )
 
         now = datetime.datetime.now(datetime.timezone.utc)
+        _ts_default = str(int(now.timestamp()))
         replacements.update(
             {
                 "{date}": now.strftime("%Y-%m-%d"),
                 "{time}": now.strftime("%H:%M:%S"),
                 "{datetime}": now.strftime("%Y-%m-%d %H:%M:%S"),
-                "{timestamp}": str(int(now.timestamp())),
                 "{unix}": str(int(now.timestamp())),
             }
         )
-
         honeypot = kwargs.get("honeypot")
         if isinstance(honeypot, dict):
             try:
@@ -2097,6 +2096,8 @@ class Script:
                 continue
             token = key if str(key).startswith("{") else f"{{{key}}}"
             replacements.setdefault(token, str(value))
+
+        replacements.setdefault("{timestamp}", _ts_default)
 
         return replacements
 

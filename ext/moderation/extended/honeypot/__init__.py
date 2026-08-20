@@ -322,7 +322,7 @@ class Honeypot(Package):
             if isinstance(existing, discord.TextChannel):
                 return await ctx.warn(
                     f"Honeypot is already armed in {existing.mention} - "
-                    f"use `{ctx.clean_prefix}honeypot disable` to turn it off"
+                    f"use `{ctx.invoke_prefix}honeypot disable` to turn it off"
                 )
 
         
@@ -436,13 +436,13 @@ class Honeypot(Package):
         if not row.get("enabled"):
             return await ctx.warn(
                 f"Honeypot is already **disabled** - "
-                f"use `{ctx.clean_prefix}honeypot setup` to arm it again"
+                f"use `{ctx.invoke_prefix}honeypot setup` to arm it again"
             )
 
         await upsert(self.bot, ctx.guild.id, enabled=False)
         return await ctx.success(
             "Honeypot **disabled** - configuration and channel kept. "
-            f"Use `{ctx.clean_prefix}honeypot reset` to delete everything"
+            f"Use `{ctx.invoke_prefix}honeypot reset` to delete everything"
         )
 
     @honeypot.command(
@@ -514,14 +514,14 @@ class Honeypot(Package):
                         title="Honeypot Alerts",
                         lines=[
                             f"**Alert channel**: {label}",
-                            f"> -# Use `{ctx.clean_prefix}honeypot alerts #channel` to change",
-                            f"> -# Use `{ctx.clean_prefix}honeypot alerts clear` to remove",
+                            f"> -# Use `{ctx.invoke_prefix}honeypot alerts #channel` to change",
+                            f"> -# Use `{ctx.invoke_prefix}honeypot alerts clear` to remove",
                         ],
                         timestamp=False,
                     )
                 )
             return await ctx.warn(
-                f"No alert channel set - use `{ctx.clean_prefix}honeypot alerts #channel`"
+                f"No alert channel set - use `{ctx.invoke_prefix}honeypot alerts #channel`"
             )
 
         if raw.lower() in {"clear", "none", "off", "remove", "reset", "unset", "disable"}:
@@ -562,7 +562,7 @@ class Honeypot(Package):
                     lines=[
                         f"**Current**: {_punishment_phrase(current)}",
                         "> -# Options: `kick`, `ban`, `hardban`, `softban`, `timeout`, `jail`",
-                        f"> -# Example: `{ctx.clean_prefix}honeypot punishment ban timeout`",
+                        f"> -# Example: `{ctx.invoke_prefix}honeypot punishment ban timeout`",
                     ],
                     timestamp=False,
                 )
@@ -647,7 +647,7 @@ class Honeypot(Package):
         row = await fetch(self.bot, ctx.guild.id)
         if not row:
             return await ctx.warn(
-                f"Honeypot is not configured - use `{ctx.clean_prefix}honeypot setup`"
+                f"Honeypot is not configured - use `{ctx.invoke_prefix}honeypot setup`"
             )
 
         channel = (
@@ -707,9 +707,9 @@ class Honeypot(Package):
                         title="Honeypot Embed",
                         lines=[
                             "**Trap embed**: `default`",
-                            f"> -# Use `{ctx.clean_prefix}honeypot embed <script>` to customize",
-                            f"> -# Use `{ctx.clean_prefix}honeypot embed clear` to reset",
-                            f"> -# Variables: `{ctx.clean_prefix}variables honeypot`",
+                            f"> -# Use `{ctx.invoke_prefix}honeypot embed <script>` to customize",
+                            f"> -# Use `{ctx.invoke_prefix}honeypot embed clear` to reset",
+                            f"> -# Variables: `{ctx.invoke_prefix}variables honeypot`",
                         ],
                         timestamp=False,
                     )
@@ -722,8 +722,8 @@ class Honeypot(Package):
                     lines=[
                         "**Trap embed**: `custom`",
                         f"```\n{preview}\n```",
-                        f"> -# Use `{ctx.clean_prefix}honeypot embed clear` to reset",
-                        f"> -# Variables: `{ctx.clean_prefix}variables honeypot`",
+                        f"> -# Use `{ctx.invoke_prefix}honeypot embed clear` to reset",
+                        f"> -# Variables: `{ctx.invoke_prefix}variables honeypot`",
                     ],
                     timestamp=False,
                 )
@@ -763,5 +763,5 @@ class Honeypot(Package):
         if updated.get("enabled"):
             await self._refresh_trap_message(ctx.guild, updated)
         return await ctx.success(
-            f"Honeypot trap embed updated - see `{ctx.clean_prefix}variables honeypot` for vars"
+            f"Honeypot trap embed updated - see `{ctx.invoke_prefix}variables honeypot` for vars"
         )

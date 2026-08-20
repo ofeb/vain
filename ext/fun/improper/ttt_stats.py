@@ -6,7 +6,7 @@ import discord
 
 from config import color
 
-from core.discord.views.embed import compose, body
+from core.discord.views.embed import compose, body, panel_container
 
 if TYPE_CHECKING:
     from core.vain import Vain
@@ -303,19 +303,18 @@ def build_stats_embed(author: discord.User, stats: dict[str, int]) -> discord.Em
     ties = stats["ties"]
     matches = wins + losses + ties
     ratio = round(wins / matches, 2) if matches else 0
-    embed = discord.Embed(
+    embed = panel_container(
         title="Tic-Tac-Toe Statistics",
         color=color.base,
-        description=compose(
-            body(
-                f"**Wins**: {wins}",
-                f"**Losses**: {losses}",
-                f"**Matches**: {matches}",
-                f"**Ratio**: {ratio}",
-            ),
-        ),
+        lines=[
+            f"**Wins**: {wins}",
+            f"**Losses**: {losses}",
+            f"**Matches**: {matches}",
+            f"**Ratio**: {ratio}",
+        ],
+        author=author.display_name,
+        author_icon=str(author.display_avatar.url),
     )
-    embed.set_author(name=author.display_name, icon_url=author.display_avatar.url)
     return embed
 
 async def build_leaderboard_pages(
@@ -327,12 +326,13 @@ async def build_leaderboard_pages(
     per_page: int = 10,
 ) -> list[discord.Embed]:
     if not rows:
-        embed = discord.Embed(
+        embed = panel_container(
             title=title,
             color=color.base,
-            description=compose(body("No statistics recorded yet.")),
+            lines=["No statistics recorded yet."],
+            author=author.display_name,
+            author_icon=str(author.display_avatar.url),
         )
-        embed.set_author(name=author.display_name, icon_url=author.display_avatar.url)
         return [embed]
 
     total_pages = max(1, (len(rows) + per_page - 1) // per_page)
@@ -345,12 +345,13 @@ async def build_leaderboard_pages(
             name = await user_display(bot, row["user_id"])
             wins = f"{row['wins']:,}"
             lines.append(f"`{offset}` **{name}** - `{wins}` wins")
-        embed = discord.Embed(
+        embed = panel_container(
             title=title,
             color=color.base,
-            description=compose(body(*lines)),
+            lines=lines,
+            author=author.display_name,
+            author_icon=str(author.display_avatar.url),
+            footer=f"Page {page_num}/{total_pages} ({len(rows)} {'entry' if len(rows) == 1 else 'entries'})",
         )
-        embed.set_author(name=author.display_name, icon_url=author.display_avatar.url)
-        embed.set_footer(text=f"Page {page_num}/{total_pages} ({len(rows)} {'entry' if len(rows) == 1 else 'entries'})")
         pages.append(embed)
     return pages

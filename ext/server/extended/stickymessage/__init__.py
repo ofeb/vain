@@ -247,8 +247,8 @@ class StickymessageCommands(Package):
         if not script:
             raise CommandError(
                 "Provide a sticky script/message\n"
-                f"Example: `{ctx.clean_prefix}stickymessage add #general stay on topic`\n"
-                f"With options: `{ctx.clean_prefix}stickymessage add #general hello 5 5m`"
+                f"Example: `{ctx.invoke_prefix}stickymessage add #general stay on topic`\n"
+                f"With options: `{ctx.invoke_prefix}stickymessage add #general hello 5 5m`"
             )
         if not isinstance(channel, TextChannel):
             raise CommandError("You can only set sticky messages in text channels")
@@ -330,7 +330,7 @@ class StickymessageCommands(Package):
         existing = await self._get_row(ctx.guild.id, channel.id)
         if not existing:
             raise CommandError(
-                f"No sticky in {channel.mention} - use `{ctx.clean_prefix}stickymessage add` first"
+                f"No sticky in {channel.mention} - use `{ctx.invoke_prefix}stickymessage add` first"
             )
         settings = Settings(self.bot, None)  # type: ignore[arg-type]
         await settings.update_sticky(
@@ -370,7 +370,7 @@ class StickymessageCommands(Package):
         if not interval_token:
             raise CommandError(
                 f"Provide an interval (e.g. `30s`, `5m`, `1h`) or `off`\n"
-                f"Example: `{ctx.clean_prefix}stickymessage interval #general 10m`"
+                f"Example: `{ctx.invoke_prefix}stickymessage interval #general 10m`"
             )
         existing = await self._get_row(ctx.guild.id, channel.id)
         if not existing:
@@ -382,7 +382,7 @@ class StickymessageCommands(Package):
             if not is_duration_token(interval_token):
                 raise CommandError(
                     f"Provide an interval (e.g. `30s`, `5m`, `1h`) or `off`\n"
-                    f"Example: `{ctx.clean_prefix}stickymessage interval #general 10m`"
+                    f"Example: `{ctx.invoke_prefix}stickymessage interval #general 10m`"
                 )
             seconds = parse_duration_seconds(interval_token)
             if seconds is None or seconds < 30:
@@ -390,7 +390,7 @@ class StickymessageCommands(Package):
             if int(existing.get("message_limit") or 1) <= 1:
                 raise CommandError(
                     "Interval is disabled while message limit is **1** (every message).\n"
-                    f"Raise the limit first: `{ctx.clean_prefix}stickymessage messagelimit {channel.mention} 5`"
+                    f"Raise the limit first: `{ctx.invoke_prefix}stickymessage messagelimit {channel.mention} 5`"
                 )
 
         settings = Settings(self.bot, None)  # type: ignore[arg-type]
@@ -429,7 +429,7 @@ class StickymessageCommands(Package):
         if not limit_token or not limit_token.isdigit():
             raise CommandError(
                 f"Provide a message limit between **1** and **100**\n"
-                f"Example: `{ctx.clean_prefix}stickymessage messagelimit #general 10`"
+                f"Example: `{ctx.invoke_prefix}stickymessage messagelimit #general 10`"
             )
         limit = int(limit_token)
         if not 1 <= limit <= 100:

@@ -456,12 +456,10 @@ class Settings:
     
 
     @staticmethod
-    async def check_ban(db, guild_id: int, user_id: int) -> bool:
-        return bool(
-            await db.fetchrow(
-                "SELECT user_id FROM voicemaster_bans WHERE guild_id = $1 AND user_id = $2",
-                guild_id, user_id,
-            )
+    async def check_ban(db, guild_id: int, user_id: int):
+        return await db.fetchrow(
+            "SELECT user_id, banned_by FROM voicemaster_bans WHERE guild_id = $1 AND user_id = $2",
+            guild_id, user_id,
         )
 
     @staticmethod

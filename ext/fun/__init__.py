@@ -17,6 +17,7 @@ from core.discord.package import Package
 from core.discord.ctx import Context
 from core.discord.hybrid import command, describe, hybrid, linked_family
 from core.discord.views.paginate import send_pages
+from core.discord.views.embed import panel_container
 from config import color, emojis
 
 from .games import start_connect4, start_rps, start_ttt
@@ -36,7 +37,7 @@ from .improper.ttt_stats import (
     scope_ids,
 )
 
-from core.discord.views.embed import compose, body, c2
+from core.discord.views.embed import compose, body, c2, panel_container
 
 if TYPE_CHECKING:
     from core.vain import Vain
@@ -125,12 +126,10 @@ class Fun(Package):
             "Very doubtful.",
         ]
         response = random.choice(responses)
-        embed = discord.Embed(
+        embed = panel_container(
             title="🎱 Magic 8-Ball",
             color=color.base,
-            description=compose(
-                body(f"**Question:** {question}", f"**Answer:** {response}"),
-            ),
+            lines=[f"**Question:** {question}", f"**Answer:** {response}"],
         )
         await ctx.send(embed=embed)
 
@@ -149,15 +148,10 @@ class Fun(Package):
         results = [random.randint(1, sides) for _ in range(count)]
         total = sum(results)
         
-        embed = discord.Embed(
+        embed = panel_container(
             title="🎲 Dice Roll",
             color=color.base,
-            description=compose(
-                body(
-                    f"**Results:** {', '.join(map(str, results))}",
-                    f"**Total:** {total}",
-                ),
-            ),
+            lines=[f"**Results:** {', '.join(map(str, results))}", f"**Total:** {total}"],
         )
         await ctx.send(embed=embed)
 
@@ -188,12 +182,10 @@ class Fun(Package):
             return await ctx.warn("Please provide at least 2 options")
         
         result = random.choice(choices)
-        embed = discord.Embed(
+        embed = panel_container(
             title="🎯 Random Choice",
             color=color.base,
-            description=compose(
-                body(f"**Options:** {', '.join(choices)}", f"**Chosen:** {result}"),
-            ),
+            lines=[f"**Options:** {', '.join(choices)}", f"**Chosen:** {result}"],
         )
         await ctx.send(embed=embed)
 
@@ -292,17 +284,15 @@ class Fun(Package):
         else:
             match_line = "💔 Not a great match..."
 
-        embed = discord.Embed(
+        embed = panel_container(
             title="💕 Ship Calculator",
             color=color.base,
-            description=compose(
-                body(
-                    f"**{member1.display_name}** ❤️ **{member2.display_name}**",
-                    f"**Ship Name:** {ship_name}",
-                    f"**Compatibility:** {compatibility}% ❤️",
-                    match_line,
-                ),
-            ),
+            lines=[
+                f"**{member1.display_name}** ❤️ **{member2.display_name}**",
+                f"**Ship Name:** {ship_name}",
+                f"**Compatibility:** {compatibility}% ❤️",
+                match_line,
+            ],
         )
         await ctx.send(embed=embed)
 
@@ -536,27 +526,85 @@ class Fun(Package):
     )
     @describe(query="Artist and song title")
     async def lyrics(self, ctx: Context, *, query: str) -> None:
-        artist, _, title = query.partition(" - ")
-        if not title.strip():
-            parts = query.rsplit(" ", 1)
-            if len(parts) == 2:
-                artist, title = parts[0], parts[1]
-            else:
-                artist, title = query, query
-        url = f"https://api.lyrics.ovh/v1/{urllib.parse.quote(artist.strip())}/{urllib.parse.quote(title.strip())}"
-        async with self.bot.session.get(url) as resp:
-            if resp.status != 200:
-                return await ctx.warn("Could not find lyrics for that track.")
-            data = await resp.json()
-        lyrics_text = data.get("lyrics")
-        if not lyrics_text:
-            return await ctx.warn("Could not find lyrics for that track.")
-        embed = discord.Embed(
-            title=f"{title.strip()} - {artist.strip()}",
-            color=color.base,
-            description=compose(body(lyrics_text[:4000])),
-        )
-        await ctx.send(embed=embed)
+        async with ctx.typing():
+            async with self.bot.session.get(
+                "https://genius.com/api/search/multi",
+                params={"q": query},
+            ) as resp:
+                if resp.status != 200:
+                    return await ctx.warn("Could not search for lyrics.")
+                data = await resp.json()
+
+            track = next(
+                (
+                    hit["result"]
+                    for section in data.get("response", {}).get("sections", [])
+                    for hit in section.get("hits", [])
+                    if hit["index"] == "song"
+                ),
+                None,
+            )
+            if not track:
+                return await ctx.warn("No results found for that track.")
+
+            async with self.bot.session.get(track["url"]) as lyrics_resp:
+                html = await lyrics_resp.text()
+
+            divs = re.findall(
+                r'<div[^>]*class="[^"]*(?:Lyrics__Container[^"]*|lyrics[^"]*)"[^>]*>(.*?)</div>',
+                html,
+                re.DOTALL,
+            )
+            if not divs:
+                return await ctx.warn("Couldn't find lyrics for this song.")
+
+            lyrics = ""
+            for div_html in divs:
+                cleaned = re.sub(r"<br\s*/?>", "\n", div_html)
+                cleaned = re.sub(r"<[^>]+>", "", cleaned)
+                lyrics += cleaned
+
+            lyrics = lyrics.strip("\n")
+            section_pattern = re.compile(r"(\[.*?\])")
+            parts = section_pattern.split(lyrics)
+
+            organized_sections = []
+            current_section = ""
+            current_header = ""
+            for part in parts:
+                if section_pattern.match(part):
+                    if current_section:
+                        organized_sections.append((current_header, current_section.strip()))
+                    current_header = part
+                    current_section = ""
+                else:
+                    current_section += part
+            if current_section:
+                organized_sections.append((current_header, current_section.strip()))
+
+            if not organized_sections:
+                organized_sections = [("", lyrics)]
+
+            thumbnail_url = track.get("song_art_image_url")
+            artist_name = track["primary_artist"]["name"]
+            artist_icon = track["primary_artist"].get("image_url")
+            artist_url = track["primary_artist"].get("url")
+            release_date = track.get("release_date_for_display", "")
+            track_title = track["title"]
+            track_url = track["url"]
+
+            pages = []
+            for i, (header, content) in enumerate(organized_sections, 1):
+                section_text = f"{header}\n{content}" if header else content
+                embed = panel_container(
+                    title=track_title,
+                    url=track_url,
+                    lines=[f"```yaml\n{section_text}```"],
+                    footer=f"{i}/{len(organized_sections)}" + (f" \u2022 {release_date}" if release_date else ""),
+                )
+                pages.append(embed)
+
+            await ctx.paginator(pages)
 
     @hybrid(
         name="rockpaperscissors",
@@ -638,10 +686,10 @@ class Fun(Package):
         if option1 is None:
             return await ctx.warn(f"expected: {ctx.cmd('wyr option1 or option2')}")
 
-        embed = discord.Embed(
+        embed = panel_container(
             title="Would You Rather?",
             color=color.base,
-            description=body(f"**1:** {option1}", f"**2:** {option2}"),
+            lines=[f"**1:** {option1}", f"**2:** {option2}"],
         )
         if ctx.guild is None:
             view = WyrView(ctx, option1, option2)

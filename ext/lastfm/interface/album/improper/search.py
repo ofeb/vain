@@ -75,7 +75,7 @@ class AlbumSearch(BaseModel):
         if not username:
             raise CommandError(
                 "You **haven't** set your Last.fm account yet!",
-                f"Use [`{ctx.clean_prefix}lastfm login <username>`](https://last.fm/join) to connect it",
+                f"Use [`{ctx.invoke_prefix}lastfm login <username>`](https://last.fm/join) to connect it",
             )
 
         recent_tracks = await RecentTracks.fetch(username)

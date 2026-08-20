@@ -11,7 +11,7 @@ import aiohttp
 import discord
 from PIL import Image
 
-from core.discord.views.embed import panel_embed
+from core.discord.views.embed import panel_embed, panel_container
 
 def label_line(label: str, value: str) -> str:
     return f"**{label}**: {value}"
@@ -166,8 +166,10 @@ def build_urban_embed(
     body = "\n\n".join(body_parts)
     body = f"{body}\n\n> -# page {page}/{total}"
     
-    embed = discord.Embed(description=body[:4090], url=permalink)
-    embed.color = None
+    embed = panel_container(
+        lines=[body[:4090]],
+        url=permalink,
+    )
     return embed
 
 def normalize_cashtag(username: str) -> str:

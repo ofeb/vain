@@ -10,7 +10,7 @@ import discord
 from config import color
 from .improper.connect4_board import render_connect4_board
 
-from core.discord.views.embed import compose, body, c2, reply_embed
+from core.discord.views.embed import compose, body, c2, reply_embed, panel_container
 
 if TYPE_CHECKING:
     from core.vain import Vain
@@ -160,13 +160,12 @@ class RPSView(discord.ui.View):
             desc = self._waiting_text()
             if self.current_round > 1:
                 desc = f"**Round {self.current_round}/{self.rounds}**\n{desc}"
-        embed = discord.Embed(
+        embed = panel_container(
             title="Rock Paper Scissors",
             color=color.base,
-            description=compose(body(*desc.split("\n"))),
+            lines=desc.split("\n"),
+            footer=f"Round {self.current_round} of {self.rounds}" if not self.finished else None,
         )
-        if not self.finished:
-            embed.set_footer(text=f"Round {self.current_round} of {self.rounds}")
         return embed
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -240,16 +239,12 @@ class RPSView(discord.ui.View):
             embed.description = compose(body(*final_lines))
         else:
             self.current_round += 1
-            embed = discord.Embed(
+            embed = panel_container(
                 title="Rock Paper Scissors",
                 color=color.base,
-                description=compose(
-                    body(
-                        *(round_text + f"\n\n**Round {self.current_round}/{self.rounds}**\n{self._waiting_text()}").split("\n"),
-                    ),
-                ),
+                lines=(round_text + f"\n\n**Round {self.current_round}/{self.rounds}**\n{self._waiting_text()}").split("\n"),
+                footer=f"Round {self.current_round} of {self.rounds}",
             )
-            embed.set_footer(text=f"Round {self.current_round} of {self.rounds}")
 
         if self.message:
             await self.message.edit(embed=embed, view=None if self.finished else self)

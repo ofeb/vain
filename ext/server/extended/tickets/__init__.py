@@ -176,8 +176,8 @@ class Tickets(TicketEvents, Package):
         await settings.upsert(channel_id=message.channel.id, message_id=message.id)
         return await ctx.success(
             f"Panel set to [this message]({message.jump_url}).\n"
-            f"Add controls with `{ctx.clean_prefix}tc opening button` or "
-            f"`{ctx.clean_prefix}tc button` / `{ctx.clean_prefix}tc dropdown`."
+            f"Add controls with `{ctx.invoke_prefix}tc opening button` or "
+            f"`{ctx.invoke_prefix}tc button` / `{ctx.invoke_prefix}tc dropdown`."
         )
 
     
@@ -452,11 +452,11 @@ class Tickets(TicketEvents, Package):
                 return await ctx.success(
                     "Using the **default** open message "
                     f"(`{DEFAULT_OPEN_TITLE}` / `{DEFAULT_OPEN_DESCRIPTION}`).\n"
-                    f"Set a custom one with `{ctx.clean_prefix}tc opening embed <script>`."
+                    f"Set a custom one with `{ctx.invoke_prefix}tc opening embed <script>`."
                 )
             return await ctx.success(
                 f"Current open embed script:\n```\n{current[:1800]}\n```\n"
-                f"Reset with `{ctx.clean_prefix}tc opening embed reset`."
+                f"Reset with `{ctx.invoke_prefix}tc opening embed reset`."
             )
 
         settings = await Settings.fetch(self.bot, ctx.guild)
@@ -542,7 +542,7 @@ class Tickets(TicketEvents, Package):
                     description=(
                         f"{emojis.approve} {ctx.author.mention}: "
                         "Use the modal to add an opening button, or run:\n"
-                        f"`{ctx.clean_prefix}tc opening button add <id> <label> "
+                        f"`{ctx.invoke_prefix}tc opening button add <id> <label> "
                         "--emoji 🎫 --style green`"
                     ),
                     color=color.approve,
@@ -577,7 +577,7 @@ class Tickets(TicketEvents, Package):
         buttons = await settings.fetch_buttons()
         if not buttons:
             return await ctx.warn(
-                f"No opening buttons yet. Add one with `{ctx.clean_prefix}tc opening button add`."
+                f"No opening buttons yet. Add one with `{ctx.invoke_prefix}tc opening button add`."
             )
         rows = [dict(b) for b in buttons]
         view = OpeningButtonEmojiSelect(self, rows)
@@ -726,14 +726,14 @@ class Tickets(TicketEvents, Package):
         message = await settings.fetch_message()
         if not message:
             return await ctx.warn(
-                f"Set a panel first with `{ctx.clean_prefix}tc panel`."
+                f"Set a panel first with `{ctx.invoke_prefix}tc panel`."
             )
 
         await settings.upsert_dropdown(identifier, placeholder[:100])
         await self._refresh_panel(message, ctx.guild.id)
         return await ctx.success(
             f"Dropdown `{identifier}` created. Add options with "
-            f"`{ctx.clean_prefix}tc dropdown option {identifier} <opt-id> <label>`."
+            f"`{ctx.invoke_prefix}tc dropdown option {identifier} <opt-id> <label>`."
         )
 
     @ticket_dropdown.command(
@@ -1073,7 +1073,7 @@ class Tickets(TicketEvents, Package):
         message = await settings.fetch_message()
         if not message:
             return await ctx.warn(
-                f"Set a panel first with `{ctx.clean_prefix}tc panel <message>`."
+                f"Set a panel first with `{ctx.invoke_prefix}tc panel <message>`."
             )
 
         if not identifier:

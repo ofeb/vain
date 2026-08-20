@@ -13,7 +13,7 @@ import discord
 from config import color
 
 from core.discord.ctx import Context
-from core.discord.views.embed import body, compose
+from core.discord.views.embed import body, compose, panel_container
 
 
 class WyrView(discord.ui.View):
@@ -52,13 +52,10 @@ class WyrView(discord.ui.View):
                 return
             for item in self.children:
                 item.disabled = True
-            embed = discord.Embed(
+            embed = panel_container(
                 title="Would You Rather?",
                 color=color.base,
-                description=compose(
-                    body(f"**1:** {self.option1}", f"**2:** {self.option2}"),
-                    f"{self.ctx.author.mention} chose **{option}**",
-                ),
+                lines=[f"**1:** {self.option1}", f"**2:** {self.option2}", f"{self.ctx.author.mention} chose **{option}**"],
             )
             await inter.response.edit_message(embed=embed, view=self)
             self.stop()

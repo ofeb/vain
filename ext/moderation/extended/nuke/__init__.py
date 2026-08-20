@@ -574,7 +574,7 @@ class Nuke(Package):
         if not interval_token:
             raise CommandError(
                 f"Provide an interval (e.g. `30m`, `2h`, `1d`)\n"
-                f"Example: `{ctx.clean_prefix}autonuke change interval #general 2h`"
+                f"Example: `{ctx.invoke_prefix}autonuke change interval #general 2h`"
             )
         seconds = parse_duration_token(interval_token)
         if seconds is None or seconds < 60:
@@ -591,7 +591,7 @@ class Nuke(Package):
         if not existing:
             raise CommandError(
                 f"No autonuke for {channel.mention} - use "
-                f"`{ctx.clean_prefix}autonuke add` first"
+                f"`{ctx.invoke_prefix}autonuke add` first"
             )
         await self.db.execute(
             """UPDATE nuke SET nuke_threshold = $1

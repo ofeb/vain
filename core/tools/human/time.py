@@ -70,13 +70,13 @@ def parse_dt(value) -> datetime.datetime | None:
 
 
 def human_date(value, *, fallback: str = "Unknown") -> str:
-    """Format a date like ``19th of April, 2024``."""
+    """Format a date like ``Saturday, 30th August 2026 At 17:30``."""
     dt = parse_dt(value)
     if dt is None:
         if isinstance(value, str) and value.strip() and not _ISO_RE.match(value.strip()):
             return value.strip()
         return fallback
-    return f"{ordinal(dt.day)} of {dt.strftime('%B')}, {dt.year}"
+    return f"{dt.strftime('%A')}, {ordinal(dt.day)} {dt.strftime('%B %Y At %H:%M')}"
 
 
 def discord_ts(value, style: str = "R") -> str:
@@ -179,3 +179,43 @@ def when(dt: datetime.datetime) -> str:
         d = int(diff / 86400)
         s = f"{d} day{'s' if d != 1 else ''}"
     return f"{s} ago" if ago else f"in {s}"
+
+
+_DURATION_RE = re.compile(r"^(\d+)(s|m|h|d|w|y)$", re.IGNORECASE)
+_DURATION_UNITS = {
+    "s": 1,
+    "m": 60,
+    "h": 3600,
+    "d": 86400,
+    "w": 604800,
+    "y": 31536000,
+}
+
+
+def parse_duration(token: str) -> int | None:
+    """Parse a duration token like ``30s``, ``5m``, ``1h``, ``2d`` into seconds.
+
+    Accepts single-letter unit suffixes: s (seconds), m (minutes), h (hours),
+    d (days), w (weeks), y (years). Returns None if the token is invalid.
+    """
+    match = _DURATION_RE.match(str(token).strip().lower())
+    if not match:
+        return None
+    amount = int(match.group(1))
+    unit = match.group(2).lower()
+    return amount * _DURATION_UNITS[unit]
+
+
+def format_duration(seconds: int) -> str:
+    """Format seconds into a human-readable duration like ``2 days, 3 hours``."""
+    if seconds <= 0:
+        return "0 seconds"
+    parts = []
+    for unit, mult in (("y", 31536000), ("w", 604800), ("d", 86400), ("h", 3600), ("m", 60), ("s", 1)):
+        if seconds >= mult:
+            count = seconds // mult
+            seconds %= mult
+            parts.append(f"{count} {unit}{'s' if count != 1 else ''}")
+        if len(parts) >= 2:
+            break
+    return ", ".join(parts) if parts else "0 seconds"

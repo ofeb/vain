@@ -360,7 +360,7 @@ class ConfirmView(View):
             return False
         return True
 
-    @discord.ui.button(label="Confirm", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="Confirm", style=discord.ButtonStyle.primary)
     async def confirm(self, interaction: Interaction, button: Button):
         self.value = True
         self.stop()
@@ -422,7 +422,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         cfg = await self._get_cfg(ctx.guild.id)
         if not cfg or not self._cfg_is_enabled(cfg):
             await ctx.warn(
-                f"Not enabled\n> -# **use:** `{ctx.clean_prefix}leveling enable`"
+                f"Not enabled\n> -# **use:** `{ctx.invoke_prefix}leveling enable`"
             )
             return None
         return cfg
@@ -540,16 +540,16 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         cfg = await self._get_cfg(ctx.guild.id)
         if not cfg:
             return await ctx.warn(
-                f"Leveling is not configured\n> -# **use:** `{ctx.clean_prefix}leveling enable`"
+                f"Leveling is not configured\n> -# **use:** `{ctx.invoke_prefix}leveling enable`"
             )
         if not self._cfg_is_enabled(cfg):
             return await ctx.warn(
-                f"Already disabled\n> -# **use:** `{ctx.clean_prefix}leveling enable` to re-enable"
+                f"Already disabled\n> -# **use:** `{ctx.invoke_prefix}leveling enable` to re-enable"
             )
         await Settings.disable_guild(self.db, ctx.guild.id)
         return await ctx.success(
             "Leveling disabled\n"
-            f"> -# **use:** `{ctx.clean_prefix}leveling wipe` to delete everything"
+            f"> -# **use:** `{ctx.invoke_prefix}leveling wipe` to delete everything"
         )
 
     @leveling.command(
@@ -632,11 +632,11 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
         if rolegain:
             return await ctx.success(
                 f"Message set\n> -# **type:** role reward message\n"
-                f"> -# **sends when:** member gains a role from `{ctx.clean_prefix}leveling rewards`\n"
+                f"> -# **sends when:** member gains a role from `{ctx.invoke_prefix}leveling rewards`\n"
                 f"```\n{script[:500]}\n```"
             )
         return await ctx.success(
-            f"Message set\n> -# **sends to:** `{ctx.clean_prefix}leveling channel` destination\n"
+            f"Message set\n> -# **sends to:** `{ctx.invoke_prefix}leveling channel` destination\n"
             f"```\n{script[:500]}\n```"
         )
 
@@ -669,7 +669,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
             ch_id = cfg.get("channel_id")
             return await ctx.warn(
                 f"Channel missing\n> -# **channel `{ch_id}` not found**\n"
-                f"> -# **use:** `{ctx.clean_prefix}leveling channel #channel`"
+                f"> -# **use:** `{ctx.invoke_prefix}leveling channel #channel`"
             )
 
         msg = await self._send_level_message(
@@ -761,7 +761,7 @@ class Leveling(LevelingEvents, Package, metaclass=_Meta):
     async def leveling_reset(self, ctx, member: Member = None):
         if not await self._get_cfg(ctx.guild.id):
             return await ctx.warn(
-                f"Not configured\n> -# **use:** `{ctx.clean_prefix}leveling enable`"
+                f"Not configured\n> -# **use:** `{ctx.invoke_prefix}leveling enable`"
             )
         view = ConfirmView(ctx.author.id)
         target = member.mention if member else "**everyone**"

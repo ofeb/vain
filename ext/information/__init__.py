@@ -162,12 +162,7 @@ class InformationCommands(Package):
         shard_count = bot.shard_count or 1
         if bot.user and bot.user.created_at:
             _dt = bot.user.created_at
-            _day = _dt.day
-            if 11 <= _day <= 13:
-                _suf = "th"
-            else:
-                _suf = {1: "st", 2: "nd", 3: "rd"}.get(_day % 10, "th")
-            created = _dt.strftime(f"%A, {_day}{_suf} %B %Y")
+            created = discord.utils.format_dt(_dt, style="F")
         else:
             created = "Unknown"
 

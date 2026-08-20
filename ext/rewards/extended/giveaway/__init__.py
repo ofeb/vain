@@ -11,6 +11,7 @@ from discord.ext import commands
 
 from core.discord.ctx import Context
 from core.discord.hybrid import describe, group
+from core.discord.views.embed import panel_container
 from config import color
 from core.managers.permissions import has_permissions
 from core.tools.moderation_args import (
@@ -376,14 +377,14 @@ class Giveaway(commands.Cog):
         
         text = header + "\n" + body + examples
         if len(text) > 3800:
-            embed = discord.Embed(
+            embed = panel_container(
                 color=color.base,
                 title="Giveaway entry rules",
-                description=header,
+                lines=[header],
             )
             await ctx.paginate(embed, [f"`{i:02d}` " + ln.split(" - ", 1)[-1] if " - " in ln else ln for i, ln in enumerate(lines, 1)])
             return
-        emb = discord.Embed(color=color.base, description=text)
+        emb = panel_container(color=color.base, lines=[text])
         await ctx.send(embed=emb)
 
     @giveaway.command(

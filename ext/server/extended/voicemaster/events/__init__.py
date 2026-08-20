@@ -27,6 +27,16 @@ class VoiceMasterEvents:
         if not config or config["channel_id"] != after.channel.id:
             return
 
+        ban_info = await Settings.check_ban(self.bot.db, member.guild.id, member.id)
+        if ban_info:
+            ban_owner_id = ban_info.get("banned_by") if hasattr(ban_info, "get") else None
+            if ban_owner_id and member.id == ban_owner_id:
+                pass
+            else:
+                with contextlib.suppress(discord.HTTPException):
+                    await member.move_to(None, reason="VoiceMaster: banned from voicemaster")
+                return
+
         cooldown_key = f"vm_create:{member.id}"
         if self._get_cooldown(cooldown_key, 1, 10):
             with contextlib.suppress(discord.HTTPException):

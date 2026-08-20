@@ -7,6 +7,7 @@ from discord.ext.commands import group
 
 from core.discord.package import Package
 from core.discord.views.paginate import send_pages
+from core.discord.views.embed import panel_container
 from core.managers.permissions import has_permissions
 
 from .settings import Settings, fetch_all
@@ -82,13 +83,14 @@ class Uwulock(Package):
         pages: list[discord.Embed] = []
         for index in range(0, len(lines), per_page):
             chunk = lines[index : index + per_page]
-            embed = discord.Embed(
+            embed = panel_container(
                 title="Uwulocked Members",
                 color=self.color,
-                description="\n".join(chunk),
+                lines=chunk,
+                author=str(ctx.author),
+                author_icon=str(ctx.author.display_avatar.url),
+                footer=f"Page {index // per_page + 1}/{total_pages}",
             )
-            embed.set_author(name=str(ctx.author), icon_url=ctx.author.display_avatar.url)
-            embed.set_footer(text=f"Page {index // per_page + 1}/{total_pages}")
             pages.append(embed)
         return await send_pages(ctx, pages)
 

@@ -361,7 +361,7 @@ class Context(commands.Context):
 
     @property
     def invoke_prefix(self) -> str:
-        """Prefix used for this invocation: `/` for slash, else clean_prefix."""
+        """Prefix used by the user"""
         if getattr(self, "interaction", None) is not None:
             return "/"
         p = getattr(self, "clean_prefix", None)

@@ -6,6 +6,8 @@ from datetime import datetime
 from typing import Any
 
 import discord
+
+from core.discord.views.embed import panel_container
 from discord import ui
 
 from config import color
@@ -240,9 +242,9 @@ def build_entries_pages(
 ) -> list[discord.Embed]:
     prize = (prize or "Giveaway").strip() or "Giveaway"
     if not members:
-        emb = discord.Embed(
+        emb = panel_container(
             title=f"Entries · {prize}",
-            description="> -# **no entries** yet",
+            lines=["> -# **no entries** yet"],
             color=color.base,
         )
         return [emb]
@@ -257,11 +259,11 @@ def build_entries_pages(
     total = (len(lines) + per_page - 1) // per_page
     for page_i in range(total):
         chunk = lines[page_i * per_page : (page_i + 1) * per_page]
-        emb = discord.Embed(
+        emb = panel_container(
             title=f"Entries · {prize}",
-            description="\n".join(chunk),
+            lines=chunk,
+            footer=f"{len(members)} entr{'y' if len(members) == 1 else 'ies'} · page {page_i + 1}/{total}",
             color=color.base,
         )
-        emb.set_footer(text=f"{len(members)} entr{'y' if len(members) == 1 else 'ies'} · page {page_i + 1}/{total}")
         pages.append(emb)
     return pages

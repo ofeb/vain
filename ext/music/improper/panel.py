@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING, Any, Callable, Coroutine
 import aiohttp
 import discord
 from discord import ui
+
+from core.discord.views.embed import panel_container
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 
 if TYPE_CHECKING:
@@ -391,9 +393,8 @@ class MusicControlView(ui.View):
                 )
             await self.cog._stop_and_leave(self.guild_id, player)
             await inter.response.edit_message(
-                embed=discord.Embed(
-                    color=0x2B2D31,
-                    description="stopped\n> -# **queue cleared**",
+                embed=panel_container(
+                    lines=["stopped", "> -# **queue cleared**"],
                 ),
                 attachments=[],
                 view=None,

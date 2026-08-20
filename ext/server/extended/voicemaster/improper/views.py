@@ -84,7 +84,7 @@ def _kick_response(
     )
 
     return _container_msg(
-        f"{interaction.user.mention}: i have **kicked** the {word} from your voice channel",
+        f"{interaction.user.display_name}: i have **kicked** the {word} from your voice channel",
         mention=mentions,
     )
 
@@ -405,7 +405,7 @@ class VoiceInterface(ui.LayoutView):
             await _reply(
                 interaction,
                 view=_container_msg(
-                    f"{user.mention}: you're not connected to a **voice channel**"
+                    f"{user.display_name}: you're not connected to a **voice channel**"
                 ),
             )
             return False
@@ -418,7 +418,7 @@ class VoiceInterface(ui.LayoutView):
             await _reply(
                 interaction,
                 view=_container_msg(
-                    f"{user.mention}: you're not in a **voicemaster** channel"
+                    f"{user.display_name}: you're not in a **voicemaster** channel"
                 ),
             )
             return False
@@ -432,7 +432,7 @@ class VoiceInterface(ui.LayoutView):
                 await _reply(
                     interaction,
                     view=_container_msg(
-                        f"{user.mention}: you already **own** this voice channel"
+                        f"{user.display_name}: you already **own** this voice channel"
                     ),
                 )
                 return False
@@ -444,7 +444,7 @@ class VoiceInterface(ui.LayoutView):
                 await _reply(
                     interaction,
                     view=_container_msg(
-                        f"{user.mention}: you can't claim this channel, "
+                        f"{user.display_name}: you can't claim this channel, "
                         "the owner is still here"
                     ),
                 )
@@ -456,7 +456,7 @@ class VoiceInterface(ui.LayoutView):
             await _reply(
                 interaction,
                 view=_container_msg(
-                    f"{user.mention}: you **don't** own this voice channel"
+                    f"{user.display_name}: you **don't** own this voice channel"
                 ),
             )
             return False
@@ -484,7 +484,7 @@ class VoiceInterface(ui.LayoutView):
         await _reply(
             interaction,
             view=_container_msg(
-                f"{interaction.user.mention}: you are now the **owner** of this channel"
+                f"{interaction.user.display_name}: you are now the **owner** of this channel"
             ),
         )
 
@@ -505,7 +505,7 @@ class VoiceInterface(ui.LayoutView):
         await _reply(
             interaction,
             view=_container_msg(
-                f"{interaction.user.mention}: your voice channel has been **deleted**"
+                f"{interaction.user.display_name}: your voice channel has been **deleted**"
             ),
         )
 
@@ -518,7 +518,7 @@ class VoiceInterface(ui.LayoutView):
 
         container.add_item(
             ui.TextDisplay(
-                f"{interaction.user.mention}: choose members to **disconnect**"
+                f"{interaction.user.display_name}: choose members to **disconnect**"
             )
         )
 
@@ -553,10 +553,12 @@ class VoiceInterface(ui.LayoutView):
             reason=f"VoiceMaster: {interaction.user} hid channel",
         )
 
+        await self.cog._move_to_private_category(channel)
+
         await _reply(
             interaction,
             view=_container_msg(
-                f"{interaction.user.mention}: your voice channel has been **hidden**"
+                f"{interaction.user.display_name}: your voice channel has been **hidden**"
             ),
         )
 
@@ -572,10 +574,12 @@ class VoiceInterface(ui.LayoutView):
             reason=f"VoiceMaster: {interaction.user} revealed channel",
         )
 
+        await self.cog._move_to_original_category(channel)
+
         await _reply(
             interaction,
             view=_container_msg(
-                f"{interaction.user.mention}: your voice channel has been **revealed**"
+                f"{interaction.user.display_name}: your voice channel has been **revealed**"
             ),
         )
 
@@ -613,7 +617,7 @@ class VoiceInterface(ui.LayoutView):
                     await _reply(
                         modal_interaction,
                         view=_container_msg(
-                            f"{modal_interaction.user.mention}: "
+                            f"{modal_interaction.user.display_name}: "
                             "amount must be a valid **number**"
                         ),
                     )
@@ -623,7 +627,7 @@ class VoiceInterface(ui.LayoutView):
                 await _reply(
                     modal_interaction,
                     view=_container_msg(
-                        f"{modal_interaction.user.mention}: "
+                        f"{modal_interaction.user.display_name}: "
                         "amount must be between **0** and **99**"
                     ),
                 )
@@ -648,7 +652,7 @@ class VoiceInterface(ui.LayoutView):
                 await _reply(
                     modal_interaction,
                     view=_container_msg(
-                        f"{modal_interaction.user.mention}: "
+                        f"{modal_interaction.user.display_name}: "
                         "the limit option must be **yes** or **no**"
                     ),
                 )
@@ -663,12 +667,12 @@ class VoiceInterface(ui.LayoutView):
 
             if has_limit:
                 message = (
-                    f"{modal_interaction.user.mention}: "
+                    f"{modal_interaction.user.display_name}: "
                     f"voice channel limit set to **{amount}** users"
                 )
             else:
                 message = (
-                    f"{modal_interaction.user.mention}: "
+                    f"{modal_interaction.user.display_name}: "
                     "voice channel limit has been **disabled**"
                 )
 
@@ -693,10 +697,12 @@ class VoiceInterface(ui.LayoutView):
             reason=f"VoiceMaster: {interaction.user} locked channel",
         )
 
+        await self.cog._move_to_private_category(channel)
+
         await _reply(
             interaction,
             view=_container_msg(
-                f"{interaction.user.mention}: your voice channel has been **locked**"
+                f"{interaction.user.display_name}: your voice channel has been **locked**"
             ),
         )
 
@@ -712,10 +718,12 @@ class VoiceInterface(ui.LayoutView):
             reason=f"VoiceMaster: {interaction.user} unlocked channel",
         )
 
+        await self.cog._move_to_original_category(channel)
+
         await _reply(
             interaction,
             view=_container_msg(
-                f"{interaction.user.mention}: your voice channel has been **unlocked**"
+                f"{interaction.user.display_name}: your voice channel has been **unlocked**"
             ),
         )
 
@@ -744,7 +752,7 @@ class VoiceInterface(ui.LayoutView):
                 await _reply(
                     modal_interaction,
                     view=_container_msg(
-                        f"{modal_interaction.user.mention}: "
+                        f"{modal_interaction.user.display_name}: "
                         "name cannot be empty"
                     ),
                 )
@@ -760,7 +768,7 @@ class VoiceInterface(ui.LayoutView):
             await _reply(
                 modal_interaction,
                 view=_container_msg(
-                    f"{modal_interaction.user.mention}: "
+                    f"{modal_interaction.user.display_name}: "
                     f"channel renamed to **{new_name}**"
                 ),
             )
@@ -843,7 +851,7 @@ class VoiceInterface(ui.LayoutView):
             await _reply(
                 modal_interaction,
                 view=_container_msg(
-                    f"{modal_interaction.user.mention}: "
+                    f"{modal_interaction.user.display_name}: "
                     f"channel status set to **{display}**"
                 ),
             )

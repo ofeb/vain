@@ -7,6 +7,7 @@ import discord
 
 from config import emojis
 
+from core.discord.views.embed import panel_container
 from ..settings import Settings
 
 
@@ -33,7 +34,7 @@ def ticket_emoji(name: str, fallback: str) -> discord.PartialEmoji | str | None:
 async def _ephemeral(
     interaction: discord.Interaction, content: str, *, followup: bool = False
 ) -> None:
-    embed = discord.Embed(color=0x2B2D31, description=content)
+    embed = panel_container(color=0x2B2D31, lines=[content])
     if followup or interaction.response.is_done():
         await interaction.followup.send(embed=embed, ephemeral=True)
     else:

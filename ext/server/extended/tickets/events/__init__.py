@@ -13,6 +13,7 @@ from discord import (
     PermissionOverwrite,
     TextChannel,
 )
+from core.discord.views.embed import panel_container
 from discord.utils import snowflake_time, utcnow
 
 from core.discord.package import Package
@@ -36,9 +37,9 @@ class TicketEvents(Package):
             return
 
         if not interaction.guild.me.guild_permissions.manage_channels:
-            embed = discord.Embed(
+            embed = panel_container(
                 color=0x2B2D31,
-                description="I need the **Manage Channels** permission to open tickets.",
+                lines=["I need the **Manage Channels** permission to open tickets."],
             )
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
@@ -48,9 +49,9 @@ class TicketEvents(Package):
 
         settings = await Settings.fetch(self.bot, interaction.guild)
         if settings.is_blacklisted(interaction.user):
-            embed = discord.Embed(
+            embed = panel_container(
                 color=0x2B2D31,
-                description="You are not allowed to open tickets here.",
+                lines=["You are not allowed to open tickets here."],
             )
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
@@ -64,9 +65,9 @@ class TicketEvents(Package):
                 record = await settings.fetch_dropdown_option(identifier, values[0])
 
         if not record:
-            embed = discord.Embed(
+            embed = panel_container(
                 color=0x2B2D31,
-                description="This control is no longer valid.",
+                lines=["This control is no longer valid."],
             )
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
@@ -75,9 +76,9 @@ class TicketEvents(Package):
         if existing:
             ch = interaction.guild.get_channel(existing["channel_id"])
             if ch:
-                embed = discord.Embed(
+                embed = panel_container(
                     color=0x2B2D31,
-                    description=f"You already have an open ticket: {ch.mention}",
+                    lines=[f"You already have an open ticket: {ch.mention}"],
                 )
                 await interaction.response.send_message(embed=embed, ephemeral=True)
                 return
@@ -86,9 +87,9 @@ class TicketEvents(Package):
         if max_tickets:
             count = await settings.count_open_tickets()
             if count is not None and int(count) >= int(max_tickets):
-                embed = discord.Embed(
+                embed = panel_container(
                     color=0x2B2D31,
-                    description=f"The server has reached the maximum of **{max_tickets}** open tickets.",
+                    lines=[f"The server has reached the maximum of **{max_tickets}** open tickets."],
                 )
                 await interaction.response.send_message(embed=embed, ephemeral=True)
                 return
@@ -130,9 +131,9 @@ class TicketEvents(Package):
                 reason=f"Ticket opened by {interaction.user} ({interaction.user.id})",
             )
         except HTTPException as exc:
-            embed = discord.Embed(
+            embed = panel_container(
                 color=0x2B2D31,
-                description=f"Could not create the channel: `{exc.text}`",
+                lines=[f"Could not create the channel: `{exc.text}`"],
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
             return
@@ -152,9 +153,9 @@ class TicketEvents(Package):
             view=control,
         )
 
-        embed = discord.Embed(
+        embed = panel_container(
             color=0x2B2D31,
-            description=f"Your ticket has been created: {channel.mention}",
+            lines=[f"Your ticket has been created: {channel.mention}"],
         )
         await interaction.followup.send(embed=embed, ephemeral=True)
         logger.info(
@@ -266,10 +267,10 @@ class TicketEvents(Package):
                     await channel.send(content=content, view=view)
                 return
 
-        embed = discord.Embed(
+        embed = panel_container(
             title=DEFAULT_OPEN_TITLE,
-            description=DEFAULT_OPEN_DESCRIPTION,
             color=_color.base,
+            lines=[DEFAULT_OPEN_DESCRIPTION],
         )
         with suppress(HTTPException):
             await channel.send(content=user.mention, embed=embed, view=view)

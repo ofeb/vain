@@ -285,7 +285,7 @@ class Crypto(commands.Cog):
         tokens = (args or "").split()
         if not tokens:
             raise commands.CommandError(
-                f"Usage: `{ctx.clean_prefix}crypto feeds add #channel <coin>`"
+                f"Usage: `{ctx.invoke_prefix}crypto feeds add #channel <coin>`"
             )
         channel: discord.abc.GuildChannel | discord.TextChannel = ctx.channel  # type: ignore[assignment]
         i = 0

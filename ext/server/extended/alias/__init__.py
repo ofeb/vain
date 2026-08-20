@@ -151,8 +151,18 @@ class AliasCommands(Package):
             return await ctx.warn(f"Unknown command `{root}`")
         if self.bot.get_command(shortcut.lower()):
             return await ctx.warn(f"`{shortcut}` is already a real command")
+        existing = await self.db.fetchval(
+            """SELECT command_name FROM aliases WHERE guild_id = $1 AND alias = $2""",
+            ctx.guild.id,
+            shortcut.lower(),
+        )
+        if existing:
+            return await ctx.warn(
+                f"`{shortcut}` is already an alias for `{existing}`\n"
+                "> -# **remove it first** to create a new one"
+            )
         await self.db.execute(
-            """INSERT INTO aliases (guild_id, command_name, alias) VALUES($1, $2, $3) ON CONFLICT(guild_id, alias) DO UPDATE SET command_name = excluded.command_name""",
+            """INSERT INTO aliases (guild_id, command_name, alias) VALUES($1, $2, $3)""",
             ctx.guild.id,
             cmd.qualified_name,
             shortcut.lower(),
@@ -256,6 +266,12 @@ class AliasCommands(Package):
             return await ctx.warn(f"`{shortcut}` is already a real command")
         from ext.server.extended.alias.settings import Settings
 
+        existing = await Settings.get_selfalias(self.db, ctx.author.id, shortcut.lower())
+        if existing:
+            return await ctx.warn(
+                f"`{shortcut}` is already a self alias for `{existing}`\n"
+                "> -# **remove it first** to create a new one"
+            )
         await Settings.add_selfalias(
             self.db, ctx.author.id, shortcut.lower(), invoke, cmd.qualified_name
         )

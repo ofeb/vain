@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 from typing import TYPE_CHECKING, Any
 
 import discord
@@ -41,17 +42,13 @@ class AFKEvents:
             if mentions:
                 from .. import views as afk_views
                 view = afk_views.AFKMentionsButton(owner_id=message.author.id, bot=self.bot, guild_id=message.guild.id)
-            embed = c2(
-                message=(
-                    f"{message.author.mention}: Welcome back, you were away "
-                    f"for {format_dt(data.timestamp, 'R')}."
-                ),
-                timestamp=False,
+            text = (
+                f"{message.author.mention}: Welcome back, you were away "
+                f"for {format_dt(data.timestamp, 'R')}."
             )
-            embed.color = None
-            await message.reply(
-                embed=embed,
-                view=view,
+            await message.channel.send(
+                content=None,
+                view=self._build_afk_layout(text, view=view),
                 allowed_mentions=discord.AllowedMentions.none(),
                 delete_after=30 if view is None else None,
             )
@@ -92,15 +89,34 @@ class AFKEvents:
                 )
             except Exception:
                 pass
-            embed = c2(
-                message=(
-                    f"{user.mention} is AFK: **{data.status}** - "
-                    f"{format_dt(data.timestamp, 'R')}"
-                ),
-                timestamp=False,
+            text = (
+                f"{user.mention} is AFK: **{data.status}** - "
+                f"{format_dt(data.timestamp, 'R')}"
             )
-            embed.color = None
-            await message.reply(
-                embed=embed,
+            from discord import ui as _ui
+            from core.discord.ctx import layout_from_items
+            container = _ui.Container()
+            for attr in ("accent_color", "accent_colour", "color", "colour"):
+                if hasattr(container, attr):
+                    with contextlib.suppress(Exception):
+                        setattr(container, attr, None)
+            container.add_item(_ui.TextDisplay(text))
+            layout = layout_from_items([container], timeout=None)
+            await message.channel.send(
+                view=layout,
                 allowed_mentions=discord.AllowedMentions.none(),
             )
+
+    def _build_afk_layout(self, text: str, view=None):
+        from discord import ui as _ui
+        from core.discord.ctx import layout_from_items
+        container = _ui.Container()
+        for attr in ("accent_color", "accent_colour", "color", "colour"):
+            if hasattr(container, attr):
+                with contextlib.suppress(Exception):
+                    setattr(container, attr, None)
+        container.add_item(_ui.TextDisplay(text))
+        layout = layout_from_items([container], timeout=None)
+        if view is not None:
+            return layout
+        return layout

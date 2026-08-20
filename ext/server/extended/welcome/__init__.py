@@ -60,7 +60,7 @@ class WelcomeCommands(Package):
             )
         except UniqueViolationError:
             return await ctx.fail(
-                f"Welcome message exists\n> -# **remove the existing one first, or use `{ctx.clean_prefix}welcome edit`**"
+                f"Welcome message exists\n> -# **remove the existing one first, or use `{ctx.invoke_prefix}welcome edit`**"
             )
         extra = f"\n> -# **the message will delete itself after {humanize_duration(timer)}**" if timer else ""
         return await ctx.success(
@@ -91,7 +91,7 @@ class WelcomeCommands(Package):
         )
         if not exists:
             return await ctx.fail(
-                f"No welcome message\n> -# **use `{ctx.clean_prefix}welcome add` to create one first**"
+                f"No welcome message\n> -# **use `{ctx.invoke_prefix}welcome add` to create one first**"
             )
         await self.db.execute(
             """UPDATE welcome_messages SET message = $1, self_destruct = $2

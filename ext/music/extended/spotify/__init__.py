@@ -106,7 +106,7 @@ class Spotify(Package):
                     "",
                     f"**1.** [Click here to authorize]({url})",
                     f"**2.** Copy the full redirect URL or authorization code",
-                    f"**3.** Run `{ctx.clean_prefix}spotify login <code>`",
+                    f"**3.** Run `{ctx.invoke_prefix}spotify login <code>`",
                     "",
                     f"Redirect URI: `{redirect_uri()}`",
                 ],

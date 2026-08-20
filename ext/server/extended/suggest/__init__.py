@@ -12,7 +12,7 @@ from core.tools.convert import MemberConvert, RoleConvert, StatusConvert
 
 from core.managers.permissions import has_permissions
 
-from core.discord.views.embed import compose, body, caption, c2
+from core.discord.views.embed import compose, body, caption, c2, panel_container
 from .settings import Settings
 
 DEFAULT_UPVOTE = "\u2705"
@@ -221,19 +221,17 @@ class SuggestCommands(Package):
 
     async def _build_public_embed(self, guild: discord.Guild, row) -> discord.Embed:
         content = str(row["content"]).strip()
-        embed = discord.Embed(
-            color=self.color,
-            description=compose(
-                body(*content.splitlines()) if content else "",
-                caption(self._suggestion_footer(row)),
-            ),
-            timestamp=discord.utils.utcnow(),
-        )
+        lines = content.splitlines() if content else []
+        footer = self._suggestion_footer(row)
         author_name, author_icon = await self._resolve_author(guild, int(row["author_id"]))
-        if author_icon:
-            embed.set_author(name=author_name, icon_url=author_icon)
-        else:
-            embed.set_author(name=author_name)
+        embed = panel_container(
+            color=self.color,
+            lines=lines if lines else ["*No suggestion content*"],
+            footer=footer if footer else None,
+            author=author_name,
+            author_icon=author_icon,
+            timestamp=True,
+        )
         return embed
 
     async def _build_review_embed(self, guild: discord.Guild, row) -> discord.Embed:

@@ -51,7 +51,7 @@ class Away(AFKEvents, Package):
             scope_label = "globally"
         else:
             guild_id = ctx.guild.id
-            scope_label = f"in **{ctx.guild.name}**"
+            scope_label = f""
 
         store = self._store()
         await store.set(ctx.author.id, status or "AFK", guild_id=guild_id)

@@ -38,7 +38,7 @@ def _mention_line(index: int, entry: dict, *, bot: Any = None) -> str:
         location_bits.append(f"<#{channel_id}>")
     location = " in " + " · ".join(location_bits) if location_bits else ""
 
-    return f"-# `{index}.` **{who}** · pinged {when}{location}{jump_bit}"
+    return f"-# `{index}.` **{who}** · pinged {when}: {jump_bit}"
 
 
 def build_afk_mention_pages(
@@ -48,7 +48,7 @@ def build_afk_mention_pages(
     bot: Any = None,
     page_size: int = 10,
 ) -> list:
-    """inrole-style C2 pages for AFK mentions."""
+    """pages for AFK mentions."""
     if not mentions:
         container = ui.Container()
         for attr in ("accent_color", "accent_colour"):
@@ -75,7 +75,7 @@ def build_afk_mention_pages(
                     setattr(container, attr, None)
                 except Exception:
                     pass
-        container.add_item(ui.TextDisplay(f"**Mentions while AFK** · {owner_mention}"))
+        container.add_item(ui.TextDisplay(f"**Mentions while AFK**"))
         container.add_item(
             ui.TextDisplay(
                 f"-# {len(ordered)} mention{'s' if len(ordered) != 1 else ''} · Page {page_number}/{total_pages}"

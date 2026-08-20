@@ -1155,6 +1155,79 @@ async def _accent_color(bot: Vain) -> int | None:
     return None
 
 
+class _HelpSearchModal(ui.Modal, title="Search Commands"):
+    query = ui.TextInput(
+        label="Search for a command",
+        placeholder="type a command name or keyword...",
+        max_length=100,
+        required=True,
+    )
+
+    def __init__(self, help_menu: "GroupHelpMenu") -> None:
+        super().__init__()
+        self.help_menu = help_menu
+
+    async def on_submit(self, interaction: Interaction) -> None:
+        q = (self.query.value or "").strip().lower()
+        if not q:
+            return
+
+        matches: list[tuple[int, Command]] = []
+        for i, cmd in enumerate(self.help_menu.pages):
+            name = command_display_name(cmd).lower()
+            desc = (cmd.help or cmd.description or "").lower()
+            aliases = " ".join(a.lower() for a in (cmd.aliases or []))
+            if q in name or q in desc or q in aliases:
+                matches.append((i, cmd))
+
+        if not matches:
+            container = ui.Container()
+            for attr in ("accent_color", "accent_colour"):
+                if hasattr(container, attr):
+                    with contextlib.suppress(Exception):
+                        setattr(container, attr, None)
+            container.add_item(ui.TextDisplay(f"No commands found matching **{self.query.value}**"))
+            view = ui.LayoutView(timeout=60)
+            view.add_item(container)
+            await interaction.response.send_message(view=view, ephemeral=True)
+            return
+
+        options: list[SelectOption] = []
+        for idx, cmd in matches[:25]:
+            options.append(
+                SelectOption(
+                    label=command_display_name(cmd)[:100],
+                    value=str(idx),
+                    description=(cmd.short_doc or cmd.description or "")[:100],
+                )
+            )
+
+        async def on_pick(pick_inter: Interaction, value: str) -> None:
+            try:
+                self.help_menu.index = int(value)
+            except ValueError:
+                self.help_menu.index = 0
+            self.help_menu._rebuild()
+            if not pick_inter.response.is_done():
+                await pick_inter.response.defer()
+            if self.help_menu.msg is not None:
+                with contextlib.suppress(discord.HTTPException):
+                    await self.help_menu.msg.edit(view=self.help_menu)
+
+        from core.discord.views.paginate import PageJumpSelect
+        picker = PageJumpSelect(
+            title=f"Results for **{self.query.value}** ({len(matches)} found)",
+            options=options,
+            on_pick=on_pick,
+            author_id=interaction.user.id,
+            timeout=120,
+            placeholder="select a command to jump to...",
+        )
+        await interaction.response.send_message(view=picker, ephemeral=True)
+        with contextlib.suppress(Exception):
+            picker.message = await interaction.original_response()
+
+
 def _home_text(ctx: Context) -> str:
     """Minimal home help page."""
     p = _get_prefix(ctx)
@@ -1225,7 +1298,7 @@ class HelpMenu(ui.LayoutView):
     """Home + category browser using Components V2 LayoutView (select inside container)."""
 
     def __init__(self, ctx: Context, cats: dict[str, list[Command]], accent: int | None = None) -> None:
-        super().__init__(timeout=180)
+        super().__init__(timeout=300)
         self.ctx = ctx
         self.cats = cats
         self.accent = accent
@@ -1301,7 +1374,7 @@ class GroupHelpMenu(ui.LayoutView):
         pages: list[Command],
         accent: int | None = None,
     ) -> None:
-        super().__init__(timeout=180)
+        super().__init__(timeout=300)
         self.ctx = ctx
         self.pages = pages or []
         self.index = 0
@@ -1354,6 +1427,18 @@ class GroupHelpMenu(ui.LayoutView):
                     show_search=True,
                 )
             )
+            search_btn = ui.Button(
+                style=discord.ButtonStyle.primary,
+                label="Search",
+                custom_id=f"vain:help:search:{id(self)}",
+            )
+            async def _open_search(inter: Interaction) -> None:
+                modal = _HelpSearchModal(self)
+                await inter.response.send_modal(modal)
+            search_btn.callback = _open_search
+            search_row = ui.ActionRow()
+            search_row.add_item(search_btn)
+            container.add_item(search_row)
         self.add_item(container)
 
     async def interaction_check(self, inter: Interaction) -> bool:

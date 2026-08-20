@@ -46,9 +46,10 @@ class _BoostConfirmView(discord.ui.View):
         self.member = member
         self.value: bool | None = None
         self._action = action
+        self.message: discord.Message | None = None
 
         self.clear_items()
-        approve = discord.ui.Button(label="Approve", style=discord.ButtonStyle.success)
+        approve = discord.ui.Button(label="Approve", style=discord.ButtonStyle.primary)
         decline = discord.ui.Button(label="Decline", style=discord.ButtonStyle.danger)
         approve.callback = self._approve
         decline.callback = self._decline
@@ -75,19 +76,25 @@ class _BoostConfirmView(discord.ui.View):
         self.stop()
 
     async def prompt(self) -> bool:
-        from core.discord.views.embed import c2
-        embed = c2(
-            message=(
-                f"Are you sure you want to **{self._action}** {self.member.mention}?\n"
-                f"They are currently boosting the server."
-            ),
-            timestamp=False,
+        from discord import ui as _ui
+        from core.discord.ctx import layout_from_items
+        message = (
+            f"Are you sure you want to **{self._action}** {self.member.mention}?\n"
+            f"They are currently boosting the server."
         )
-        embed.color = None
-        msg = await self.ctx.send(embed=embed, view=self)
+        container = _ui.Container()
+        for attr in ("accent_color", "accent_colour", "color", "colour"):
+            if hasattr(container, attr):
+                with contextlib.suppress(Exception):
+                    setattr(container, attr, None)
+        container.add_item(_ui.TextDisplay(message))
+        layout = layout_from_items([container], timeout=None)
+        self.message = await self.ctx.send(view=layout)
+        with contextlib.suppress(discord.HTTPException, Exception):
+            await self.message.edit(view=self)
         await self.wait()
         with contextlib.suppress(discord.HTTPException):
-            await msg.delete()
+            await self.message.delete()
         return bool(self.value)
 
 class ModerationCommands(Package):
@@ -1733,7 +1740,7 @@ class ModerationCommands(Package):
         if not row or not row.get(role_key):
             setting_name = {"": "muted", "i": "imuted", "r": "rmuted"}.get(mute_type, mute_type)
             return await ctx.warn(
-                f"No mute role\n> -# **use** `{ctx.clean_prefix}settings {setting_name}` to configure"
+                f"No mute role\n> -# **use** `{ctx.invoke_prefix}settings {setting_name}` to configure"
             )
         role = ctx.guild.get_role(row[role_key])
         if not role:
@@ -2313,6 +2320,65 @@ class ModerationCommands(Package):
             timestamp=False,
         )
         await ctx.send(embed=embed)
+
+    @command(
+        name="temprole",
+        description="give a role temporarily to a user or users with a role",
+        example=",temprole @member @Role 1h",
+    )
+    @has_permissions(manage_roles=True)
+    async def temprole(
+        self,
+        ctx,
+        target: discord.Member | discord.Role,
+        role: discord.Role,
+        duration_str: str,
+        *,
+        reason: str | None = None,
+    ):
+        """give a temporary role to a user or users with a role"""
+        from core.tools.human.time import parse_duration, format_duration, discord_ts
+
+        seconds = parse_duration(duration_str)
+        if seconds is None or seconds <= 0:
+            return await ctx.warn("Invalid duration\n> -# **use format:** `30s`, `5m`, `1h`, `2d`, `1w`")
+
+        expires_at = discord.utils.utcnow() + __import__("datetime").timedelta(seconds=seconds)
+        expires_ts = discord_ts(expires_at, "F")
+
+        if isinstance(target, discord.Role):
+            members_with_role = [m for m in target.members if not m.bot]
+            if not members_with_role:
+                return await ctx.warn(f"No members with {target.mention}")
+            count = 0
+            for member in members_with_role:
+                if role not in member.roles:
+                    with contextlib.suppress(discord.HTTPException):
+                        await member.add_roles(role, reason=self._audit_reason(ctx, reason))
+                        count += 1
+                        self.bot.loop.create_task(self._temprole_remove_after(member, role, seconds))
+            return await ctx.success(
+                f"Gave {role.mention} to people with {target.mention}\n"
+                f"> -# **until** {expires_ts}",
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+        else:
+            if role in target.roles:
+                return await ctx.warn(f"{target.mention} already has {role.mention}")
+            await target.add_roles(role, reason=self._audit_reason(ctx, reason))
+            self.bot.loop.create_task(self._temprole_remove_after(target, role, seconds))
+            return await ctx.success(
+                f"Gave {role.mention} to {target.mention}\n"
+                f"> -# **until** {expires_ts}",
+            )
+
+    async def _temprole_remove_after(self, member: discord.Member, role: discord.Role, seconds: int):
+        """Remove a role after a duration."""
+        import asyncio
+        await asyncio.sleep(seconds)
+        with contextlib.suppress(discord.HTTPException, discord.NotFound):
+            if role in member.roles:
+                await member.remove_roles(role, reason="temprole expired")
 
     @command(
         name="clearinvites",
@@ -3568,7 +3634,7 @@ class ModerationCommands(Package):
         if removed:
             await ctx.success(
                 f"Removed all channels and roles\n"
-                f"Use `{ctx.clean_prefix}setup` to recreate them."
+                f"Use `{ctx.invoke_prefix}setup` to recreate them."
             )
         else:
             await ctx.warn("No setup found\n> -# **no moderation setup channels to remove**")
@@ -3677,7 +3743,7 @@ class ModerationCommands(Package):
         if removed:
             await ctx.success(
                 f"Removed: {', '.join(removed)}\n"
-                f"Use `{ctx.clean_prefix}setupjail` to recreate them."
+                f"Use `{ctx.invoke_prefix}setupjail` to recreate them."
             )
         else:
             await ctx.warn("No jail setup found\n> -# **no jail system to remove**")
@@ -3795,7 +3861,7 @@ class ModerationCommands(Package):
         if removed:
             await ctx.success(
                 f"Removed: {', '.join(removed)}\n"
-                f"Use `{ctx.clean_prefix}setupmute` to recreate them."
+                f"Use `{ctx.invoke_prefix}setupmute` to recreate them."
             )
         else:
             await ctx.warn("No mute setup found\n> -# **no mute system to remove**")

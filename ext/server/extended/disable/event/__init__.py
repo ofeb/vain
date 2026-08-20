@@ -19,7 +19,7 @@ class EventDisableCommands(Package):
         tokens = (args or "").split()
         if not tokens:
             raise CommandError(
-                f"Provide an event name\nExample: `{ctx.clean_prefix}disableevent repost`"
+                f"Provide an event name\nExample: `{ctx.invoke_prefix}disableevent repost`"
             )
 
         channel: TextChannel | None = None
@@ -49,7 +49,7 @@ class EventDisableCommands(Package):
             raise CommandError("Provide a **text channel** (or run this in one)")
         if not event_token:
             raise CommandError(
-                f"Provide an event name\nExample: `{ctx.clean_prefix}disableevent repost`"
+                f"Provide an event name\nExample: `{ctx.invoke_prefix}disableevent repost`"
             )
 
         event = await EventConverter().convert(ctx, event_token)

@@ -18,7 +18,7 @@ from core.discord.views.rolepages import build_inrole_pages, build_roles_pages
 from core.managers.permissions import has_permissions
 from core.tools.embed import BadEmbed, ParseError, PreparedScript, parse
 
-from core.discord.views.embed import compose, body, caption, c2
+from core.discord.views.embed import compose, body, caption, c2, panel_container
 
 _CLEAR_MEDIA = frozenset({"clear", "none", "off", "remove", "reset", "delete", "del"})
 _MAX_GUILD_MEDIA_BYTES = 10 * 1024 * 1024
@@ -541,14 +541,12 @@ class ServerCommands(Package):
 
             cat = categories[category]
             lines = [f"`{var}` - {desc}" for var, desc in cat["variables"].items()]
-            embed = discord.Embed(
+            embed = panel_container(
                 color=self.color,
                 title=cat["description"],
-                description=compose(
-                    body(*lines),
-                    caption("Use these variables in embedcreate, autoresponders, and more"),
-                ),
-                timestamp=discord.utils.utcnow(),
+                lines=lines,
+                footer="Use these variables in embedcreate, autoresponders, and more",
+                timestamp=True,
             )
             return await ctx.send(embed=embed)
 
@@ -556,14 +554,12 @@ class ServerCommands(Package):
         search_options = []
         for idx, (key, cat) in enumerate(categories.items()):
             lines = [f"`{var}` - {desc}" for var, desc in cat["variables"].items()]
-            pages.append(discord.Embed(
+            pages.append(panel_container(
                 color=self.color,
                 title=cat["description"],
-                description=compose(
-                    body(*lines),
-                    caption(f"Use {ctx.clean_prefix}variables <category> for more details"),
-                ),
-                timestamp=discord.utils.utcnow(),
+                lines=lines,
+                footer=f"Use {ctx.invoke_prefix}variables <category> for more details",
+                timestamp=True,
             ))
             search_options.append(
                 discord.SelectOption(

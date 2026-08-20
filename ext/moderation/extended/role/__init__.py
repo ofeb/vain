@@ -142,7 +142,7 @@ class Role(RoleEvents, Package):
             with contextlib.suppress(Exception):
                 await ctx.warn(
                     "There is already an ongoing mass role operation\n"
-                    f"> -# Cancel it early with `{ctx.clean_prefix}role cancel`"
+                    f"> -# Cancel it early with `{ctx.invoke_prefix}role cancel`"
                 )
             return
         return
@@ -495,6 +495,70 @@ class Role(RoleEvents, Package):
             reason=reason,
         )
         return await ctx.success(f"Added {target_role.mention} to {member.mention}")
+
+    @role.command(
+        name="temp",
+        aliases=("temprole",),
+        description="add a role temporarily for a duration",
+        example=",role temp @member @Role 1h",
+    )
+    @has_permissions(manage_roles=True)
+    async def role_temp(
+        self,
+        ctx,
+        member: discord.Member,
+        role: RoleConvert,
+        duration_str: str,
+        *,
+        reason: str | None = None,
+    ) -> discord.Message | None:
+        """Add a role temporarily. Duration format: 30s, 5m, 1h, 2d, 1w."""
+        from core.tools.human.time import parse_duration, format_duration, discord_ts
+
+        target_role: discord.Role = role  # type: ignore[assignment]
+        if not await self._ensure_targetable_member(ctx, member):
+            return None
+        if not await self._ensure_manageable_role(ctx, target_role, action="give"):
+            return None
+
+        seconds = parse_duration(duration_str)
+        if seconds is None or seconds <= 0:
+            return await ctx.warn("Invalid duration\n> -# **use format:** `30s`, `5m`, `1h`, `2d`, `1w`")
+
+        if target_role in member.roles:
+            return await ctx.warn(
+                f"{member.mention} already has {target_role.mention}"
+            )
+
+        await member.add_roles(target_role, reason=self._audit_reason(ctx, reason))
+        case_id = await self._create_case(
+            ctx, action="temprole", target_id=member.id, reason=reason
+        )
+        await self._send_modlog(
+            ctx,
+            action="temprole",
+            target_name=f"{member} -> {target_role.name}",
+            case_id=case_id,
+            reason=reason,
+        )
+
+        expires_at = discord.utils.utcnow() + __import__("datetime").timedelta(seconds=seconds)
+        expires_ts = discord_ts(expires_at, "F")
+
+        self.bot.loop.create_task(self._remove_role_after(ctx, member, target_role, seconds, reason))
+
+        return await ctx.success(
+            f"Gave {target_role.mention} to {member.mention}\n"
+            f"> -# **until** {expires_ts}"
+        )
+
+    async def _remove_role_after(self, ctx, member: discord.Member, role: discord.Role, seconds: int, reason: str | None):
+        """Remove a role after a duration."""
+        import asyncio
+        await asyncio.sleep(seconds)
+        with contextlib.suppress(discord.HTTPException, discord.NotFound):
+            if role in member.roles:
+                await member.remove_roles(role, reason=f"temprole expired: {reason or 'no reason'}")
 
     @role.command(
         name="remove",

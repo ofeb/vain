@@ -11,6 +11,7 @@ import contextlib
 from enum import Enum
 
 import discord
+from discord import ui
 from discord.ext.commands import Context
 
 from config import color
@@ -23,6 +24,17 @@ def _build_confirm_container(message: str) -> discord.Embed:
         message=message or "Are you sure you want to do this?",
         timestamp=False,
     )
+
+
+def _build_confirm_layout(message: str) -> ui.LayoutView:
+    """Build a C2 layout with the message text inside the container."""
+    container = ui.Container()
+    for attr in ("accent_color", "accent_colour", "color", "colour"):
+        if hasattr(container, attr):
+            with contextlib.suppress(Exception):
+                setattr(container, attr, None)
+    container.add_item(ui.TextDisplay(message or "Are you sure you want to do this?"))
+    return ui.LayoutView(timeout=None, items=[container])
 
 
 class ConfirmView(discord.ui.View):
@@ -45,7 +57,7 @@ class ConfirmView(discord.ui.View):
 
         approve = discord.ui.Button(
             label="Approve",
-            style=discord.ButtonStyle.success,
+            style=discord.ButtonStyle.primary,
         )
         deny = discord.ui.Button(
             label="Deny",
@@ -91,8 +103,10 @@ class ConfirmView(discord.ui.View):
     ) -> bool:
         """Send the prompt and wait for Approve / Deny. Returns True if approved."""
         display_message = message or "Are you sure you want to do this?"
-        embed = _build_confirm_container(display_message)
-        self.message = await self.ctx.send(embed=embed, view=self)
+        layout = _build_confirm_layout(display_message)
+        self.message = await self.ctx.send(view=layout)
+        with contextlib.suppress(discord.HTTPException, Exception):
+            await self.message.edit(view=self)
         await self.wait()
         approved = bool(self.value)
         if delete_after and self.message is not None:
@@ -144,12 +158,13 @@ class ThreeButtonConfirmView(discord.ui.View):
         self.member = member or ctx.author
         self.value: ConfirmChoice | None = None
         self.message: discord.Message | None = None
+        self._show_cancel = show_cancel
 
         self.clear_items()
 
         approve = discord.ui.Button(
             label="Approve",
-            style=discord.ButtonStyle.success,
+            style=discord.ButtonStyle.primary,
         )
         deny = discord.ui.Button(
             label="Deny",
@@ -208,8 +223,10 @@ class ThreeButtonConfirmView(discord.ui.View):
     ) -> ConfirmChoice:
         """Send the prompt and wait for Approve / Deny / Cancel. Returns ConfirmChoice."""
         display_message = message or "Are you sure you want to do this?"
-        embed = _build_confirm_container(display_message)
-        self.message = await self.ctx.send(embed=embed, view=self)
+        layout = _build_confirm_layout(display_message)
+        self.message = await self.ctx.send(view=layout)
+        with contextlib.suppress(discord.HTTPException, Exception):
+            await self.message.edit(view=self)
         await self.wait()
         result = self.value or ConfirmChoice.CANCEL
         if delete_after and self.message is not None:

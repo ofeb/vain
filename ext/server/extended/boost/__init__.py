@@ -79,7 +79,7 @@ class BoostCommands(Package):
             if not exists:
                 return await ctx.fail(
                     f"no **{slot}** message for {channel.mention} - use "
-                    f"`{ctx.clean_prefix}boosts add` first"
+                    f"`{ctx.invoke_prefix}boosts add` first"
                     + (" `--twoboosts`" if is_second else "")
                 )
             await Settings.upsert_message(
@@ -90,7 +90,7 @@ class BoostCommands(Package):
             if exists:
                 return await ctx.fail(
                     f"there's already a **{slot}** message in {channel.mention} - "
-                    f"use `{ctx.clean_prefix}boosts edit` or `{ctx.clean_prefix}boosts remove`"
+                    f"use `{ctx.invoke_prefix}boosts edit` or `{ctx.invoke_prefix}boosts remove`"
                     + (" `--twoboosts`" if is_second else "")
                 )
             try:

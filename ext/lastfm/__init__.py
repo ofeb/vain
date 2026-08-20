@@ -700,7 +700,7 @@ class Lastfm(LastfmEvents, Package):
         if not data:
             await ctx.warn(
                 f"You do not have a **Last.fm** account linked yet. "
-                f"You can link it with `{ctx.clean_prefix}lastfm login`."
+                f"You can link it with `{ctx.invoke_prefix}lastfm login`."
             )
             return
         await Settings.remove_user(self.bot, ctx.author.id)
@@ -883,7 +883,7 @@ class Lastfm(LastfmEvents, Package):
             if not script:
                 await ctx.warn(
                     f"You do not have a **custom script** set yet. "
-                    f"Set one with `{ctx.clean_prefix}lastfm embed` - "
+                    f"Set one with `{ctx.invoke_prefix}lastfm embed` - "
                     f"supports `{{embed}}`, `{{container}}`, or plain text."
                 )
                 return
@@ -2005,7 +2005,7 @@ class Lastfm(LastfmEvents, Package):
         if not session_key:
             await ctx.warn(
                 f"You need to reconnect your **Last.fm** account first. "
-                f"You can link it with `{ctx.clean_prefix}lastfm login`."
+                f"You can link it with `{ctx.invoke_prefix}lastfm login`."
             )
             return
         resolved = await self._resolve_track_identity(username, track)
@@ -2040,7 +2040,7 @@ class Lastfm(LastfmEvents, Package):
         if not session_key:
             await ctx.warn(
                 f"You need to reconnect your **Last.fm** account first. "
-                f"You can link it with `{ctx.clean_prefix}lastfm login`."
+                f"You can link it with `{ctx.invoke_prefix}lastfm login`."
             )
             return
         resolved = await self._resolve_track_identity(username, track)
@@ -2075,7 +2075,7 @@ class Lastfm(LastfmEvents, Package):
         if not session_key:
             await ctx.warn(
                 f"You need to reconnect your **Last.fm** account first. "
-                f"You can link it with `{ctx.clean_prefix}lastfm login`."
+                f"You can link it with `{ctx.invoke_prefix}lastfm login`."
             )
             return
         resolved = await self._resolve_track_identity(username, track)
@@ -2681,7 +2681,7 @@ class Lastfm(LastfmEvents, Package):
             if not current:
                 await ctx.info(
                     f"{ctx.author.mention}: You do not have a **custom now playing command** yet. "
-                    f"Set one with `{ctx.clean_prefix}lastfm customcommand (trigger)`."
+                    f"Set one with `{ctx.invoke_prefix}lastfm customcommand (trigger)`."
                 )
                 return
             visibility = "public" if current.get("public") else "private"
@@ -2710,7 +2710,7 @@ class Lastfm(LastfmEvents, Package):
             if not current or not current.get("public"):
                 await ctx.info(
                     f"{ctx.author.mention}: You do not have a **public custom now playing command** yet. "
-                    f"Set one with `{ctx.clean_prefix}lastfm customcommand public (trigger)`."
+                    f"Set one with `{ctx.invoke_prefix}lastfm customcommand public (trigger)`."
                 )
                 return
             await ctx.info(
@@ -3094,7 +3094,7 @@ class Lastfm(LastfmEvents, Package):
             script = await Settings.get_custom_embed(self.bot, ctx.author.id)
             if not script:
                 await ctx.warn(
-                    f"Set a **custom script** first with `{ctx.clean_prefix}lastfm embed` "
+                    f"Set a **custom script** first with `{ctx.invoke_prefix}lastfm embed` "
                     "(supports `{embed}`, `{container}`, or plain text) "
                     "before switching to `custom` mode."
                 )
@@ -3116,12 +3116,12 @@ class Lastfm(LastfmEvents, Package):
             if not current:
                 await ctx.info(
                     f"{ctx.author.mention}: You do not have a **custom Last.fm embed** yet. "
-                    f"Set one with `{ctx.clean_prefix}lastfm embed {{embed}}...`."
+                    f"Set one with `{ctx.invoke_prefix}lastfm embed {{embed}}...`."
                 )
                 return
             await ctx.info(
                 f"{ctx.author.mention}: You already have a **custom Last.fm embed** saved. "
-                f"Use `{ctx.clean_prefix}lastfm mode custom` to enable it, or `lastfm embed off` to clear it."
+                f"Use `{ctx.invoke_prefix}lastfm mode custom` to enable it, or `lastfm embed off` to clear it."
             )
             return
         script, np_reply_flag = self._strip_lastfm_embed_reply_flag(script)

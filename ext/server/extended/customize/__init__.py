@@ -284,7 +284,7 @@ class CustomizeCommands(Package):
             description="\n".join(lines),
             color=self.color,
         )
-        embed.set_footer(text=f"Use {ctx.clean_prefix}customize emoji <key> <emoji> to change")
+        embed.set_footer(text=f"Use {ctx.invoke_prefix}customize emoji <key> <emoji> to change")
         await ctx.send(embed=embed)
 
     @customize_emoji.command(
@@ -466,7 +466,7 @@ class CustomizeCommands(Package):
             description="\n".join(lines),
             color=self.color,
         )
-        embed.set_footer(text=f"Use {ctx.clean_prefix}customize emoji vm <key> <emoji> to change")
+        embed.set_footer(text=f"Use {ctx.invoke_prefix}customize emoji vm <key> <emoji> to change")
         await ctx.send(embed=embed)
 
     @customize_emoji_vm.command(

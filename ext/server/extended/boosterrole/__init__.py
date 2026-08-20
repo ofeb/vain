@@ -21,7 +21,7 @@ def _confirm_embed(message: str) -> discord.Embed:
     )
 
 
-class _ShareConfirmView(discord.ui.View):
+class _BoostConfirmView(discord.ui.View):
     def __init__(self, ctx, *, member: discord.abc.User, timeout: float = 30.0):
         super().__init__(timeout=timeout)
         self.ctx = ctx
@@ -30,7 +30,7 @@ class _ShareConfirmView(discord.ui.View):
         self.message: discord.Message | None = None
 
         self.clear_items()
-        accept = discord.ui.Button(label="Accept", style=discord.ButtonStyle.success)
+        accept = discord.ui.Button(label="Accept", style=discord.ButtonStyle.primary)
         deny = discord.ui.Button(label="Deny", style=discord.ButtonStyle.danger)
         accept.callback = self._accept
         deny.callback = self._deny
@@ -63,11 +63,19 @@ class _ShareConfirmView(discord.ui.View):
                 await self.message.delete()
 
     async def prompt(self, message: str | None = None, *, embed: discord.Embed | None = None, delete_after: bool = True) -> bool:
-        from core.discord.views.embed import c2
+        from discord import ui as _ui
+        from core.discord.ctx import layout_from_items
         display_message = message or "Are you sure you want to do this?"
-        embed = c2(message=display_message, timestamp=False)
-        embed.color = None
-        self.message = await self.ctx.send(embed=embed, view=self)
+        container = _ui.Container()
+        for attr in ("accent_color", "accent_colour", "color", "colour"):
+            if hasattr(container, attr):
+                with contextlib.suppress(Exception):
+                    setattr(container, attr, None)
+        container.add_item(_ui.TextDisplay(display_message))
+        layout = layout_from_items([container], timeout=None)
+        self.message = await self.ctx.send(view=layout)
+        with contextlib.suppress(discord.HTTPException, Exception):
+            await self.message.edit(view=self)
         await self.wait()
         if delete_after and self.message is not None:
             with contextlib.suppress(discord.HTTPException):
@@ -452,11 +460,11 @@ class BoosterroleCommands(Package):
         if resolved is not None:
             return await ctx.success(
                 "Icon **updated**\n"
-                f"> -# run `{ctx.clean_prefix}br icon remove` to **remove** it"
+                f"> -# run `{ctx.invoke_prefix}br icon remove` to **remove** it"
             )
         return await ctx.success(
             "Icon **removed**\n"
-            f"> -# run `{ctx.clean_prefix}br icon <emoji/url>` to **set** a new one"
+            f"> -# run `{ctx.invoke_prefix}br icon <emoji/url>` to **set** a new one"
         )
 
     @boosterrole_icon.command(
@@ -492,7 +500,7 @@ class BoosterroleCommands(Package):
         await role.edit(display_icon=None, reason=f"icon removed by {ctx.author}")
         return await ctx.success(
             "Icon **removed**\n"
-            f"> -# run `{ctx.clean_prefix}br icon <emoji/url>` to **set** a new one"
+            f"> -# run `{ctx.invoke_prefix}br icon <emoji/url>` to **set** a new one"
         )
 
     async def _resolve_boosterrole_icon(
@@ -834,7 +842,7 @@ class BoosterroleCommands(Package):
             )
         return await ctx.success(
             "Award role **removed**\n"
-            f"> -# run `{ctx.clean_prefix}br award <role>` to **set** a new one"
+            f"> -# run `{ctx.invoke_prefix}br award <role>` to **set** a new one"
         )
 
     @boosterrole.command(
@@ -904,7 +912,7 @@ class BoosterroleCommands(Package):
             )
         return await ctx.success(
             "Role cap **removed**\n"
-            f"> -# run `{ctx.clean_prefix}br limit <number>` to **set** a new one"
+            f"> -# run `{ctx.invoke_prefix}br limit <number>` to **set** a new one"
         )
 
     @boosterrole.command(
@@ -1034,7 +1042,7 @@ class BoosterroleCommands(Package):
                 f"> -# **no action needed**"
             )
 
-        view = _ShareConfirmView(ctx, member=member)
+        view = _BoostConfirmView(ctx, member=member)
         confirmed = await view.prompt(
             f"{member.mention}, {ctx.author} wants to **share** their booster role **with you**!\n"
             f"> -# to **receive** their **booster role** they want to share, **press accept**\n"
@@ -1170,5 +1178,5 @@ class BoosterroleCommands(Package):
         action = "disable" if new_state else "enable"
         return await ctx.success(
             f"Booster roles **{state_str}**\n"
-            f"> -# run `{ctx.clean_prefix}br toggle` to **{action}** it"
+            f"> -# run `{ctx.invoke_prefix}br toggle` to **{action}** it"
         )

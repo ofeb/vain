@@ -1066,8 +1066,10 @@ class Antinuke(AntinukeEvents, Package):
                 parts.append("threshold: N/A")
             else:
                 parts.append(f"threshold: {mod.threshold}")
-            if tag in {"ban", "kick", "role"}:
+            if tag not in {"botadd", "vanity"}:
                 parts.append(f"cmd: {'on' if mod.command else 'off'}")
+            if tag not in {"botadd", "vanity"} and mod.within:
+                parts.append(f"within: {mod.within}s")
             entries.append(f"{tag} ({', '.join(parts)})")
 
         for uid in config.whitelist:
@@ -1115,22 +1117,22 @@ class Antinuke(AntinukeEvents, Package):
     @antinuke.command(
         name="webhook",
         usage="(on or off) --params",
-        example="on --do ban --threshold 3",
+        example="on --do ban --threshold 3 --command on",
         flags=AntiNukeFlags,
     )
     async def antinuke_webhook(self, ctx, status: StatusConvert, *, flags: str = None):
         """Prevent mass webhook creation."""
-        return await self._adjust_module(ctx, "webhook", status, with_threshold=True)
+        return await self._adjust_module(ctx, "webhook", status, with_threshold=True, with_command=True)
 
     @antinuke.command(
         name="emoji",
         usage="(on or off) --params",
-        example="on --do kick --threshold 3",
+        example="on --do kick --threshold 3 --command on",
         flags=AntiNukeFlags,
     )
     async def antinuke_emoji(self, ctx, status: StatusConvert, *, flags: str = None):
         """Prevent mass emoji delete."""
-        return await self._adjust_module(ctx, "emoji", status, with_threshold=True)
+        return await self._adjust_module(ctx, "emoji", status, with_threshold=True, with_command=True)
 
     @antinuke.command(
         name="permissions",
@@ -1243,12 +1245,12 @@ class Antinuke(AntinukeEvents, Package):
     @antinuke.command(
         name="channel",
         usage="(on or off) --params",
-        example="on --do ban --threshold 3",
+        example="on --do ban --threshold 3 --command on",
         flags=AntiNukeFlags,
     )
     async def antinuke_channel(self, ctx, status: StatusConvert, *, flags: str = None):
         """Prevent mass channel create and delete."""
-        return await self._adjust_module(ctx, "channel", status, with_threshold=True)
+        return await self._adjust_module(ctx, "channel", status, with_threshold=True, with_command=True)
 
     @antinuke.command(
         name="role",
@@ -1274,22 +1276,47 @@ class Antinuke(AntinukeEvents, Package):
     )
     async def antinuke_setup(self, ctx):
         """Enable all antinuke modules with best recommended settings."""
+        from discord import ui as _ui
+        from core.discord.ctx import layout_from_items
+        import contextlib as _ctx_lib
+
         defaults = {
             "ban":     {"punishment": "ban", "threshold": 3, "command": True, "within": 300},
             "kick":    {"punishment": "kick", "threshold": 3, "command": True, "within": 300},
-            "channel": {"punishment": "ban", "threshold": 3, "within": 300},
+            "channel": {"punishment": "ban", "threshold": 3, "command": True, "within": 300},
             "role":    {"punishment": "ban", "threshold": 3, "command": True, "within": 300},
-            "webhook": {"punishment": "ban", "threshold": 3, "within": 300},
-            "emoji":   {"punishment": "kick", "threshold": 3, "within": 300},
+            "webhook": {"punishment": "ban", "threshold": 1, "command": True, "within": 300},
+            "emoji":   {"punishment": "kick", "threshold": 5, "command": True, "within": 300},
             "vanity":  {"punishment": "ban"},
             "botadd":  {"punishment": "ban"},
         }
         for module, payload in defaults.items():
             await self._commit_module(ctx.guild.id, module, {**payload, "status": True})
         await self._load_config(ctx.guild.id)
-        return await ctx.success(
-            "Antinuke **setup complete**\n> -# Recommended settings applied"
+
+        lines = chr(10).join([
+            f"> **Mass Ban:** ban @ 3 (cmd on, 5m)",
+            f"> **Mass Kick:** kick @ 3 (cmd on, 5m)",
+            f"> **Channel Create/Delete:** ban @ 3 (cmd on, 5m)",
+            f"> **Role Delete:** ban @ 3 (cmd on, 5m)",
+            f"> **Webhook Create:** ban @ 1 (instant, 5m)",
+            f"> **Emoji Delete:** kick @ 5 (cmd on, 5m)",
+            f"> **Vanity Change:** ban (instant)",
+            f"> **Bot Join:** ban (instant)",
+        ])
+        body = (
+            f"**Antinuke setup complete**{chr(10)}"
+            f"> Recommended settings applied{chr(10)}{chr(10)}"
+            f"**Default Configuration**{chr(10)}{lines}{chr(10)}{chr(10)}"
+            f"> -# Use `antinuke <module> on/off` to customize individual modules"
         )
+        container = _ui.Container()
+        for attr in ("accent_color", "accent_colour", "color", "colour"):
+            if hasattr(container, attr):
+                with _ctx_lib.suppress(Exception):
+                    setattr(container, attr, None)
+        container.add_item(_ui.TextDisplay(body))
+        return await ctx.send(view=layout_from_items([container], timeout=None))
 
     @antinuke.command(
         name="enable",
@@ -1299,25 +1326,50 @@ class Antinuke(AntinukeEvents, Package):
     )
     async def antinuke_enable(self, ctx, *, flags: str = None):
         """Enable all antinuke modules."""
+        from discord import ui as _ui
+        from core.discord.ctx import layout_from_items
+        import contextlib as _ctx_lib
+
         recommended = ctx.flags.get("recommended")
 
         if recommended:
             defaults = {
                 "ban":     {"punishment": "ban", "threshold": 3, "command": True, "within": 300},
                 "kick":    {"punishment": "kick", "threshold": 3, "command": True, "within": 300},
-                "channel": {"punishment": "ban", "threshold": 3, "within": 300},
+                "channel": {"punishment": "ban", "threshold": 3, "command": True, "within": 300},
                 "role":    {"punishment": "ban", "threshold": 3, "command": True, "within": 300},
-                "webhook": {"punishment": "ban", "threshold": 3, "within": 300},
-                "emoji":   {"punishment": "kick", "threshold": 3, "within": 300},
+                "webhook": {"punishment": "ban", "threshold": 1, "command": True, "within": 300},
+                "emoji":   {"punishment": "kick", "threshold": 5, "command": True, "within": 300},
                 "vanity":  {"punishment": "ban"},
                 "botadd":  {"punishment": "ban"},
             }
             for module, payload in defaults.items():
                 await self._commit_module(ctx.guild.id, module, {**payload, "status": True})
             await self._load_config(ctx.guild.id)
-            return await ctx.success(
-                "Antinuke **fully enabled**\n> -# Recommended settings applied"
+
+            lines = chr(10).join([
+                f"> **Mass Ban:** ban @ 3 (cmd on, 5m)",
+                f"> **Mass Kick:** kick @ 3 (cmd on, 5m)",
+                f"> **Channel Create/Delete:** ban @ 3 (cmd on, 5m)",
+                f"> **Role Delete:** ban @ 3 (cmd on, 5m)",
+                f"> **Webhook Create:** ban @ 1 (instant, 5m)",
+                f"> **Emoji Delete:** kick @ 5 (cmd on, 5m)",
+                f"> **Vanity Change:** ban (instant)",
+                f"> **Bot Join:** ban (instant)",
+            ])
+            body = (
+                f"**Antinuke fully enabled**{chr(10)}"
+                f"> Recommended settings applied{chr(10)}{chr(10)}"
+                f"**Default Configuration**{chr(10)}{lines}{chr(10)}{chr(10)}"
+                f"> -# Use `antinuke <module> on/off` to customize individual modules"
             )
+            container = _ui.Container()
+            for attr in ("accent_color", "accent_colour", "color", "colour"):
+                if hasattr(container, attr):
+                    with _ctx_lib.suppress(Exception):
+                        setattr(container, attr, None)
+            container.add_item(_ui.TextDisplay(body))
+            return await ctx.send(view=layout_from_items([container], timeout=None))
 
         modules = ["ban", "kick", "channel", "role", "webhook", "emoji", "vanity", "botadd"]
         config = await self._guild_config(ctx.guild.id)
@@ -1353,7 +1405,7 @@ class Antinuke(AntinukeEvents, Package):
             await self._commit_module(ctx.guild.id, module, payload)
         await self._load_config(ctx.guild.id)
         return await ctx.success(
-            "All antinuke modules **disabled**\n> -# Config kept. Use `{ctx.clean_prefix}antinuke reset` to delete"
+            "All antinuke modules **disabled**\n> -# Config kept. Use `{ctx.invoke_prefix}antinuke reset` to delete"
         )
 
     @antinuke.command(

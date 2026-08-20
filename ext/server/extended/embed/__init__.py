@@ -12,7 +12,7 @@ from core.discord.package import Package
 from core.managers.permissions import has_permissions
 from config import color
 
-from core.discord.views.embed import body, c2
+from core.discord.views.embed import body, c2, panel_container
 from core.tools.embed import Script, BadEmbed, ParseError, maybe_wrap_embed_script
 
 if TYPE_CHECKING:
@@ -99,11 +99,11 @@ class EmbedCommands(Package):
             f"**`{row['name']}`** - <@{row['author_id']}> ({discord.utils.format_dt(row['updated_at'], style='R')})"
             for row in rows
         ]
-        embed = discord.Embed(
+        embed = panel_container(
             title=f"Saved Embeds ({len(lines)})",
-            description=body(*lines[:40]),
+            lines=lines[:40],
             color=color.base,
-            timestamp=discord.utils.utcnow(),
+            timestamp=True,
         )
         await ctx.send(embed=embed)
 

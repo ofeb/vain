@@ -482,7 +482,7 @@ class PaginateView(discord.ui.LayoutView):
         search_placeholder: str | None = None,
         on_delete_page: Callable[[int], Any] | None = None,
     ) -> None:
-        super().__init__(timeout=timeout if timeout is not None else 180)
+        super().__init__(timeout=timeout if timeout is not None else 300)
         self.ctx = ctx
         self.pages = list(pages)
         self.index = min(max(start_index, 0), max(len(self.pages) - 1, 0))

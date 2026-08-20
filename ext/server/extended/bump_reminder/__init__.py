@@ -321,9 +321,9 @@ class BumpReminder(BumpReminderEvents, Package):
             message=(
                 f"**Enabled** in {target.mention}\n"
                 f"> -# Guild members are reminded after a successful Disboard `/bump` (every 2 hours)\n"
-                f"> -# Customize with `{ctx.clean_prefix}bumpreminder message` · "
-                f"`{ctx.clean_prefix}bumpreminder thankyou` · "
-                f"`{ctx.clean_prefix}bumpreminder role`"
+                f"> -# Customize with `{ctx.invoke_prefix}bumpreminder message` · "
+                f"`{ctx.invoke_prefix}bumpreminder thankyou` · "
+                f"`{ctx.invoke_prefix}bumpreminder role`"
             ),
             timestamp=False,
         )
@@ -350,14 +350,14 @@ class BumpReminder(BumpReminderEvents, Package):
         if not settings.enabled:
             return await ctx.warn(
                 f"Bump reminder is already **disabled** - "
-                f"use `{ctx.clean_prefix}bumpreminder enable` to turn it back on"
+                f"use `{ctx.invoke_prefix}bumpreminder enable` to turn it back on"
             )
 
         await settings.upsert(enabled=False)
         self._reminder_sent.discard(ctx.guild.id)
         return await ctx.success(
             "Disboard bump reminders **disabled** - configuration kept "
-            f"(channel, role, messages). Use `{ctx.clean_prefix}bumpreminder reset` to delete everything"
+            f"(channel, role, messages). Use `{ctx.invoke_prefix}bumpreminder reset` to delete everything"
         )
 
     @bumpreminder.command(
@@ -411,7 +411,7 @@ class BumpReminder(BumpReminderEvents, Package):
         settings = await Settings.fetch(self.bot, ctx.guild)
         if not settings.channel_id:
             return await ctx.warn(
-                f"Set a channel first with `{ctx.clean_prefix}bumpreminder enable #channel`"
+                f"Set a channel first with `{ctx.invoke_prefix}bumpreminder enable #channel`"
             )
 
         new_state = not settings.enabled
@@ -453,8 +453,8 @@ class BumpReminder(BumpReminderEvents, Package):
                     title="Bump Reminder Message",
                     lines=[
                         f"```\n{preview}\n```",
-                        f"> -# Clear with `{ctx.clean_prefix}bumpreminder message clear`",
-                        f"> -# Vars: `{ctx.clean_prefix}variables bumper`",
+                        f"> -# Clear with `{ctx.invoke_prefix}bumpreminder message clear`",
+                        f"> -# Vars: `{ctx.invoke_prefix}variables bumper`",
                     ],
                     timestamp=False,
                 )
@@ -517,8 +517,8 @@ class BumpReminder(BumpReminderEvents, Package):
                     title="Bump Thank-You Message",
                     lines=[
                         f"```\n{preview}\n```",
-                        f"> -# Clear with `{ctx.clean_prefix}bumpreminder thankyou clear`",
-                        f"> -# Vars: `{ctx.clean_prefix}variables bumper`",
+                        f"> -# Clear with `{ctx.invoke_prefix}bumpreminder thankyou clear`",
+                        f"> -# Vars: `{ctx.invoke_prefix}variables bumper`",
                     ],
                     timestamp=False,
                 )
@@ -578,7 +578,7 @@ class BumpReminder(BumpReminderEvents, Package):
                         title="Bump Reminder Role",
                         lines=[
                             f"**Role**: {current.mention}",
-                            f"> -# Clear with `{ctx.clean_prefix}bumpreminder role clear`",
+                            f"> -# Clear with `{ctx.invoke_prefix}bumpreminder role clear`",
                         ],
                         timestamp=False,
                     )

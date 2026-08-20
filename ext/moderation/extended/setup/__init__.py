@@ -629,8 +629,8 @@ class SetupView(ui.LayoutView):
             exists = await VMSettings.exists(self.bot, guild)
             if not exists:
                 vm_cat = await self._ensure_category("Voice Channels")
-                interface = await self._ensure_text("interface", vm_cat)
-                join_vc = await self._ensure_voice("Join to Create", vm_cat)
+                interface = await self._ensure_text("panel", vm_cat)
+                join_vc = await self._ensure_voice("create vc", vm_cat)
                 everyone = guild.default_role
                 with contextlib.suppress(Exception):
                     await interface.set_permissions(

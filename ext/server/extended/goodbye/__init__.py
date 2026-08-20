@@ -60,7 +60,7 @@ class GoodbyeCommands(Package):
             )
         except UniqueViolationError:
             return await ctx.fail(
-                f"there's already a goodbye message in {channel.mention} - remove it first or use `{ctx.clean_prefix}goodbye edit`"
+                f"there's already a goodbye message in {channel.mention} - remove it first or use `{ctx.invoke_prefix}goodbye edit`"
             )
         extra = f"\n> -# **the message will delete itself after {humanize_duration(timer)}**" if timer else ""
         return await ctx.success(
@@ -91,7 +91,7 @@ class GoodbyeCommands(Package):
         )
         if not exists:
             return await ctx.fail(
-                f"no goodbye message for {channel.mention} - use `{ctx.clean_prefix}goodbye add` first"
+                f"no goodbye message for {channel.mention} - use `{ctx.invoke_prefix}goodbye add` first"
             )
         await self.db.execute(
             """UPDATE leave_messages SET message = $1, self_destruct = $2

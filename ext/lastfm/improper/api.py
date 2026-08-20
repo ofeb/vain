@@ -542,7 +542,7 @@ class LastFMApiClient:
         if target.id == ctx.author.id:
             message = (
                 "You do not have a **Last.fm** account linked yet. "
-                f"You can link it with `{ctx.clean_prefix}lastfm login`."
+                f"You can link it with `{ctx.invoke_prefix}lastfm login`."
             )
         else:
             message = f"{target} does not have a **Last.fm** account linked yet."
