@@ -35,7 +35,7 @@ class Away(AFKEvents, Package):
 
     @group(
         name="afk",
-        description="set yourself as away from keyboard\n use --global to set yourself afk in all servers",
+        description="set yourself as away from keyboard (use --global to set yourself afk in all guilds)",
         aliases=["away"],
         invoke_without_command=True,
     )
