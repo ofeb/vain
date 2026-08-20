@@ -12,10 +12,16 @@ from core.discord.views.embed import body
 
 from .settings import AFK
 
-
-def _mention_line(index: int, entry: dict, *, bot: Any = None) -> str:
+def _mention_line(
+    index: int, 
+    entry: dict, 
+    *, 
+    bot: Any = None, 
+    current_guild_id: int | None = None
+) -> str:
     author_id = entry.get("author_id")
     who = f"<@{author_id}>" if author_id else entry.get("author_name") or "unknown"
+
     ts = entry.get("timestamp")
     if isinstance(ts, (int, float)):
         from datetime import datetime, timezone
@@ -24,21 +30,29 @@ def _mention_line(index: int, entry: dict, *, bot: Any = None) -> str:
         when = format_dt(ts, "R")
     else:
         when = "unknown"
-    where = entry.get("where_url") or ""
-    where_bit = f" · [where]({where})" if where else ""
+
+    where_url = entry.get("where_url") or entry.get("jump_url") or ""
+    where_bit = f" → [**where**]({where_url})" if where_url else ""
 
     channel_id = entry.get("channel_id")
     guild_id = entry.get("guild_id")
-    location_bits = []
-    if bot and guild_id:
-        guild = bot.get_guild(int(guild_id))
-        if guild:
-            location_bits.append(f"**{guild.name}**")
-    if channel_id:
-        location_bits.append(f"<#{channel_id}>")
-    location = " in " + " · ".join(location_bits) if location_bits else ""
 
-    return f"-# `{index}.` **{who}** · pinged {when} {where_bit}"
+    # Hide server name if mention is from the current server
+    is_same_guild = current_guild_id and guild_id and int(guild_id) == int(current_guild_id)
+
+    location_str = ""
+    if not is_same_guild and bot and guild_id:
+        guild = bot.get_guild(int(guild_id))
+        if guild and channel_id:
+            location_str = f", in **{guild.name}**: <#{channel_id}>"
+        elif guild:
+            location_str = f", in **{guild.name}**"
+        elif channel_id:
+            location_str = f", in <#{channel_id}>"
+    elif channel_id:
+        location_str = f", in <#{channel_id}>"
+
+    return f"-# `{index}.` **{who}** - {when}{location_str}{where_bit}"
 
 
 def build_afk_mention_pages(
