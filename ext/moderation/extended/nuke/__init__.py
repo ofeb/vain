@@ -245,8 +245,8 @@ class Nuke(Package):
             ("pingonjoin", "channel_ids", True),
             ("leveling", "channel_id", False),
             ("voicemaster", "channel_id", False),
-            ("voicemaster_config", "category_id", False),
-            ("voicemaster_config", "interface_channel_id", False),
+            ("voicemaster_configuration", "category_id", False),
+            ("voicemaster_configuration", "interface_channel_id", False),
         ]
 
         for table, column, is_array in tables:
