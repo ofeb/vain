@@ -158,7 +158,6 @@ class StealPaginateView(PaginateView):
             ctx,
             pages,
             search_options=search_options,
-            search_title="Jump by name",
             search_placeholder="Search by name…",
         )
 

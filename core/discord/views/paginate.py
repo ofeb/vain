@@ -478,7 +478,6 @@ class PaginateView(discord.ui.LayoutView):
         owner_only: bool = True,
         show_goto: bool = True,
         search_options: list[discord.SelectOption] | None = None,
-        search_title: str | None = None,
         search_placeholder: str | None = None,
         on_delete_page: Callable[[int], Any] | None = None,
     ) -> None:
@@ -490,7 +489,6 @@ class PaginateView(discord.ui.LayoutView):
         self.owner_only = owner_only
         self.show_goto = show_goto
         self.search_options = search_options
-        self.search_title = search_title
         self.search_placeholder = search_placeholder
         self.on_delete_page = on_delete_page
         self._rebuild()
@@ -720,7 +718,6 @@ async def send_pages(
     timeout: float | None = None,
     show_goto: bool = True,
     search_options: list[discord.SelectOption] | None = None,
-    search_title: str | None = None,
     search_placeholder: str | None = None,
     on_delete_page: Callable[[int], Any] | None = None,
 ) -> discord.Message:
@@ -759,7 +756,6 @@ async def send_pages(
         owner_only=owner_only,
         show_goto=show_goto,
         search_options=search_options,
-        search_title=search_title,
         search_placeholder=search_placeholder,
         on_delete_page=on_delete_page,
     )

@@ -573,7 +573,6 @@ class ServerCommands(Package):
             ctx,
             pages,
             search_options=search_options,
-            search_title="Variable categories",
             search_placeholder="Jump to category…",
         )
 
