@@ -1424,7 +1424,7 @@ class GroupHelpMenu(ui.LayoutView):
             row = ui.ActionRow()
             start_num = idx * 25 + 1
             end_num = min((idx + 1) * 25, len(options))
-            ph = f"select a command to jump to ({start_num}-{end_num}/{len(options)})..."
+            ph = f"select a command to jump to ({start_num}-{end_num})..."
             select = ui.Select(
                 placeholder=ph,
                 min_values=1,
