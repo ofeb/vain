@@ -285,7 +285,7 @@ class _PagerButton(ui.Button):
 
 
 class PageJumpSelect(ui.LayoutView):
-    """Ephemeral C2 select - stays open until timeout; picks update the original message."""
+    """Ephemeral select menu using containers."""
 
     def __init__(
         self,
@@ -303,7 +303,7 @@ class PageJumpSelect(ui.LayoutView):
         self.message: discord.Message | None = None
         self._title = title
         self._all_options = list(options)
-        self._placeholder = (placeholder or "select a page to jump to").strip()[:150] or "select a page to jump to"
+        self._placeholder = (placeholder or "select a page to jump to...").strip()[:150] or "select a page to jump to..."
         self._disabled = False
         self._build()
 
@@ -318,7 +318,7 @@ class PageJumpSelect(ui.LayoutView):
             row = ui.ActionRow()
             start_num = idx * 25 + 1
             end_num = min((idx + 1) * 25, len(self._all_options))
-            ph = f"{self._placeholder} ({start_num}-{end_num}/{len(self._all_options)})"
+            ph = f"{self._placeholder} ({start_num}-{end_num})..."
             select = ui.Select(
                 placeholder=ph,
                 min_values=1,
