@@ -24,8 +24,8 @@ def _mention_line(index: int, entry: dict, *, bot: Any = None) -> str:
         when = format_dt(ts, "R")
     else:
         when = "unknown"
-    jump = entry.get("jump_url") or ""
-    jump_bit = f" · [jump]({jump})" if jump else ""
+    where = entry.get("where_url") or ""
+    where_bit = f" · [where]({where})" if where else ""
 
     channel_id = entry.get("channel_id")
     guild_id = entry.get("guild_id")
@@ -38,7 +38,7 @@ def _mention_line(index: int, entry: dict, *, bot: Any = None) -> str:
         location_bits.append(f"<#{channel_id}>")
     location = " in " + " · ".join(location_bits) if location_bits else ""
 
-    return f"-# `{index}.` **{who}** · pinged {when}: {jump_bit}"
+    return f"-# `{index}.` **{who}** · pinged {when}: {where_bit}"
 
 
 def build_afk_mention_pages(
