@@ -117,12 +117,13 @@ class Nuke(Package):
         old_id = channel.id
 
         is_interface = False
+
         try:
             interface_id = await self.db.fetchval(
-                "SELECT interface_channel_id FROM voicemaster_config WHERE guild_id = $1",
+                "SELECT interface_id FROM voicemaster_configuration WHERE guild_id = $1",
                 guild.id,
             )
-            if interface_id and interface_id in (old_id, channel.id):
+            if interface_id is not None and int(interface_id) in (old_id, channel.id):
                 is_interface = True
         except Exception:
             pass
