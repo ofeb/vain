@@ -1058,7 +1058,7 @@ async def _fetch_custom_aliases(ctx: Context, cmd: Command) -> tuple[list[str], 
     guild_aliases: list[str] = []
     self_aliases: list[str] = []
     qn = (cmd.qualified_name or cmd.name or "").lower()
-    names = {qn, (cmd.name or "").lower()}
+    names = {qn}
     names.update(a.lower() for a in (cmd.aliases or []))
     db = getattr(getattr(ctx, "bot", None), "db", None)
     if db is None:
@@ -1072,10 +1072,9 @@ async def _fetch_custom_aliases(ctx: Context, cmd: Command) -> tuple[list[str], 
             for r in rows or []:
                 alias = str(r["alias"] if hasattr(r, "keys") else r[0]).strip().rstrip(",")
                 target = (r["command_name"] if hasattr(r, "keys") else r[1] or "").lower().strip()
-                root = target.split()[0] if target else ""
                 if not alias:
                     continue
-                if target in names or root in names or any(n == root or n.endswith(" " + root) or n == target for n in names):
+                if target in names:
                     if alias not in guild_aliases:
                         guild_aliases.append(alias)
         rows = await db.fetch(
@@ -1086,8 +1085,7 @@ async def _fetch_custom_aliases(ctx: Context, cmd: Command) -> tuple[list[str], 
             name = r["name"] if hasattr(r, "keys") else r[0]
             inv = (r["invoke"] if hasattr(r, "keys") else r[1] or "").lower()
             cmdn = (r["command"] if hasattr(r, "keys") else (r[2] if len(r) > 2 else "") or "").lower()
-            root = inv.split()[0] if inv else ""
-            if cmdn in names or root in names or inv in names:
+            if cmdn in names or inv in names:
                 self_aliases.append(str(name))
     except Exception:
         pass
@@ -1392,6 +1390,8 @@ class GroupHelpMenu(ui.LayoutView):
         await inter.response.edit_message(view=self)
 
     async def _goto(self, inter: Interaction) -> None:
+        from core.discord.views.paginate import _warning_embed
+
         total = len(self.pages)
         options: list[SelectOption] = []
         for i, cmd in enumerate(self.pages):
@@ -1422,9 +1422,9 @@ class GroupHelpMenu(ui.LayoutView):
         chunks = [options[i:i + 25] for i in range(0, len(options), 25)]
         for idx, chunk in enumerate(chunks):
             row = ui.ActionRow()
-            ph = "select a command to jump to..."
-            if len(chunks) > 1:
-                ph = f"{ph} ({idx + 1}/{len(chunks)})"
+            start_num = idx * 25 + 1
+            end_num = min((idx + 1) * 25, len(options))
+            ph = f"select a command to jump to ({start_num}-{end_num}/{len(options)})..."
             select = ui.Select(
                 placeholder=ph,
                 min_values=1,

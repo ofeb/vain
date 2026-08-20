@@ -315,9 +315,9 @@ class PageJumpSelect(ui.LayoutView):
         chunks = [self._all_options[i:i + 25] for i in range(0, len(self._all_options), 25)]
         for idx, chunk in enumerate(chunks):
             row = ui.ActionRow()
-            ph = self._placeholder
-            if len(chunks) > 1:
-                ph = f"{ph} ({idx + 1}/{len(chunks)})"
+            start_num = idx * 25 + 1
+            end_num = min((idx + 1) * 25, len(self._all_options))
+            ph = f"{self._placeholder} ({start_num}-{end_num}/{len(self._all_options)})"
             select = ui.Select(
                 placeholder=ph,
                 min_values=1,

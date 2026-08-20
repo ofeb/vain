@@ -254,7 +254,7 @@ class Antiraid(AntiraidEvents, Package):
     @group(
         name="antiraid",
         usage="(subcommand)",
-        example="massjoin on --threshold 5 --do ban --lock true --punish true",
+        example="massjoin on --threshold 5 --punishment ban --lock true --punish true",
         invoke_without_command=True,
     )
     @has_permissions(manage_guild=True)
@@ -346,7 +346,7 @@ class Antiraid(AntiraidEvents, Package):
     @antiraid.command(
         name="massjoin",
         usage="(on or off) --params",
-        example="on --threshold 5 --do ban --lock true --punish true",
+        example="on --threshold 5 --punishment ban --lock true --punish true",
         flags=AntiRaidFlags,
     )
     @has_permissions(manage_guild=True)
@@ -389,7 +389,7 @@ class Antiraid(AntiraidEvents, Package):
     @antiraid.command(
         name="avatar",
         usage="(on or off) --params",
-        example="on --do kick",
+        example="on --punishment kick",
         aliases=["defaultpfp"],
         flags=AntiRaidFlags,
     )
@@ -420,7 +420,7 @@ class Antiraid(AntiraidEvents, Package):
     @antiraid.command(
         name="newaccounts",
         usage="(on or off) --params",
-        example="on --threshold 7 --do ban",
+        example="on --threshold 7 --punishment ban",
         aliases=["age", "newaccount"],
         flags=AntiRaidFlags,
     )

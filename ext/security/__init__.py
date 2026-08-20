@@ -1102,7 +1102,7 @@ class Antinuke(AntinukeEvents, Package):
         name="vanity",
         aliases=["vanityurl"],
         usage="(on or off) --params",
-        example="on --do ban",
+        example="on --punishment ban",
         flags=AntiNukeFlags,
     )
     async def antinuke_vanity(self, ctx, status: StatusConvert, *, flags: str = None):
@@ -1112,7 +1112,7 @@ class Antinuke(AntinukeEvents, Package):
     @antinuke.command(
         name="botadd",
         usage="(on or off) --params",
-        example="on --do ban",
+        example="on --punishment ban",
         flags=AntiNukeFlags,
     )
     async def antinuke_botadd(self, ctx, status: StatusConvert, *, flags: str = None):
@@ -1122,7 +1122,7 @@ class Antinuke(AntinukeEvents, Package):
     @antinuke.command(
         name="webhook",
         usage="(on or off) --params",
-        example="on --do ban --threshold 3 --command on",
+        example="on --punishment ban --threshold 3 --command on",
         flags=AntiNukeFlags,
     )
     async def antinuke_webhook(self, ctx, status: StatusConvert, *, flags: str = None):
@@ -1132,7 +1132,7 @@ class Antinuke(AntinukeEvents, Package):
     @antinuke.command(
         name="emoji",
         usage="(on or off) --params",
-        example="on --do kick --threshold 3 --command on",
+        example="on --punishment kick --threshold 3 --command on",
         flags=AntiNukeFlags,
     )
     async def antinuke_emoji(self, ctx, status: StatusConvert, *, flags: str = None):
@@ -1218,7 +1218,7 @@ class Antinuke(AntinukeEvents, Package):
     @antinuke.command(
         name="ban",
         usage="(on or off) --params",
-        example="on --do ban --command on",
+        example="on --punishment ban --command on",
         flags=AntiNukeFlags,
     )
     async def antinuke_ban(self, ctx, status: StatusConvert, *, flags: str = None):
@@ -1234,7 +1234,7 @@ class Antinuke(AntinukeEvents, Package):
     @antinuke.command(
         name="kick",
         usage="(on or off) --params",
-        example="on --do stripstaff --threshold 3",
+        example="on --punishment stripstaff --threshold 3",
         flags=AntiNukeFlags,
     )
     async def antinuke_kick(self, ctx, status: StatusConvert, *, flags: str = None):
@@ -1250,7 +1250,7 @@ class Antinuke(AntinukeEvents, Package):
     @antinuke.command(
         name="channel",
         usage="(on or off) --params",
-        example="on --do ban --threshold 3 --command on",
+        example="on --punishment ban --threshold 3 --command on",
         flags=AntiNukeFlags,
     )
     async def antinuke_channel(self, ctx, status: StatusConvert, *, flags: str = None):
@@ -1260,7 +1260,7 @@ class Antinuke(AntinukeEvents, Package):
     @antinuke.command(
         name="role",
         usage="(on or off) --params",
-        example="on --do ban --threshold 3 --command on",
+        example="on --punishment ban --threshold 3 --command on",
         flags=AntiNukeFlags,
     )
     async def antinuke_role(self, ctx, status: StatusConvert, *, flags: str = None):

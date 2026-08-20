@@ -529,48 +529,32 @@ class Fun(Package):
     )
     @describe(query="Artist and song title")
     async def lyrics(self, ctx: Context, *, query: str) -> None:
+        import lyricsgenius
+
+        genius = lyricsgenius.Genius(
+            "fs6QAbNhqF0VmAMb4p4FWAZ7TqjKKCcvu-8BOlNwKTJgdVoPr8qd-Mo1AuyJiYuu",
+            verbose=False,
+            remove_section_headers=False,
+        )
+
         async with ctx.typing():
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    "https://genius.com/api/search/multi",
-                    params={"q": query},
-                ) as resp:
-                    if resp.status != 200:
-                        return await ctx.warn("Could not search for lyrics.")
-                    data = await resp.json()
-
-                track = next(
-                    (
-                        hit["result"]
-                        for section in data.get("response", {}).get("sections", [])
-                        for hit in section.get("hits", [])
-                        if hit["index"] == "song"
-                    ),
-                    None,
+            try:
+                song = await self.bot.loop.run_in_executor(
+                    None, lambda: genius.search_song(query)
                 )
-                if not track:
-                    return await ctx.warn("No results found for that track.")
+            except Exception:
+                return await ctx.warn("Could not search for lyrics.")
 
-                async with session.get(track["url"]) as lyrics_resp:
-                    html = await lyrics_resp.text()
+            if not song or not song.lyrics:
+                return await ctx.warn("No lyrics found for that track.")
 
-            divs = re.findall(
-                r'<div[^>]*class="[^"]*(?:Lyrics__Container[^"]*|lyrics[^"]*)"[^>]*>(.*?)</div>',
-                html,
-                re.DOTALL,
-            )
-            if not divs:
-                return await ctx.warn("Couldn't find lyrics for this song.")
+            lyrics_text = song.lyrics.strip()
+            title = song.title or query
+            artist = song.artist or ""
+            track_url = song.url or ""
 
-            lyrics = ""
-            for div_html in divs:
-                cleaned = re.sub(r"<br\s*/?>", "\n", div_html)
-                cleaned = re.sub(r"<[^>]+>", "", cleaned)
-                lyrics += cleaned
-
-            lyrics = lyrics.strip("\n")
             section_pattern = re.compile(r"(\[.*?\])")
-            parts = section_pattern.split(lyrics)
+            parts = section_pattern.split(lyrics_text)
 
             organized_sections = []
             current_section = ""
@@ -587,24 +571,17 @@ class Fun(Package):
                 organized_sections.append((current_header, current_section.strip()))
 
             if not organized_sections:
-                organized_sections = [("", lyrics)]
-
-            thumbnail_url = track.get("song_art_image_url")
-            artist_name = track["primary_artist"]["name"]
-            artist_icon = track["primary_artist"].get("image_url")
-            artist_url = track["primary_artist"].get("url")
-            release_date = track.get("release_date_for_display", "")
-            track_title = track["title"]
-            track_url = track["url"]
+                organized_sections = [("", lyrics_text)]
 
             pages = []
             for i, (header, content) in enumerate(organized_sections, 1):
                 section_text = f"{header}\n{content}" if header else content
                 embed = panel_container(
-                    title=track_title,
+                    title=title,
                     url=track_url,
                     lines=[f"```yaml\n{section_text}```"],
-                    footer=f"{i}/{len(organized_sections)}" + (f" \u2022 {release_date}" if release_date else ""),
+                    author=artist,
+                    footer=f"{i}/{len(organized_sections)}",
                 )
                 pages.append(embed)
 

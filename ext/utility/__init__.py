@@ -556,7 +556,6 @@ async def _send_snipe_pages(
         show_goto=True,
         on_delete_page=on_delete_page,
         search_options=search_options,
-        search_title=f"Search for a page (1-{len(pages)})..",
         search_placeholder="select a page to jump to...",
     )
     await view.start()
