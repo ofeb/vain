@@ -35,18 +35,18 @@ class Away(AFKEvents, Package):
 
     @group(
         name="afk",
-        description="set yourself as away from keyboard",
+        description="set yourself as away from keyboard\n use --global to set yourself afk in all servers",
         aliases=["away"],
         invoke_without_command=True,
     )
-    @describe(status="What you're doing / why you're AFK")
+    @describe(status="What you're doing and why")
     async def afk(self, ctx: Context, *, status: str = "AFK") -> None:
         if ctx.invoked_subcommand is not None:
             return
 
-        is_global = "--global" in status
+        is_global = "--global" in status or "--g" in status
         if is_global:
-            status = status.replace("--global", "").strip() or "AFK"
+            status = status.replace("--global", "").replace("--g", "").strip() or "AFK"
             guild_id = None
             scope_label = "globally"
         else:
