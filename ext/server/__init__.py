@@ -789,9 +789,10 @@ class ServerCommands(Package):
         from core.discord.ctx import layout_from_items
 
         if member:
-            avatar = member.display_avatar.replace(size=4096)
-            url = str(avatar.url)
-            label = f"**{member.display_name}'s avatar**"
+            if not member.guild_avatar:
+                return await ctx.warn(f"**{member.display_name}** has no server avatar")
+            url = str(member.guild_avatar.replace(size=4096).url)
+            label = f"**{member.display_name}'s server avatar**"
         else:
             if not ctx.guild or not ctx.guild.icon:
                 return await ctx.warn("this server has no avatar")
@@ -822,16 +823,10 @@ class ServerCommands(Package):
         from core.discord.ctx import layout_from_items
 
         if member:
-            banner_url = None
-            try:
-                user = await self.bot.fetch_user(member.id)
-                if user.banner:
-                    banner_url = str(user.banner.replace(size=4096).url)
-            except Exception:
-                pass
-            if not banner_url:
-                return await ctx.warn(f"**{member.display_name}** has no banner")
-            label = f"**{member.display_name}'s banner**"
+            if not member.guild_banner:
+                return await ctx.warn(f"**{member.display_name}** has no server banner")
+            banner_url = str(member.guild_banner.replace(size=4096).url)
+            label = f"**{member.display_name}'s server banner**"
         else:
             if not ctx.guild or not ctx.guild.banner:
                 return await ctx.warn("this server has no banner")

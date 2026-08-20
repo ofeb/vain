@@ -529,7 +529,18 @@ class Fun(Package):
     )
     @describe(query="Artist and song title (leave empty to detect from your status)")
     async def lyrics(self, ctx: Context, *, query: str = None) -> None:
-        genius_token = "fs6QAbNhqF0VmAMb4p4FWAZ7TqjKKCcvu-8BOlNwKTJgdVoPr8qd-Mo1AuyJiYuu"
+        import sys
+        if sys.version_info < (3, 11):
+            import typing
+            if not hasattr(typing, "Self"):
+                typing.Self = None
+
+        import lyricsgenius
+
+        genius = lyricsgenius.Genius(
+            "fs6QAbNhqF0VmAMb4p4FWAZ7TqjKKCcvu-8BOlNwKTJgdVoPr8qd-Mo1AuyJiYuu",
+            remove_section_headers=False,
+        )
 
         if not query:
             query = None
@@ -575,65 +586,21 @@ class Fun(Package):
                 )
 
         async with ctx.typing():
-            
-            search_url = "https://api.genius.com/search"
-            headers = {"Authorization": f"Bearer {genius_token}"}
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    search_url, headers=headers, params={"q": query}
-                ) as resp:
-                    if resp.status != 200:
-                        return await ctx.warn("Could not search for lyrics.")
-                    data = await resp.json()
+            try:
+                song = await self.bot.loop.run_in_executor(
+                    None, lambda: genius.search_song(query)
+                )
+            except Exception:
+                return await ctx.warn("Could not search for lyrics.")
 
-            hits = data.get("response", {}).get("hits", [])
-            if not hits:
+            if not song or not song.lyrics:
                 return await ctx.warn("No lyrics found for that track.")
 
-            song_result = hits[0].get("result", {})
-            song_id = song_result.get("id")
-            title = song_result.get("title", query)
-            artist = song_result.get("primary_artist", {}).get("name", "")
-            track_url = song_result.get("url", "")
+            lyrics_text = song.lyrics.strip()
+            title = song.title or query
+            artist = song.artist or ""
+            track_url = song.url or ""
 
-            
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    f"https://api.genius.com/songs/{song_id}",
-                    headers=headers,
-                ) as resp:
-                    if resp.status != 200:
-                        return await ctx.warn("Could not fetch lyrics.")
-                    song_data = await resp.json()
-
-            song_info = song_data.get("response", {}).get("song", {})
-            lyrics_url = song_info.get("url", "")
-
-            
-            if not lyrics_url:
-                return await ctx.warn("Could not find lyrics URL.")
-
-            async with aiohttp.ClientSession() as session:
-                async with session.get(lyrics_url) as resp:
-                    if resp.status != 200:
-                        return await ctx.warn("Could not fetch lyrics page.")
-                    html = await resp.text()
-
-            divs = re.findall(
-                r'<div[^>]*class="[^"]*(?:Lyrics__Container[^"]*|lyrics[^"]*)"[^>]*>(.*?)</div>',
-                html,
-                re.DOTALL,
-            )
-            if not divs:
-                return await ctx.warn("Couldn't find lyrics for this song.")
-
-            lyrics_text = ""
-            for div_html in divs:
-                cleaned = re.sub(r"<br\s*/?>", "\n", div_html)
-                cleaned = re.sub(r"<[^>]+>", "", cleaned)
-                lyrics_text += cleaned
-
-            lyrics_text = lyrics_text.strip("\n")
             section_pattern = re.compile(r"(\[.*?\])")
             parts = section_pattern.split(lyrics_text)
 
