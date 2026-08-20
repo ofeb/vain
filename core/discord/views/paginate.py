@@ -303,7 +303,7 @@ class PageJumpSelect(ui.LayoutView):
         self.message: discord.Message | None = None
         self._title = title
         self._all_options = list(options)
-        self._placeholder = (placeholder or "select a page to jump to...").strip()[:150] or "select a page to jump to..."
+        self._placeholder = (placeholder or "select a page to jump to").strip()[:150] or "select a page to jump to"
         self._disabled = False
         self._build()
 
@@ -608,7 +608,7 @@ class PaginateView(discord.ui.LayoutView):
 
         if self.search_options:
             options = list(self.search_options)
-            placeholder = self.search_placeholder or "select a page to jump to..."
+            placeholder = self.search_placeholder or "select a page to jump to"
         else:
             total = len(self.pages)
             options = [
@@ -618,7 +618,7 @@ class PaginateView(discord.ui.LayoutView):
                 )
                 for i in range(1, total + 1)
             ]
-            placeholder = self.search_placeholder or "select a page to jump to..."
+            placeholder = self.search_placeholder or "select a page to jump to"
 
         async def on_pick(inter: discord.Interaction, value: str) -> None:
             try:
