@@ -16,19 +16,28 @@ from discord.ext.commands import Context
 
 from config import color
 
+import contextlib
+from typing import Any
+import discord
+from discord import ui
 
-def _build_confirm_layout(message: str) -> ui.LayoutView:
-    """Build a C2 layout with the message text inside the container."""
+
+def _build_confirm_layout(message: str, view: ui.View) -> ui.LayoutView:
     container = ui.Container()
+
     for attr in ("accent_color", "accent_colour", "color", "colour"):
         if hasattr(container, attr):
             with contextlib.suppress(Exception):
                 setattr(container, attr, None)
+
     container.add_item(ui.TextDisplay(message or "Are you sure you want to do this?"))
-    
-    view = ui.LayoutView(timeout=None)
-    view.add_item(container)
-    return view
+
+    for child in list(view.children):
+        container.add_item(child)
+
+    layout = ui.LayoutView(timeout=None)
+    layout.add_item(container)
+    return layout
 
 
 def _build_confirm_container(message: str) -> discord.Embed:
@@ -106,10 +115,11 @@ class ConfirmView(discord.ui.View):
     ) -> bool:
         """Send the prompt and wait for Approve / Deny. Returns True if approved."""
         display_message = message or "Are you sure you want to do this?"
-        layout = _build_confirm_layout(display_message)
+        
+        layout = _build_confirm_layout(display_message, view=self)
+        
         self.message = await self.ctx.send(view=layout)
-        with contextlib.suppress(discord.HTTPException, Exception):
-            await self.message.edit(view=self)
+        
         await self.wait()
         approved = bool(self.value)
         if delete_after and self.message is not None:
