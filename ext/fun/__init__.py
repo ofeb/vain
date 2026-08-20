@@ -523,6 +523,9 @@ class Fun(Package):
     @hybrid(
         name="lyrics",
         description="search for song lyrics",
+        guilds=True,
+        dms=True,
+        groupchats=True,
     )
     @describe(query="Artist and song title")
     async def lyrics(self, ctx: Context, *, query: str) -> None:

@@ -161,6 +161,7 @@ class Reaction(ReactionEvents, Package):
         name="clear",
         description="Removes every reaction trigger in guild. This can't be undone.",
         aliases=["reset"],
+        usage="",
     )
     @has_permissions(manage_expressions=True)
     async def reaction_clear(self, ctx: Context) -> None:
@@ -185,6 +186,7 @@ class Reaction(ReactionEvents, Package):
         description="add an auto reaction trigger (emoji(s) + trigger word/phrase)",
         aliases=["create"],
         example=",autoreaction add 😂 pic --not_strict --reply yes",
+        usage="<emoji(s)> <trigger> [--strict|--not_strict] [--reply yes/no]",
     )
     @describe(emoji="Emoji(s) to react with", trigger="Word/phrase that triggers the reaction")
     @has_permissions(manage_expressions=True)
@@ -274,6 +276,7 @@ class Reaction(ReactionEvents, Package):
         name="delete",
         description="remove a reaction trigger",
         aliases=["remove", "del"],
+        usage="<trigger>",
     )
     @describe(trigger="Trigger word/phrase to remove")
     @has_permissions(manage_expressions=True)
@@ -311,7 +314,7 @@ class Reaction(ReactionEvents, Package):
 
     @reaction_group.command(
         name="strict",
-        description="toggle strict matching for a trigger (on/off)",
+        description="toggle strict matching on a trigger",
         usage="<trigger or all> <on or off>",
     )
     @has_permissions(manage_expressions=True)
@@ -349,6 +352,7 @@ class Reaction(ReactionEvents, Package):
         description="add or remove auto reaction on every message in a channel",
         guild_only=True,
         invoke_without_command=True,
+        usage="add <channel> <emoji(s)> | remove <channel> | list",
     )
     @has_permissions(manage_expressions=True)
     async def reaction_messages(self, ctx: Context) -> None:
@@ -358,6 +362,7 @@ class Reaction(ReactionEvents, Package):
     @reaction_messages.command(
         name="add",
         description="auto-react to every message in a channel",
+        usage="<channel> <emoji(s)>",
     )
     @describe(channel="Channel", emoji="Emoji(s) to add")
     @has_permissions(manage_expressions=True)
@@ -391,6 +396,7 @@ class Reaction(ReactionEvents, Package):
         name="remove",
         description="stop auto-reacting in a channel",
         aliases=["delete", "del"],
+        usage="<channel>",
     )
     @describe(channel="Channel to clear")
     @has_permissions(manage_expressions=True)
@@ -409,6 +415,7 @@ class Reaction(ReactionEvents, Package):
     @reaction_messages.command(
         name="list",
         description="list channel auto reactions",
+        usage="",
     )
     @has_permissions(manage_expressions=True)
     async def reaction_messages_list(self, ctx: Context) -> None:
@@ -440,6 +447,7 @@ class Reaction(ReactionEvents, Package):
     @reaction_group.command(
         name="deleteall",
         description="removes every reaction trigger for a specific word",
+        usage="<trigger_word>",
     )
     @describe(trigger_word="Word to delete all triggers for")
     @has_permissions(manage_expressions=True)
@@ -456,6 +464,7 @@ class Reaction(ReactionEvents, Package):
         name="list",
         description="view every reaction trigger in guild",
         aliases=["view", "show", "ls"],
+        usage="",
     )
     @has_permissions(manage_expressions=True)
     async def reaction_list(self, ctx: Context) -> None:
@@ -487,6 +496,7 @@ class Reaction(ReactionEvents, Package):
     @reaction_group.command(
         name="owner",
         description="gets the author of a trigger word",
+        usage="<trigger_word>",
     )
     @describe(trigger_word="Trigger word to get owner of")
     @has_permissions(manage_expressions=True)

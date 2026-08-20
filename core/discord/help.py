@@ -1155,77 +1155,6 @@ async def _accent_color(bot: Vain) -> int | None:
     return None
 
 
-class _HelpSearchModal(ui.Modal, title="Search Commands"):
-    query = ui.TextInput(
-        label="Search for a command",
-        placeholder="type a command name or keyword...",
-        max_length=100,
-        required=True,
-    )
-
-    def __init__(self, help_menu: "GroupHelpMenu") -> None:
-        super().__init__()
-        self.help_menu = help_menu
-
-    async def on_submit(self, interaction: Interaction) -> None:
-        q = (self.query.value or "").strip().lower()
-        if not q:
-            return
-
-        matches: list[tuple[int, Command]] = []
-        for i, cmd in enumerate(self.help_menu.pages):
-            name = command_display_name(cmd).lower()
-            desc = (cmd.help or cmd.description or "").lower()
-            aliases = " ".join(a.lower() for a in (cmd.aliases or []))
-            if q in name or q in desc or q in aliases:
-                matches.append((i, cmd))
-
-        if not matches:
-            container = ui.Container()
-            for attr in ("accent_color", "accent_colour"):
-                if hasattr(container, attr):
-                    with contextlib.suppress(Exception):
-                        setattr(container, attr, None)
-            container.add_item(ui.TextDisplay(f"No commands found matching **{self.query.value}**"))
-            view = ui.LayoutView(timeout=60)
-            view.add_item(container)
-            await interaction.response.send_message(view=view, ephemeral=True)
-            return
-
-        options: list[SelectOption] = []
-        for idx, cmd in matches[:25]:
-            options.append(
-                SelectOption(
-                    label=command_display_name(cmd)[:100],
-                    value=str(idx),
-                    description=(cmd.short_doc or cmd.description or "")[:100],
-                )
-            )
-
-        async def on_pick(pick_inter: Interaction, value: str) -> None:
-            try:
-                self.help_menu.index = int(value)
-            except ValueError:
-                self.help_menu.index = 0
-            self.help_menu._rebuild()
-            if not pick_inter.response.is_done():
-                await pick_inter.response.defer()
-            if self.help_menu.msg is not None:
-                with contextlib.suppress(discord.HTTPException):
-                    await self.help_menu.msg.edit(view=self.help_menu)
-
-        from core.discord.views.paginate import PageJumpSelect
-        picker = PageJumpSelect(
-            title=f"Results for **{self.query.value}** ({len(matches)} found)",
-            options=options,
-            on_pick=on_pick,
-            author_id=interaction.user.id,
-            timeout=120,
-            placeholder="select a command to jump to...",
-        )
-        await interaction.response.send_message(view=picker, ephemeral=True)
-        with contextlib.suppress(Exception):
-            picker.message = await interaction.original_response()
 
 
 def _home_text(ctx: Context) -> str:
@@ -1424,21 +1353,9 @@ class GroupHelpMenu(ui.LayoutView):
             container.add_item(
                 build_pager_row(
                     parent=self,
-                    show_search=True,
+                    show_search=False,
                 )
             )
-            search_btn = ui.Button(
-                style=discord.ButtonStyle.primary,
-                label="Search",
-                custom_id=f"vain:help:search:{id(self)}",
-            )
-            async def _open_search(inter: Interaction) -> None:
-                modal = _HelpSearchModal(self)
-                await inter.response.send_modal(modal)
-            search_btn.callback = _open_search
-            search_row = ui.ActionRow()
-            search_row.add_item(search_btn)
-            container.add_item(search_row)
         self.add_item(container)
 
     async def interaction_check(self, inter: Interaction) -> bool:
@@ -1475,8 +1392,6 @@ class GroupHelpMenu(ui.LayoutView):
         await inter.response.edit_message(view=self)
 
     async def _goto(self, inter: Interaction) -> None:
-        from core.discord.views.paginate import PageJumpSelect
-
         total = len(self.pages)
         options: list[SelectOption] = []
         for i, cmd in enumerate(self.pages):
@@ -1503,17 +1418,38 @@ class GroupHelpMenu(ui.LayoutView):
                 with contextlib.suppress(discord.HTTPException):
                     await self.msg.edit(view=self)
 
-        picker = PageJumpSelect(
-            title=f"Search for a command (1-{total})..",
-            options=options,
-            on_pick=on_pick,
-            author_id=self.ctx.author.id,
-            timeout=self.timeout or 180,
-            placeholder="select a command to jump to...",
-        )
-        await inter.response.send_message(view=picker, ephemeral=True)
-        with contextlib.suppress(Exception):
-            picker.message = await inter.original_response()
+        view = ui.LayoutView(timeout=self.timeout or 300)
+        chunks = [options[i:i + 25] for i in range(0, len(options), 25)]
+        for idx, chunk in enumerate(chunks):
+            row = ui.ActionRow()
+            ph = "select a command to jump to..."
+            if len(chunks) > 1:
+                ph = f"{ph} ({idx + 1}/{len(chunks)})"
+            select = ui.Select(
+                placeholder=ph,
+                min_values=1,
+                max_values=1,
+                options=chunk,
+            )
+
+            async def _cb(interaction: Interaction, _sel: ui.Select = select) -> None:
+                if interaction.user.id != self.ctx.author.id:
+                    await interaction.response.send_message(
+                        embed=_warning_embed(
+                            interaction.user,
+                            "these controls aren't for you.",
+                        ),
+                        ephemeral=True,
+                    )
+                    return
+                value = _sel.values[0]
+                await on_pick(interaction, value)
+
+            select.callback = _cb
+            row.add_item(select)
+            view.add_item(row)
+
+        await inter.response.send_message(view=view, ephemeral=True)
 
     async def _cancel(self, inter: Interaction) -> None:
         await inter.response.defer()

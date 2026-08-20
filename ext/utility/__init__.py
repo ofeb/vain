@@ -907,7 +907,7 @@ class Utility(Remind):
         await super().cog_load()
 
     def _ensure_hybrid_contexts(self) -> None:
-        names = ("ask", "translate", "ocr")
+        names = ("ask", "translate", "languageauto", "ocr")
         for name in names:
             cmd = self.bot.tree.get_command(name)
             if cmd is None:
@@ -1237,6 +1237,74 @@ class Utility(Remind):
         current: str,
     ) -> list[app_commands.Choice[str]]:
         return _lang_autocomplete_choices(current, include_auto=True)
+
+    @hybrid(
+        name="languageauto",
+        description="auto-detect language and translate to english (or a target language)",
+        example=",languageauto",
+        guilds=True,
+        dms=True,
+        groupchats=True,
+    )
+    @describe(language="Target language to translate to (defaults to english)")
+    async def languageauto(
+        self,
+        ctx: Context,
+        language: str = None,
+    ) -> None:
+        to_lang = (language or "en").strip().lower() if language else "en"
+        if to_lang in {"auto", "detect", "none"}:
+            to_lang = "en"
+
+        body_text = None
+        if ctx.message and ctx.message.reference:
+            ref = ctx.message.reference.resolved
+            if not isinstance(ref, discord.Message):
+                try:
+                    ref = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+                except Exception:
+                    ref = None
+            if isinstance(ref, discord.Message) and (ref.content or "").strip():
+                body_text = ref.content.strip()
+
+        if not body_text:
+            return await ctx.warn(
+                "Reply to a message to auto-detect and translate it\n"
+                f"> -# **usage:** {ctx.cmd('languageauto')} or {ctx.cmd('languageauto french')} (reply to a message)"
+            )
+
+        async with ctx.typing():
+            try:
+                result = await self._translator().translate(body_text, to_lang=to_lang)
+            except Exception as exc:
+                return await ctx.fail(f"Translate failed\n> -# {exc}")
+
+        out = (result.get("text") if isinstance(result, dict) else str(result or "")).strip()
+        detected = (result.get("lang") if isinstance(result, dict) else None) or "Unknown"
+        if not out:
+            return await ctx.warn("Empty translation")
+
+        to_name = _lang_display(to_lang or "en")
+        from_name = _lang_display(detected)
+        source_code = _lang_code(detected, "auto")
+        target_code = _lang_code(to_lang or "en", "en")
+        view = _translate_layout(
+            original=body_text,
+            translated=out,
+            from_label=from_name,
+            to_label=to_name,
+            source_code=source_code,
+            target_code=target_code,
+        )
+        return await ctx.send(view=view)
+
+    @languageauto.autocomplete("language")
+    async def languageauto_autocomplete(
+        self,
+        interaction: discord.Interaction,
+        current: str,
+    ) -> list[app_commands.Choice[str]]:
+        return _lang_autocomplete_choices(current, include_auto=False)
 
     @commands.command(
         name="transcribe",
