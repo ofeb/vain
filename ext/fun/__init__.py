@@ -530,28 +530,29 @@ class Fun(Package):
     @describe(query="Artist and song title")
     async def lyrics(self, ctx: Context, *, query: str) -> None:
         async with ctx.typing():
-            async with self.bot.session.get(
-                "https://genius.com/api/search/multi",
-                params={"q": query},
-            ) as resp:
-                if resp.status != 200:
-                    return await ctx.warn("Could not search for lyrics.")
-                data = await resp.json()
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    "https://genius.com/api/search/multi",
+                    params={"q": query},
+                ) as resp:
+                    if resp.status != 200:
+                        return await ctx.warn("Could not search for lyrics.")
+                    data = await resp.json()
 
-            track = next(
-                (
-                    hit["result"]
-                    for section in data.get("response", {}).get("sections", [])
-                    for hit in section.get("hits", [])
-                    if hit["index"] == "song"
-                ),
-                None,
-            )
-            if not track:
-                return await ctx.warn("No results found for that track.")
+                track = next(
+                    (
+                        hit["result"]
+                        for section in data.get("response", {}).get("sections", [])
+                        for hit in section.get("hits", [])
+                        if hit["index"] == "song"
+                    ),
+                    None,
+                )
+                if not track:
+                    return await ctx.warn("No results found for that track.")
 
-            async with self.bot.session.get(track["url"]) as lyrics_resp:
-                html = await lyrics_resp.text()
+                async with session.get(track["url"]) as lyrics_resp:
+                    html = await lyrics_resp.text()
 
             divs = re.findall(
                 r'<div[^>]*class="[^"]*(?:Lyrics__Container[^"]*|lyrics[^"]*)"[^>]*>(.*?)</div>',

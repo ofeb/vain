@@ -887,9 +887,14 @@ class Antinuke(AntinukeEvents, Package):
         return False
     @group(
         name="antinuke",
-        description="protect your server from mass actions, bots, webhooks, and permission abuse",
+        description=(
+            "protect your server from mass actions, bots, webhooks, and permission abuse\n"
+            "**flags:** `--punishment` (ban/kick/jail/timeout/warn/stripstaff), "
+            "`--threshold` (1-6), `--within` (time window, e.g. 5m), "
+            "`--command` (on/off - count bot commands toward threshold)"
+        ),
         usage="(subcommand) <args>",
-        example="ban on --punishment ban --threshold 3",
+        example="ban on --punishment ban --threshold 3 --within 5m --command on",
         aliases=["an"],
         invoke_without_command=True,
     )

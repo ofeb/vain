@@ -931,7 +931,7 @@ class Utility(Remind):
                     for param in params:
                         pname = getattr(param, "name", None)
                         if pname == "text":
-                            param.required = True
+                            param.required = False
                         elif pname in ("to", "from", "source"):
                             param.required = False
                 except Exception:
@@ -1141,13 +1141,13 @@ class Utility(Remind):
         name="translate",
         aliases=["tr"],
         description="translate text using google translate",
-        example=",tr es hello",
+        example=",tr es hello (use languageauto to modify your destination language translation)",
         guilds=True,
         dms=True,
         groupchats=True,
     )
     @describe(
-        text="Text to translate",
+        text="Text to translate (or reply to a message)",
         to="Target language",
         source="Source language (auto-detects by default)",
     )
@@ -1155,7 +1155,7 @@ class Utility(Remind):
     async def translate(
         self,
         ctx: Context,
-        text: str,
+        text: str = None,
         to: str = None,
         source: str = None,
     ) -> None:

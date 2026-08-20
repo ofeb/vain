@@ -1353,7 +1353,7 @@ class GroupHelpMenu(ui.LayoutView):
             container.add_item(
                 build_pager_row(
                     parent=self,
-                    show_search=False,
+                    show_search=True,
                 )
             )
         self.add_item(container)
