@@ -31,15 +31,13 @@ def _build_confirm_layout(message: str) -> ui.LayoutView:
     return view
 
 
-def _build_confirm_layout(message: str) -> ui.LayoutView:
-    """Build a C2 layout with the message text inside the container."""
-    container = ui.Container()
-    for attr in ("accent_color", "accent_colour", "color", "colour"):
-        if hasattr(container, attr):
-            with contextlib.suppress(Exception):
-                setattr(container, attr, None)
-    container.add_item(ui.TextDisplay(message or "Are you sure you want to do this?"))
-    return ui.LayoutView(timeout=None, items=[container])
+def _build_confirm_container(message: str) -> discord.Embed:
+    """Build a C2 container embed for confirm prompts."""
+    from core.discord.views.embed import c2
+    return c2(
+        message=message or "Are you sure you want to do this?",
+        timestamp=False,
+    )
 
 
 class ConfirmView(discord.ui.View):
