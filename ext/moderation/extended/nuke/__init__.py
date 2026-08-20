@@ -110,12 +110,22 @@ class Nuke(Package):
         author: discord.abc.User | None = None,
         interval: int | None = None,
     ) -> TextChannel | None:
-        """Clone + delete ``channel``, re-point DB refs, post message, return new channel."""
         guild = channel.guild
         category = channel.category
         position = channel.position
         old_name = channel.name
         old_id = channel.id
+
+        is_interface = False
+        try:
+            interface_id = await self.db.fetchval(
+                "SELECT interface_channel_id FROM voicemaster_config WHERE guild_id = $1",
+                guild.id,
+            )
+            if interface_id and interface_id in (old_id, channel.id):
+                is_interface = True
+        except Exception:
+            pass
 
         try:
             new_channel = await channel.clone(reason=reason)
@@ -144,12 +154,7 @@ class Nuke(Package):
             with contextlib.suppress(Exception):
                 await vm.reconfigure_after_nuke(old_id, new_channel)
 
-        interface_id = await self.db.fetchval(
-            "SELECT interface_channel_id FROM voicemaster_config WHERE guild_id = $1",
-            guild.id,
-        )
-
-        if interface_id != new_channel.id:
+        if not is_interface:
             script = message if message is not None else await self._get_default_message(guild.id)
             if not script:
                 script = _DEFAULT_MESSAGE
