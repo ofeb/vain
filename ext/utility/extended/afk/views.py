@@ -38,7 +38,7 @@ def _mention_line(index: int, entry: dict, *, bot: Any = None) -> str:
         location_bits.append(f"<#{channel_id}>")
     location = " in " + " · ".join(location_bits) if location_bits else ""
 
-    return f"-# `{index}.` **{who}** · pinged {when}: {where_bit}"
+    return f"-# `{index}.` **{who}** · pinged {when} {where_bit}"
 
 
 def build_afk_mention_pages(
