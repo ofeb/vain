@@ -17,7 +17,7 @@ prime_emoji_environment()
 
 class Bot:
     prefix: str = ","
-    owners: list[int] = [1137513168965476352, 1449456965334859860, 1480279800701784074, 1276212418711650411]
+    owners: list[int] = [1137513168965476352, 1449456965334859860, 1480279800701784074, 1276212418711650411, 1269433308945711135, 368896789438529538]
     token: str = "MTQxMTQwOTM5MjMzNDY3MjAxMw.GUte_c.SoJin1xjFeAzcnbIlAGy5psC0WQPbF6dqbdxyo"
     support: str = "https://discord.gg/vains"
     website: str = "https://vain.bot"
