@@ -780,21 +780,30 @@ class ServerCommands(Package):
     @command(
         name="serveravatar",
         aliases=["sav"],
-        description="view the server avatar",
+        description="view the server avatar or a user's avatar",
+        usage="[member]",
         guild_only=True,
     )
-    async def serveravatar(self, ctx):
-        if not ctx.guild or not ctx.guild.icon:
-            return await ctx.warn("this server has no avatar")
-        url = str(ctx.guild.icon.replace(size=4096).url)
+    async def serveravatar(self, ctx, member: discord.Member = None):
         from discord import ui as _ui
         from core.discord.ctx import layout_from_items
+
+        if member:
+            avatar = member.display_avatar.replace(size=4096)
+            url = str(avatar.url)
+            label = f"**{member.display_name}'s avatar**"
+        else:
+            if not ctx.guild or not ctx.guild.icon:
+                return await ctx.warn("this server has no avatar")
+            url = str(ctx.guild.icon.replace(size=4096).url)
+            label = f"**{ctx.guild.name}'s server avatar**"
+
         container = _ui.Container()
         for attr in ("accent_color", "accent_colour"):
             if hasattr(container, attr):
                 with contextlib.suppress(Exception):
                     setattr(container, attr, None)
-        container.add_item(_ui.TextDisplay(f"**{ctx.guild.name}'s server avatar**"))
+        container.add_item(_ui.TextDisplay(label))
         try:
             container.add_item(_ui.MediaGallery(discord.MediaGalleryItem(url)))
         except Exception:
@@ -804,25 +813,41 @@ class ServerCommands(Package):
     @command(
         name="serverbanner",
         aliases=["sbanner", "guildbanner"],
-        description="view the server banner",
+        description="view the server banner or a user's banner",
+        usage="[member]",
         guild_only=True,
     )
-    async def serverbanner(self, ctx):
-        if not ctx.guild or not ctx.guild.banner:
-            return await ctx.warn("this server has no banner")
-        url = str(ctx.guild.banner.replace(size=4096).url)
+    async def serverbanner(self, ctx, member: discord.Member = None):
         from discord import ui as _ui
         from core.discord.ctx import layout_from_items
+
+        if member:
+            banner_url = None
+            try:
+                user = await self.bot.fetch_user(member.id)
+                if user.banner:
+                    banner_url = str(user.banner.replace(size=4096).url)
+            except Exception:
+                pass
+            if not banner_url:
+                return await ctx.warn(f"**{member.display_name}** has no banner")
+            label = f"**{member.display_name}'s banner**"
+        else:
+            if not ctx.guild or not ctx.guild.banner:
+                return await ctx.warn("this server has no banner")
+            banner_url = str(ctx.guild.banner.replace(size=4096).url)
+            label = f"**{ctx.guild.name}'s server banner**"
+
         container = _ui.Container()
         for attr in ("accent_color", "accent_colour"):
             if hasattr(container, attr):
                 with contextlib.suppress(Exception):
                     setattr(container, attr, None)
-        container.add_item(_ui.TextDisplay(f"**{ctx.guild.name}'s server banner**"))
+        container.add_item(_ui.TextDisplay(label))
         try:
-            container.add_item(_ui.MediaGallery(discord.MediaGalleryItem(url)))
+            container.add_item(_ui.MediaGallery(discord.MediaGalleryItem(banner_url)))
         except Exception:
-            container.add_item(_ui.TextDisplay(f"[open banner]({url})"))
+            container.add_item(_ui.TextDisplay(f"[open banner]({banner_url})"))
         await ctx.send(view=layout_from_items([container], timeout=None))
 
     @command(

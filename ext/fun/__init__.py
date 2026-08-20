@@ -527,32 +527,113 @@ class Fun(Package):
         dms=True,
         groupchats=True,
     )
-    @describe(query="Artist and song title")
-    async def lyrics(self, ctx: Context, *, query: str) -> None:
-        import lyricsgenius
+    @describe(query="Artist and song title (leave empty to detect from your status)")
+    async def lyrics(self, ctx: Context, *, query: str = None) -> None:
+        genius_token = "fs6QAbNhqF0VmAMb4p4FWAZ7TqjKKCcvu-8BOlNwKTJgdVoPr8qd-Mo1AuyJiYuu"
 
-        genius = lyricsgenius.Genius(
-            "fs6QAbNhqF0VmAMb4p4FWAZ7TqjKKCcvu-8BOlNwKTJgdVoPr8qd-Mo1AuyJiYuu",
-            verbose=False,
-            remove_section_headers=False,
-        )
+        if not query:
+            query = None
+            
+            member = ctx.author
+            activities = list(getattr(member, "activities", None) or ())
+            primary = getattr(member, "activity", None)
+            if primary is not None and primary not in activities:
+                activities.insert(0, primary)
+            for act in activities:
+                if isinstance(act, discord.Spotify):
+                    query = f"{act.title} {act.artist}"
+                    break
+
+            
+            if not query:
+                try:
+                    from core.networks.lastfm import LastFM
+                    from ext.lastfm.settings import Settings as LfmSettings
+
+                    lfm_data = await LfmSettings.get_user(self.bot, ctx.author.id)
+                    if lfm_data:
+                        username = lfm_data.get("lastfm_username") if isinstance(lfm_data, dict) else None
+                        if not username and isinstance(lfm_data, str):
+                            username = lfm_data
+                        if username:
+                            lfm = LastFM()
+                            tracks = await lfm.recent_tracks(username, limit=1)
+                            if tracks:
+                                track = tracks[0]
+                                track_name = track.get("name", "")
+                                artist_name = track.get("artist", {}).get("#text") or ""
+                                if track_name and artist_name:
+                                    query = f"{track_name} {artist_name}"
+                except Exception:
+                    pass
+
+            
+            if not query:
+                return await ctx.warn(
+                    "I **can't** see your profile because it is private\n"
+                    "> -# search a query instead or connect your lastfm"
+                )
 
         async with ctx.typing():
-            try:
-                song = await self.bot.loop.run_in_executor(
-                    None, lambda: genius.search_song(query)
-                )
-            except Exception:
-                return await ctx.warn("Could not search for lyrics.")
+            
+            search_url = "https://api.genius.com/search"
+            headers = {"Authorization": f"Bearer {genius_token}"}
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    search_url, headers=headers, params={"q": query}
+                ) as resp:
+                    if resp.status != 200:
+                        return await ctx.warn("Could not search for lyrics.")
+                    data = await resp.json()
 
-            if not song or not song.lyrics:
+            hits = data.get("response", {}).get("hits", [])
+            if not hits:
                 return await ctx.warn("No lyrics found for that track.")
 
-            lyrics_text = song.lyrics.strip()
-            title = song.title or query
-            artist = song.artist or ""
-            track_url = song.url or ""
+            song_result = hits[0].get("result", {})
+            song_id = song_result.get("id")
+            title = song_result.get("title", query)
+            artist = song_result.get("primary_artist", {}).get("name", "")
+            track_url = song_result.get("url", "")
 
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"https://api.genius.com/songs/{song_id}",
+                    headers=headers,
+                ) as resp:
+                    if resp.status != 200:
+                        return await ctx.warn("Could not fetch lyrics.")
+                    song_data = await resp.json()
+
+            song_info = song_data.get("response", {}).get("song", {})
+            lyrics_url = song_info.get("url", "")
+
+            
+            if not lyrics_url:
+                return await ctx.warn("Could not find lyrics URL.")
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(lyrics_url) as resp:
+                    if resp.status != 200:
+                        return await ctx.warn("Could not fetch lyrics page.")
+                    html = await resp.text()
+
+            divs = re.findall(
+                r'<div[^>]*class="[^"]*(?:Lyrics__Container[^"]*|lyrics[^"]*)"[^>]*>(.*?)</div>',
+                html,
+                re.DOTALL,
+            )
+            if not divs:
+                return await ctx.warn("Couldn't find lyrics for this song.")
+
+            lyrics_text = ""
+            for div_html in divs:
+                cleaned = re.sub(r"<br\s*/?>", "\n", div_html)
+                cleaned = re.sub(r"<[^>]+>", "", cleaned)
+                lyrics_text += cleaned
+
+            lyrics_text = lyrics_text.strip("\n")
             section_pattern = re.compile(r"(\[.*?\])")
             parts = section_pattern.split(lyrics_text)
 
