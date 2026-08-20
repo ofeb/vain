@@ -529,19 +529,6 @@ class Fun(Package):
     )
     @describe(query="Artist and song title (leave empty to detect from your status)")
     async def lyrics(self, ctx: Context, *, query: str = None) -> None:
-        import sys
-        if sys.version_info < (3, 11):
-            import typing
-            if not hasattr(typing, "Self"):
-                typing.Self = None
-
-        import lyricsgenius
-
-        genius = lyricsgenius.Genius(
-            "fs6QAbNhqF0VmAMb4p4FWAZ7TqjKKCcvu-8BOlNwKTJgdVoPr8qd-Mo1AuyJiYuu",
-            remove_section_headers=False,
-        )
-
         if not query:
             query = None
             
@@ -586,20 +573,25 @@ class Fun(Package):
                 )
 
         async with ctx.typing():
-            try:
-                song = await self.bot.loop.run_in_executor(
-                    None, lambda: genius.search_song(query)
-                )
-            except Exception:
-                return await ctx.warn("Could not search for lyrics.")
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    "https://lrclib.net/api/search",
+                    params={"q": query},
+                ) as resp:
+                    if resp.status != 200:
+                        return await ctx.warn("Could not search for lyrics.")
+                    data = await resp.json()
 
-            if not song or not song.lyrics:
+            if not data:
                 return await ctx.warn("No lyrics found for that track.")
 
-            lyrics_text = song.lyrics.strip()
-            title = song.title or query
-            artist = song.artist or ""
-            track_url = song.url or ""
+            song = data[0]
+            lyrics_text = (song.get("plainLyrics") or "").strip()
+            title = song.get("trackName") or query
+            artist = song.get("artistName") or ""
+
+            if not lyrics_text:
+                return await ctx.warn("No lyrics found for that track.")
 
             section_pattern = re.compile(r"(\[.*?\])")
             parts = section_pattern.split(lyrics_text)
@@ -626,7 +618,6 @@ class Fun(Package):
                 section_text = f"{header}\n{content}" if header else content
                 embed = panel_container(
                     title=title,
-                    url=track_url,
                     lines=[f"```yaml\n{section_text}```"],
                     author=artist,
                     footer=f"{i}/{len(organized_sections)}",
