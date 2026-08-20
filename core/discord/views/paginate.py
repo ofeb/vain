@@ -290,7 +290,7 @@ class PageJumpSelect(ui.LayoutView):
     def __init__(
         self,
         *,
-        title: str,
+        title: str = "",
         options: list[discord.SelectOption],
         on_pick: Callable[[discord.Interaction, str], Any],
         author_id: int,
@@ -310,7 +310,8 @@ class PageJumpSelect(ui.LayoutView):
     def _build(self) -> None:
         self.clear_items()
         container = ui.Container()
-        container.add_item(ui.TextDisplay(self._title))
+        if self._title:
+            container.add_item(ui.TextDisplay(self._title))
 
         chunks = [self._all_options[i:i + 25] for i in range(0, len(self._all_options), 25)]
         for idx, chunk in enumerate(chunks):
@@ -643,6 +644,7 @@ class PaginateView(discord.ui.LayoutView):
                     await target.edit(view=self)
 
         picker = PageJumpSelect(
+            title="",
             options=options,
             on_pick=on_pick,
             author_id=self.ctx.author.id,
