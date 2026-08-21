@@ -861,26 +861,20 @@ class BoosterroleCommands(Package):
         )
         dead_ids = []
         unmanageable_roles = []
+        valid_roles = []
+
         role_ids = [
             r.role_id
             for r in await self.db.fetch(
                 """SELECT role_id FROM custom_roles WHERE guild_id = $1""", ctx.guild.id
             )
         ]
-        
-        target_position = role.position - 1 if role.position > 1 else 1
 
         for rid in role_ids:
             br = ctx.guild.get_role(rid)
             if br:
                 if br.is_assignable():
-                    try:
-                        await br.edit(
-                            position=target_position,
-                            reason=f"Base role changed by {ctx.author}",
-                        )
-                    except Forbidden:
-                        unmanageable_roles.append(br.mention)
+                    valid_roles.append(br)
                 else:
                     unmanageable_roles.append(br.mention)
             else:
@@ -892,6 +886,23 @@ class BoosterroleCommands(Package):
                 ctx.guild.id,
                 dead_ids,
             )
+
+        if valid_roles:
+            target_position = role.position - 1 if role.position > 1 else 1
+            
+            positions = {br: target_position for br in valid_roles}
+            
+            try:
+                await ctx.guild.edit_role_positions(
+                    positions=positions,
+                    reason=f"Base role set by {ctx.author}",
+                )
+            except discord.Forbidden:
+                for br in valid_roles:
+                    if br.mention not in unmanageable_roles:
+                        unmanageable_roles.append(br.mention)
+            except discord.HTTPException:
+                pass
 
         if unmanageable_roles:
             bot_role = ctx.guild.me.top_role
