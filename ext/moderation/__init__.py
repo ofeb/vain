@@ -891,7 +891,7 @@ class ModerationCommands(Package):
     @has_permissions(manage_messages=True)
     async def warn_remove(self, ctx, case_id: int, *, reason=None):
         """remove a warning using its case ID"""
-        case = await self.db.get_case(ctx.guild.id, case_id)
+        case = await self.db.fetch_modlog_case(ctx.guild.id, case_id)
         if not case or case.get("action") != "warn":
             return await self._action_c2(ctx, f"Case **#{case_id}** was not found or is not a warning.")
 
@@ -904,6 +904,14 @@ class ModerationCommands(Package):
             target=target,
             case_id=case_id,
             reason=reason,
+        )
+
+        if await self._invoke_response(ctx, "warn_remove", case_id=case_id, reason=reason):
+            return
+
+        return await self._action_c2(
+            ctx, 
+            f"Removed warning **#{case_id}**\n> -# **reason:** {self._default_reason(reason)}"
         )
 
         if await self._invoke_response(ctx, "warn_remove", case_id=case_id, reason=reason):
