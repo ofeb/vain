@@ -1456,6 +1456,18 @@ class Database:
                 )
                 return case_id
 
+    async def delete_modlog_case(self, guild_id: int, case_id: int) -> bool:
+        """delete a specific modlog case by case_id"""
+        result = await self.execute(
+            """
+            DELETE FROM modlog_cases
+            WHERE guild_id = $1 AND case_id = $2
+            """,
+            guild_id,
+            case_id,
+        )
+        return result == "DELETE 1"
+
     async def reset_modlog_cases(self, guild_id: int) -> None:
         """delete all modlog cases for a guild"""
         await self.execute(
