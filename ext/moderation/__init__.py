@@ -883,6 +883,37 @@ class ModerationCommands(Package):
             return
         return await self._action_c2(ctx, f"Warned **{member}**\n> -# **reason:** {self._default_reason(reason)}")
 
+    @warn.command(
+        name="remove",
+        aliases=["delete", "del", "clear"],
+        description="removes a warning from a user by case ID",
+    )
+    @has_permissions(manage_messages=True)
+    async def warn_remove(self, ctx, case_id: int, *, reason=None):
+        """remove a warning using its case ID"""
+        case = await self.db.get_case(ctx.guild.id, case_id)
+        if not case or case.get("action") != "warn":
+            return await self._action_c2(ctx, f"Case **#{case_id}** was not found or is not a warning.")
+
+        await self.db.delete_case(ctx.guild.id, case_id)
+
+        target = ctx.guild.get_member(case.get("target_id"))
+        await self._send_modlog(
+            ctx,
+            action="warn_remove",
+            target=target,
+            case_id=case_id,
+            reason=reason,
+        )
+
+        if await self._invoke_response(ctx, "warn_remove", case_id=case_id, reason=reason):
+            return
+
+        return await self._action_c2(
+            ctx, 
+            f"Removed warning **#{case_id}**\n> -# **reason:** {self._default_reason(reason)}"
+        )
+
     @warn.group(
         name="invoke",
         description="customize warn punishment messages",
