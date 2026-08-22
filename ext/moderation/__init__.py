@@ -882,7 +882,7 @@ class ModerationCommands(Package):
         if await self._invoke_response(ctx, "warn", user=member, reason=reason, case_id=case_id):
             return
         return await self._action_c2(ctx, f"Warned **{member}**\n> -# **reason:** {self._default_reason(reason)}")
-
+        
     @warn.command(
         name="remove",
         aliases=["delete", "del", "clear"],
@@ -897,7 +897,7 @@ class ModerationCommands(Package):
 
         await self.db.delete_modlog_case(ctx.guild.id, case_id)
 
-        target = ctx.guild.get_member(case.get("target_id"))
+        target = ctx.guild.get_member(case.get("target_id")) or case.get("target_id")
         await self._send_modlog(
             ctx,
             action="warn_remove",
@@ -906,39 +906,14 @@ class ModerationCommands(Package):
             reason=reason,
         )
 
-        if await self._invoke_response(ctx, "warn_remove", case_id=case_id, reason=reason):
+        if await self._invoke_response(ctx, "warn_remove", user=target, case_id=case_id, reason=reason):
             return
 
         return await self._action_c2(
             ctx, 
             f"Removed warning **#{case_id}**\n> -# **reason:** {self._default_reason(reason)}"
         )
-
-        target = ctx.guild.get_member(case.get("target_id"))
-        await self._send_modlog(
-            ctx,
-            action="warn_remove",
-            target=target,
-            case_id=case_id,
-            reason=reason,
-        )
-
-        if await self._invoke_response(ctx, "warn_remove", case_id=case_id, reason=reason):
-            return
-
-        return await self._action_c2(
-            ctx, 
-            f"Removed warning **#{case_id}**\n> -# **reason:** {self._default_reason(reason)}"
-        )
-
-        if await self._invoke_response(ctx, "warn_remove", case_id=case_id, reason=reason):
-            return
-
-        return await self._action_c2(
-            ctx, 
-            f"Removed warning **#{case_id}**\n> -# **reason:** {self._default_reason(reason)}"
-        )
-
+        
     @warn.group(
         name="invoke",
         description="customize warn punishment messages",
