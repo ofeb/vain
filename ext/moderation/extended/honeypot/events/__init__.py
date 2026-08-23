@@ -43,8 +43,6 @@ class HoneypotEvents(Package):
             await message.delete()
 
         punishments = _normalize_punishments(row.get("punishments"))
-        if "ban" not in punishments and "softban" not in punishments and "kick" not in punishments:
-            punishments = ["ban", *punishments]
 
         applied = await self._apply_punishments(author, punishments, reason=reason)
 

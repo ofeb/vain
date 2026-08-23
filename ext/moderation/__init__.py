@@ -113,6 +113,7 @@ class ModerationCommands(Package):
 
     def __init__(self, bot) -> None:
         super().__init__(bot)
+        self.tasks: dict[str, asyncio.Task] = {}
         self._unbanall_tasks: dict[int, asyncio.Task] = {}
         self._naughty_tasks: dict[int, asyncio.Task] = {}
 
@@ -892,7 +893,38 @@ class ModerationCommands(Package):
         if await self._invoke_response(ctx, "warn", user=member, reason=reason, case_id=case_id):
             return
         return await self._action_c2(ctx, f"Warned **{member}**\n> -# **reason:** {self._default_reason(reason)}")
+        
+    @warn.command(
+        name="remove",
+        aliases=["delete", "del", "clear"],
+        description="removes a warning from a user by case ID",
+    )
+    @has_permissions(manage_messages=True)
+    async def warn_remove(self, ctx, case_id: int, *, reason=None):
+        """remove a warning using its case ID"""
+        case = await self.db.fetch_modlog_case(ctx.guild.id, case_id)
+        if not case or case.get("action") != "warn":
+            return await self._action_c2(ctx, f"Case **#{case_id}** was not found or is not a warning.")
 
+        await self.db.delete_modlog_case(ctx.guild.id, case_id)
+
+        target = ctx.guild.get_member(case.get("target_id")) or case.get("target_id")
+        await self._send_modlog(
+            ctx,
+            action="warn_remove",
+            target=target,
+            case_id=case_id,
+            reason=reason,
+        )
+
+        if await self._invoke_response(ctx, "warn_remove", user=target, case_id=case_id, reason=reason):
+            return
+
+        return await self._action_c2(
+            ctx, 
+            f"Removed warning **#{case_id}**\n> -# **reason:** {self._default_reason(reason)}"
+        )
+        
     @warn.group(
         name="invoke",
         description="customize warn punishment messages",

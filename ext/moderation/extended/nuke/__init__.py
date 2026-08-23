@@ -110,12 +110,23 @@ class Nuke(Package):
         author: discord.abc.User | None = None,
         interval: int | None = None,
     ) -> TextChannel | None:
-        """Clone + delete ``channel``, re-point DB refs, post message, return new channel."""
         guild = channel.guild
         category = channel.category
         position = channel.position
         old_name = channel.name
         old_id = channel.id
+
+        is_interface = False
+
+        try:
+            interface_id = await self.db.fetchval(
+                "SELECT interface_id FROM voicemaster_configuration WHERE guild_id = $1",
+                guild.id,
+            )
+            if interface_id is not None and int(interface_id) in (old_id, channel.id):
+                is_interface = True
+        except Exception:
+            pass
 
         try:
             new_channel = await channel.clone(reason=reason)
@@ -144,43 +155,44 @@ class Nuke(Package):
             with contextlib.suppress(Exception):
                 await vm.reconfigure_after_nuke(old_id, new_channel)
 
-        script = message if message is not None else await self._get_default_message(guild.id)
-        if not script:
-            script = _DEFAULT_MESSAGE
+        if not is_interface:
+            script = message if message is not None else await self._get_default_message(guild.id)
+            if not script:
+                script = _DEFAULT_MESSAGE
 
-        reconfigured = (
-            "welcome, leave, boost, logs, jail, tickets, starboard, "
-            "clownboard, giveaways, counters, suggest, and related systems"
-        )
-        kwargs = {
-            "guild": guild,
-            "channel": new_channel,
-            "nuke": {
-                "interval": naturaldelta(interval) if interval else "n/a",
-                "threshold": naturaldelta(interval) if interval else "n/a",
-                "reconfigured": reconfigured,
+            reconfigured = (
+                "welcome, leave, boost, logs, jail, tickets, starboard, "
+                "clownboard, giveaways, counters, suggest, and related systems"
+            )
+            kwargs = {
+                "guild": guild,
                 "channel": new_channel,
-                "old": old_name,
-            },
-            "nuke.interval": naturaldelta(interval) if interval else "n/a",
-            "nuke.threshold": naturaldelta(interval) if interval else "n/a",
-            "nuke.reconfigured": reconfigured,
-            "nuke.channel": new_channel.mention,
-            "nuke.channel.name": new_channel.name,
-            "nuke.channel.id": str(new_channel.id),
-            "nuke.old": old_name,
-        }
-        if author is not None:
-            kwargs["user"] = author
-            kwargs["member"] = author
+                "nuke": {
+                    "interval": naturaldelta(interval) if interval else "n/a",
+                    "threshold": naturaldelta(interval) if interval else "n/a",
+                    "reconfigured": reconfigured,
+                    "channel": new_channel,
+                    "old": old_name,
+                },
+                "nuke.interval": naturaldelta(interval) if interval else "n/a",
+                "nuke.threshold": naturaldelta(interval) if interval else "n/a",
+                "nuke.reconfigured": reconfigured,
+                "nuke.channel": new_channel.mention,
+                "nuke.channel.name": new_channel.name,
+                "nuke.channel.id": str(new_channel.id),
+                "nuke.old": old_name,
+            }
+            if author is not None:
+                kwargs["user"] = author
+                kwargs["member"] = author
 
-        try:
-            await self.bot.send_embed(new_channel, script, **kwargs)
-        except Exception:
             try:
-                await new_channel.send(content=(script or _DEFAULT_MESSAGE)[:2000])
-            except (discord.NotFound, discord.HTTPException):
-                pass
+                await self.bot.send_embed(new_channel, script, **kwargs)
+            except Exception:
+                try:
+                    await new_channel.send(content=(script or _DEFAULT_MESSAGE)[:2000])
+                except (discord.NotFound, discord.HTTPException):
+                    pass
 
         return new_channel
 
@@ -233,8 +245,8 @@ class Nuke(Package):
             ("pingonjoin", "channel_ids", True),
             ("leveling", "channel_id", False),
             ("voicemaster", "channel_id", False),
-            ("voicemaster_config", "category_id", False),
-            ("voicemaster_config", "interface_channel_id", False),
+            ("voicemaster_configuration", "category_id", False),
+            ("voicemaster_configuration", "interface_id", False),
         ]
 
         for table, column, is_array in tables:

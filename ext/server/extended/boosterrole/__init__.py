@@ -858,37 +858,67 @@ class BoosterroleCommands(Package):
     @has_permissions(manage_guild=True)
     async def boosterrole_base(self, ctx, *, role: Role):
         """set booster role position"""
-        if not role.is_assignable():
-            raise CommandError(
-                f"Cannot edit {role.mention}\n"
-                f"> -# **role may be too high or managed**"
-            )
         await self.db.execute(
             """INSERT INTO booster_roles (guild_id, base_id) VALUES($1, $2) ON CONFLICT(guild_id) DO UPDATE SET base_id = excluded.base_id""",
             ctx.guild.id,
             role.id,
         )
         dead_ids = []
+        unmanageable_roles = []
+        valid_roles = []
+
         role_ids = [
             r.role_id
             for r in await self.db.fetch(
                 """SELECT role_id FROM custom_roles WHERE guild_id = $1""", ctx.guild.id
             )
         ]
+
         for rid in role_ids:
             br = ctx.guild.get_role(rid)
             if br:
-                await br.edit(
-                    position=role.position - 1 if role.position > 1 else 1,
-                    reason=f"base role changed by {ctx.author}",
-                )
+                if br.is_assignable():
+                    valid_roles.append(br)
+                else:
+                    unmanageable_roles.append(br.mention)
             else:
                 dead_ids.append(rid)
-        await self.db.execute(
-            """DELETE FROM custom_roles WHERE guild_id = $1 AND role_id = ANY($2::BIGINT[])""",
-            ctx.guild.id,
-            dead_ids,
-        )
+
+        if dead_ids:
+            await self.db.execute(
+                """DELETE FROM custom_roles WHERE guild_id = $1 AND role_id = ANY($2::BIGINT[])""",
+                ctx.guild.id,
+                dead_ids,
+            )
+
+        if valid_roles:
+            target_position = role.position - 1 if role.position > 1 else 1
+            
+            positions = {br: target_position for br in valid_roles}
+            
+            try:
+                await ctx.guild.edit_role_positions(
+                    positions=positions,
+                    reason=f"Base role set by {ctx.author}",
+                )
+            except discord.Forbidden:
+                for br in valid_roles:
+                    if br.mention not in unmanageable_roles:
+                        unmanageable_roles.append(br.mention)
+            except discord.HTTPException:
+                pass
+
+        if unmanageable_roles:
+            bot_role = ctx.guild.me.top_role
+            roles_str = ", ".join(unmanageable_roles[:5])
+            if len(unmanageable_roles) > 5:
+                roles_str += f" (+{len(unmanageable_roles) - 5} more)"
+            return await ctx.warn(
+                f"Base role set, but could not reposition {roles_str}\n"
+                f"> -# **roles are positioned above the bot's highest role**\n"
+                f"> -# **you must drag the role vain was given once it joined the server known as {bot_role.mention} above the base role of your choice**"
+            )
+
         return await ctx.success(
             f"Base role set\n"
             f"> -# **role:** {role.mention}"
