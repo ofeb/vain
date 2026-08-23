@@ -1,3 +1,4 @@
+aiodc
 git+https://github.com/Rapptz/discord.py
 jishaku
 aiohttp
