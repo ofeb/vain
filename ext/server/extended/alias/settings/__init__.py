@@ -127,6 +127,7 @@ class Settings:
                 command_name TEXT NOT NULL,
                 alias TEXT NOT NULL,
                 with_parameters BOOLEAN DEFAULT FALSE,
+                invoke TEXT DEFAULT '',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (guild_id, alias)
             )
@@ -134,6 +135,9 @@ class Settings:
         )
         await db.execute(
             "ALTER TABLE aliases ADD COLUMN IF NOT EXISTS with_parameters BOOLEAN DEFAULT FALSE"
+        )
+        await db.execute(
+            "ALTER TABLE aliases ADD COLUMN IF NOT EXISTS invoke TEXT DEFAULT ''"
         )
         await db.execute(
             "ALTER TABLE selfaliases ADD COLUMN IF NOT EXISTS with_parameters BOOLEAN DEFAULT FALSE"

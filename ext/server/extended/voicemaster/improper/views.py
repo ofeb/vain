@@ -278,24 +278,13 @@ class VoiceInterface(ui.LayoutView):
             )
         )
 
-        state = self._channel_state
         db_disabled = self._disabled_buttons
 
-        is_disabled = {
-            "lock": "lock" in db_disabled or state["locked"],
-            "unlock": "unlock" in db_disabled or not state["locked"],
-            "hide": "hide" in db_disabled or state["hidden"],
-            "reveal": "reveal" in db_disabled or not state["hidden"],
-            "claim": "claim" in db_disabled,
-            "status": "status" in db_disabled,
-            "disconnect": "disconnect" in db_disabled,
-            "limit": "limit" in db_disabled,
-            "rename": "rename" in db_disabled,
-            "delete": "delete" in db_disabled,
-        }
+        def is_disabled(name: str) -> bool:
+            return name in db_disabled
 
         def _label(name: str) -> str:
-            return _strike(name) if is_disabled[name] else name
+            return _strike(name) if is_disabled(name) else name
 
         controls = (
             "### button usage\n"
@@ -327,61 +316,61 @@ class VoiceInterface(ui.LayoutView):
                 style=discord.ButtonStyle.secondary,
                 emoji=VM["lock"],
                 custom_id="voicemaster:lock",
-                disabled=is_disabled["lock"],
+                disabled=is_disabled("lock"),
             ),
             "unlock": ui.Button(
                 style=discord.ButtonStyle.secondary,
                 emoji=VM["unlock"],
                 custom_id="voicemaster:unlock",
-                disabled=is_disabled["unlock"],
+                disabled=is_disabled("unlock"),
             ),
             "hide": ui.Button(
                 style=discord.ButtonStyle.secondary,
                 emoji=VM["hide"],
                 custom_id="voicemaster:hide",
-                disabled=is_disabled["hide"],
+                disabled=is_disabled("hide"),
             ),
             "reveal": ui.Button(
                 style=discord.ButtonStyle.secondary,
                 emoji=VM["reveal"],
                 custom_id="voicemaster:reveal",
-                disabled=is_disabled["reveal"],
+                disabled=is_disabled("reveal"),
             ),
             "claim": ui.Button(
                 style=discord.ButtonStyle.secondary,
                 emoji=VM["claim"],
                 custom_id="voicemaster:claim",
-                disabled=is_disabled["claim"],
+                disabled=is_disabled("claim"),
             ),
             "status": ui.Button(
                 style=discord.ButtonStyle.secondary,
                 emoji=VM["status"],
                 custom_id="voicemaster:status",
-                disabled=is_disabled["status"],
+                disabled=is_disabled("status"),
             ),
             "disconnect": ui.Button(
                 style=discord.ButtonStyle.secondary,
                 emoji=VM["disconnect"],
                 custom_id="voicemaster:disconnect",
-                disabled=is_disabled["disconnect"],
+                disabled=is_disabled("disconnect"),
             ),
             "limit": ui.Button(
                 style=discord.ButtonStyle.secondary,
                 emoji=VM["limit"],
                 custom_id="voicemaster:limit",
-                disabled=is_disabled["limit"],
+                disabled=is_disabled("limit"),
             ),
             "rename": ui.Button(
                 style=discord.ButtonStyle.secondary,
                 emoji=VM["rename"],
                 custom_id="voicemaster:rename",
-                disabled=is_disabled["rename"],
+                disabled=is_disabled("rename"),
             ),
             "delete": ui.Button(
                 style=discord.ButtonStyle.secondary,
                 emoji=VM["delete"],
                 custom_id="voicemaster:delete",
-                disabled=is_disabled["delete"],
+                disabled=is_disabled("delete"),
             ),
         }
 
@@ -422,6 +411,19 @@ class VoiceInterface(ui.LayoutView):
         )
 
         self.add_item(container)
+
+    def apply_disabled(self, disabled_buttons: set[str] | None) -> bool:
+        """Re-render this panel for a new disabled-button set.
+
+        Returns True when the set changed (caller should edit the message).
+        """
+        new = {b for b in (disabled_buttons or set()) if b}
+        if new == self._disabled_buttons:
+            return False
+        self._disabled_buttons = new
+        self.clear_items()
+        self._build()
+        return True
 
     async def _refresh_panel(
         self,

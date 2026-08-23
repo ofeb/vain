@@ -364,6 +364,18 @@ class Settings:
         return [dict(r) for r in rows]
 
     @staticmethod
+    async def fetch_panel_button_rows(db) -> list[dict[str, Any]]:
+        rows = await db.fetch(
+            """
+            SELECT guild_id, interface_id, panel_message_id,
+                   COALESCE(disabled_buttons, '') AS disabled_buttons
+            FROM voicemaster_configuration
+            WHERE interface_id IS NOT NULL AND panel_message_id IS NOT NULL
+            """
+        )
+        return [dict(r) for r in rows]
+
+    @staticmethod
     async def fetch_interface_id(db, guild_id: int) -> int | None:
         row = await db.fetchrow(
             "SELECT interface_id FROM voicemaster_configuration WHERE guild_id = $1",

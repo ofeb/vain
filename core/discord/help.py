@@ -1118,7 +1118,7 @@ def _detail_text(
 
     kind_label = "group" if is_grp else "command"
     lines = [
-        f"{emojis.approve} **{kind_label}:** `{name}`",
+        f"<:white_heart:1540897432190193674> **{kind_label}:** `{name}`",
         "",
         f"> **{desc}**",
     ]
@@ -1131,14 +1131,15 @@ def _detail_text(
         alias_lines.append(f"> -# **guild aliases:** {', '.join(guild_aliases)}")
     if self_aliases:
         alias_lines.append(f"> -# **your aliases:** {', '.join(self_aliases)}")
-    alias_lines.append("> ")
     alias_lines.append(f"> -# **command permissions:** {perm}")
+    lines.append("")
     lines.extend(alias_lines)
 
     usage_lines: list[str] = []
     usage_lines.append(f"-# **command usage**\n```{syntax}```")
     if ex and ex.strip() and ex.strip() != syntax.strip():
         usage_lines.append(f"-# **command example**\n```{ex}```")
+    lines.append("")
     lines.extend(usage_lines)
 
     module = _module(cmd)
@@ -1191,7 +1192,7 @@ def _build_help_detail_container(
     )
 
     container.add_item(
-        ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small)
+        ui.Separator(visible=True, spacing=discord.SeparatorSpacing.large)
     )
 
     guild_aliases = kwargs.get("guild_aliases") or []
@@ -1205,7 +1206,7 @@ def _build_help_detail_container(
     container.add_item(ui.TextDisplay("\n".join(alias_parts)))
 
     container.add_item(
-        ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small)
+        ui.Separator(visible=True, spacing=discord.SeparatorSpacing.large)
     )
 
     usage_parts = [f"-# **command usage**: `{syntax}`"]

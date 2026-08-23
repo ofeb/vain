@@ -555,6 +555,7 @@ CREATE TABLE IF NOT EXISTS aliases (
     command_name TEXT NOT NULL,
     alias        TEXT NOT NULL,
     with_parameters BOOLEAN DEFAULT FALSE,
+    invoke       TEXT DEFAULT '',
     created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (guild_id, alias)
 );
@@ -566,6 +567,14 @@ CREATE TABLE IF NOT EXISTS selfaliases (
     command  TEXT NOT NULL,
     with_parameters BOOLEAN DEFAULT FALSE,
     PRIMARY KEY (user_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS booster_losses (
+    guild_id  BIGINT NOT NULL,
+    user_id   BIGINT NOT NULL,
+    user_name TEXT NOT NULL DEFAULT '',
+    lost_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (guild_id, user_id)
 );
 
 CREATE TABLE IF NOT EXISTS nuke (

@@ -146,6 +146,73 @@ def build_inrole_pages(
     return pages
 
 
+def _paged_member_lines(
+    header: str,
+    subline: str,
+    lines: list[str],
+    *,
+    page_size: int = _PAGE_SIZE,
+) -> list[ui.Container]:
+    total_pages = max(1, math.ceil(len(lines) / page_size))
+    pages: list[ui.Container] = []
+    for page_number, start in enumerate(range(0, len(lines), page_size), start=1):
+        chunk = lines[start : start + page_size]
+        container = ui.Container()
+        container.add_item(ui.TextDisplay(header))
+        container.add_item(ui.TextDisplay(f"{subline} · Page {page_number}/{total_pages}"))
+        container.add_item(ui.Separator(visible=True))
+        container.add_item(ui.TextDisplay(body(*chunk)))
+        pages.append(container)
+    return pages
+
+
+def build_booster_pages(
+    guild: discord.Guild,
+    members: Iterable[discord.Member],
+    *,
+    page_size: int = _PAGE_SIZE,
+) -> list[ui.Container]:
+    """Numbered listing of current server boosters, inrole-style."""
+    members = sorted(
+        members,
+        key=lambda m: (m.premium_since is None, m.premium_since or m.joined_at or m.created_at),
+    )
+    lines = []
+    for index, member in enumerate(members, start=1):
+        since = member.premium_since or member.joined_at
+        tail = f"boosting since {_ts(since)}" if since else "boosting"
+        lines.append(f"-# `{index}.` **{member.display_name}** • {tail}")
+    return _paged_member_lines(
+        f"**Boosters in {guild.name}**",
+        f"-# {len(members)} total",
+        lines,
+        page_size=page_size,
+    )
+
+
+def build_booster_loss_pages(
+    guild: discord.Guild,
+    losses: Iterable[dict],
+    *,
+    page_size: int = _PAGE_SIZE,
+) -> list[ui.Container]:
+    """Numbered listing of past boosters who stopped boosting, inrole-style."""
+    losses = list(losses)
+    lines = [
+        (
+            f"-# `{index}.` **{entry['name']}**"
+            f" (`<@{entry['user_id']}>`) • stopped boosting {_ts(entry['lost_at'])}"
+        )
+        for index, entry in enumerate(losses, start=1)
+    ]
+    return _paged_member_lines(
+        f"**Stopped boosting in {guild.name}**",
+        f"-# {len(losses)} total",
+        lines,
+        page_size=page_size,
+    )
+
+
 def build_roleinfo_pages(
     role: discord.Role,
     *,

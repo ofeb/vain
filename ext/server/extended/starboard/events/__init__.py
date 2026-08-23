@@ -9,8 +9,6 @@ from weakref import WeakValueDictionary
 import discord
 from discord.ext import commands
 
-from core.discord.views.embed import panel_embed
-
 if TYPE_CHECKING:
     from core.vain import Vain
 
@@ -119,8 +117,8 @@ class StarboardEvents(commands.Cog):
         if reaction is None or reaction.count < starboard.threshold:
             return
 
-        content, embed = self._render(starboard, reaction, message)
-        await starboard.save_star(stars=reaction.count, message=message, content=content, embed=embed)
+        view = self._render(starboard, reaction, message)
+        await starboard.save_star(stars=reaction.count, message=message, view=view)
 
     async def _unstar(
         self,
@@ -138,68 +136,106 @@ class StarboardEvents(commands.Cog):
                 message_id=message.id, channel_id=channel.id
             )
             return
-        content, embed = self._render(starboard, reaction, message)
+        view = self._render(starboard, reaction, message)
         await starboard.save_star(
-            stars=reaction.count, message=message, content=content, embed=embed
+            stars=reaction.count, message=message, view=view
         )
+
+    @staticmethod
+    def _glyph(starboard: Config, count: int) -> str:
+        emoji = starboard.emoji
+        if emoji != "⭐":
+            return emoji
+        if count < 5:
+            return "⭐"
+        if count < 10:
+            return "🌟"
+        if count < 25:
+            return "💫"
+        return "✨"
 
     def _render(
         self,
         starboard: Config,
         reaction: discord.Reaction,
         message: discord.Message,
-    ) -> tuple[str, discord.Embed]:
-        color_val = None
-        if starboard.color:
-            try:
-                color_val = int(str(starboard.color).lstrip("#"), 16)
-            except ValueError:
-                color_val = None
-        if color_val is None:
-            color_val = getattr(message.author.color, "value", 0) or 0x2B2D31
+    ):
+        glyph = self._glyph(starboard, reaction.count)
 
-        embed = panel_embed(color=color_val, lines=[], timestamp=False)
-        embed.set_author(
-            name=message.author.display_name,
-            icon_url=message.author.display_avatar.url,
+        container = discord.ui.Container()
+        for attr in ("accent_color", "accent_colour"):
+            if hasattr(container, attr):
+                with contextlib.suppress(Exception):
+                    setattr(container, attr, None)
+
+        container.add_item(
+            discord.ui.TextDisplay(
+                f"{glyph} **{reaction.count:,}** · <#{message.channel.id}>"
+            )
         )
+        container.add_item(
+            discord.ui.Separator(
+                visible=True,
+                spacing=discord.SeparatorSpacing.small,
+            )
+        )
+
+        subtitle = (
+            f"-# <t:{int(message.created_at.timestamp())}:R>"
+            if starboard.ts
+            else ""
+        )
+        container.add_item(
+            discord.ui.Section(
+                discord.ui.TextDisplay(
+                    f"**{message.author.display_name}**\n{subtitle}".rstrip()
+                ),
+                accessory=discord.ui.Thumbnail(
+                    media=message.author.display_avatar.url
+                ),
+            )
+        )
+
+        lines: list[str] = []
         if message.content:
-            embed.description = message.content[:2048]
-        if starboard.ts:
-            embed.timestamp = message.created_at
+            lines.append(message.content[:2000])
+
+        media_url = None
         if starboard.attachments:
             for att in message.attachments:
                 url = att.url.lower()
                 if url.endswith((".png", ".jpg", ".jpeg", ".gif", ".webp")):
-                    embed.set_image(url=att.url)
+                    media_url = att.url
                     break
-            if message.embeds:
-                media = message.embeds[0]
-                if media.image and media.image.url:
-                    embed.set_image(url=media.image.url)
-                elif media.thumbnail and media.thumbnail.url:
-                    embed.set_image(url=media.thumbnail.url)
-        if starboard.jump:
-            embed.add_field(
-                name=f"#{getattr(message.channel, 'name', 'channel')}",
-                value=f"[Jump to message]({message.jump_url})",
-                inline=False,
-            )
+            if media_url is None and message.embeds:
+                embedded = message.embeds[0]
+                if embedded.image and embedded.image.url:
+                    media_url = embedded.image.url
+                elif embedded.thumbnail and embedded.thumbnail.url:
+                    media_url = embedded.thumbnail.url
 
-        count = reaction.count
-        emoji = starboard.emoji
-        if emoji == "⭐":
-            if count < 5:
-                glyph = "⭐"
-            elif count < 10:
-                glyph = "🌟"
-            elif count < 25:
-                glyph = "💫"
-            else:
-                glyph = "✨"
-        else:
-            glyph = emoji
-        return f"{glyph} **{count:,}**", embed
+        if lines:
+            container.add_item(discord.ui.TextDisplay("\n".join(lines)))
+        elif media_url is None:
+            container.add_item(discord.ui.TextDisplay("*no content*"))
+
+        if media_url:
+            with contextlib.suppress(Exception):
+                container.add_item(
+                    discord.ui.MediaGallery(
+                        discord.MediaGalleryItem(media_url)
+                    )
+                )
+
+        if starboard.jump:
+            footer = f"-# [jump to message]({message.jump_url})"
+            if getattr(message.channel, "name", None):
+                footer += f" · #{message.channel.name}"
+            container.add_item(discord.ui.TextDisplay(footer))
+
+        from core.discord.ctx import layout_from_items
+
+        return layout_from_items([container], timeout=None)
 
     @commands.Cog.listener("on_raw_reaction_add")
     async def starboard_reaction_add(

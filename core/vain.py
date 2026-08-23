@@ -682,7 +682,8 @@ class Vain(commands.AutoShardedBot):
                         try:
                             row = await self.db.fetchrow(
                                 """
-                                SELECT command_name, with_parameters FROM aliases
+                                SELECT command_name, with_parameters, COALESCE(invoke, '') AS invoke
+                                FROM aliases
                                 WHERE guild_id = $1 AND lower(trim(both ',' from alias)) = $2
                                 """,
                                 origin.guild.id,
@@ -691,7 +692,8 @@ class Vain(commands.AutoShardedBot):
                             if not row:
                                 row = await self.db.fetchrow(
                                     """
-                                    SELECT command_name, with_parameters FROM aliases
+                                    SELECT command_name, with_parameters, COALESCE(invoke, '') AS invoke
+                                    FROM aliases
                                     WHERE guild_id = $1 AND lower(alias) = $2
                                     """,
                                     origin.guild.id,
@@ -700,6 +702,9 @@ class Vain(commands.AutoShardedBot):
                             if row:
                                 inv = row["command_name"] if hasattr(row, "keys") else row[0]
                                 with_parameters = row["with_parameters"] if hasattr(row, "keys") else (row[1] if len(row) > 1 else False)
+                                stored = row["invoke"] if hasattr(row, "keys") else (row[2] if len(row) > 2 else "")
+                                if stored and str(stored).strip():
+                                    inv = str(stored).strip()
                         except Exception:
                             inv = None
                     if inv:

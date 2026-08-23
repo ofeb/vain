@@ -39,16 +39,17 @@ class AliasCommands(Package):
     @has_permissions(manage_guild=True)
     async def alias_view(self, ctx, *, shortcut: str):
         """view alias target"""
-        cmd_name = await self.db.fetchval(
-            """SELECT command_name FROM aliases WHERE guild_id = $1 AND alias = $2""",
+        row = await self.db.fetchrow(
+            """SELECT command_name, COALESCE(invoke, '') AS invoke FROM aliases WHERE guild_id = $1 AND alias = $2""",
             ctx.guild.id,
             shortcut,
         )
-        if not cmd_name:
+        if not row:
             raise CommandError(f"no alias found for `{shortcut[:25]}`")
-        cmd = self.bot.get_command(cmd_name)
-        name = cmd.qualified_name if cmd else cmd_name
-        return await ctx.normal(f"**{shortcut}** runs `{name}`", emoji="ℹ️")
+        cmd_name = str(row["command_name"] if hasattr(row, "keys") else row[0])
+        invoke = str(row["invoke"] if hasattr(row, "keys") else (row[1] if len(row) > 1 else "") or "")
+        target = invoke.strip() or cmd_name
+        return await ctx.normal(f"**{shortcut}** runs `{target}`", emoji="ℹ️")
 
     @alias.command(
         name="removeall",
@@ -191,6 +192,7 @@ class AliasCommands(Package):
         cmd = self._find_command(root)
         if cmd is None:
             return await ctx.warn(f"Unknown command `{root}`")
+        template = f"{cmd.qualified_name}{invoke[len(root):]}".strip()
         if self.bot.get_command(shortcut.lower()):
             return await ctx.warn(f"`{shortcut}` is already a real command")
         existing = await self.db.fetchval(
@@ -204,10 +206,11 @@ class AliasCommands(Package):
                 "> -# **remove it first** to create a new one"
             )
         await self.db.execute(
-            """INSERT INTO aliases (guild_id, command_name, alias, with_parameters) VALUES($1, $2, $3, $4)""",
+            """INSERT INTO aliases (guild_id, command_name, alias, invoke, with_parameters) VALUES($1, $2, $3, $4, $5)""",
             ctx.guild.id,
             cmd.qualified_name,
             shortcut.lower(),
+            template,
             with_parameters,
         )
         wp_note = " (with parameters)" if with_parameters else ""
@@ -315,6 +318,7 @@ class AliasCommands(Package):
         cmd = self._find_command(root)
         if cmd is None:
             return await ctx.warn(f"Unknown command `{root}`")
+        template = f"{cmd.qualified_name}{invoke[len(root):]}".strip()
         if self.bot.get_command(shortcut.lower()):
             return await ctx.warn(f"`{shortcut}` is already a real command")
         from ext.server.extended.alias.settings import Settings
@@ -326,11 +330,11 @@ class AliasCommands(Package):
                 "> -# **remove it first** to create a new one"
             )
         await Settings.add_selfalias(
-            self.db, ctx.author.id, shortcut.lower(), invoke, cmd.qualified_name, with_parameters
+            self.db, ctx.author.id, shortcut.lower(), template, cmd.qualified_name, with_parameters
         )
         wp_note = " (with parameters)" if with_parameters else ""
         return await ctx.success(
-            f"Self alias added\n> -# **`{shortcut.lower()}`** → `{invoke}`{wp_note}"
+            f"Self alias added\n> -# **`{shortcut.lower()}`** → `{template}`{wp_note}"
         )
 
     @alias_self.command(

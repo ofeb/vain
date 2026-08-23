@@ -50,19 +50,30 @@ class VoiceMaster(VoiceMasterEvents, Package):
     def __init__(self, bot: Vain):
         super().__init__(bot)
         self._cooldowns: dict = {}
+        self._panel_button_cache: dict[int, str] = {}
 
     async def cog_load(self) -> None:
         if getattr(self.bot.db, "pool", None) is None:
             return
         await VoiceMasterSettings.ensure_schema(self.bot.db)
+        # TEMP one-shot startup script: re-enable every voicemaster button
+        # so panels are never disabled/strikethrough by default. Remove me.
+        with contextlib.suppress(Exception):
+            await self.bot.db.execute(
+                "UPDATE voicemaster_configuration SET disabled_buttons = '' "
+                "WHERE COALESCE(disabled_buttons, '') <> ''"
+            )
         if not self._cleanup_loop.is_running():
             self._cleanup_loop.start()
         if not self._panel_refresh_loop.is_running():
             self._panel_refresh_loop.start()
+        if not self._button_sync_loop.is_running():
+            self._button_sync_loop.start()
 
     async def cog_unload(self) -> None:
         self._cleanup_loop.cancel()
         self._panel_refresh_loop.cancel()
+        self._button_sync_loop.cancel()
 
     @tasks.loop(minutes=1)
     async def _cleanup_loop(self):
@@ -102,6 +113,79 @@ class VoiceMaster(VoiceMasterEvents, Package):
     @_panel_refresh_loop.before_loop
     async def _before_panel_refresh_loop(self) -> None:
         await self.bot.wait_until_ready()
+
+    @tasks.loop(seconds=30)
+    async def _button_sync_loop(self):
+        await self._sync_panel_buttons()
+
+    @_button_sync_loop.before_loop
+    async def _before_button_sync_loop(self) -> None:
+        await self.bot.wait_until_ready()
+
+    async def _sync_panel_buttons(self) -> None:
+        """Watch `disabled_buttons` in the database and edit panels live.
+
+        The moment the value changes (button command, jishaku script, ...)
+        the panel is edited so disabled buttons become unclickable with a
+        strikethrough usage line, and everything else stays enabled.
+        """
+        if getattr(self.bot.db, "pool", None) is None:
+            return
+        try:
+            rows = await VoiceMasterSettings.fetch_panel_button_rows(self.bot.db)
+        except Exception:
+            return
+        seen: set[int] = set()
+        for row in rows:
+            guild_id = row.get("guild_id")
+            raw = str(row.get("disabled_buttons") or "")
+            seen.add(guild_id)
+            if self._panel_button_cache.get(guild_id) == raw:
+                continue
+            guild = self.bot.get_guild(guild_id)
+            interface_id = row.get("interface_id")
+            message_id = row.get("panel_message_id")
+            if not guild or not interface_id or not message_id:
+                self._panel_button_cache[guild_id] = raw
+                continue
+            channel = guild.get_channel(int(interface_id))
+            if not isinstance(channel, discord.TextChannel):
+                continue
+            try:
+                message = await channel.fetch_message(int(message_id))
+                view = self._make_interface(
+                    guild,
+                    disabled_buttons=self._get_disabled_buttons({"disabled_buttons": raw}),
+                )
+                await message.edit(view=view)
+            except Exception:
+                continue
+            self._panel_button_cache[guild_id] = raw
+        for gid in list(self._panel_button_cache):
+            if gid not in seen:
+                del self._panel_button_cache[gid]
+
+    async def _edit_guild_panel(self, guild: discord.Guild) -> None:
+        """Re-render this guild's panel from the current DB state."""
+        config = await VoiceMasterSettings.get_config(self.bot.db, guild.id) or {}
+        raw = str(config.get("disabled_buttons") or "")
+        interface_id = config.get("interface_id")
+        message_id = config.get("panel_message_id")
+        if not interface_id or not message_id:
+            return
+        channel = guild.get_channel(int(interface_id))
+        if not isinstance(channel, discord.TextChannel):
+            return
+        try:
+            message = await channel.fetch_message(int(message_id))
+            view = self._make_interface(
+                guild,
+                disabled_buttons=self._get_disabled_buttons(config),
+            )
+            await message.edit(view=view)
+        except Exception:
+            return
+        self._panel_button_cache[guild.id] = raw
 
     async def _refresh_all_panels(self):
         if getattr(self.bot.db, "pool", None) is None:
@@ -289,6 +373,17 @@ class VoiceMaster(VoiceMasterEvents, Package):
         await VoiceMasterSettings.insert_channel(
             self.bot.db, member.guild.id, channel.id, member.id,
         )
+        if config.get("send_interface"):
+            with contextlib.suppress(discord.HTTPException):
+                disabled = self._get_disabled_buttons(config)
+                await channel.send(
+                    view=self._make_interface(
+                        member.guild,
+                        channel=channel,
+                        disabled_buttons=disabled,
+                    ),
+                    silent=True,
+                )
         log_cog = self.bot.get_cog("Log")
         if log_cog and hasattr(log_cog, "log_vm_channel_create"):
             with contextlib.suppress(Exception):
@@ -647,9 +742,20 @@ class VoiceMaster(VoiceMasterEvents, Package):
         state = "enabled" if setting else "disabled"
         await ctx.send(view=_vm_container(f"{ctx.author.display_name}: music mode **{state}**"))
 
-    @voicemaster.command(name="sendinterface", usage="", example="sendinterface")
-    async def voicemaster_sendinterface(self, ctx: Context) -> None:
-        """resend the voicemaster interface panel"""
+    @voicemaster.command(name="sendinterface", aliases=["si", "resend", "sp"], usage="[on/off]", example="sendinterface on")
+    @has_permissions(manage_guild=True)
+    @describe(setting="on/off - always send the panel into new voice channels")
+    async def voicemaster_sendinterface(self, ctx: Context, setting: bool = None) -> None:
+        """resend the panel, or toggle auto-sending it into every new channel"""
+        if setting is not None:
+            try:
+                await VoiceMasterSettings.update_config_field(
+                    self.bot.db, ctx.guild.id, "send_interface", setting,
+                )
+            except Exception:
+                return await ctx.send(view=_vm_container(f"{ctx.author.display_name}: voicemaster is **not configured** in this guild"))
+            state = "**enabled** - every new channel gets its own panel" if setting else "**disabled**"
+            return await ctx.send(view=_vm_container(f"{ctx.author.display_name}: auto interface {state}"))
         config = await VoiceMasterSettings.fetch_interface_id(self.bot.db, ctx.guild.id)
         if not config:
             return await ctx.send(view=_vm_container(f"{ctx.author.display_name}: server **not configured**"))
@@ -792,6 +898,7 @@ class VoiceMaster(VoiceMasterEvents, Package):
         await VoiceMasterSettings.update_config_field(
             self.bot.db, ctx.guild.id, "disabled_buttons", new_value,
         )
+        await self._edit_guild_panel(ctx.guild)
         await ctx.send(view=_vm_container(f"{ctx.author.display_name}: **{button}** button **enabled**"))
 
     @voicemaster_button.command(name="disable", usage="<button>", example="button disable disconnect")
@@ -817,6 +924,7 @@ class VoiceMaster(VoiceMasterEvents, Package):
         await VoiceMasterSettings.update_config_field(
             self.bot.db, ctx.guild.id, "disabled_buttons", new_value,
         )
+        await self._edit_guild_panel(ctx.guild)
         await ctx.send(view=_vm_container(f"{ctx.author.display_name}: **{button}** button **disabled**"))
 
     @voicemaster.command(name="messages", usage="<on/off>", example="messages on")

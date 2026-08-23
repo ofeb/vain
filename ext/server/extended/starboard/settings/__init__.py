@@ -232,7 +232,7 @@ class Config:
                 continue
         return None
 
-    async def save_star(self, *, stars: int, message, content: str, embed) -> None:
+    async def save_star(self, *, stars: int, message, view) -> None:
         """Create or update the archived starboard post."""
         board = self.channel
         if board is None:
@@ -240,14 +240,12 @@ class Config:
         existing = await self.get_star_message_id(message.id, message.channel.id)
         if existing:
             try:
-                await board.get_partial_message(int(existing)).edit(
-                    content=content, embed=embed
-                )
+                await board.get_partial_message(int(existing)).edit(view=view)
                 return
             except Exception:
                 pass
         try:
-            posted = await board.send(content=content, embed=embed)
+            posted = await board.send(view=view)
         except Exception:
             return
         for table, col in (

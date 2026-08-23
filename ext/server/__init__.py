@@ -14,7 +14,12 @@ from urllib.parse import urlparse
 from core.discord.hybrid import hybrid, command
 from core.discord.package import Package
 from core.discord.views.paginate import send_pages
-from core.discord.views.rolepages import build_inrole_pages, build_roles_pages
+from core.discord.views.rolepages import (
+    build_inrole_pages,
+    build_roles_pages,
+    build_booster_pages,
+    build_booster_loss_pages,
+)
 from core.managers.permissions import has_permissions
 from core.tools.embed import BadEmbed, ParseError, PreparedScript, parse
 
@@ -585,19 +590,9 @@ class ServerCommands(Package):
     )
     async def serverinfo(self, ctx):
         """show server info"""
+        from core.discord.ctx import layout_from_items
+
         g = ctx.guild
-        try:
-            dom_color = await get_bot_dominant_color(self.bot)
-        except Exception:
-            dom_color = self.color
-
-        e = c2(color=dom_color, title=g.name, message=f"Server created <t:{int(g.created_at.timestamp())}:R> • ID: `{g.id}`", timestamp=True)
-
-        if g.icon:
-            e.set_thumbnail(url=g.icon.url)
-
-        if g.banner:
-            e.set_image(url=g.banner.url)
 
         owner = g.owner
         if owner is None and g.owner_id:
@@ -605,13 +600,7 @@ class ServerCommands(Package):
                 owner = await g.fetch_member(g.owner_id)
             except Exception:
                 owner = None
-        if owner:
-            owner_text = f"{owner} (`{owner.id}`)"
-            owner_icon = getattr(owner, 'display_avatar', None) and owner.display_avatar.url
-        else:
-            owner_text = f"Unknown (`{g.owner_id}`)"
-            owner_icon = None
-        e.set_author(name=f"owned by {owner_text}", icon_url=owner_icon)
+        owner_text = owner.mention if owner else f"`{g.owner_id or 'unknown'}`"
 
         humans = sum(1 for m in g.members if not m.bot)
         bots = sum(1 for m in g.members if m.bot)
@@ -623,105 +612,365 @@ class ServerCommands(Package):
 
         role_limit = 250
         emoji_limit = g.emoji_limit or 50
-        sticker_limit = getattr(g, "sticker_limit", 5) or 5
 
         boosters = getattr(g, "premium_subscribers", None) or []
         booster_count = len(boosters)
 
-        features = g.features or []
-        shown = features[:6]
-        extra = len(features) - len(shown)
-        features_str = ", ".join(f.replace("_", " ").title() for f in shown)
-        if extra > 0:
-            features_str += f" **+ {extra}** more"
+        def _asset(asset):
+            return f"[view]({asset.url})" if asset else "None"
 
-        vanity = "N/A"
-        if "VANITY_URL" in features:
-            try:
-                vinv = await g.vanity_invite()
-                vanity = vinv.code
-            except Exception:
-                vanity = "N/A"
+        created = g.created_at.strftime("%B %d, %Y")
+        created_ts = int(g.created_at.timestamp())
 
-        mfa = "Require_2fa" if g.mfa_level else "None"
+        info_lines = [
+            f"> -# **Owner:** {owner_text}",
+            f"> -# **Created:** {created} (<t:{created_ts}:R>)",
+            f"> -# **Bio:** {g.description or 'None'}",
+            "",
+            "-# **Members**",
+            f"> -# Total: {g.member_count or len(g.members)}",
+            f"> -# Humans: {humans}",
+            f"> -# Bots: {bots}",
+            "",
+            "-# **Design Assets**",
+            f"> -# Icon: {_asset(g.icon)}",
+            f"> -# Banner: {_asset(g.banner)}",
+            f"> -# Splash: {_asset(getattr(g, 'splash', None))}",
+            "",
+            f"-# **Channels ({total_channels})**",
+            f"> -# Text: {text_channels}",
+            f"> -# Voice: {voice_channels}",
+            f"> -# Category: {categories}",
+            "",
+            "-# **Counts**",
+            f"> -# Roles: {len(g.roles)}/{role_limit}",
+            f"> -# Emojis: {len(g.emojis)}/{emoji_limit}",
+            f"> -# Boosters: {booster_count}",
+            "",
+            f"-# `Guild ID:` `{g.id}`",
+        ]
 
-        e.add_field(
-            name=f"Members ({g.member_count})",
-            value=body(
-                f"Boosters: `{booster_count}`",
-                f"Humans: `{humans}`",
-                f"Bots: `{bots}`",
-            ),
-            inline=True,
+        container = discord.ui.Container()
+        for attr in ("accent_color", "accent_colour"):
+            if hasattr(container, attr):
+                with contextlib.suppress(Exception):
+                    setattr(container, attr, None)
+        container.add_item(
+            discord.ui.TextDisplay(f"-# **Server Information — {g.name}**")
         )
-        e.add_field(
-            name=f"Counts ({total_channels})",
-            value=body(
-                f"Stickers: `{len(g.stickers)}/{sticker_limit}`",
-                f"Emojis: `{len(g.emojis)}/{emoji_limit}`",
-                f"Roles: `{len(g.roles)}/{role_limit}`",
-            ),
-            inline=True,
-        )
-        e.add_field(
-            name=f"Channels ({total_channels})",
-            value=body(
-                f"Categories: `{categories}`",
-                f"Text: `{text_channels}`",
-                f"Voice: `{voice_channels}`",
-            ),
-            inline=True,
-        )
-        e.add_field(
-            name="Boosts",
-            value=body(
-                f"Level: `{g.premium_tier}`",
-                f"Boosts: `{g.premium_subscription_count or 0}`",
-                f"Boosters: `{booster_count}`",
-            ),
-            inline=True,
-        )
-
-        icon_url = f"[view]({g.icon.url})" if g.icon else "`none`"
-        banner_url = "`none`"
-        splash_url = "`none`"
-        if hasattr(g, "banner") and g.banner:
-            banner_url = f"[view]({g.banner.url})"
-        if hasattr(g, "splash") and g.splash:
-            splash_url = f"[view]({g.splash.url})"
-        e.add_field(
-            name="Design",
-            value=body(
-                f"Icon: {icon_url}",
-                f"Banner: {banner_url}",
-                f"Splash: {splash_url}",
-            ),
-            inline=True,
-        )
-        e.add_field(
-            name="System",
-            value=body(
-                f"Verification: `{str(g.verification_level).replace('_', ' ').title()}`",
-                f"Mfa level: `{mfa}`",
-                f"Vanity: `{vanity}`",
-            ),
-            inline=True,
-        )
-        if features_str:
-            e.add_field(
-                name=f"Features ({len(features)})",
-                value=body(features_str),
-                inline=False,
+        container.add_item(
+            discord.ui.Separator(
+                visible=True,
+                spacing=discord.SeparatorSpacing.small,
             )
-
-        e.description = compose(
-            e.description or "",
-            caption(
-                f"ID: {g.id} • Shard {g.shard_id if g.shard_id is not None else 0} • "
-                f"Cluster ID {getattr(g, 'cluster_id', 'N/A')}"
-            ),
         )
-        await ctx.send(embed=e)
+        container.add_item(discord.ui.TextDisplay("\n".join(info_lines)))
+
+        await ctx.send(view=layout_from_items([container], timeout=None))
+
+    @staticmethod
+    def _strip_commas(value: str) -> str:
+        cleaned = (value or "").strip()
+        while cleaned and cleaned[-1] in ",;":
+            cleaned = cleaned[:-1].strip()
+        return cleaned
+
+    @classmethod
+    def _find_any_channel(cls, guild: discord.Guild, value: str):
+        raw = cls._strip_commas(value)
+        if not raw:
+            return None
+        token = raw
+        if token.startswith("<#") and token.endswith(">"):
+            token = token[2:-1]
+            if token.startswith("!"):
+                token = token[1:]
+        if token.isdigit():
+            channel = guild.get_channel(int(token))
+            if channel is not None:
+                return channel
+        lowered = raw.lower()
+        return discord.utils.find(lambda c: c.name.lower() == lowered, guild.channels)
+
+    @classmethod
+    def _find_category(cls, guild: discord.Guild, value: str):
+        raw = cls._strip_commas(value)
+        if not raw:
+            return None
+        if raw.lower() in {"none", "reset", "clear", "remove"}:
+            return "__none__"
+        token = raw
+        if token.startswith("<#") and token.endswith(">"):
+            token = token[2:-1]
+        if token.isdigit():
+            channel = guild.get_channel(int(token))
+            if isinstance(channel, discord.CategoryChannel):
+                return channel
+        lowered = raw.lower()
+        return discord.utils.find(
+            lambda c: isinstance(c, discord.CategoryChannel) and c.name.lower() == lowered,
+            guild.categories,
+        )
+
+    @classmethod
+    def _split_channel_args(cls, guild: discord.Guild, value: str):
+        """Split '<channel> <tail>' - tolerates multi-word names and commas."""
+        raw = cls._strip_commas(value or "")
+        if not raw:
+            return None, ""
+        if "," in raw:
+            head, tail = raw.split(",", 1)
+            return cls._find_any_channel(guild, head), cls._strip_commas(tail)
+        tokens = raw.split()
+        for i in range(len(tokens), 0, -1):
+            candidate = " ".join(tokens[:i])
+            found = cls._find_any_channel(guild, candidate)
+            if found is not None:
+                return found, cls._strip_commas(" ".join(tokens[i:]))
+        return cls._find_any_channel(guild, tokens[0]), cls._strip_commas(" ".join(tokens[1:]))
+
+    @group(
+        name="channel",
+        aliases=["chan"],
+        description="create, delete and reorganise server channels",
+        usage="",
+        example=",channel create general",
+    )
+    @has_permissions(manage_channels=True)
+    async def channel(self, ctx):
+        """manage server channels"""
+        return await ctx.send_help(ctx.command)
+
+    @channel.command(
+        name="create",
+        aliases=["add"],
+        description="create a text or voice channel",
+        usage="<name> [category] [voice]",
+        example=",channel create general, General --voice",
+    )
+    @has_permissions(manage_channels=True)
+    async def channel_create(self, ctx, *, payload: str):
+        """create a channel - include 'voice' for a voice channel"""
+        text = self._strip_commas(payload)
+        if not text:
+            return await ctx.warn("Usage: `channel create <name> [category] [voice]`")
+        kind = "text"
+        tokens = text.split()
+        lowered = [t.lower().strip(",") for t in tokens]
+        if "voice" in lowered:
+            kind = "voice"
+            idx = lowered.index("voice")
+            tokens.pop(idx)
+            text = " ".join(tokens).strip()
+        pieces = [p.strip() for p in text.split(",") if p.strip()]
+        name = self._strip_commas(pieces[0])
+        if not name:
+            return await ctx.warn("Provide a **name** for the new channel")
+        category = None
+        if len(pieces) > 1:
+            category_raw = ",".join(pieces[1:])
+            resolved = self._find_category(ctx.guild, category_raw)
+            if isinstance(resolved, discord.CategoryChannel):
+                category = resolved
+            elif resolved is None:
+                return await ctx.warn(f"No category found for **{self._strip_commas(category_raw)}**")
+        reason = f"{ctx.author} used channel create"
+        try:
+            if kind == "voice":
+                created = await ctx.guild.create_voice_channel(name=name, category=category, reason=reason)
+            else:
+                created = await ctx.guild.create_text_channel(name=name, category=category, reason=reason)
+        except discord.HTTPException as exc:
+            return await ctx.warn(f"I couldn't create **{name}** - `{exc}`")
+        where = f" under {category.mention}" if category else ""
+        return await ctx.success(f"Created {created.mention}{where}")
+
+    @channel.command(
+        name="delete",
+        aliases=["del", "remove"],
+        description="delete a channel by mention, id or name",
+        usage="<channel>",
+        example=",channel delete #general",
+    )
+    @has_permissions(manage_channels=True)
+    async def channel_delete(self, ctx, *, target: str):
+        """delete a channel"""
+        target_channel = self._find_any_channel(ctx.guild, target)
+        if target_channel is None:
+            return await ctx.warn(f"No channel found for **{self._strip_commas(target)}**")
+        mention = getattr(target_channel, "mention", f"`{target_channel.name}`")
+        await target_channel.delete(reason=f"{ctx.author} used channel delete")
+        return await ctx.success(f"Deleted {mention}")
+
+    @channel.command(
+        name="duplicate",
+        aliases=["copy", "clone"],
+        description="duplicate a channel with its permissions",
+        usage="<channel>",
+        example=",channel duplicate #general",
+    )
+    @has_permissions(manage_channels=True)
+    async def channel_duplicate(self, ctx, *, target: str):
+        """clone a channel"""
+        target_channel = self._find_any_channel(ctx.guild, target)
+        if target_channel is None:
+            return await ctx.warn(f"No channel found for **{self._strip_commas(target)}**")
+        try:
+            clone = await target_channel.clone(reason=f"{ctx.author} used channel duplicate")
+        except discord.HTTPException as exc:
+            return await ctx.warn(f"I couldn't duplicate **{target_channel.name}** - `{exc}`")
+        return await ctx.success(f"Duplicated {target_channel.mention} → {clone.mention}")
+
+    @channel.command(
+        name="rename",
+        aliases=["name"],
+        description="rename a channel",
+        usage="<channel> <new name>",
+        example=",channel rename #general chat",
+    )
+    @has_permissions(manage_channels=True)
+    async def channel_rename(self, ctx, *, payload: str):
+        """rename a channel"""
+        target_channel, new_name = self._split_channel_args(ctx.guild, payload)
+        if target_channel is None:
+            return await ctx.warn("No matching **channel** found")
+        if not new_name:
+            return await ctx.warn("Provide a **new name** for the channel")
+        old = target_channel.name
+        try:
+            await target_channel.edit(name=new_name, reason=f"{ctx.author} used channel rename")
+        except discord.HTTPException as exc:
+            return await ctx.warn(f"I couldn't rename **{old}** - `{exc}`")
+        return await ctx.success(f"Renamed `{old}` → `{new_name}`")
+
+    @channel.command(
+        name="description",
+        aliases=["topic", "desc"],
+        description="set the channel description (text channels)",
+        usage="<channel> [description]",
+        example=",channel description #general chill vibes only",
+    )
+    @has_permissions(manage_channels=True)
+    async def channel_description(self, ctx, *, payload: str):
+        """set or clear a channel's description"""
+        target_channel, description = self._split_channel_args(ctx.guild, payload)
+        if target_channel is None:
+            return await ctx.warn("No matching **channel** found")
+        if not hasattr(target_channel, "topic"):
+            return await ctx.warn(f"{getattr(target_channel, 'mention', 'This channel')} doesn't support descriptions")
+        cleared = description.lower() in {"none", "clear", "reset", "remove"} if description else True
+        topic = None if cleared else description[:1024]
+        try:
+            await target_channel.edit(topic=topic, reason=f"{ctx.author} used channel description")
+        except discord.HTTPException as exc:
+            return await ctx.warn(f"I couldn't update **{target_channel.name}** - `{exc}`")
+        if cleared:
+            return await ctx.success(f"Cleared the description of {target_channel.mention}")
+        return await ctx.success(f"Set the description of {target_channel.mention}:\n> {topic}")
+
+    @channel.command(
+        name="move",
+        description="move a channel into another category",
+        usage="<channel> <new category|none>",
+        example=",channel move #general, Text Channels",
+    )
+    @has_permissions(manage_channels=True)
+    async def channel_move(self, ctx, *, payload: str):
+        """move a channel into a category ('none' to uncategory it)"""
+        target_channel, category_raw = self._split_channel_args(ctx.guild, payload)
+        if target_channel is None:
+            return await ctx.warn("No matching **channel** found")
+        if isinstance(target_channel, discord.CategoryChannel):
+            return await ctx.warn("You can't move a **category** into another category")
+        if not category_raw:
+            return await ctx.warn("Provide a **category** (or `none`) to move it into")
+        resolved = self._find_category(ctx.guild, category_raw)
+        if resolved is None:
+            return await ctx.warn(f"No category found for **{self._strip_commas(category_raw)}**")
+        category = None if resolved == "__none__" else resolved
+        destination = category.mention if category else "**no category**"
+        try:
+            await target_channel.edit(category=category, reason=f"{ctx.author} used channel move")
+        except discord.HTTPException as exc:
+            return await ctx.warn(f"I couldn't move **{target_channel.name}** - `{exc}`")
+        return await ctx.success(f"Moved {target_channel.mention} to {destination}")
+
+    @group(
+        name="boosters",
+        aliases=["bstrs"],
+        description="view all users currently boosting the server",
+        usage="",
+        example=",boosters",
+    )
+    async def boosters(self, ctx):
+        """view all users currently boosting the server"""
+        members = list(ctx.guild.premium_subscribers)
+        if not members:
+            return await ctx.warn("no users are **boosting** this server")
+        pages = build_booster_pages(ctx.guild, members)
+        await send_pages(ctx, pages)
+
+    @boosters.command(
+        name="lost",
+        description="view users who are no longer boosting the server",
+        usage="",
+        example=",boosters lost",
+    )
+    async def boosters_lost(self, ctx):
+        """view users who are no longer boosting the server"""
+        rows = await self.db.fetch(
+            "SELECT user_id, user_name, lost_at FROM booster_losses "
+            "WHERE guild_id = $1 ORDER BY lost_at DESC",
+            ctx.guild.id,
+        )
+        if not rows:
+            return await ctx.warn("no users have **stopped boosting** this server")
+        losses = []
+        for row in rows:
+            member = ctx.guild.get_member(row["user_id"])
+            name = member.display_name if member else (row["user_name"] or str(row["user_id"]))
+            losses.append(
+                {
+                    "user_id": row["user_id"],
+                    "name": name,
+                    "lost_at": row["lost_at"],
+                }
+            )
+        pages = build_booster_loss_pages(ctx.guild, losses)
+        await send_pages(ctx, pages)
+
+    @Package.listener("on_member_update")
+    async def _booster_track_update(self, before: discord.Member, after: discord.Member) -> None:
+        if before.premium_since == after.premium_since:
+            return
+        if after.premium_since and not before.premium_since:
+            with contextlib.suppress(Exception):
+                await self.db.execute(
+                    "DELETE FROM booster_losses WHERE guild_id = $1 AND user_id = $2",
+                    after.guild.id, after.id,
+                )
+        elif before.premium_since and not after.premium_since:
+            with contextlib.suppress(Exception):
+                await self.db.execute(
+                    "INSERT INTO booster_losses (guild_id, user_id, user_name) "
+                    "VALUES ($1, $2, $3) "
+                    "ON CONFLICT (guild_id, user_id) "
+                    "DO UPDATE SET lost_at = CURRENT_TIMESTAMP, user_name = EXCLUDED.user_name",
+                    after.guild.id, after.id, after.display_name,
+                )
+
+    @Package.listener("on_member_remove")
+    async def _booster_track_remove(self, member: discord.Member) -> None:
+        if not member.premium_since:
+            return
+        with contextlib.suppress(Exception):
+            await self.db.execute(
+                "INSERT INTO booster_losses (guild_id, user_id, user_name) "
+                "VALUES ($1, $2, $3) "
+                "ON CONFLICT (guild_id, user_id) "
+                "DO UPDATE SET lost_at = CURRENT_TIMESTAMP, user_name = EXCLUDED.user_name",
+                member.guild.id, member.id, member.display_name,
+            )
 
     @command(
         name="roles",
