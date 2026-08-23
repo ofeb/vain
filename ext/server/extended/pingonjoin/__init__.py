@@ -101,7 +101,7 @@ class PingOnJoinCommands(PingOnJoinEvents, Package):
     @has_permissions(manage_guild=True)
     async def pingonjoin_list(self, ctx) -> Message:
         await self._ensure_table()
-        row = await self._get_row(ctx.guild.id)
+        row = await self._get_pingonjoin_row(ctx.guild.id)
         ids = [int(i) for i in (row.get("channel_ids") or [])]
         if not ids:
             return await ctx.search("no ping on join channels set")
@@ -169,7 +169,7 @@ class PingOnJoinCommands(PingOnJoinEvents, Package):
         """
         await self._ensure_table()
         if not script or not str(script).strip():
-            row = await self._get_row(ctx.guild.id)
+            row = await self._get_pingonjoin_row(ctx.guild.id)
             current = row.get("message")
             if current:
                 return await ctx.send(f"```\n{str(current)[:1900]}\n```")
@@ -191,7 +191,7 @@ class PingOnJoinCommands(PingOnJoinEvents, Package):
     @has_permissions(manage_guild=True)
     async def pingonjoin_message_remove(self, ctx) -> Message:
         await self._ensure_table()
-        row = await self._get_row(ctx.guild.id)
+        row = await self._get_pingonjoin_row(ctx.guild.id)
         if not row.get("message"):
             return await ctx.warn("No custom ping on join message has been set")
         await self._set_message(ctx.guild.id, None)
@@ -217,7 +217,7 @@ class PingOnJoinCommands(PingOnJoinEvents, Package):
         """
         await self._ensure_table()
         if not option or not str(option).strip():
-            row = await self._get_row(ctx.guild.id)
+            row = await self._get_pingonjoin_row(ctx.guild.id)
             on = bool(row.get("delete_enabled", DEFAULT_DELETE_ENABLED))
             after = int(row.get("delete_after") or DEFAULT_DELETE_AFTER)
             return await ctx.success(
@@ -229,7 +229,7 @@ class PingOnJoinCommands(PingOnJoinEvents, Package):
         
         if raw in {"on", "enable", "enabled", "true", "yes", "1"}:
             await self._set_delete(ctx.guild.id, enabled=True)
-            row = await self._get_row(ctx.guild.id)
+            row = await self._get_pingonjoin_row(ctx.guild.id)
             after = int(row.get("delete_after") or DEFAULT_DELETE_AFTER)
             return await ctx.success(
                 f"Auto-delete **enabled** · pings delete after **{after}s**"
@@ -262,7 +262,7 @@ class PingOnJoinCommands(PingOnJoinEvents, Package):
     async def pingonjoin_delete_enable(self, ctx) -> Message:
         await self._ensure_table()
         await self._set_delete(ctx.guild.id, enabled=True)
-        row = await self._get_row(ctx.guild.id)
+        row = await self._get_pingonjoin_row(ctx.guild.id)
         after = int(row.get("delete_after") or DEFAULT_DELETE_AFTER)
         return await ctx.success(
             f"Auto-delete **enabled** · pings delete after **{after}s**"

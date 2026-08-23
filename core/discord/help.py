@@ -1115,7 +1115,7 @@ def _detail_text(
     if ex:
         ex = _strip_hidden_params_from_text(ex)
 
-    kind_label = "group command or just says command" if is_grp else "command"
+    kind_label = "group" if is_grp else "command"
     lines = [
         f"{emojis.approve} **{kind_label}:** `{name}`",
         "",
@@ -1125,27 +1125,27 @@ def _detail_text(
     alias_lines: list[str] = []
     guild_aliases = kwargs.get("guild_aliases") or []
     self_aliases = kwargs.get("self_aliases") or []
-    alias_lines.append(f"> -# **your aliases:** {aliases}")
+    alias_lines.append(f"> -# **aliases:** {aliases}")
     if guild_aliases:
         alias_lines.append(f"> -# **guild aliases:** {', '.join(guild_aliases)}")
     if self_aliases:
-        alias_lines.append(f"> -# **bot aliases:** {', '.join(self_aliases)}")
+        alias_lines.append(f"> -# **your aliases:** {', '.join(self_aliases)}")
     alias_lines.append("> ")
     alias_lines.append(f"> -# **command permissions:** {perm}")
     lines.extend(alias_lines)
 
     usage_lines: list[str] = []
-    usage_lines.append(f"-# **command usage**: `{syntax}`")
+    usage_lines.append(f"-# **command usage**\n```{syntax}```")
     if ex and ex.strip() and ex.strip() != syntax.strip():
-        usage_lines.append(f"-# **command example:** `{ex}`")
+        usage_lines.append(f"-# **command example**\n```{ex}```")
     lines.extend(usage_lines)
 
     module = _module(cmd)
     if module != "n/a":
         module_label = next((k for k in _ORDER if k.lower() == module), module.title())
-        footer = f"-# Module: {module_label}"
+        footer = f"-# **category:** {module_label}"
     else:
-        footer = "-# Module: N/A"
+        footer = "-# **category:** N/A"
     if page_info:
         footer += f" · {page_info}"
     lines.append(footer)
@@ -1176,7 +1176,7 @@ def _build_help_detail_container(
     if ex:
         ex = _strip_hidden_params_from_text(ex)
 
-    kind_label = "group command or just says command" if is_grp else "command"
+    kind_label = "group" if is_grp else "command"
     container = ui.Container()
     for attr in ("accent_color", "accent_colour"):
         if hasattr(container, attr):
@@ -1195,11 +1195,11 @@ def _build_help_detail_container(
 
     guild_aliases = kwargs.get("guild_aliases") or []
     self_aliases = kwargs.get("self_aliases") or []
-    alias_parts = [f"> -# **your aliases:** {aliases}"]
+    alias_parts = [f"> -# **aliases:** {aliases}"]
     if guild_aliases:
         alias_parts.append(f"> -# **guild aliases:** {', '.join(guild_aliases)}")
     if self_aliases:
-        alias_parts.append(f"> -# **bot aliases:** {', '.join(self_aliases)}")
+        alias_parts.append(f"> -# **your aliases:** {', '.join(self_aliases)}")
     alias_parts.append("> ")
     alias_parts.append(f"> -# **command permissions:** {perm}")
     container.add_item(ui.TextDisplay("\n".join(alias_parts)))
@@ -1212,6 +1212,19 @@ def _build_help_detail_container(
     if ex and ex.strip() and ex.strip() != syntax.strip():
         usage_parts.append(f"-# **command example:** `{ex}`")
     container.add_item(ui.TextDisplay("\n".join(usage_parts)))
+
+    module = _module(cmd)
+    if module != "n/a":
+        module_label = next((k for k in _ORDER if k.lower() == module), module.title())
+        footer_text = f"-# **category:** {module_label}"
+    else:
+        footer_text = "-# **category:** N/A"
+    if page_info:
+        footer_text += f" · {page_info}"
+    container.add_item(
+        ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small)
+    )
+    container.add_item(ui.TextDisplay(footer_text))
 
     return container
 
@@ -1380,7 +1393,7 @@ class GroupHelpMenu(ui.LayoutView):
     def _page_info(self) -> str | None:
         if len(self.pages) <= 1:
             return None
-        return f"Page {self.index + 1}/{len(self.pages)}"
+        return f"page {self.index + 1} out of {len(self.pages)}"
 
     def _page_text(self) -> str:
         cmd = self.pages[self.index]

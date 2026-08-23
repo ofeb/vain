@@ -37,7 +37,7 @@ class PingOnJoinEvents(Package):
             with suppress(Exception):
                 await self.bot.db.execute(sql)
 
-    async def _get_row(self, guild_id: int) -> dict[str, Any]:
+    async def _get_pingonjoin_row(self, guild_id: int) -> dict[str, Any]:
         await self._ensure_table()
         with suppress(Exception):
             row = await self.bot.db.fetchrow(
@@ -55,7 +55,7 @@ class PingOnJoinEvents(Package):
         }
 
     async def _get_channels(self, guild_id: int) -> list[int]:
-        row = await self._get_row(guild_id)
+        row = await self._get_pingonjoin_row(guild_id)
         ids = row.get("channel_ids") or []
         return [int(i) for i in ids]
 
@@ -91,7 +91,7 @@ class PingOnJoinEvents(Package):
         after: int | None = None,
     ) -> None:
         await self._ensure_table()
-        row = await self._get_row(guild_id)
+        row = await self._get_pingonjoin_row(guild_id)
         en = row.get("delete_enabled", DEFAULT_DELETE_ENABLED) if enabled is None else enabled
         sec = row.get("delete_after", DEFAULT_DELETE_AFTER) if after is None else after
         sec = max(1, min(int(sec), 600))  
@@ -132,7 +132,7 @@ class PingOnJoinEvents(Package):
     async def on_member_join_ping(self, member: Member) -> None:
         if member.bot:
             return
-        row = await self._get_row(member.guild.id)
+        row = await self._get_pingonjoin_row(member.guild.id)
         ids = [int(i) for i in (row.get("channel_ids") or [])]
         if not ids:
             return

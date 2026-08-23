@@ -33,18 +33,18 @@ bot = Bot
 
 
 class emojis:
-    approve: str = default_emoji("approve", "<:approve:1540866276313014415>")
-    warn: str = default_emoji("warn", "<:warning:1540866713740906558>")
-    deny: str = default_emoji("deny", "<:deny:1540868770975719464>")
-    loading: str = default_emoji("loading", "<a:embeds_loading:1511705994823077988>")
+    approve: str = default_emoji("approve", "<:approve_new:1526186163457490974>")
+    warn: str = default_emoji("warn", "<:warning:1526186228561477642>")
+    deny: str = default_emoji("deny", "<:deny:1526186193971052634>")
+    loading: str = default_emoji("loading", "<a:ctx_loading:1517184450595651765>")
     cooldown: str = default_emoji("cooldown", "<:cooldown:1525919040776835075>")
-    add: str = "<:embeds_add:1511705992469942292>"
-    remove: str = "<:embeds_remove:1511705995850551357>"
-    lastfm: str = "<:embeds_lastfm:1511705994458300618>"
-    spotify: str = "<:embeds_spotify:1511705997130072235>"
-    shazam: str = "<:embeds_shazam:1511705996555194368>"
-    juul: str = "<:embeds_juul:1511705993795604490>"
-    no_juul: str = "<:embeds_no_juul:1511705995653419008>"
+    add: str = default_emoji("add", "<:ctx_add:1517184446556537104>")
+    remove: str = default_emoji("remove", "<:ctx_remove:1517184460876026018>")
+    lastfm: str = default_emoji("lastfm", "<:ctx_lastfm:1517184449891139829>")
+    spotify: str = default_emoji("spotify", "<:ctx_spotify:1517184462197362821>")
+    shazam: str = default_emoji("shazam", "<:ctx_shazam:1517184461538590810>")
+    juul: str = default_emoji("juul", "<:ctx_juul:1517184449429766266>")
+    no_juul: str = default_emoji("no_juul", "<:ctx_no_juul:1517184459827576855>")
 
     
     human: str = "<:human:1527022590160404782>"
@@ -57,26 +57,26 @@ class emojis:
     reposts: str = "<:reposts:1527024036276867167>"
 
     class paginator:
-        previous: str = "<:paginator_previous:1511706003836633288>"
-        next: str = "<:paginator_next:1511706003853279353>"
-        navigate: str = "<:search:1479154501066817600>"
-        cancel: str = "<:delete:1535040504516055191>"
-        search: str = "<:search:1479154501066817600>"
-        delete: str = "<:delete:1535040504516055191>"
+        previous: str = default_emoji("paginator_previous", "<:paginator_previous:1517184479293079745>")
+        next: str = default_emoji("paginator_next", "<:paginator_next:1517184477816684565>")
+        navigate: str = default_emoji("paginator_navigate", "<:paginator_navigate:1517184477678403867>")
+        cancel: str = default_emoji("paginator_cancel", "<:paginator_cancel:1517184476306870386>")
+        search: str = default_emoji("paginator_navigate", "<:paginator_navigate:1517184477678403867>")
+        delete: str = default_emoji("paginator_cancel", "<:paginator_cancel:1517184476306870386>")
         left: str = "⬅️"
         right: str = "➡️"
 
     class interface:
-        lock: str = "<:interface_lock:1511706000007106721>"
-        unlock: str = "<:interface_unlock:1511706000690774097>"
-        ghost: str = "<:interface_ghost:1511705999264710756>"
-        reveal: str = "<:interface_reveal:1511706000405692449>"
-        claim: str = "<:interface_claim:1511705997897633954>"
-        disconnect: str = "<:interface_disconnect:1511705999264972800>"
-        activity: str = "<:interface_activity:1511705997889114273>"
-        information: str = "<:interface_information:1511705999550185646>"
-        increase: str = "<:interface_increase:1511705999348596767>"
-        decrease: str = "<:interface_decrease:1511705998434500719>"
+        lock: str = default_emoji("interface_lock", "<:interface_lock:1517184482707243261>")
+        unlock: str = default_emoji("interface_unlock", "<:interface_unlock:1517184483944698076>")
+        ghost: str = default_emoji("interface_ghost", "<:interface_ghost:1517184480513753308>")
+        reveal: str = default_emoji("interface_reveal", "<:interface_reveal:1517184483378335937>")
+        claim: str = default_emoji("interface_claim", "<:interface_claim:1517184477225553920>")
+        disconnect: str = default_emoji("interface_disconnect", "<:interface_disconnect:1517184479767036066>")
+        activity: str = default_emoji("interface_activity", "<:interface_activity:1517184476097024160>")
+        information: str = default_emoji("interface_information", "<:interface_information:1517184481830899903>")
+        increase: str = default_emoji("interface_increase", "<:interface_increase:1517184481214206022>")
+        decrease: str = default_emoji("interface_decrease", "<:interface_decrease:1517184478689235134>")
 
     class ticket:
         claim: str = default_emoji("ticket_claim", "<:claim:1535044178898325595>")

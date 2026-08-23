@@ -291,6 +291,10 @@ class VoiceInterface(ui.LayoutView):
         )
 
         container.add_item(
+            ui.TextDisplay(controls)
+        )
+
+        container.add_item(
             ui.Separator(
                 visible=True,
                 spacing=discord.SeparatorSpacing.small,
