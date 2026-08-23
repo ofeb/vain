@@ -14,11 +14,12 @@ from ..settings import fetch, upsert
 class HoneypotEvents(Package):
     """Watches guild messages and triggers the honeypot trap."""
 
+    _honeypot_cache: dict[int, dict] = {}
+    _honeypot_cache_ttl: float = 30.0
+    _honeypot_last_fetch: dict[int, float] = {}
+
     def __init__(self, bot) -> None:
         super().__init__(bot)
-        self._honeypot_cache: dict[int, dict] = {}
-        self._honeypot_cache_ttl: float = 30.0
-        self._honeypot_last_fetch: dict[int, float] = {}
 
     async def _get_honeypot_config(self, guild_id: int) -> dict | None:
         """Get honeypot config with caching to reduce DB queries."""

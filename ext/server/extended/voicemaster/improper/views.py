@@ -225,14 +225,14 @@ class DisconnectMembers(ui.Select):
 class VoiceInterface(ui.LayoutView):
     def __init__(
         self,
-        cog: "VoiceMaster",
-        guild: discord.Guild,
+        cog: "VoiceMaster" = None,
+        guild: discord.Guild = None,
         *,
         channel: discord.VoiceChannel | None = None,
     ) -> None:
         self.cog = cog
         self.guild = guild
-        self._channel_state = self._get_channel_state(channel)
+        self._channel_state = self._get_channel_state(channel) if channel else {"locked": False, "hidden": False}
 
         super().__init__(timeout=None)
 
@@ -240,12 +240,15 @@ class VoiceInterface(ui.LayoutView):
 
     @staticmethod
     def _get_channel_state(channel: discord.VoiceChannel | None) -> dict:
-        if channel is None:
+        if channel is None or not isinstance(channel, discord.VoiceChannel):
             return {"locked": False, "hidden": False}
-        overwrites = channel.overwrites_for(channel.guild.default_role)
-        locked = overwrites.connect is False
-        hidden = overwrites.view_channel is False
-        return {"locked": locked, "hidden": hidden}
+        try:
+            overwrites = channel.overwrites_for(channel.guild.default_role)
+            locked = overwrites.connect is False
+            hidden = overwrites.view_channel is False
+            return {"locked": locked, "hidden": hidden}
+        except Exception:
+            return {"locked": False, "hidden": False}
 
     def _build(self) -> None:
         container = ui.Container()
@@ -385,7 +388,7 @@ class VoiceInterface(ui.LayoutView):
 
         self.add_item(container)
 
-    async def _refresh(
+    async def _refresh_panel(
         self,
         interaction: discord.Interaction,
         channel: discord.VoiceChannel,
@@ -576,7 +579,7 @@ class VoiceInterface(ui.LayoutView):
 
         await self.cog._move_to_private_category(channel)
 
-        await self._refresh(interaction, channel)
+        await self._refresh_panel(interaction, channel)
 
     async def _reveal(
         self,
@@ -592,7 +595,7 @@ class VoiceInterface(ui.LayoutView):
 
         await self.cog._move_to_original_category(channel)
 
-        await self._refresh(interaction, channel)
+        await self._refresh_panel(interaction, channel)
 
     async def _limit(
         self,
@@ -710,7 +713,7 @@ class VoiceInterface(ui.LayoutView):
 
         await self.cog._move_to_private_category(channel)
 
-        await self._refresh(interaction, channel)
+        await self._refresh_panel(interaction, channel)
 
     async def _unlock(
         self,
@@ -726,7 +729,7 @@ class VoiceInterface(ui.LayoutView):
 
         await self.cog._move_to_original_category(channel)
 
-        await self._refresh(interaction, channel)
+        await self._refresh_panel(interaction, channel)
 
     async def _rename(
         self,

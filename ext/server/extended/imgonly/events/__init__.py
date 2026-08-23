@@ -33,6 +33,27 @@ class ImgonlyEvents(Package):
         except Exception:
             log.exception("imgonly schema ensure failed")
 
+    def _can_bypass(self, message: discord.Message) -> bool:
+        if message.author.guild_permissions.manage_messages:
+            return True
+        if message.author.guild_permissions.manage_channels:
+            return True
+        return False
+
+    def _has_media(self, message: discord.Message) -> bool:
+        if message.attachments:
+            return True
+        if message.embeds:
+            return True
+        content = message.content or ""
+        lower = content.lower()
+        for ext in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".mp4", ".mp3", ".webm"):
+            if ext in lower:
+                return True
+        if "cdn.discordapp.com" in content or "media.tenor.com" in content:
+            return True
+        return False
+
     
     @Package.listener("on_message")
     async def on_imgonly_message(self, message: discord.Message) -> None:
