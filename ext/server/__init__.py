@@ -698,48 +698,46 @@ class ServerCommands(Package):
             f"-# `Shard:` `{shard_id}` • `Cluster:` `{cluster_id}`"
         )
     
-        container = Container(
-            TextDisplay(content),
-            accent_color=dom_color,
+    container = discord.ui.Container(
+        discord.ui.TextDisplay(content),
+        accent_color=dom_color,
+    )
+    
+    assets = []
+    
+    if g.icon:
+        assets.append(
+            discord.ui.Button(
+                label="Icon",
+                style=discord.ButtonStyle.link,
+                url=g.icon.url,
+            )
         )
     
-        assets = []
-    
-        if g.icon:
-            assets.append(
-                Button(
-                    label="Icon",
-                    style=ButtonStyle.link,
-                    url=g.icon.url,
-                )
+    if g.banner:
+        assets.append(
+            discord.ui.Button(
+                label="Banner",
+                style=discord.ButtonStyle.link,
+                url=g.banner.url,
             )
-    
-        if g.banner:
-            assets.append(
-                Button(
-                    label="Banner",
-                    style=ButtonStyle.link,
-                    url=g.banner.url,
-                )
-            )
-    
-        if g.splash:
-            assets.append(
-                Button(
-                    label="Splash",
-                    style=ButtonStyle.link,
-                    url=g.splash.url,
-                )
-            )
-    
-        if assets:
-            container.add_item(
-                ActionRow(*assets)
-            )
-    
-        await ctx.send(
-            view=container,
         )
+    
+    if g.splash:
+        assets.append(
+            discord.ui.Button(
+                label="Splash",
+                style=discord.ButtonStyle.link,
+                url=g.splash.url,
+            )
+        )
+    
+    if assets:
+        container.add_item(
+            discord.ui.ActionRow(*assets)
+        )
+    
+    await ctx.send(view=container)
 
     @staticmethod
     def _strip_commas(value: str) -> str:
