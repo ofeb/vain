@@ -697,16 +697,6 @@ class ServerCommands(Package):
         container = discord.ui.Container()
 
         container.add_item(
-            discord.ui.TextDisplay(
-                f"-# **Server Information — {g.name}**"
-            )
-        )
-
-        container.add_item(
-            discord.ui.Separator()
-        )
-
-        container.add_item(
             discord.ui.TextDisplay(content)
         )
 
@@ -744,7 +734,7 @@ class ServerCommands(Package):
                 discord.ui.ActionRow(*assets)
             )
 
-        view = discord.ui.View()
+        view = discord.ui.LayoutView()
         view.add_item(container)
 
         await ctx.send(view=view)
