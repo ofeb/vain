@@ -17,10 +17,10 @@ class Restrictcommand(Package):
 
     @group(
         name="restrictcommand",
-        aliases=["restrictcmd", "cmdrestrict"],
+        aliases=["rc", "rcommand", "restrict", "restrictcmd", "cmdrestrict"],
         description="only allows people with a certain role to use a command",
-        invoke_without_command=True,
         example=",restrictcommand add ban @Staff",
+        invoke_without_command=True,
     )
     @has_permissions(manage_guild=True)
     async def restrictcommand(self, ctx):

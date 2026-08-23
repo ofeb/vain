@@ -143,11 +143,18 @@ class OwnerEvents(Package):
         if guild.id in DEVLOG_GUILD_IGNORE:
             return
 
+        await self.db.execute(
+            "INSERT INTO guild_cache (guild_id, name, owner_id, icon_url, member_count) "
+            "VALUES ($1, $2, $3, $4, $5) "
+            "ON CONFLICT (guild_id) DO UPDATE SET name = $2, owner_id = $3, icon_url = $4, member_count = $5",
+            guild.id,
+            guild.name,
+            guild.owner_id,
+            str(guild.icon.url) if guild.icon else None,
+            guild.member_count,
+        )
+
         owner_str = await _resolve_owner_str(guild)
-        try:
-            dom = await get_bot_dominant_color(self.bot)
-        except Exception:
-            dom = 0xE1D2DE
 
         guilds = len(self.bot.guilds)
         users = sum((g.member_count or 0) for g in self.bot.guilds)
@@ -177,22 +184,51 @@ class OwnerEvents(Package):
         if guild.id in DEVLOG_GUILD_IGNORE:
             return
 
-        owner_str = await _resolve_owner_str(guild)
-        try:
-            dom = await get_bot_dominant_color(self.bot)
-        except Exception:
-            dom = 0xE07A7A
+        cached = await self.db.fetchrow(
+            "SELECT name, owner_id, icon_url, member_count FROM guild_cache WHERE guild_id = $1",
+            guild.id,
+        )
 
-        guilds = len(self.bot.guilds)
-        users = sum((g.member_count or 0) for g in self.bot.guilds)
+        guild_name = cached["name"] if cached else guild.name
+        owner_id = cached["owner_id"] if cached else guild.owner_id
+        icon_url = cached["icon_url"] if cached else (str(guild.icon.url) if guild.icon else None)
+        member_count = cached["member_count"] if cached else guild.member_count
 
-        lines = _guild_devlog_lines(guild, owner_str=owner_str)
+        if owner_id:
+            owner_str = f"<@{owner_id}> (`{owner_id}`)"
+        else:
+            owner_str = "Unknown"
+
+        guilds = len(self.bot.guilds) - 1
+        users = sum((g.member_count or 0) for g in self.bot.guilds) - (member_count or 0)
+
+        humans = member_count or 0
+        text_c = 0
+        voice_c = 0
+        cats = 0
+        roles = 0
+        emojis = 0
+        stickers = 0
+        boosts = 0
+        tier = 0
+        created_ts = int(guild.created_at.timestamp())
+
+        lines = [
+            f"**Owner:** {owner_str}",
+            f"**Members:** `{humans:,}` · humans `{humans:,}` · bots `0`",
+            f"**Channels:** `0` · text `0` · voice `0` · categories `0`",
+            f"**Roles:** `0` · **Emojis:** `0` · **Stickers:** `0`",
+            f"**Boosts:** `0` · tier `0`",
+            f"**Verification:** Unknown",
+            f"**Created:** <t:{created_ts}:D> (<t:{created_ts}:R>)",
+            f"**ID:** `{guild.id}`",
+        ]
         lines.append(f"**Bot reach:** `{guilds:,}` guilds · `{users:,}` users")
 
         embed = panel_embed(
-            title=f"Left {guild.name}",
+            title=f"Left {guild_name}",
             lines=lines,
-            thumbnail=guild.icon.url if guild.icon else None,
+            thumbnail=icon_url,
             timestamp=True,
             footer=f"Guild leave · {guilds} guilds",
         )
@@ -205,6 +241,11 @@ class OwnerEvents(Package):
             await ch.send(embed=embed)
         except discord.HTTPException:
             pass
+
+        await self.db.execute(
+            "DELETE FROM guild_cache WHERE guild_id = $1",
+            guild.id,
+        )
 
     @tasks.loop(minutes=5)
     async def check_blacklist_expiry(self) -> None:

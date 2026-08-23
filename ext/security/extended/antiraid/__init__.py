@@ -515,9 +515,11 @@ class Antiraid(AntiraidEvents, Package):
         name="reset",
         usage="",
     )
-    @has_permissions(manage_guild=True)
     async def antiraid_reset(self, ctx):
         """Reset all antiraid configuration for this server. This can't be undone."""
+        if ctx.author.id != ctx.guild.owner_id:
+            from discord.ext.commands import CommandError
+            raise CommandError("You must be the **guild owner** to run this command.")
         from core.discord.views.confirm import ConfirmView
 
         view = ConfirmView(ctx)

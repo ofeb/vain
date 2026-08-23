@@ -31,6 +31,7 @@ EVENT_TYPES = {
     "emojis": "Emoji/sticker create/delete/update logging",
     "voice": "Voice channel join/leave/mute/deafen logging",
     "guild": "Guild/webhook update logging",
+    "voicemaster": "VoiceMaster channel create/delete/logging",
 }
 
 PERMISSION_NAMES = {

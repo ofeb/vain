@@ -78,7 +78,7 @@ class Antinuke(AntinukeEvents, Package):
         if ctx.guild is None:
             raise CommandError("this command can only be used in a server")
 
-        if ctx.command and ctx.command.name == "admin":
+        if ctx.command and ctx.command.name in {"admin", "reset"}:
             if ctx.author.id != ctx.guild.owner_id:
                 raise CommandError(
                     "You must be the **guild owner** to run this command."
@@ -396,6 +396,9 @@ class Antinuke(AntinukeEvents, Package):
             await send_c2_embed(channel, embed)
 
     async def _alert_guild_owner(self, guild: discord.Guild, body: str) -> None:
+        from discord import ui as _ui
+        from core.discord.ctx import layout_from_items
+
         owner = guild.owner
         if owner is None:
             with contextlib.suppress(discord.HTTPException):
@@ -405,9 +408,18 @@ class Antinuke(AntinukeEvents, Package):
                 owner = await self.bot.fetch_user(guild.owner_id)
         if owner is None:
             return
-        embed = Embed(color=self.color, description=body)
+
+        container = _ui.Container()
+        for attr in ("accent_color", "accent_colour", "color", "colour"):
+            if hasattr(container, attr):
+                with contextlib.suppress(Exception):
+                    setattr(container, attr, None)
+        container.add_item(_ui.TextDisplay(body))
+        layout = layout_from_items([container], timeout=None)
+        for item in self._server_link_view(guild).children:
+            container.add_item(item)
         with contextlib.suppress(discord.Forbidden, discord.HTTPException):
-            await owner.send(embed=embed)
+            await owner.send(view=layout)
 
     def _server_link_view(self, guild: discord.Guild) -> discord.ui.View:
         view = discord.ui.View()
@@ -433,22 +445,31 @@ class Antinuke(AntinukeEvents, Package):
         reason: str,
         case_id: int | None = None,
     ) -> None:
-        embed = Embed(color=self.color)
+        from discord import ui as _ui
+        from core.discord.ctx import layout_from_items
+
         title = f"You were {self._verb_for(action.replace(' (auto)', ''))}"
         if case_id is not None:
             title += f" [#{case_id}]"
-        embed.add_field(
-            name=title,
-            value=(
-                f"**Staff:** @{getattr(moderator, 'name', str(moderator))}\n"
-                f"**Cause:** {reason or 'no reason provided'}"
-            ),
-            inline=False,
+
+        body = (
+            f"**{title}**\n"
+            f"> -# **Staff:** @{getattr(moderator, 'name', str(moderator))}\n"
+            f"> -# **Cause:** {reason or 'no reason provided'}\n"
+            f"> -# Contact staff if you believe this was an error."
         )
-        embed.set_footer(text="Contact staff if you believe this was an error.")
-        embed.timestamp = discord.utils.utcnow()
+
+        container = _ui.Container()
+        for attr in ("accent_color", "accent_colour", "color", "colour"):
+            if hasattr(container, attr):
+                with contextlib.suppress(Exception):
+                    setattr(container, attr, None)
+        container.add_item(_ui.TextDisplay(body))
+        layout = layout_from_items([container], timeout=None)
+        for item in self._server_link_view(guild).children:
+            container.add_item(item)
         with contextlib.suppress(discord.Forbidden, discord.HTTPException):
-            await user.send(embed=embed, view=self._server_link_view(guild))
+            await user.send(view=layout)
 
     async def _record_case(
         self,

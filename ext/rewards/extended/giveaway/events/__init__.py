@@ -8,10 +8,12 @@ from random import sample
 from typing import Any
 
 import discord
+from discord import ui
 from discord.ext import commands, tasks
 from discord.ext.commands import Cog
 
 from config import color
+from core.discord.ctx import layout_from_items
 
 from ..improper.requirements import (
     check_member_requirements,
@@ -722,16 +724,15 @@ class GiveawayEvents(Cog):
 
         
         verb = "rerolled and won" if reroll else "won"
-        emb = discord.Embed(
-            color=color.base,
-            description=(
-                f"**{mentions}** {verb} **{prize}**\n"
-            ),
+        container = ui.Container()
+        container.add_item(
+            ui.TextDisplay(f"**{mentions}** {verb} **{prize}**")
         )
+        view = layout_from_items([container])
         try:
             return await message.reply(
                 content=mentions,
-                embed=emb,
+                view=view,
                 allowed_mentions=am,
                 mention_author=False,
             )
@@ -740,7 +741,7 @@ class GiveawayEvents(Cog):
         try:
             return await channel.send(
                 content=mentions,
-                embed=emb,
+                view=view,
                 allowed_mentions=am,
             )
         except Exception:
@@ -800,18 +801,17 @@ class GiveawayEvents(Cog):
             pass
 
         try:
-            emb = discord.Embed(
-                title="You won a giveaway!" if not reroll else "You won a reroll!",
-                description=(
+            container = ui.Container()
+            container.add_item(
+                ui.TextDisplay(
+                    f"**{'You won a giveaway!' if not reroll else 'You won a reroll!'}**\n\n"
                     f"**Congratulations** {member.mention}\n\n"
                     f"You won **{prize}** in **{guild.name}**\n"
                     f"> -# **thanks for entering**"
-                ),
-                color=color.base,
+                )
             )
-            if guild.icon:
-                emb.set_thumbnail(url=guild.icon.url)
-            await member.send(embed=emb, view=view)
+            container_view = layout_from_items([container])
+            await member.send(view=container_view)
             return True
         except (discord.Forbidden, discord.HTTPException):
             return False

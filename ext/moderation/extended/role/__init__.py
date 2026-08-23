@@ -864,7 +864,7 @@ class Role(RoleEvents, Package):
     @role.command(
         name="color",
         aliases=("colour",),
-        description="set a color for a role",
+        description="set a color for a role (gradient: ,role color @Role #ff0000 #00ff00)",
         example=",role color @Role #ff0000",
     )
     @has_permissions(manage_roles=True)
@@ -872,16 +872,46 @@ class Role(RoleEvents, Package):
         self,
         ctx,
         role: RoleConvert,
-        *,
-        color: ColorConvert,
+        primary: ColorConvert,
+        secondary: ColorConvert = None,
     ) -> discord.Message | None:
-        """Change a role's color."""
+        """Change a role's color. Pass two hex codes for gradient (boost level 3)."""
         if not await self._ensure_manageable_role(
             ctx, role, action="recolor", check_integrated=False
         ):
             return None
-        await role.edit(color=color, reason=self._audit_reason(ctx, None))
-        return await ctx.success(f"Changed {role.mention}'s color to `{color}`")
+
+        if secondary is not None:
+            if ctx.guild.premium_tier < 3:
+                return await ctx.warn(
+                    "Gradient requires **Boost Level 3**\n> -# **only available at server boost level 3**"
+                )
+            try:
+                RoleColours = getattr(discord, "RoleColours", None)
+                if RoleColours is not None:
+                    await role.edit(
+                        colours=RoleColours(primary=primary, secondary=secondary),
+                        reason=self._audit_reason(ctx, None),
+                    )
+                else:
+                    for kw in (
+                        {"colour": primary, "secondary_colour": secondary},
+                        {"color": primary, "secondary_color": secondary},
+                    ):
+                        try:
+                            await role.edit(**kw, reason=self._audit_reason(ctx, None))
+                            break
+                        except TypeError:
+                            continue
+            except Exception:
+                await role.edit(color=primary, reason=self._audit_reason(ctx, None))
+            return await ctx.success(
+                f"Changed {role.mention}'s color to gradient\n"
+                f"> -# **gradient:** `#{primary.value:06X}` → `#{secondary.value:06X}`"
+            )
+
+        await role.edit(color=primary, reason=self._audit_reason(ctx, None))
+        return await ctx.success(f"Changed {role.mention}'s color to `{primary}`")
 
     @role.command(
         name="rename",

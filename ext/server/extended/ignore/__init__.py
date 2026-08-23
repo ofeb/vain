@@ -90,13 +90,14 @@ class IgnoreCommands(Package):
         return await ctx.success(f"now ignoring {target.mention}")
 
     @group(
-        name="allow",
+        name="allowcommand",
+        aliases=["allow"],
         description="grant or revoke command access for a member",
-        example=",allow jonathan ban",
+        example=",allowcommand jonathan ban",
         invoke_without_command=True,
     )
     @has_permissions(server_owner=True)
-    async def allow(self, ctx, member: Member, command: CommandConverter):
+    async def allowcommand(self, ctx, member: Member, command: CommandConverter):
         """toggle command access"""
         from core.tools.hierarchy import ensure_member_hierarchy
 
@@ -114,13 +115,13 @@ class IgnoreCommands(Package):
             )
             return await ctx.success(f"**{member}** can no longer use **{command}**")
 
-    @allow.command(
+    @allowcommand.command(
         name="list",
         description="see who can bypass command permissions",
         aliases=["ls", "show", "view"],
     )
     @has_permissions(server_owner=True)
-    async def allow_list(self, ctx):
+    async def allowcommand_list(self, ctx):
         """list allowed overrides"""
         rows = await self.db.fetch(
             "SELECT user_id, command FROM command_allowed WHERE guild_id = $1",

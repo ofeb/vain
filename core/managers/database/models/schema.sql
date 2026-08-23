@@ -997,8 +997,17 @@ CREATE TABLE IF NOT EXISTS user_customize (
 );
 
 CREATE TABLE IF NOT EXISTS devlog_config (
-    bot_id     BIGINT PRIMARY KEY,
-    channel_id BIGINT
+    bot_id      BIGINT PRIMARY KEY,
+    channel_id  BIGINT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS guild_cache (
+    guild_id    BIGINT PRIMARY KEY,
+    name        TEXT,
+    owner_id    BIGINT,
+    icon_url    TEXT,
+    member_count INTEGER,
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS suggest_settings (

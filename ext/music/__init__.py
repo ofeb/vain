@@ -9,9 +9,10 @@ import re
 from typing import TYPE_CHECKING
 
 import discord
+from discord import ui
 
 from core.discord.package import Package
-from core.discord.ctx import Context
+from core.discord.ctx import Context, layout_from_items
 from core.discord.hybrid import describe, hybrid
 from config import color, music as nl, music_enabled
 
@@ -617,28 +618,26 @@ class Music(MusicEvents, Package):
             if channel is None:
                 return
 
-            emb = discord.Embed(
-                title=title[:256],
-                description=(description or "")[:4000],
-                color=0xED4245 if error else color.base,
-                timestamp=discord.utils.utcnow(),
-            )
+            container = ui.Container()
+            title_text = title[:256] if title else ""
+            desc_text = (description or "")[:4000]
+            lines = []
+            if title_text:
+                lines.append(f"## {title_text}")
+            if desc_text:
+                lines.append(desc_text)
             if guild is not None:
-                emb.add_field(
-                    name="Guild",
-                    value=f"{guild.name}\n`{guild.id}`",
-                    inline=True,
-                )
+                lines.append(f"**Guild:** {guild.name} · `{guild.id}`")
             if user is not None:
-                emb.add_field(
-                    name="User",
-                    value=f"{user} (`{user.id}`)",
-                    inline=True,
-                )
+                lines.append(f"**User:** {user} · `{user.id}`")
             for name, value in fields or []:
-                emb.add_field(name=str(name)[:256], value=str(value)[:1024], inline=False)
-            emb.set_footer(text="music diagnostics")
-            await channel.send(embed=emb)
+                lines.append(f"**{str(name)[:256]}:** {str(value)[:1024]}")
+            container.add_item(ui.TextDisplay("\n".join(lines)))
+            container.add_item(
+                ui.TextDisplay("-# music diagnostics")
+            )
+            view = layout_from_items([container])
+            await channel.send(view=view)
         except Exception:
             log.exception("music_log send failed")
 

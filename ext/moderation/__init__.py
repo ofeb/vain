@@ -4108,6 +4108,21 @@ class ModerationCommands(Package):
         )
         await ctx.send(embed=embed)
 
+    @command(
+        name="restore",
+        aliases=("reassign",),
+        description="Restore a member's roles from cache",
+        usage="<member>",
+        example="restore @member",
+    )
+    @has_permissions(manage_roles=True)
+    async def restore(self, ctx, member: discord.Member) -> discord.Message | None:
+        """Restore a member's roles from cache."""
+        role_cog = self.bot.get_cog("Role")
+        if role_cog and hasattr(role_cog, "role_restore"):
+            return await role_cog.role_restore(ctx, member)
+        return await ctx.warn("Role restore is not available")
+
     @tasks.loop(seconds=30)
     async def temprole_watcher(self) -> None:
         if getattr(self.db, "pool", None) is None:

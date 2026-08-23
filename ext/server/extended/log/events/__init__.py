@@ -1349,3 +1349,27 @@ class LogEvents:
         )
         await self._log(after.guild.id, "channels", embed)
 
+    async def log_vm_channel_create(self, guild: discord.Guild, channel: discord.VoiceChannel, owner: discord.Member) -> None:
+        """Log a voicemaster channel creation."""
+        embed = panel_embed(
+            author="VoiceMaster",
+            lines=[
+                f"{owner.mention} created {channel.mention}",
+                label_line("Owner", owner.mention),
+                label_line("Channel", channel.mention),
+            ],
+            footer=f"User ID : {owner.id}",
+        )
+        await self._log(guild.id, "voicemaster", embed)
+
+    async def log_vm_channel_delete(self, guild: discord.Guild, channel_name: str, owner_id: int) -> None:
+        """Log a voicemaster channel deletion."""
+        embed = panel_embed(
+            author="VoiceMaster",
+            lines=[
+                f"**{channel_name}** was deleted (empty)",
+                label_line("Owner", f"<@{owner_id}>"),
+            ],
+        )
+        await self._log(guild.id, "voicemaster", embed)
+

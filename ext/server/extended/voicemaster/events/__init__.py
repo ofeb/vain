@@ -91,6 +91,10 @@ class VoiceMasterEvents:
         owner_id = await Settings.delete_channel(self.bot.db, channel.id)
 
         if owner_id:
+            log_cog = self.bot.get_cog("Log")
+            if log_cog and hasattr(log_cog, "log_vm_channel_delete"):
+                with contextlib.suppress(Exception):
+                    await log_cog.log_vm_channel_delete(member.guild, channel.name, owner_id)
             try:
                 await channel.delete(reason="VoiceMaster: Empty channel")
             except discord.HTTPException:

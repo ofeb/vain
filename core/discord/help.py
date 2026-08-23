@@ -1115,27 +1115,31 @@ def _detail_text(
     if ex:
         ex = _strip_hidden_params_from_text(ex)
 
+    kind_label = "group command or just says command" if is_grp else "command"
     lines = [
-        f"### {'Group' if is_grp else 'Command'}: `{name}`",
-        f"> {desc}",
+        f"{emojis.approve} **{kind_label}:** `{name}`",
         "",
-        f"**Aliases:** {aliases}",
+        f"> **{desc}**",
     ]
+
+    alias_lines: list[str] = []
     guild_aliases = kwargs.get("guild_aliases") or []
     self_aliases = kwargs.get("self_aliases") or []
+    alias_lines.append(f"> -# **your aliases:** {aliases}")
     if guild_aliases:
-        lines.append(f"**Guild Aliases:** {', '.join(guild_aliases)}")
+        alias_lines.append(f"> -# **guild aliases:** {', '.join(guild_aliases)}")
     if self_aliases:
-        lines.append(f"**Your Aliases:** {', '.join(self_aliases)}")
-    lines.extend([
-        f"**Permissions:** {perm}",
-        "```yaml",
-        f"Usage: {syntax}",
-    ])
-    
+        alias_lines.append(f"> -# **bot aliases:** {', '.join(self_aliases)}")
+    alias_lines.append("> ")
+    alias_lines.append(f"> -# **command permissions:** {perm}")
+    lines.extend(alias_lines)
+
+    usage_lines: list[str] = []
+    usage_lines.append(f"-# **command usage**: `{syntax}`")
     if ex and ex.strip() and ex.strip() != syntax.strip():
-        lines.append(f"Example: {ex}")
-    lines.append("```")
+        usage_lines.append(f"-# **command example:** `{ex}`")
+    lines.extend(usage_lines)
+
     module = _module(cmd)
     if module != "n/a":
         module_label = next((k for k in _ORDER if k.lower() == module), module.title())
@@ -1146,6 +1150,70 @@ def _detail_text(
         footer += f" · {page_info}"
     lines.append(footer)
     return "\n".join(lines)
+
+
+def _build_help_detail_container(
+    cmd: Command,
+    ctx: Context,
+    *,
+    group_title: bool = False,
+    page_info: str | None = None,
+    **kwargs,
+) -> ui.Container:
+    """Build a C2 container for command/group help with proper sectioning."""
+    from config import color as _c
+
+    prefix = _get_prefix(ctx)
+    is_grp = bool(group_title and isinstance(cmd, Group))
+    name = command_display_name(cmd)
+    desc = _description(cmd) or "no description provided"
+    aliases = _aliases(cmd)
+    if aliases == "n/a":
+        aliases = "None"
+    perm = _information(cmd).get("permissions") or "None"
+    syntax = _strip_hidden_params_from_text(_syntax(cmd, prefix))
+    ex = _example(cmd, prefix)
+    if ex:
+        ex = _strip_hidden_params_from_text(ex)
+
+    kind_label = "group command or just says command" if is_grp else "command"
+    container = ui.Container()
+    for attr in ("accent_color", "accent_colour"):
+        if hasattr(container, attr):
+            with contextlib.suppress(Exception):
+                setattr(container, attr, None)
+
+    container.add_item(
+        ui.TextDisplay(
+            f"{emojis.approve} **{kind_label}:** `{name}`\n\n> **{desc}**"
+        )
+    )
+
+    container.add_item(
+        ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small)
+    )
+
+    guild_aliases = kwargs.get("guild_aliases") or []
+    self_aliases = kwargs.get("self_aliases") or []
+    alias_parts = [f"> -# **your aliases:** {aliases}"]
+    if guild_aliases:
+        alias_parts.append(f"> -# **guild aliases:** {', '.join(guild_aliases)}")
+    if self_aliases:
+        alias_parts.append(f"> -# **bot aliases:** {', '.join(self_aliases)}")
+    alias_parts.append("> ")
+    alias_parts.append(f"> -# **command permissions:** {perm}")
+    container.add_item(ui.TextDisplay("\n".join(alias_parts)))
+
+    container.add_item(
+        ui.Separator(visible=True, spacing=discord.SeparatorSpacing.small)
+    )
+
+    usage_parts = [f"-# **command usage**: `{syntax}`"]
+    if ex and ex.strip() and ex.strip() != syntax.strip():
+        usage_parts.append(f"-# **command example:** `{ex}`")
+    container.add_item(ui.TextDisplay("\n".join(usage_parts)))
+
+    return container
 
 
 async def _accent_color(bot: Vain) -> int | None:
@@ -1342,10 +1410,19 @@ class GroupHelpMenu(ui.LayoutView):
         from core.discord.views.paginate import build_pager_row
 
         self.clear_items()
-        body = ui.TextDisplay(self._page_text())
-        
-        container = ui.Container()
-        container.add_item(body)
+        cache = getattr(self, "_alias_cache", {}) or {}
+        guild_a, self_a = cache.get(id(self.pages[self.index]), ([], []))
+
+        container = _build_help_detail_container(
+            self.pages[self.index],
+            self.ctx,
+            group_title=isinstance(self.pages[self.index], Group)
+            and not getattr(self.pages[self.index], "invoke_without_command", False),
+            page_info=self._page_info(),
+            guild_aliases=guild_a,
+            self_aliases=self_a,
+        )
+
         if len(self.pages) > 1:
             container.add_item(ui.Separator(visible=True))
             container.add_item(
@@ -1497,38 +1574,20 @@ class CommandHelpMenu(ui.LayoutView):
         self.ctx = ctx
         self.cmd = cmd
         self.msg: discord.Message | None = None
-        body = ui.TextDisplay(_detail_text(cmd, ctx, group_title=False))
-        container = ui.Container()
-        for attr in ("accent_color", "accent_colour"):
-            if hasattr(container, attr):
-                try:
-                    setattr(container, attr, None)
-                except Exception:
-                    pass
-        container.add_item(body)
+        container = _build_help_detail_container(cmd, ctx, group_title=False)
         self.add_item(container)
 
     async def start(self) -> discord.Message:
         guild_a, self_a = await _fetch_custom_aliases(self.ctx, self.cmd)
         if guild_a or self_a:
             self.clear_items()
-            body = ui.TextDisplay(
-                _detail_text(
-                    self.cmd,
-                    self.ctx,
-                    group_title=False,
-                    guild_aliases=guild_a,
-                    self_aliases=self_a,
-                )
+            container = _build_help_detail_container(
+                self.cmd,
+                self.ctx,
+                group_title=False,
+                guild_aliases=guild_a,
+                self_aliases=self_a,
             )
-            container = ui.Container()
-            for attr in ("accent_color", "accent_colour"):
-                if hasattr(container, attr):
-                    try:
-                        setattr(container, attr, None)
-                    except Exception:
-                        pass
-            container.add_item(body)
             self.add_item(container)
         kw: dict[str, Any] = {"view": self}
         if self.ctx.message and not self.ctx.interaction:

@@ -605,6 +605,12 @@ class Context(commands.Context):
             
             pass
 
+        
+        if isinstance(embed, ui.LayoutView):
+            view = embed
+            embed = None
+            embeds = None
+
         base_kw: dict[str, Any] = {
             "tts": tts,
             "delete_after": delete_after,

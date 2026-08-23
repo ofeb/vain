@@ -120,11 +120,11 @@ class VoiceMaster(VoiceMasterEvents, Package):
             if not channel:
                 continue
             if old_msg_id:
-                with contextlib.suppress(Exception):
+                with contextlib.suppress(discord.HTTPException, discord.NotFound):
                     old_msg = await channel.fetch_message(old_msg_id)
                     await old_msg.delete()
             try:
-                msg = await channel.send(view=VoiceInterface(self, guild))
+                msg = await channel.send(view=VoiceInterface(self, guild), silent=True)
                 settings = await VoiceMasterSettings.fetch(self.bot, guild)
                 await settings.upsert(panel_message_id=msg.id)
             except Exception:
@@ -137,8 +137,13 @@ class VoiceMaster(VoiceMasterEvents, Package):
         settings = await VoiceMasterSettings.fetch(self.bot, new_channel.guild)
         if not settings.record.get("interface_id"):
             return
+        old_msg_id = settings.record.get("panel_message_id")
+        if old_msg_id:
+            with contextlib.suppress(discord.HTTPException, discord.NotFound):
+                old_msg = await new_channel.fetch_message(old_msg_id)
+                await old_msg.delete()
         try:
-            msg = await new_channel.send(view=VoiceInterface(self, new_channel.guild))
+            msg = await new_channel.send(view=VoiceInterface(self, new_channel.guild), silent=True)
             await settings.upsert(panel_message_id=msg.id)
         except Exception:
             pass
@@ -226,6 +231,8 @@ class VoiceMaster(VoiceMasterEvents, Package):
         self, member: discord.Member, config, trigger_channel: discord.VoiceChannel,
     ) -> None:
         category = member.guild.get_channel(config["category_id"]) or trigger_channel.category
+        if trigger_channel.category and trigger_channel.category != category:
+            category = trigger_channel.category
         channel = await member.guild.create_voice_channel(
             name=self._resolve_channel_name(config, member),
             category=category,
@@ -250,6 +257,10 @@ class VoiceMaster(VoiceMasterEvents, Package):
         await VoiceMasterSettings.insert_channel(
             self.bot.db, member.guild.id, channel.id, member.id,
         )
+        log_cog = self.bot.get_cog("Log")
+        if log_cog and hasattr(log_cog, "log_vm_channel_create"):
+            with contextlib.suppress(Exception):
+                await log_cog.log_vm_channel_create(member.guild, channel, member)
         status_text = config.get("default_status_text") or ""
         status_emoji = config.get("default_status_emoji") or ""
         if status_text or status_emoji:
@@ -309,7 +320,7 @@ class VoiceMaster(VoiceMasterEvents, Package):
         everyone = ctx.guild.default_role
         await interface.set_permissions(everyone, send_messages=False, send_messages_in_threads=False, create_public_threads=False, create_private_threads=False)
         await channel.set_permissions(everyone, connect=True)
-        panel_msg = await interface.send(view=VoiceInterface(self, ctx.guild))
+        panel_msg = await interface.send(view=VoiceInterface(self, ctx.guild), silent=True)
         settings = await VoiceMasterSettings.fetch(self.bot, ctx.guild)
         await settings.upsert(category_id=category.id, interface_id=interface.id, channel_id=channel.id, panel_message_id=panel_msg.id)
         await ctx.send(view=_vm_container(f"{ctx.author.display_name}: voicemaster **setup complete**"))
@@ -612,7 +623,12 @@ class VoiceMaster(VoiceMasterEvents, Package):
         interface = ctx.guild.get_channel(config["interface_id"])
         if not interface:
             return await ctx.send(view=_vm_container(f"{ctx.author.display_name}: interface channel **not found**"))
-        panel_msg = await interface.send(view=VoiceInterface(self, ctx.guild))
+        old_msg_id = config.get("panel_message_id")
+        if old_msg_id:
+            with contextlib.suppress(discord.HTTPException, discord.NotFound):
+                old_msg = await interface.fetch_message(old_msg_id)
+                await old_msg.delete()
+        panel_msg = await interface.send(view=VoiceInterface(self, ctx.guild), silent=True)
         settings = await VoiceMasterSettings.fetch(self.bot, ctx.guild)
         await settings.upsert(panel_message_id=panel_msg.id)
         await ctx.send(view=_vm_container(f"{ctx.author.display_name}: interface **resent**"))

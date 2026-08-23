@@ -33,6 +33,11 @@ def _clear(container: ui.Container) -> None:
                 setattr(container, attr, None)
 
 
+def _strike(text: str) -> str:
+    """Wrap text in Discord strikethrough markdown."""
+    return f"~~{text}~~"
+
+
 def _container_msg(text: str, *, mention: str = "") -> ui.LayoutView:
     container = ui.Container()
     _clear(container)
@@ -233,25 +238,18 @@ class VoiceInterface(ui.LayoutView):
 
         self._build()
 
-    def _get_channel_state(self, channel: discord.VoiceChannel | None) -> dict:
+    @staticmethod
+    def _get_channel_state(channel: discord.VoiceChannel | None) -> dict:
         if channel is None:
             return {"locked": False, "hidden": False}
-        default_role = channel.guild.default_role
-        overwrites = channel.overwrites_for(default_role)
-        return {
-            "locked": overwrites.connect is False,
-            "hidden": overwrites.view_channel is False,
-        }
+        overwrites = channel.overwrites_for(channel.guild.default_role)
+        locked = overwrites.connect is False
+        hidden = overwrites.view_channel is False
+        return {"locked": locked, "hidden": hidden}
 
     def _build(self) -> None:
         container = ui.Container()
         _clear(container)
-
-        server_icon = (
-            self.guild.icon.url
-            if self.guild.icon
-            else None
-        )
 
         header = (
             "## **voice controls**\n"
@@ -269,12 +267,18 @@ class VoiceInterface(ui.LayoutView):
             )
         )
 
+        state = self._channel_state
+        lock_label = _strike("lock") if state["locked"] else "lock"
+        unlock_label = _strike("unlock") if not state["locked"] else "unlock"
+        hide_label = _strike("hide") if state["hidden"] else "hide"
+        reveal_label = _strike("reveal") if not state["hidden"] else "reveal"
+
         controls = (
             "### button usage\n"
-            f"> {VM['lock']} - **lock** the channel\n"
-            f"> {VM['unlock']} - **unlock** the channel\n"
-            f"> {VM['hide']} - **hide** the channel\n"
-            f"> {VM['reveal']} - **reveal** the channel\n"
+            f"> {VM['lock']} - **{lock_label}** the channel\n"
+            f"> {VM['unlock']} - **{unlock_label}** the channel\n"
+            f"> {VM['hide']} - **{hide_label}** the channel\n"
+            f"> {VM['reveal']} - **{reveal_label}** the channel\n"
             f"> {VM['claim']} - **claim** the channel\n"
             f"> {VM['status']} - set the channel **status**\n"
             f"> {VM['disconnect']} - **disconnect** members\n"
@@ -283,20 +287,6 @@ class VoiceInterface(ui.LayoutView):
             f"> {VM['delete']} - **delete** the channel"
         )
 
-        if server_icon:
-            container.add_item(
-                ui.Section(
-                    ui.TextDisplay(controls),
-                    accessory=ui.Thumbnail(
-                        media=server_icon,
-                    ),
-                )
-            )
-        else:
-            container.add_item(
-                ui.TextDisplay(controls)
-            )
-
         container.add_item(
             ui.Separator(
                 visible=True,
@@ -304,31 +294,26 @@ class VoiceInterface(ui.LayoutView):
             )
         )
 
-        state = self._channel_state
         buttons = {
             "lock": ui.Button(
                 style=discord.ButtonStyle.secondary,
                 emoji=VM["lock"],
                 custom_id="voicemaster:lock",
-                disabled=state["locked"],
             ),
             "unlock": ui.Button(
                 style=discord.ButtonStyle.secondary,
                 emoji=VM["unlock"],
                 custom_id="voicemaster:unlock",
-                disabled=not state["locked"],
             ),
             "hide": ui.Button(
                 style=discord.ButtonStyle.secondary,
                 emoji=VM["hide"],
                 custom_id="voicemaster:hide",
-                disabled=state["hidden"],
             ),
             "reveal": ui.Button(
                 style=discord.ButtonStyle.secondary,
                 emoji=VM["reveal"],
                 custom_id="voicemaster:reveal",
-                disabled=not state["hidden"],
             ),
             "claim": ui.Button(
                 style=discord.ButtonStyle.secondary,
@@ -400,10 +385,23 @@ class VoiceInterface(ui.LayoutView):
 
         self.add_item(container)
 
-    def _refresh(self, channel: discord.VoiceChannel) -> None:
-        self._channel_state = self._get_channel_state(channel)
-        self.clear_items()
-        self._build()
+    async def _refresh(
+        self,
+        interaction: discord.Interaction,
+        channel: discord.VoiceChannel,
+    ) -> None:
+        """Refresh the panel with updated button states."""
+        new_view = VoiceInterface(self.cog, self.guild, channel=channel)
+        try:
+            await interaction.message.edit(view=new_view)
+        except discord.HTTPException:
+            pass
+        await _reply(
+            interaction,
+            view=_container_msg(
+                f"{interaction.user.display_name}: channel updated"
+            ),
+        )
 
     async def _get_owner_id(
         self,
@@ -577,14 +575,8 @@ class VoiceInterface(ui.LayoutView):
         )
 
         await self.cog._move_to_private_category(channel)
-        self._refresh(channel)
 
-        await _reply(
-            interaction,
-            view=_container_msg(
-                f"{interaction.user.display_name}: your voice channel has been **hidden**"
-            ),
-        )
+        await self._refresh(interaction, channel)
 
     async def _reveal(
         self,
@@ -599,14 +591,8 @@ class VoiceInterface(ui.LayoutView):
         )
 
         await self.cog._move_to_original_category(channel)
-        self._refresh(channel)
 
-        await _reply(
-            interaction,
-            view=_container_msg(
-                f"{interaction.user.display_name}: your voice channel has been **revealed**"
-            ),
-        )
+        await self._refresh(interaction, channel)
 
     async def _limit(
         self,
@@ -723,14 +709,8 @@ class VoiceInterface(ui.LayoutView):
         )
 
         await self.cog._move_to_private_category(channel)
-        self._refresh(channel)
 
-        await _reply(
-            interaction,
-            view=_container_msg(
-                f"{interaction.user.display_name}: your voice channel has been **locked**"
-            ),
-        )
+        await self._refresh(interaction, channel)
 
     async def _unlock(
         self,
@@ -745,14 +725,8 @@ class VoiceInterface(ui.LayoutView):
         )
 
         await self.cog._move_to_original_category(channel)
-        self._refresh(channel)
 
-        await _reply(
-            interaction,
-            view=_container_msg(
-                f"{interaction.user.display_name}: your voice channel has been **unlocked**"
-            ),
-        )
+        await self._refresh(interaction, channel)
 
     async def _rename(
         self,
