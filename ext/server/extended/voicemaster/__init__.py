@@ -55,25 +55,20 @@ class VoiceMaster(VoiceMasterEvents, Package):
     async def cog_load(self) -> None:
         if getattr(self.bot.db, "pool", None) is None:
             return
+    
         await VoiceMasterSettings.ensure_schema(self.bot.db)
-        # TEMP one-shot startup script: re-enable every voicemaster button
-        # so panels are never disabled/strikethrough by default. Remove me.
-        with contextlib.suppress(Exception):
-            await self.bot.db.execute(
-                "UPDATE voicemaster_configuration SET disabled_buttons = '' "
-                "WHERE COALESCE(disabled_buttons, '') <> ''"
-            )
+    
         if not self._cleanup_loop.is_running():
             self._cleanup_loop.start()
         if not self._panel_refresh_loop.is_running():
             self._panel_refresh_loop.start()
         if not self._button_sync_loop.is_running():
             self._button_sync_loop.start()
-
-    async def cog_unload(self) -> None:
-        self._cleanup_loop.cancel()
-        self._panel_refresh_loop.cancel()
-        self._button_sync_loop.cancel()
+    
+        async def cog_unload(self) -> None:
+            self._cleanup_loop.cancel()
+            self._panel_refresh_loop.cancel()
+            self._button_sync_loop.cancel()
 
     @tasks.loop(minutes=1)
     async def _cleanup_loop(self):
