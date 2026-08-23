@@ -581,7 +581,7 @@ class ServerCommands(Package):
             search_placeholder="Jump to category…",
         )
 
-   @command(
+    @command(
         name="serverinfo",
         description="view detailed information about the current server",
         aliases=["si", "server", "guildinfo", "gi"],
@@ -590,83 +590,156 @@ class ServerCommands(Package):
     )
     async def serverinfo(self, ctx):
         """show server info"""
-        from core.discord.ctx import layout_from_items
-
         g = ctx.guild
-
+    
+        try:
+            dom_color = await get_bot_dominant_color(self.bot)
+        except Exception:
+            dom_color = self.color
+    
         owner = g.owner
         if owner is None and g.owner_id:
             try:
                 owner = await g.fetch_member(g.owner_id)
             except Exception:
                 owner = None
-        owner_text = owner.mention if owner else f"`{g.owner_id or 'unknown'}`"
-
+    
+        owner_text = owner.mention if owner else f"`{g.owner_id}`"
+    
         humans = sum(1 for m in g.members if not m.bot)
         bots = sum(1 for m in g.members if m.bot)
-
+    
         categories = len(g.categories)
         text_channels = len(g.text_channels)
         voice_channels = len(g.voice_channels)
         total_channels = categories + text_channels + voice_channels
-
+    
         role_limit = 250
         emoji_limit = g.emoji_limit or 50
-
+        sticker_limit = getattr(g, "sticker_limit", 5) or 5
+    
         boosters = getattr(g, "premium_subscribers", None) or []
         booster_count = len(boosters)
-
-        def _asset(asset):
-            return f"[view]({asset.url})" if asset else "None"
-
-        created = g.created_at.strftime("%B %d, %Y")
-        created_ts = int(g.created_at.timestamp())
-
-        info_lines = [
-            f"> -# **Owner:** {owner_text}",
-            f"> -# **Created:** {created} (<t:{created_ts}:R>)",
-            f"> -# **Bio:** {g.description or 'None'}",
-            "",
-            "-# **Members**",
-            f"> -# Total: {g.member_count or len(g.members)}",
-            f"> -# Humans: {humans}",
-            f"> -# Bots: {bots}",
-            "",
-            "-# **Design Assets**",
-            f"> -# Icon: {_asset(g.icon)}",
-            f"> -# Banner: {_asset(g.banner)}",
-            f"> -# Splash: {_asset(getattr(g, 'splash', None))}",
-            "",
-            f"-# **Channels ({total_channels})**",
-            f"> -# Text: {text_channels}",
-            f"> -# Voice: {voice_channels}",
-            f"> -# Category: {categories}",
-            "",
-            "-# **Counts**",
-            f"> -# Roles: {len(g.roles)}/{role_limit}",
-            f"> -# Emojis: {len(g.emojis)}/{emoji_limit}",
-            f"> -# Boosters: {booster_count}",
-            "",
-            f"-# `Guild ID:` `{g.id}`",
-        ]
-
-        container = discord.ui.Container()
-        for attr in ("accent_color", "accent_colour"):
-            if hasattr(container, attr):
-                with contextlib.suppress(Exception):
-                    setattr(container, attr, None)
-        container.add_item(
-            discord.ui.TextDisplay(f"-# **Server Information — {g.name}**")
+    
+        features = g.features or []
+        shown = features[:6]
+        extra = len(features) - len(shown)
+    
+        features_str = ", ".join(
+            feature.replace("_", " ").title()
+            for feature in shown
         )
-        container.add_item(
-            discord.ui.Separator(
-                visible=True,
-                spacing=discord.SeparatorSpacing.small,
+    
+        if extra:
+            features_str += f" **+ {extra}** more"
+    
+        vanity = "None"
+        if "VANITY_URL" in features:
+            try:
+                invite = await g.vanity_invite()
+                vanity = f"`{invite.code}`"
+            except Exception:
+                vanity = "None"
+    
+        mfa = "Required" if g.mfa_level else "None"
+    
+        created = (
+            f"{g.created_at.strftime('%B')} {g.created_at.day}, "
+            f"{g.created_at.year} "
+            f"(<t:{int(g.created_at.timestamp())}:R>)"
+        )
+    
+        description = getattr(g, "description", None) or "None"
+    
+        shard_id = g.shard_id if g.shard_id is not None else 0
+        cluster_id = getattr(g, "cluster_id", "N/A")
+    
+        content = (
+            f"-# **Server Information — {g.name}**\n"
+            f"\n"
+            f"-# **Owner:** {owner_text}\n"
+            f"-# **Created:** {created}\n"
+            f"-# **Bio:** {description}\n"
+            f"\n"
+            f"-# **Members**\n"
+            f"> -# Total: `{g.member_count}`\n"
+            f"> -# Humans: `{humans}`\n"
+            f"> -# Bots: `{bots}`\n"
+            f"> -# Boosters: `{booster_count}`\n"
+            f"\n"
+            f"-# **Assets**\n"
+            f"> -# Use the buttons below to view available assets.\n"
+            f"\n"
+            f"-# **Channels ({total_channels})**\n"
+            f"> -# Text: `{text_channels}`\n"
+            f"> -# Voice: `{voice_channels}`\n"
+            f"> -# Categories: `{categories}`\n"
+            f"\n"
+            f"-# **Counts**\n"
+            f"> -# Roles: `{len(g.roles)}/{role_limit}`\n"
+            f"> -# Emojis: `{len(g.emojis)}/{emoji_limit}`\n"
+            f"> -# Stickers: `{len(g.stickers)}/{sticker_limit}`\n"
+            f"\n"
+            f"-# **Boosts**\n"
+            f"> -# Level: `{g.premium_tier}`\n"
+            f"> -# Boosts: `{g.premium_subscription_count or 0}`\n"
+            f"> -# Boosters: `{booster_count}`\n"
+            f"\n"
+            f"-# **System**\n"
+            f"> -# Verification: "
+            f"`{str(g.verification_level).replace('_', ' ').title()}`\n"
+            f"> -# MFA: `{mfa}`\n"
+            f"> -# Vanity: {vanity}\n"
+            f"\n"
+            f"-# **Features ({len(features)})**\n"
+            f"> -# {features_str or 'None'}\n"
+            f"\n"
+            f"-# `Guild ID:` `{g.id}`\n"
+            f"-# `Shard:` `{shard_id}` • `Cluster:` `{cluster_id}`"
+        )
+    
+        container = Container(
+            TextDisplay(content),
+            accent_color=dom_color,
+        )
+    
+        assets = []
+    
+        if g.icon:
+            assets.append(
+                Button(
+                    label="Icon",
+                    style=ButtonStyle.link,
+                    url=g.icon.url,
+                )
             )
+    
+        if g.banner:
+            assets.append(
+                Button(
+                    label="Banner",
+                    style=ButtonStyle.link,
+                    url=g.banner.url,
+                )
+            )
+    
+        if g.splash:
+            assets.append(
+                Button(
+                    label="Splash",
+                    style=ButtonStyle.link,
+                    url=g.splash.url,
+                )
+            )
+    
+        if assets:
+            container.add_item(
+                ActionRow(*assets)
+            )
+    
+        await ctx.send(
+            view=container,
         )
-        container.add_item(discord.ui.TextDisplay("\n".join(info_lines)))
-
-        await ctx.send(view=layout_from_items([container], timeout=None))
 
     @staticmethod
     def _strip_commas(value: str) -> str:
