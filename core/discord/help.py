@@ -1187,7 +1187,7 @@ def _build_help_detail_container(
 
     container.add_item(
         ui.TextDisplay(
-            f"{emojis.approve} **{kind_label}:** `{name}`\n\n> **{desc}**"
+            f"<:white_heart:1540897432190193674> **{kind_label}:** `{name}`\n\n> **{desc}**"
         )
     )
 
