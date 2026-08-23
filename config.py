@@ -111,7 +111,7 @@ class database:
 
 
 class redis:
-    enabled: bool = False
+    enabled: bool = True
     url: str = "redis://127.0.0.1:6379/0"
 
 
