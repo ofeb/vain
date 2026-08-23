@@ -663,6 +663,7 @@ class ServerCommands(Package):
             f"> -# **Verification:** `{str(g.verification_level).replace('_', ' ').title()}`\n"
             f"> -# **Vanity:** `{vanity}`\n"
             f"> -# **MFA:** `{mfa}`\n"
+            f"> -# **Guild ID:** `{g.id}`\n"
             f"\n"
             f"-# **Members**\n"
             f"> -# Total: `{g.member_count}`\n"
@@ -693,8 +694,6 @@ class ServerCommands(Package):
                 f"> -# {features_str}"
             )
 
-        content += f"\n\n-# `Guild ID:` `{g.id}`"
-
         container = discord.ui.Container()
 
         container.add_item(
@@ -708,9 +707,7 @@ class ServerCommands(Package):
         )
 
         container.add_item(
-            discord.ui.TextDisplay(
-                content
-            )
+            discord.ui.TextDisplay(content)
         )
 
         assets = []
@@ -747,7 +744,10 @@ class ServerCommands(Package):
                 discord.ui.ActionRow(*assets)
             )
 
-        await ctx.send(view=container)
+        view = discord.ui.View()
+        view.add_item(container)
+
+        await ctx.send(view=view)
 
     @staticmethod
     def _strip_commas(value: str) -> str:
