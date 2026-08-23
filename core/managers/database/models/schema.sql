@@ -551,6 +551,7 @@ CREATE TABLE IF NOT EXISTS aliases (
     guild_id     BIGINT NOT NULL,
     command_name TEXT NOT NULL,
     alias        TEXT NOT NULL,
+    with_parameters BOOLEAN DEFAULT FALSE,
     created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (guild_id, alias)
 );
@@ -560,6 +561,7 @@ CREATE TABLE IF NOT EXISTS selfaliases (
     name     TEXT NOT NULL,
     invoke   TEXT NOT NULL,
     command  TEXT NOT NULL,
+    with_parameters BOOLEAN DEFAULT FALSE,
     PRIMARY KEY (user_id, name)
 );
 

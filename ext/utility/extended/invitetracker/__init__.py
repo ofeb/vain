@@ -138,6 +138,52 @@ class InviteTracker(Package):
         )
 
     @invites.command(
+        name="purge",
+        description="delete all invites with 0 uses created by members",
+    )
+    @has_permissions(manage_guild=True)
+    async def invites_purge(self, ctx: Context):
+        from core.discord.views.confirm import ConfirmView
+
+        await ctx.typing()
+        invites = await ctx.guild.invites()
+
+        purgeable = [
+            inv for inv in invites
+            if inv.uses == 0
+            and inv.inviter is not None
+            and not inv.inviter.bot
+            and not inv.max_uses
+            and not inv.max_age
+        ]
+
+        if not purgeable:
+            return await ctx.warn("No **purgeable** invites found\n> -# **invites:** all invites have uses or are temporary")
+
+        view = ConfirmView(ctx)
+        message = (
+            f"This will **delete {len(purgeable)} invite(s)** with 0 uses.\n"
+            f"This action **can't be undone**.\n"
+            f"Are you sure you want to do this?"
+        )
+        if not await view.prompt(message):
+            return await ctx.warn("Purge was **cancelled**\n> -# **invites:** no invites were deleted")
+
+        deleted = 0
+        failed = 0
+        for inv in purgeable:
+            try:
+                await inv.delete(reason=f"Invite purge by {ctx.author}")
+                deleted += 1
+            except discord.HTTPException:
+                failed += 1
+
+        parts = [f"**{deleted}** invite(s) deleted"]
+        if failed:
+            parts.append(f"**{failed}** failed to delete")
+        return await ctx.success(", ".join(parts))
+
+    @invites.command(
         name="resetuser",
         description="reset invite counts for one user",
     )

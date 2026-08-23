@@ -659,10 +659,19 @@ class VoiceMaster(VoiceMasterEvents, Package):
         await VoiceMasterSettings.insert_ban(
             self.bot.db, ctx.guild.id, member.id, ctx.author.id,
         )
+        vm_channel_ids = await VoiceMasterSettings.fetch_guild_channel_ids(
+            self.bot.db, ctx.guild.id,
+        )
+        for cid in vm_channel_ids:
+            channel = ctx.guild.get_channel(cid)
+            if channel is not None:
+                with contextlib.suppress(discord.HTTPException):
+                    await channel.set_permissions(
+                        member,
+                        connect=False,
+                        reason=f"VoiceMaster: {ctx.author} banned {member} from voicemaster",
+                    )
         if member.voice and member.voice.channel:
-            vm_channel_ids = await VoiceMasterSettings.fetch_guild_channel_ids(
-                self.bot.db, ctx.guild.id,
-            )
             if member.voice.channel.id in vm_channel_ids:
                 with contextlib.suppress(discord.HTTPException):
                     await member.move_to(None, reason="VoiceMaster: banned from voicemaster")
@@ -677,6 +686,18 @@ class VoiceMaster(VoiceMasterEvents, Package):
             self.bot.db, ctx.guild.id, member.id,
         )
         if deleted:
+            vm_channel_ids = await VoiceMasterSettings.fetch_guild_channel_ids(
+                self.bot.db, ctx.guild.id,
+            )
+            for cid in vm_channel_ids:
+                channel = ctx.guild.get_channel(cid)
+                if channel is not None:
+                    with contextlib.suppress(discord.HTTPException):
+                        await channel.set_permissions(
+                            member,
+                            connect=None,
+                            reason=f"VoiceMaster: {ctx.author} unbanned {member} from voicemaster",
+                        )
             await ctx.send(view=_vm_container(f"Unbanned {member.mention}\n> -# **can now join voicemaster channels**"))
         else:
             await ctx.send(view=_vm_container(f"{member.mention} is **not banned**"))

@@ -30,6 +30,7 @@ EVENT_TYPES = {
     "invites": "Invite create/delete logging",
     "emojis": "Emoji/sticker create/delete/update logging",
     "voice": "Voice channel join/leave/mute/deafen logging",
+    "guild": "Guild/webhook update logging",
 }
 
 PERMISSION_NAMES = {
@@ -193,15 +194,31 @@ class Log(LogEvents, Package):
             pass
         return None
 
-    async def _is_ignored(self, guild_id: int, target_id: int) -> bool:
+    async def _is_ignored(self, guild_id: int, target_id: int, member: discord.Member | None = None) -> bool:
         try:
             result = await self.db.fetchval(
                 "SELECT 1 FROM log_ignored WHERE guild_id = $1 AND target_id = $2 LIMIT 1",
                 guild_id, target_id,
             )
-            return bool(result)
+            if result:
+                return True
         except Exception:
-            return False
+            pass
+
+        if member is not None:
+            try:
+                ignored_roles = await self.db.fetch(
+                    "SELECT target_id FROM log_ignored WHERE guild_id = $1 AND target_type = 'role'",
+                    guild_id,
+                )
+                member_role_ids = {r.id for r in member.roles}
+                for row in ignored_roles:
+                    if row["target_id"] in member_role_ids:
+                        return True
+            except Exception:
+                pass
+
+        return False
 
     async def _log(
         self,
@@ -563,12 +580,12 @@ class Log(LogEvents, Package):
 
     @log.group(
         name="ignore",
-        description="ignore a member or channel from being logged",
+        description="ignore a member, role, or channel from being logged",
         invoke_without_command=True,
         example=",log ignore jonathan",
     )
     @has_permissions(manage_guild=True)
-    async def log_ignore(self, ctx: Context, target: Union[discord.Member, discord.TextChannel, discord.VoiceChannel] = None) -> None:
+    async def log_ignore(self, ctx: Context, target: Union[discord.Member, discord.Role, discord.TextChannel, discord.VoiceChannel] = None) -> None:
         if target is None:
             return await ctx.send_help(ctx.command)
 
@@ -579,7 +596,12 @@ class Log(LogEvents, Package):
         if existing:
             return await ctx.warn(f"{target.mention} is already **ignored** from logging")
 
-        target_type = "member" if isinstance(target, discord.Member) else "channel"
+        if isinstance(target, discord.Member):
+            target_type = "member"
+        elif isinstance(target, discord.Role):
+            target_type = "role"
+        else:
+            target_type = "channel"
         await self.db.execute(
             "INSERT INTO log_ignored (guild_id, target_id, target_type) VALUES ($1, $2, $3)",
             ctx.guild.id, target.id, target_type,
@@ -588,11 +610,11 @@ class Log(LogEvents, Package):
 
     @log_ignore.command(
         name="remove",
-        description="remove an ignored member or channel",
+        description="remove an ignored member, role, or channel",
         example=",log ignore remove jonathan",
     )
     @has_permissions(manage_guild=True)
-    async def log_ignore_remove(self, ctx: Context, target: Union[discord.Member, discord.TextChannel, discord.VoiceChannel] = None) -> None:
+    async def log_ignore_remove(self, ctx: Context, target: Union[discord.Member, discord.Role, discord.TextChannel, discord.VoiceChannel] = None) -> None:
         if target is None:
             return await ctx.send_help(ctx.command)
 
@@ -606,7 +628,7 @@ class Log(LogEvents, Package):
 
     @log_ignore.command(
         name="list",
-        description="view all ignored members and channels",
+        description="view all ignored members, roles, and channels",
         aliases=["ls", "show", "view"],
     )
     @has_permissions(manage_guild=True)
@@ -616,12 +638,14 @@ class Log(LogEvents, Package):
             ctx.guild.id,
         )
         if not rows:
-            return await ctx.warn("No members or channels are **ignored** from logging")
+            return await ctx.warn("No members, roles, or channels are **ignored** from logging")
 
         lines = []
         for row in rows:
             if row[1] == "member":
                 obj = ctx.guild.get_member(row[0])
+            elif row[1] == "role":
+                obj = ctx.guild.get_role(row[0])
             else:
                 obj = ctx.guild.get_channel(row[0])
             if obj:

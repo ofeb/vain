@@ -666,21 +666,23 @@ class Vain(commands.AutoShardedBot):
                     name = raw_name.lower().strip().rstrip(",").lstrip(",")
                     tail = rest[len(raw_name) :].lstrip()
                     inv = None
+                    with_parameters = False
                     try:
                         row = await self.db.fetchrow(
-                            "SELECT invoke FROM selfaliases WHERE user_id = $1 AND name = $2",
+                            "SELECT invoke, with_parameters FROM selfaliases WHERE user_id = $1 AND name = $2",
                             origin.author.id,
                             name,
                         )
                         if row:
                             inv = row["invoke"] if hasattr(row, "keys") else row[0]
+                            with_parameters = row["with_parameters"] if hasattr(row, "keys") else (row[1] if len(row) > 1 else False)
                     except Exception:
                         inv = None
                     if inv is None and getattr(origin, "guild", None) is not None:
                         try:
                             row = await self.db.fetchrow(
                                 """
-                                SELECT command_name FROM aliases
+                                SELECT command_name, with_parameters FROM aliases
                                 WHERE guild_id = $1 AND lower(trim(both ',' from alias)) = $2
                                 """,
                                 origin.guild.id,
@@ -689,7 +691,7 @@ class Vain(commands.AutoShardedBot):
                             if not row:
                                 row = await self.db.fetchrow(
                                     """
-                                    SELECT command_name FROM aliases
+                                    SELECT command_name, with_parameters FROM aliases
                                     WHERE guild_id = $1 AND lower(alias) = $2
                                     """,
                                     origin.guild.id,
@@ -697,11 +699,16 @@ class Vain(commands.AutoShardedBot):
                                 )
                             if row:
                                 inv = row["command_name"] if hasattr(row, "keys") else row[0]
+                                with_parameters = row["with_parameters"] if hasattr(row, "keys") else (row[1] if len(row) > 1 else False)
                         except Exception:
                             inv = None
                     if inv:
                         inv = str(inv).strip()
-                        new_content = f"{ctx.prefix}{inv}" + (f" {tail}" if tail else "")
+                        if with_parameters and "{}" in inv:
+                            inv = inv.replace("{}", tail if tail else "", 1)
+                            new_content = f"{ctx.prefix}{inv}"
+                        else:
+                            new_content = f"{ctx.prefix}{inv}" + (f" {tail}" if tail else "")
                         origin = copy.copy(origin)
                         origin._update({"content": new_content})
                         ctx = await super().get_context(origin, cls=cls)

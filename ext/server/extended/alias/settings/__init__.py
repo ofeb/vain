@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 from logging import getLogger
 from typing import Any
 
@@ -114,28 +115,38 @@ class Settings:
                 name TEXT NOT NULL,
                 invoke TEXT NOT NULL,
                 command TEXT NOT NULL,
+                with_parameters BOOLEAN DEFAULT FALSE,
                 PRIMARY KEY (user_id, name)
             )
             """
         )
+        with contextlib.suppress(Exception):
+            await db.execute(
+                "ALTER TABLE aliases ADD COLUMN IF NOT EXISTS with_parameters BOOLEAN DEFAULT FALSE"
+            )
+        with contextlib.suppress(Exception):
+            await db.execute(
+                "ALTER TABLE selfaliases ADD COLUMN IF NOT EXISTS with_parameters BOOLEAN DEFAULT FALSE"
+            )
 
     
 
     @staticmethod
     async def add_selfalias(
-        db: Any, user_id: int, name: str, invoke: str, command: str
+        db: Any, user_id: int, name: str, invoke: str, command: str, with_parameters: bool = False
     ) -> None:
         await db.execute(
             """
-            INSERT INTO selfaliases (user_id, name, invoke, command)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO selfaliases (user_id, name, invoke, command, with_parameters)
+            VALUES ($1, $2, $3, $4, $5)
             ON CONFLICT (user_id, name) DO UPDATE
-            SET invoke = EXCLUDED.invoke, command = EXCLUDED.command
+            SET invoke = EXCLUDED.invoke, command = EXCLUDED.command, with_parameters = EXCLUDED.with_parameters
             """,
             user_id,
             name,
             invoke,
             command,
+            with_parameters,
         )
 
     @staticmethod

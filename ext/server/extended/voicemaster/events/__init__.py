@@ -37,6 +37,12 @@ class VoiceMasterEvents:
                     await member.move_to(None, reason="VoiceMaster: banned from voicemaster")
                 return
 
+        channel_overwrites = after.channel.overwrites_for(member)
+        if channel_overwrites.connect is False:
+            with contextlib.suppress(discord.HTTPException):
+                await member.move_to(None, reason="VoiceMaster: banned from voicemaster")
+            return
+
         cooldown_key = f"vm_create:{member.id}"
         if self._get_cooldown(cooldown_key, 1, 10):
             with contextlib.suppress(discord.HTTPException):

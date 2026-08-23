@@ -449,9 +449,8 @@ class Context(commands.Context):
             self._message_embed(
                 self._strip_self_mention(message),
                 emoji=emoji,
-                color_value=await self._get_color("approve"),
+                color_value=None,
             ),
-            raw_embed=True,
             **kw,
         )
 
@@ -468,9 +467,8 @@ class Context(commands.Context):
             self._message_embed(
                 self._strip_self_mention(message),
                 emoji=emoji,
-                color_value=await self._get_color("deny"),
+                color_value=None,
             ),
-            raw_embed=True,
             **kw,
         )
 
@@ -482,9 +480,8 @@ class Context(commands.Context):
             self._message_embed(
                 self._strip_self_mention(message),
                 emoji=emoji,
-                color_value=await self._get_color("warn"),
+                color_value=None,
             ),
-            raw_embed=True,
             **kw,
         )
 
@@ -496,7 +493,7 @@ class Context(commands.Context):
             self._message_embed(
                 self._strip_self_mention(message),
                 emoji=emoji,
-                color_value=await self._get_color("cooldown"),
+                color_value=None,
             ),
             **kw,
         )

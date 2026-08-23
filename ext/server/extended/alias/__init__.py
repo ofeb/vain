@@ -78,7 +78,7 @@ class AliasCommands(Package):
         from core.discord.views.embed import body as _body
 
         entries = await self.db.fetch(
-            """SELECT alias, command_name FROM aliases WHERE guild_id = $1 ORDER BY alias ASC""",
+            """SELECT alias, command_name, with_parameters FROM aliases WHERE guild_id = $1 ORDER BY alias ASC""",
             ctx.guild.id,
         )
         if not entries:
@@ -89,11 +89,13 @@ class AliasCommands(Package):
         for e in entries:
             alias = str(e["alias"] if hasattr(e, "keys") else e[0]).strip().rstrip(",")
             cmd = str(e["command_name"] if hasattr(e, "keys") else e[1]).strip()
+            wp = e["with_parameters"] if hasattr(e, "keys") else (e[2] if len(e) > 2 else False)
             key = alias.lower()
             if not alias or key in seen:
                 continue
             seen.add(key)
-            clean.append((alias, cmd))
+            wp_tag = " `{}`" if wp else ""
+            clean.append((alias, cmd, wp_tag))
         if not clean:
             return await ctx.warn("No aliases have been added")
 
@@ -104,8 +106,8 @@ class AliasCommands(Package):
         for start in range(0, total, chunk):
             batch = clean[start : start + chunk]
             lines = [
-                f"-# `{i}.` **{alias}** · `{cmd}`"
-                for i, (alias, cmd) in enumerate(batch, start=start + 1)
+                f"-# `{i}.` **{alias}** · `{cmd}`{wp_tag}"
+                for i, (alias, cmd, wp_tag) in enumerate(batch, start=start + 1)
             ]
             container = _ui.Container()
             for attr in ("accent_color", "accent_colour"):
@@ -125,15 +127,48 @@ class AliasCommands(Package):
         return await ctx.paginate(pages)
 
 
+    def _parse_wp_flag(self, payload: str) -> tuple[str, bool]:
+        """Parse --with_parameters or --wp flag from payload. Returns (cleaned_payload, with_parameters)."""
+        text = (payload or "").strip()
+        with_parameters = False
+        flag_patterns = ["--with_parameters", "--wp"]
+        for flag in flag_patterns:
+            if flag in text.lower():
+                with_parameters = True
+                text = re.sub(r'\s*' + re.escape(flag) + r'\s*', ' ', text, flags=re.IGNORECASE).strip()
+                break
+        return text, with_parameters
+
+    def _find_command(self, name: str):
+        """Find a command by name, supporting group subcommands like 'role add'."""
+        cmd = self.bot.get_command(name)
+        if cmd:
+            return cmd
+        parts = name.strip().split()
+        if len(parts) >= 2:
+            for i in range(len(parts), 0, -1):
+                candidate = " ".join(parts[:i])
+                cmd = self.bot.get_command(candidate)
+                if cmd and hasattr(cmd, "commands"):
+                    sub_name = " ".join(parts[i:])
+                    sub_cmd = cmd.get_command(sub_name)
+                    if sub_cmd:
+                        return sub_cmd
+                    if sub_name:
+                        return cmd
+        return None
+
     @alias.command(
         name="add",
         aliases=["create"],
-        description="create an alias for a command",
-        example=",alias add dep, ban",
+        description="create an alias for a command (use --wp to allow parameters with {})",
+        example=",alias add dep, ban  or  ,alias add role add, r {} --wp",
     )
     @has_permissions(manage_guild=True)
     async def alias_add(self, ctx, *, payload: str):
-        """add a command alias - format: <alias>, <command>"""
+        """add a command alias - format: <alias>, <command> [--wp]"""
+        payload, with_parameters = self._parse_wp_flag(payload)
+
         if "," not in (payload or ""):
             return await ctx.warn(
                 "A **comma** is required between the alias and command\n"
@@ -145,8 +180,15 @@ class AliasCommands(Package):
                 "Use a comma between alias and command\n"
                 "> -# **example:** `alias add dep, ban`"
             )
+
+        if "{}" in invoke and not with_parameters:
+            return await ctx.warn(
+                "Use **--wp** (or **--with_parameters**) to create an alias with parameters\n"
+                "> -# **example:** `alias add sp, purge {} 30 --wp`"
+            )
+
         root = invoke.split()[0]
-        cmd = self.bot.get_command(root)
+        cmd = self._find_command(root)
         if cmd is None:
             return await ctx.warn(f"Unknown command `{root}`")
         if self.bot.get_command(shortcut.lower()):
@@ -162,13 +204,15 @@ class AliasCommands(Package):
                 "> -# **remove it first** to create a new one"
             )
         await self.db.execute(
-            """INSERT INTO aliases (guild_id, command_name, alias) VALUES($1, $2, $3)""",
+            """INSERT INTO aliases (guild_id, command_name, alias, with_parameters) VALUES($1, $2, $3, $4)""",
             ctx.guild.id,
             cmd.qualified_name,
             shortcut.lower(),
+            with_parameters,
         )
+        wp_note = " (with parameters)" if with_parameters else ""
         return await ctx.success(
-            f"Alias added\n> -# **{shortcut.lower()}** → `{cmd.qualified_name}`"
+            f"Alias added\n> -# **{shortcut.lower()}** → `{cmd.qualified_name}`{wp_note}"
         )
 
     @alias.command(
@@ -240,10 +284,12 @@ class AliasCommands(Package):
     @alias_self.command(
         name="add",
         aliases=["create", "set"],
-        description="add a personal alias",
-        example=",alias self add deport, ban",
+        description="add a personal alias (use --wp to allow parameters with {})",
+        example=",alias self add deport, ban  or  ,alias self add sp, purge {} 30 --wp",
     )
     async def alias_self_add(self, ctx, *, payload: str):
+        payload, with_parameters = self._parse_wp_flag(payload)
+
         if "," not in (payload or ""):
             return await ctx.warn(
                 "A **comma** is required between the alias and command\n"
@@ -258,8 +304,15 @@ class AliasCommands(Package):
             return await ctx.warn(
                 "Provide a command after the alias\n> -# **example:** `alias self add deport, ban`"
             )
+
+        if "{}" in invoke and not with_parameters:
+            return await ctx.warn(
+                "Use **--wp** (or **--with_parameters**) to create an alias with parameters\n"
+                "> -# **example:** `alias self add sp, purge {} 30 --wp`"
+            )
+
         root = invoke.split()[0]
-        cmd = self.bot.get_command(root)
+        cmd = self._find_command(root)
         if cmd is None:
             return await ctx.warn(f"Unknown command `{root}`")
         if self.bot.get_command(shortcut.lower()):
@@ -273,10 +326,11 @@ class AliasCommands(Package):
                 "> -# **remove it first** to create a new one"
             )
         await Settings.add_selfalias(
-            self.db, ctx.author.id, shortcut.lower(), invoke, cmd.qualified_name
+            self.db, ctx.author.id, shortcut.lower(), invoke, cmd.qualified_name, with_parameters
         )
+        wp_note = " (with parameters)" if with_parameters else ""
         return await ctx.success(
-            f"Self alias added\n> -# **`{shortcut.lower()}`** → `{invoke}`"
+            f"Self alias added\n> -# **`{shortcut.lower()}`** → `{invoke}`{wp_note}"
         )
 
     @alias_self.command(
@@ -338,10 +392,12 @@ class AliasCommands(Package):
         for e in raw:
             name = str(e["name"]).strip().rstrip(",")
             inv = str(e["invoke"]).strip()
+            wp = e.get("with_parameters", False)
             if not name or name.lower() in seen:
                 continue
             seen.add(name.lower())
-            clean.append((name, inv))
+            wp_tag = " `{}`" if wp else ""
+            clean.append((name, inv, wp_tag))
         pages = []
         chunk = 10
         total = len(clean)
@@ -349,8 +405,8 @@ class AliasCommands(Package):
         for start in range(0, total, chunk):
             batch = clean[start : start + chunk]
             lines = [
-                f"-# `{i}.` **{name}** · `{inv}`"
-                for i, (name, inv) in enumerate(batch, start=start + 1)
+                f"-# `{i}.` **{name}** · `{inv}`{wp_tag}"
+                for i, (name, inv, wp_tag) in enumerate(batch, start=start + 1)
             ]
             container = _ui.Container()
             for attr in ("accent_color", "accent_colour"):

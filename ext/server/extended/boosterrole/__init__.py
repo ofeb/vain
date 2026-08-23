@@ -63,20 +63,24 @@ class _BoostConfirmView(discord.ui.View):
                 await self.message.delete()
 
     async def prompt(self, message: str | None = None, *, embed: discord.Embed | None = None, delete_after: bool = True) -> bool:
-        from discord import ui as _ui
-        from core.discord.ctx import layout_from_items
+        from core.discord.views.confirm import _build_confirm_layout
         display_message = message or "Are you sure you want to do this?"
-        container = _ui.Container()
-        for attr in ("accent_color", "accent_colour", "color", "colour"):
-            if hasattr(container, attr):
-                with contextlib.suppress(Exception):
-                    setattr(container, attr, None)
-        container.add_item(_ui.TextDisplay(display_message))
-        layout = layout_from_items([container], timeout=None)
+        layout = _build_confirm_layout(display_message)
         self.message = await self.ctx.send(view=layout)
         with contextlib.suppress(discord.HTTPException, Exception):
             await self.message.edit(view=self)
         await self.wait()
+        if not self.value and delete_after:
+            from core.discord.views.confirm import ConfirmView
+            cancel_view = ConfirmView(self.ctx)
+            cancel_view.value = False
+            if self.message is not None:
+                with contextlib.suppress(Exception):
+                    await self.message.edit(
+                        embed=cancel_view._cancel_warn_embed("Cancelled"),
+                        view=None,
+                    )
+                    await asyncio.sleep(5)
         if delete_after and self.message is not None:
             with contextlib.suppress(discord.HTTPException):
                 await self.message.delete()

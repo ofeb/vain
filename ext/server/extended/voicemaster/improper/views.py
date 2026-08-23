@@ -222,13 +222,26 @@ class VoiceInterface(ui.LayoutView):
         self,
         cog: "VoiceMaster",
         guild: discord.Guild,
+        *,
+        channel: discord.VoiceChannel | None = None,
     ) -> None:
         self.cog = cog
         self.guild = guild
+        self._channel_state = self._get_channel_state(channel)
 
         super().__init__(timeout=None)
 
         self._build()
+
+    def _get_channel_state(self, channel: discord.VoiceChannel | None) -> dict:
+        if channel is None:
+            return {"locked": False, "hidden": False}
+        default_role = channel.guild.default_role
+        overwrites = channel.overwrites_for(default_role)
+        return {
+            "locked": overwrites.connect is False,
+            "hidden": overwrites.view_channel is False,
+        }
 
     def _build(self) -> None:
         container = ui.Container()
@@ -291,26 +304,31 @@ class VoiceInterface(ui.LayoutView):
             )
         )
 
+        state = self._channel_state
         buttons = {
             "lock": ui.Button(
                 style=discord.ButtonStyle.secondary,
                 emoji=VM["lock"],
                 custom_id="voicemaster:lock",
+                disabled=state["locked"],
             ),
             "unlock": ui.Button(
                 style=discord.ButtonStyle.secondary,
                 emoji=VM["unlock"],
                 custom_id="voicemaster:unlock",
+                disabled=not state["locked"],
             ),
             "hide": ui.Button(
                 style=discord.ButtonStyle.secondary,
                 emoji=VM["hide"],
                 custom_id="voicemaster:hide",
+                disabled=state["hidden"],
             ),
             "reveal": ui.Button(
                 style=discord.ButtonStyle.secondary,
                 emoji=VM["reveal"],
                 custom_id="voicemaster:reveal",
+                disabled=not state["hidden"],
             ),
             "claim": ui.Button(
                 style=discord.ButtonStyle.secondary,
@@ -381,6 +399,11 @@ class VoiceInterface(ui.LayoutView):
         )
 
         self.add_item(container)
+
+    def _refresh(self, channel: discord.VoiceChannel) -> None:
+        self._channel_state = self._get_channel_state(channel)
+        self.clear_items()
+        self._build()
 
     async def _get_owner_id(
         self,
@@ -554,6 +577,7 @@ class VoiceInterface(ui.LayoutView):
         )
 
         await self.cog._move_to_private_category(channel)
+        self._refresh(channel)
 
         await _reply(
             interaction,
@@ -575,6 +599,7 @@ class VoiceInterface(ui.LayoutView):
         )
 
         await self.cog._move_to_original_category(channel)
+        self._refresh(channel)
 
         await _reply(
             interaction,
@@ -698,6 +723,7 @@ class VoiceInterface(ui.LayoutView):
         )
 
         await self.cog._move_to_private_category(channel)
+        self._refresh(channel)
 
         await _reply(
             interaction,
@@ -719,6 +745,7 @@ class VoiceInterface(ui.LayoutView):
         )
 
         await self.cog._move_to_original_category(channel)
+        self._refresh(channel)
 
         await _reply(
             interaction,

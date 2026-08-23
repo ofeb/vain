@@ -259,7 +259,8 @@ class LogEvents:
             return
         if await self._is_ignored(message.guild.id, message.channel.id):
             return
-        if await self._is_ignored(message.guild.id, message.author.id):
+        member = message.author if isinstance(message.author, discord.Member) else None
+        if await self._is_ignored(message.guild.id, message.author.id, member):
             return
         ts = int(message.created_at.timestamp())
         lines = [
@@ -421,7 +422,8 @@ class LogEvents:
             return
         if await self._is_ignored(before.guild.id, before.channel.id):
             return
-        if await self._is_ignored(before.guild.id, before.author.id):
+        member = before.author if isinstance(before.author, discord.Member) else None
+        if await self._is_ignored(before.guild.id, before.author.id, member):
             return
         ts = int(discord.utils.utcnow().timestamp())
         lines = [
@@ -445,10 +447,10 @@ class LogEvents:
             return
         if await self._is_ignored(payload.guild_id, payload.channel_id):
             return
-        if await self._is_ignored(payload.guild_id, payload.user_id):
-            return
         user = guild.get_member(payload.user_id) or self.bot.get_user(payload.user_id)
         if user is None or getattr(user, "bot", False):
+            return
+        if await self._is_ignored(payload.guild_id, payload.user_id, user if isinstance(user, discord.Member) else None):
             return
         jump = f"https://discord.com/channels/{payload.guild_id}/{payload.channel_id}/{payload.message_id}"
         lines = [
@@ -469,10 +471,10 @@ class LogEvents:
             return
         if await self._is_ignored(payload.guild_id, payload.channel_id):
             return
-        if await self._is_ignored(payload.guild_id, payload.user_id):
-            return
         user = guild.get_member(payload.user_id) or self.bot.get_user(payload.user_id)
         if user is None or getattr(user, "bot", False):
+            return
+        if await self._is_ignored(payload.guild_id, payload.user_id, user if isinstance(user, discord.Member) else None):
             return
         jump = f"https://discord.com/channels/{payload.guild_id}/{payload.channel_id}/{payload.message_id}"
         lines = [
@@ -487,7 +489,7 @@ class LogEvents:
 
     @Package.listener()
     async def on_member_join(self, member: discord.Member) -> None:
-        if await self._is_ignored(member.guild.id, member.id):
+        if await self._is_ignored(member.guild.id, member.id, member):
             return
 
         embed = panel_embed(
@@ -504,7 +506,7 @@ class LogEvents:
 
     @Package.listener()
     async def on_member_remove(self, member: discord.Member) -> None:
-        if await self._is_ignored(member.guild.id, member.id):
+        if await self._is_ignored(member.guild.id, member.id, member):
             return
 
         entry = await _get_audit_entry(member.guild, discord.AuditLogAction.kick, member.id)
@@ -538,7 +540,7 @@ class LogEvents:
     async def on_member_update(self, before: discord.Member, after: discord.Member) -> None:
         if before.bot:
             return
-        if await self._is_ignored(after.guild.id, after.id):
+        if await self._is_ignored(after.guild.id, after.id, after):
             return
 
         if before.nick != after.nick:
@@ -952,7 +954,7 @@ class LogEvents:
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState) -> None:
         if member.bot:
             return
-        if await self._is_ignored(member.guild.id, member.id):
+        if await self._is_ignored(member.guild.id, member.id, member):
             return
 
         def _voice_embed(headline: str, *, extra_lines: list[str] | None = None) -> discord.Embed:
@@ -1179,7 +1181,119 @@ class LogEvents:
                 lines=lines,
                 footer=f"User ID : {moderator.id}" if moderator else None,
             )
-            await self._log(after.guild.id, "channels", embed)
+        await self._log(after.guild.id, "channels", embed)
+
+    @Package.listener()
+    async def on_guild_stickers_update(self, guild: discord.Guild, before: list[discord.GuildSticker], after: list[discord.GuildSticker]) -> None:
+        before_map = {s.id: s for s in before}
+        after_map = {s.id: s for s in after}
+
+        for sticker in after:
+            if sticker.id not in before_map:
+                entry = await _get_audit_entry(guild, discord.AuditLogAction.sticker_create, sticker.id)
+                lines = [
+                    f"Sticker created by {entry.user.mention}"
+                    if entry and entry.user
+                    else "Sticker created",
+                    label_line("Name", sticker.name),
+                ]
+                if sticker.description:
+                    lines.append(label_line("Description", sticker.description))
+                embed = panel_embed(
+                    author="Sticker created",
+                    author_icon=entry.user.display_avatar.url if entry and entry.user else None,
+                    lines=lines,
+                    footer=f"User ID : {entry.user.id}" if entry and entry.user else None,
+                )
+                await self._log(guild.id, "emojis", embed)
+
+        for sticker in before:
+            if sticker.id not in after_map:
+                entry = await _get_audit_entry(guild, discord.AuditLogAction.sticker_delete, sticker.id)
+                lines = [
+                    f"Sticker **{sticker.name}** deleted by {entry.user.mention}"
+                    if entry and entry.user
+                    else f"Sticker **{sticker.name}** deleted",
+                ]
+                embed = panel_embed(
+                    author="Sticker deleted",
+                    author_icon=entry.user.display_avatar.url if entry and entry.user else None,
+                    lines=lines,
+                    footer=f"User ID : {entry.user.id}" if entry and entry.user else None,
+                )
+                await self._log(guild.id, "emojis", embed)
+
+        for sid, after_sticker in after_map.items():
+            before_sticker = before_map.get(sid)
+            if before_sticker and before_sticker.name != after_sticker.name:
+                entry = await _get_audit_entry(guild, discord.AuditLogAction.sticker_update, after_sticker.id)
+                lines = [
+                    f"Sticker updated by {entry.user.mention}"
+                    if entry and entry.user
+                    else "Sticker updated",
+                    label_line("Name", f"{before_sticker.name} → {after_sticker.name}"),
+                ]
+                embed = panel_embed(
+                    author="Sticker updated",
+                    author_icon=entry.user.display_avatar.url if entry and entry.user else None,
+                    lines=lines,
+                    footer=f"User ID : {entry.user.id}" if entry and entry.user else None,
+                )
+                await self._log(guild.id, "emojis", embed)
+
+    @Package.listener()
+    async def on_guild_update(self, before: discord.Guild, after: discord.Guild) -> None:
+        changes = []
+        if before.name != after.name:
+            changes.append(label_line("Name", f"{before.name} → {after.name}"))
+        if before.icon != after.icon:
+            changes.append(label_line("Icon", "Updated"))
+        if before.owner_id != after.owner_id:
+            changes.append(label_line("Owner", f"<@{before.owner_id}> → <@{after.owner_id}>"))
+        if before.splash != after.splash:
+            changes.append(label_line("Splash", "Updated"))
+        if before.discovery_splash != after.discovery_splash:
+            changes.append(label_line("Discovery Splash", "Updated"))
+        if before.banner != after.banner:
+            changes.append(label_line("Banner", "Updated"))
+        if before.verification_level != after.verification_level:
+            changes.append(label_line("Verification Level", f"`{before.verification_level}` → `{after.verification_level}`"))
+        if before.default_message_notifications != after.default_message_notifications:
+            changes.append(label_line("Default Notifications", f"`{before.default_message_notifications}` → `{after.default_message_notifications}`"))
+        if before.mfa_level != after.mfa_level:
+            changes.append(label_line("MFA Level", f"`{before.mfa_level}` → `{after.mfa_level}`"))
+        if before.premium_tier != after.premium_tier:
+            changes.append(label_line("Boost Tier", f"`{before.premium_tier}` → `{after.premium_tier}`"))
+        if before.premium_progress_bar_enabled != after.premium_progress_bar_enabled:
+            changes.append(label_line("Boost Progress Bar", f"`{before.premium_progress_bar_enabled}` → `{after.premium_progress_bar_enabled}`"))
+        if before.vanity_url_code != after.vanity_url_code:
+            changes.append(label_line("Vanity URL", f"`{before.vanity_url_code}` → `{after.vanity_url_code}`"))
+
+        if not changes:
+            return
+
+        entry = await _get_audit_entry(after, discord.AuditLogAction.guild_update)
+        moderator = entry.user if entry else None
+
+        embed = panel_embed(
+            author="Guild updated",
+            author_icon=moderator.display_avatar.url if moderator else None,
+            lines=changes,
+            footer=f"User ID : {moderator.id}" if moderator else None,
+        )
+        await self._log(after.id, "guild", embed)
+
+    @Package.listener()
+    async def on_guild_webhooks_update(self, channel: discord.TextChannel, guild: discord.Guild) -> None:
+        entry = await _get_audit_entry(guild, discord.AuditLogAction.webhook_create)
+        if entry and entry.user:
+            embed = panel_embed(
+                author="Webhook updated",
+                author_icon=entry.user.display_avatar.url,
+                lines=[f"Webhooks updated in {channel.mention} by {entry.user.mention}"],
+                footer=f"User ID : {entry.user.id}",
+            )
+            await self._log(guild.id, "guild", embed)
 
     @Package.listener()
     async def on_thread_create(self, thread: discord.Thread) -> None:

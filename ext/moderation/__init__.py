@@ -75,26 +75,37 @@ class _BoostConfirmView(discord.ui.View):
         await interaction.response.defer()
         self.stop()
 
+    async def on_timeout(self) -> None:
+        self.value = False
+        if self.message is not None:
+            with contextlib.suppress(discord.HTTPException):
+                await self.message.delete()
+
     async def prompt(self) -> bool:
-        from discord import ui as _ui
-        from core.discord.ctx import layout_from_items
+        from core.discord.views.confirm import _build_confirm_layout
         message = (
             f"Are you sure you want to **{self._action}** {self.member.mention}?\n"
             f"They are currently boosting the server."
         )
-        container = _ui.Container()
-        for attr in ("accent_color", "accent_colour", "color", "colour"):
-            if hasattr(container, attr):
-                with contextlib.suppress(Exception):
-                    setattr(container, attr, None)
-        container.add_item(_ui.TextDisplay(message))
-        layout = layout_from_items([container], timeout=None)
+        layout = _build_confirm_layout(message)
         self.message = await self.ctx.send(view=layout)
         with contextlib.suppress(discord.HTTPException, Exception):
             await self.message.edit(view=self)
         await self.wait()
+        if not self.value:
+            from core.discord.views.confirm import ConfirmView
+            cancel_view = ConfirmView(self.ctx)
+            cancel_view.value = False
+            if self.message is not None:
+                with contextlib.suppress(Exception):
+                    await self.message.edit(
+                        embed=cancel_view._cancel_warn_embed("Cancelled"),
+                        view=None,
+                    )
+                    await asyncio.sleep(5)
         with contextlib.suppress(discord.HTTPException):
-            await self.message.delete()
+            if self.message is not None:
+                await self.message.delete()
         return bool(self.value)
 
 class ModerationCommands(Package):
