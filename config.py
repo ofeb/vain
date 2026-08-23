@@ -107,7 +107,7 @@ class color:
 
 class database:
     enabled: bool = True
-    dsn: str = "postgresql://bleed_user:bleed@localhost:5432/bleed"
+    dsn: str = "postgresql://postgres@localhost:5432/vain"
 
 
 class redis:
