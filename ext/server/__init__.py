@@ -581,7 +581,7 @@ class ServerCommands(Package):
             search_placeholder="Jump to category…",
         )
 
-    @command(
+   @command(
         name="serverinfo",
         description="view detailed information about the current server",
         aliases=["si", "server", "guildinfo", "gi"],
