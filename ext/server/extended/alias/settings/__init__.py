@@ -120,14 +120,24 @@ class Settings:
             )
             """
         )
-        with contextlib.suppress(Exception):
-            await db.execute(
-                "ALTER TABLE aliases ADD COLUMN IF NOT EXISTS with_parameters BOOLEAN DEFAULT FALSE"
+        await db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS aliases (
+                guild_id BIGINT NOT NULL,
+                command_name TEXT NOT NULL,
+                alias TEXT NOT NULL,
+                with_parameters BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (guild_id, alias)
             )
-        with contextlib.suppress(Exception):
-            await db.execute(
-                "ALTER TABLE selfaliases ADD COLUMN IF NOT EXISTS with_parameters BOOLEAN DEFAULT FALSE"
-            )
+            """
+        )
+        await db.execute(
+            "ALTER TABLE aliases ADD COLUMN IF NOT EXISTS with_parameters BOOLEAN DEFAULT FALSE"
+        )
+        await db.execute(
+            "ALTER TABLE selfaliases ADD COLUMN IF NOT EXISTS with_parameters BOOLEAN DEFAULT FALSE"
+        )
 
     
 

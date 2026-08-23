@@ -137,8 +137,14 @@ class VoiceMaster(VoiceMasterEvents, Package):
         if getattr(self.bot.db, "pool", None) is None:
             return
         settings = await VoiceMasterSettings.fetch(self.bot, new_channel.guild)
-        if not settings.record.get("interface_id"):
+        interface_id = settings.record.get("interface_id")
+        if not interface_id:
             return
+        if old_channel_id != interface_id:
+            return
+        await VoiceMasterSettings.update_config_field(
+            self.bot.db, new_channel.guild.id, "interface_id", new_channel.id,
+        )
         old_msg_id = settings.record.get("panel_message_id")
         if old_msg_id:
             with contextlib.suppress(discord.HTTPException, discord.NotFound):
@@ -308,7 +314,7 @@ class VoiceMaster(VoiceMasterEvents, Package):
             "voicemaster sendinterface", "voicemaster join2unmute",
             "voicemaster messages", "voicemaster bypassed", "voicemaster private",
             "voicemaster ban", "voicemaster unban", "voicemaster bans",
-            "voicemaster toggle",
+            "voicemaster button", "voicemaster button enable", "voicemaster button disable",
         }
         if ctx.command.qualified_name in admin_commands:
             return True
@@ -757,11 +763,42 @@ class VoiceMaster(VoiceMasterEvents, Package):
         lines = [f"> -#<@{r['user_id']}>" for r in rows[:25]]
         await ctx.send(view=_vm_container(f"{ctx.author.display_name}:\n" + "\n".join(lines)))
 
-    @voicemaster.command(name="toggle", usage="<button>", example="toggle disconnect")
+    @voicemaster.group(name="button", usage="", example="button")
+    async def voicemaster_button(self, ctx: Context) -> None:
+        """manage panel buttons"""
+        if ctx.invoked_subcommand is None:
+            await ctx.send_help(ctx.command)
+
+    @voicemaster_button.command(name="enable", usage="<button>", example="button enable disconnect")
     @has_permissions(manage_guild=True)
-    @describe(button="button name to enable/disable")
-    async def voicemaster_toggle(self, ctx: Context, button: str) -> None:
-        """toggle a panel button on or off"""
+    @describe(button="button name to enable")
+    async def voicemaster_button_enable(self, ctx: Context, button: str) -> None:
+        """enable a panel button"""
+        button = button.lower().strip()
+        if button not in ALL_BUTTONS:
+            options = ", ".join(sorted(ALL_BUTTONS))
+            return await ctx.send(view=_vm_container(
+                f"{ctx.author.display_name}: invalid button\n> -# **options**: `{options}`"
+            ))
+        config = await VoiceMasterSettings.get_config(self.bot.db, ctx.guild.id)
+        if not config:
+            return await ctx.send(view=_vm_container(f"{ctx.author.display_name}: voicemaster is **not configured** in this guild"))
+        raw = config.get("disabled_buttons") or ""
+        current = {b.strip() for b in raw.split(",") if b.strip()}
+        if button not in current:
+            return await ctx.send(view=_vm_container(f"{ctx.author.display_name}: **{button}** is already **enabled**"))
+        current.discard(button)
+        new_value = ",".join(sorted(current))
+        await VoiceMasterSettings.update_config_field(
+            self.bot.db, ctx.guild.id, "disabled_buttons", new_value,
+        )
+        await ctx.send(view=_vm_container(f"{ctx.author.display_name}: **{button}** button **enabled**"))
+
+    @voicemaster_button.command(name="disable", usage="<button>", example="button disable disconnect")
+    @has_permissions(manage_guild=True)
+    @describe(button="button name to disable")
+    async def voicemaster_button_disable(self, ctx: Context, button: str) -> None:
+        """disable a panel button"""
         button = button.lower().strip()
         if button not in ALL_BUTTONS:
             options = ", ".join(sorted(ALL_BUTTONS))
@@ -774,18 +811,13 @@ class VoiceMaster(VoiceMasterEvents, Package):
         raw = config.get("disabled_buttons") or ""
         current = {b.strip() for b in raw.split(",") if b.strip()}
         if button in current:
-            current.discard(button)
-            action = "enabled"
-        else:
-            current.add(button)
-            action = "disabled"
+            return await ctx.send(view=_vm_container(f"{ctx.author.display_name}: **{button}** is already **disabled**"))
+        current.add(button)
         new_value = ",".join(sorted(current))
         await VoiceMasterSettings.update_config_field(
             self.bot.db, ctx.guild.id, "disabled_buttons", new_value,
         )
-        await ctx.send(view=_vm_container(
-            f"{ctx.author.display_name}: **{button}** button **{action}**"
-        ))
+        await ctx.send(view=_vm_container(f"{ctx.author.display_name}: **{button}** button **disabled**"))
 
     @voicemaster.command(name="messages", usage="<on/off>", example="messages on")
     @has_permissions(manage_guild=True)
