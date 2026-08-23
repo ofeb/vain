@@ -222,6 +222,12 @@ class DisconnectMembers(ui.Select):
         )
 
 
+ALL_BUTTONS = frozenset({
+    "claim", "delete", "disconnect", "hide", "limit",
+    "lock", "rename", "reveal", "status", "unlock",
+})
+
+
 class VoiceInterface(ui.LayoutView):
     def __init__(
         self,
@@ -229,10 +235,12 @@ class VoiceInterface(ui.LayoutView):
         guild: discord.Guild = None,
         *,
         channel: discord.VoiceChannel | None = None,
+        disabled_buttons: set[str] | None = None,
     ) -> None:
         self.cog = cog
         self.guild = guild
         self._channel_state = self._get_channel_state(channel) if channel else {"locked": False, "hidden": False}
+        self._disabled_buttons: set[str] = disabled_buttons or set()
 
         super().__init__(timeout=None)
 
@@ -271,23 +279,36 @@ class VoiceInterface(ui.LayoutView):
         )
 
         state = self._channel_state
-        lock_label = _strike("lock") if state["locked"] else "lock"
-        unlock_label = _strike("unlock") if not state["locked"] else "unlock"
-        hide_label = _strike("hide") if state["hidden"] else "hide"
-        reveal_label = _strike("reveal") if not state["hidden"] else "reveal"
+        db_disabled = self._disabled_buttons
+
+        is_disabled = {
+            "lock": "lock" in db_disabled or state["locked"],
+            "unlock": "unlock" in db_disabled or not state["locked"],
+            "hide": "hide" in db_disabled or state["hidden"],
+            "reveal": "reveal" in db_disabled or not state["hidden"],
+            "claim": "claim" in db_disabled,
+            "status": "status" in db_disabled,
+            "disconnect": "disconnect" in db_disabled,
+            "limit": "limit" in db_disabled,
+            "rename": "rename" in db_disabled,
+            "delete": "delete" in db_disabled,
+        }
+
+        def _label(name: str) -> str:
+            return _strike(name) if is_disabled[name] else name
 
         controls = (
             "### button usage\n"
-            f"> {VM['lock']} - **{lock_label}** the channel\n"
-            f"> {VM['unlock']} - **{unlock_label}** the channel\n"
-            f"> {VM['hide']} - **{hide_label}** the channel\n"
-            f"> {VM['reveal']} - **{reveal_label}** the channel\n"
-            f"> {VM['claim']} - **claim** the channel\n"
-            f"> {VM['status']} - set the channel **status**\n"
-            f"> {VM['disconnect']} - **disconnect** members\n"
-            f"> {VM['limit']} - set the channel **limit**\n"
-            f"> {VM['rename']} - **rename** the channel\n"
-            f"> {VM['delete']} - **delete** the channel"
+            f"> {VM['lock']} - **{_label('lock')}** the channel\n"
+            f"> {VM['unlock']} - **{_label('unlock')}** the channel\n"
+            f"> {VM['hide']} - **{_label('hide')}** the channel\n"
+            f"> {VM['reveal']} - **{_label('reveal')}** the channel\n"
+            f"> {VM['claim']} - **{_label('claim')}** the channel\n"
+            f"> {VM['status']} - set the channel **{_label('status')}**\n"
+            f"> {VM['disconnect']} - **{_label('disconnect')}** members\n"
+            f"> {VM['limit']} - set the channel **{_label('limit')}**\n"
+            f"> {VM['rename']} - **{_label('rename')}** the channel\n"
+            f"> {VM['delete']} - **{_label('delete')}** the channel"
         )
 
         container.add_item(
@@ -306,51 +327,61 @@ class VoiceInterface(ui.LayoutView):
                 style=discord.ButtonStyle.secondary,
                 emoji=VM["lock"],
                 custom_id="voicemaster:lock",
+                disabled=is_disabled["lock"],
             ),
             "unlock": ui.Button(
                 style=discord.ButtonStyle.secondary,
                 emoji=VM["unlock"],
                 custom_id="voicemaster:unlock",
+                disabled=is_disabled["unlock"],
             ),
             "hide": ui.Button(
                 style=discord.ButtonStyle.secondary,
                 emoji=VM["hide"],
                 custom_id="voicemaster:hide",
+                disabled=is_disabled["hide"],
             ),
             "reveal": ui.Button(
                 style=discord.ButtonStyle.secondary,
                 emoji=VM["reveal"],
                 custom_id="voicemaster:reveal",
+                disabled=is_disabled["reveal"],
             ),
             "claim": ui.Button(
                 style=discord.ButtonStyle.secondary,
                 emoji=VM["claim"],
                 custom_id="voicemaster:claim",
+                disabled=is_disabled["claim"],
             ),
             "status": ui.Button(
                 style=discord.ButtonStyle.secondary,
                 emoji=VM["status"],
                 custom_id="voicemaster:status",
+                disabled=is_disabled["status"],
             ),
             "disconnect": ui.Button(
                 style=discord.ButtonStyle.secondary,
                 emoji=VM["disconnect"],
                 custom_id="voicemaster:disconnect",
+                disabled=is_disabled["disconnect"],
             ),
             "limit": ui.Button(
                 style=discord.ButtonStyle.secondary,
                 emoji=VM["limit"],
                 custom_id="voicemaster:limit",
+                disabled=is_disabled["limit"],
             ),
             "rename": ui.Button(
                 style=discord.ButtonStyle.secondary,
                 emoji=VM["rename"],
                 custom_id="voicemaster:rename",
+                disabled=is_disabled["rename"],
             ),
             "delete": ui.Button(
                 style=discord.ButtonStyle.secondary,
                 emoji=VM["delete"],
                 custom_id="voicemaster:delete",
+                disabled=is_disabled["delete"],
             ),
         }
 
@@ -398,7 +429,7 @@ class VoiceInterface(ui.LayoutView):
         channel: discord.VoiceChannel,
     ) -> None:
         """Refresh the panel with updated button states."""
-        new_view = VoiceInterface(self.cog, self.guild, channel=channel)
+        new_view = VoiceInterface(self.cog, self.guild, channel=channel, disabled_buttons=self._disabled_buttons)
         try:
             await interaction.message.edit(view=new_view)
         except discord.HTTPException:

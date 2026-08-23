@@ -55,7 +55,7 @@ def _format_overwrite_changes(
         if old_val != new_val:
             old_str = str(old_val) if old_val is not None else "inherit"
             new_str = str(new_val) if new_val is not None else "inherit"
-            changes.append(label_line(label, f"`{old_str}` → `{new_str}`"))
+            changes.append(f"{label_line(label, f'`{old_str}` → `{new_str}`')}")
     return changes
 
 PERMISSION_NAMES = {
@@ -1174,7 +1174,7 @@ class LogEvents:
             lines = [description]
             permission_changes = _format_overwrite_changes(old, new)
             if permission_changes:
-                lines.append(label_line("Changes", "\n".join(permission_changes[:25])))
+                lines.append(label_line("Changes", "\n\n".join(permission_changes[:25])))
             embed = panel_embed(
                 author=title,
                 author_icon=moderator.display_avatar.url if moderator else None,

@@ -28,7 +28,7 @@ VALID_REGIONS = {
 from core.discord.ctx import Context
 from core.discord.hybrid import hybrid, describe, group
 from config import bot as bot_config, color
-from .improper.views import VoiceInterface
+from .improper.views import VoiceInterface, ALL_BUTTONS
 from core.managers.permissions import has_permissions
 from .settings import Settings as VoiceMasterSettings
 
@@ -124,7 +124,9 @@ class VoiceMaster(VoiceMasterEvents, Package):
                     old_msg = await channel.fetch_message(old_msg_id)
                     await old_msg.delete()
             try:
-                msg = await channel.send(view=VoiceInterface(self, guild), silent=True)
+                config = await VoiceMasterSettings.get_config(self.bot.db, guild_id)
+                disabled = self._get_disabled_buttons(config or {})
+                msg = await channel.send(view=self._make_interface(guild, disabled_buttons=disabled), silent=True)
                 settings = await VoiceMasterSettings.fetch(self.bot, guild)
                 await settings.upsert(panel_message_id=msg.id)
             except Exception:
@@ -143,10 +145,25 @@ class VoiceMaster(VoiceMasterEvents, Package):
                 old_msg = await new_channel.fetch_message(old_msg_id)
                 await old_msg.delete()
         try:
-            msg = await new_channel.send(view=VoiceInterface(self, new_channel.guild), silent=True)
+            config = await VoiceMasterSettings.get_config(self.bot.db, new_channel.guild.id)
+            disabled = self._get_disabled_buttons(config or {})
+            msg = await new_channel.send(view=self._make_interface(new_channel.guild, disabled_buttons=disabled), silent=True)
             await settings.upsert(panel_message_id=msg.id)
         except Exception:
             pass
+
+    def _get_disabled_buttons(self, config: dict) -> set[str]:
+        raw = config.get("disabled_buttons") or ""
+        return {b.strip() for b in raw.split(",") if b.strip()}
+
+    def _make_interface(
+        self,
+        guild: discord.Guild,
+        *,
+        channel: discord.VoiceChannel | None = None,
+        disabled_buttons: set[str] | None = None,
+    ) -> VoiceInterface:
+        return VoiceInterface(self, guild, channel=channel, disabled_buttons=disabled_buttons)
 
     def _get_cooldown(self, key: str, rate: int, per: float) -> Optional[float]:
         now = asyncio.get_event_loop().time()
@@ -254,6 +271,15 @@ class VoiceMaster(VoiceMasterEvents, Package):
                 member.guild.default_role, send_messages=False,
                 reason="VoiceMaster: Messages denied (deny_messages enabled)",
             )
+        banned = await VoiceMasterSettings.get_bans(self.bot.db, member.guild.id)
+        for ban_row in banned:
+            banned_user = member.guild.get_member(ban_row["user_id"])
+            if banned_user and banned_user.id != member.id:
+                with contextlib.suppress(discord.HTTPException):
+                    await channel.set_permissions(
+                        banned_user, connect=False,
+                        reason=f"VoiceMaster: Banned from voicemaster by channel owner",
+                    )
         await VoiceMasterSettings.insert_channel(
             self.bot.db, member.guild.id, channel.id, member.id,
         )
@@ -282,6 +308,7 @@ class VoiceMaster(VoiceMasterEvents, Package):
             "voicemaster sendinterface", "voicemaster join2unmute",
             "voicemaster messages", "voicemaster bypassed", "voicemaster private",
             "voicemaster ban", "voicemaster unban", "voicemaster bans",
+            "voicemaster toggle",
         }
         if ctx.command.qualified_name in admin_commands:
             return True
@@ -320,7 +347,7 @@ class VoiceMaster(VoiceMasterEvents, Package):
         everyone = ctx.guild.default_role
         await interface.set_permissions(everyone, send_messages=False, send_messages_in_threads=False, create_public_threads=False, create_private_threads=False)
         await channel.set_permissions(everyone, connect=True)
-        panel_msg = await interface.send(view=VoiceInterface(self, ctx.guild), silent=True)
+        panel_msg = await interface.send(view=self._make_interface(ctx.guild), silent=True)
         settings = await VoiceMasterSettings.fetch(self.bot, ctx.guild)
         await settings.upsert(category_id=category.id, interface_id=interface.id, channel_id=channel.id, panel_message_id=panel_msg.id)
         await ctx.send(view=_vm_container(f"{ctx.author.display_name}: voicemaster **setup complete**"))
@@ -628,7 +655,9 @@ class VoiceMaster(VoiceMasterEvents, Package):
             with contextlib.suppress(discord.HTTPException, discord.NotFound):
                 old_msg = await interface.fetch_message(old_msg_id)
                 await old_msg.delete()
-        panel_msg = await interface.send(view=VoiceInterface(self, ctx.guild), silent=True)
+        vm_config = await VoiceMasterSettings.get_config(self.bot.db, ctx.guild.id)
+        disabled = self._get_disabled_buttons(vm_config or {})
+        panel_msg = await interface.send(view=self._make_interface(ctx.guild, disabled_buttons=disabled), silent=True)
         settings = await VoiceMasterSettings.fetch(self.bot, ctx.guild)
         await settings.upsert(panel_message_id=panel_msg.id)
         await ctx.send(view=_vm_container(f"{ctx.author.display_name}: interface **resent**"))
@@ -691,7 +720,7 @@ class VoiceMaster(VoiceMasterEvents, Package):
             if member.voice.channel.id in vm_channel_ids:
                 with contextlib.suppress(discord.HTTPException):
                     await member.move_to(None, reason="VoiceMaster: banned from voicemaster")
-        await ctx.send(view=_vm_container(f"Banned {member.mention}\n> -# **from voicemaster channels**"))
+        await ctx.send(view=_vm_container(f"Banned {member.mention} from **joining** your voicemaster channels\n> -# **applies to future channels until unbanned**"))
 
     @voicemaster.command(name="unban", usage="<member>", example="unban @user")
     @has_permissions(manage_guild=True)
@@ -714,7 +743,7 @@ class VoiceMaster(VoiceMasterEvents, Package):
                             connect=None,
                             reason=f"VoiceMaster: {ctx.author} unbanned {member} from voicemaster",
                         )
-            await ctx.send(view=_vm_container(f"Unbanned {member.mention}\n> -# **can now join voicemaster channels**"))
+            await ctx.send(view=_vm_container(f"Unbanned {member.mention}, they can now **join voicemaster channels**"))
         else:
             await ctx.send(view=_vm_container(f"{member.mention} is **not banned**"))
 
@@ -727,6 +756,36 @@ class VoiceMaster(VoiceMasterEvents, Package):
             return await ctx.send(view=_vm_container(f"{ctx.author.display_name}: no **banned** users"))
         lines = [f"> -#<@{r['user_id']}>" for r in rows[:25]]
         await ctx.send(view=_vm_container(f"{ctx.author.display_name}:\n" + "\n".join(lines)))
+
+    @voicemaster.command(name="toggle", usage="<button>", example="toggle disconnect")
+    @has_permissions(manage_guild=True)
+    @describe(button="button name to enable/disable")
+    async def voicemaster_toggle(self, ctx: Context, button: str) -> None:
+        """toggle a panel button on or off"""
+        button = button.lower().strip()
+        if button not in ALL_BUTTONS:
+            options = ", ".join(sorted(ALL_BUTTONS))
+            return await ctx.send(view=_vm_container(
+                f"{ctx.author.display_name}: invalid button\n> -# **options**: `{options}`"
+            ))
+        config = await VoiceMasterSettings.get_config(self.bot.db, ctx.guild.id)
+        if not config:
+            return await ctx.send(view=_vm_container(f"{ctx.author.display_name}: voicemaster is **not configured** in this guild"))
+        raw = config.get("disabled_buttons") or ""
+        current = {b.strip() for b in raw.split(",") if b.strip()}
+        if button in current:
+            current.discard(button)
+            action = "enabled"
+        else:
+            current.add(button)
+            action = "disabled"
+        new_value = ",".join(sorted(current))
+        await VoiceMasterSettings.update_config_field(
+            self.bot.db, ctx.guild.id, "disabled_buttons", new_value,
+        )
+        await ctx.send(view=_vm_container(
+            f"{ctx.author.display_name}: **{button}** button **{action}**"
+        ))
 
     @voicemaster.command(name="messages", usage="<on/off>", example="messages on")
     @has_permissions(manage_guild=True)

@@ -31,6 +31,7 @@ class Record(TypedDict, total=False):
     default_status_emoji: Any | None
     deny_messages: bool
     use_private: bool
+    disabled_buttons: str
 
 
 class Settings:
@@ -109,6 +110,11 @@ class Settings:
         return bool(self.record.get('use_private', False))
 
     @property
+    def disabled_buttons(self) -> set[str]:
+        raw = self.record.get('disabled_buttons') or ''
+        return {b.strip() for b in raw.split(',') if b.strip()}
+
+    @property
     def channel(self) -> TextChannel | Thread | None:
         cid = self.record.get('channel_id')
         if not cid:
@@ -142,6 +148,7 @@ class Settings:
             'default_status_emoji': None,
             'deny_messages': False,
             'use_private': False,
+            'disabled_buttons': '',
         }
 
     @classmethod
@@ -183,10 +190,11 @@ class Settings:
             'default_status_emoji': kwargs.get('default_status_emoji', self.default_status_emoji),
             'deny_messages': kwargs.get('deny_messages', self.deny_messages),
             'use_private': kwargs.get('use_private', self.use_private),
+            'disabled_buttons': kwargs.get('disabled_buttons', self.record.get('disabled_buttons', '')),
         }
         query = """
-        INSERT INTO voicemaster_configuration (guild_id, channel_id, category_id, interface_id, panel_message_id, private_category_id, role_id, bitrate, region, send_interface, default_name, join_role_id, default_status_text, default_status_emoji, deny_messages, use_private)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        INSERT INTO voicemaster_configuration (guild_id, channel_id, category_id, interface_id, panel_message_id, private_category_id, role_id, bitrate, region, send_interface, default_name, join_role_id, default_status_text, default_status_emoji, deny_messages, use_private, disabled_buttons)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
         ON CONFLICT (guild_id) DO UPDATE SET
             channel_id = EXCLUDED.channel_id,
             category_id = EXCLUDED.category_id,
@@ -202,7 +210,8 @@ class Settings:
             default_status_text = EXCLUDED.default_status_text,
             default_status_emoji = EXCLUDED.default_status_emoji,
             deny_messages = EXCLUDED.deny_messages,
-            use_private = EXCLUDED.use_private
+            use_private = EXCLUDED.use_private,
+            disabled_buttons = EXCLUDED.disabled_buttons
         RETURNING *
         """
         record = await self.bot.db.fetchrow(
@@ -223,6 +232,7 @@ class Settings:
             values['default_status_emoji'],
             values['deny_messages'],
             values['use_private'],
+            values['disabled_buttons'],
         )
         if record is not None:
             self.record = dict(record)
@@ -292,6 +302,10 @@ class Settings:
         with contextlib.suppress(Exception):
             await db.execute(
                 "ALTER TABLE voicemaster_configuration ADD COLUMN IF NOT EXISTS use_private BOOLEAN DEFAULT FALSE"
+            )
+        with contextlib.suppress(Exception):
+            await db.execute(
+                "ALTER TABLE voicemaster_configuration ADD COLUMN IF NOT EXISTS disabled_buttons TEXT DEFAULT ''"
             )
 
     

@@ -397,6 +397,7 @@ def _description(cmd: Command) -> str:
         text = str(text or "").strip()
         while text.endswith("."):
             text = text[:-1].rstrip()
+        text = text.replace("**", "")
         return text.lower() if text else ""
 
     if isinstance(cmd, Group):
@@ -1200,7 +1201,6 @@ def _build_help_detail_container(
         alias_parts.append(f"> -# **guild aliases:** {', '.join(guild_aliases)}")
     if self_aliases:
         alias_parts.append(f"> -# **your aliases:** {', '.join(self_aliases)}")
-    alias_parts.append("> ")
     alias_parts.append(f"> -# **command permissions:** {perm}")
     container.add_item(ui.TextDisplay("\n".join(alias_parts)))
 

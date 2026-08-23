@@ -653,17 +653,13 @@ class Context(commands.Context):
 
 
         if isinstance(view, discord.ui.LayoutView):
-            if content is not None and str(content).strip():
-                text_display = ui.TextDisplay(str(content))
-                view.add_item(text_display)
-                content = None
             send_kw = dict(base_kw)
             send_kw.pop("suppress_embeds", None)
             if len(file_list) == 1:
                 send_kw["file"] = file_list[0]
             elif file_list:
                 send_kw["files"] = file_list
-            return await super().send(view=view, **send_kw)
+            return await self._deliver(content=content, view=view, **send_kw)
 
         
 
