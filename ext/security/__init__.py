@@ -1228,12 +1228,12 @@ class Antinuke(AntinukeEvents, Package):
         if toggled_off:
             direction = "granting" if option == "grant" else "removal"
             return await ctx.success(
-                f"Stopped watching **{direction}**\n> -# \`{entry.permission}\`"
+                f"Stopped watching **{direction}**\n> -# `{entry.permission}`"
             )
 
         direction = "granting" if option == "grant" else "removal"
         return await ctx.success(
-            f"Now watching **{direction}**\n> -# \`{entry.permission}\` - penalty: **{entry.punishment}**"
+            f"Now watching **{direction}**\n> -# `{entry.permission}` - penalty: **{entry.punishment}**"
         )
 
     @antinuke.command(
