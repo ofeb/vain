@@ -5,7 +5,7 @@ import os
 import sys
 
 from pathlib import Path
-from dcspoof import mode
+from aiodc import mode
 
 from core.vain import Vain
 from config import Bot
