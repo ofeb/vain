@@ -598,16 +598,16 @@ class ServerCommands(Package):
             dom_color = self.color
 
         owner = g.owner
+
         if owner is None and g.owner_id:
             try:
                 owner = await g.fetch_member(g.owner_id)
             except Exception:
                 owner = None
 
-        if owner:
-            owner_text = f"<@{owner.id}>"
-        else:
-            owner_text = f"<@{g.owner_id}>" if g.owner_id else "Unknown"
+        owner_text = f"<@{owner.id}>" if owner else (
+            f"<@{g.owner_id}>" if g.owner_id else "Unknown"
+        )
 
         humans = sum(1 for member in g.members if not member.bot)
         bots = sum(1 for member in g.members if member.bot)
@@ -647,32 +647,39 @@ class ServerCommands(Package):
 
         mfa = "Required" if g.mfa_level else "None"
 
-        created = f"<t:{int(g.created_at.timestamp())}:D> (<t:{int(g.created_at.timestamp())}:R>)"
+        created = (
+            f"<t:{int(g.created_at.timestamp())}:D> "
+            f"(<t:{int(g.created_at.timestamp())}:R>)"
+        )
 
         icon_url = g.icon.url if g.icon else None
         banner_url = g.banner.url if g.banner else None
         splash_url = g.splash.url if g.splash else None
 
-        description = (
-            f"-# **Server Information — {g.name}**\n\n"
+        content = (
+            f"-# **{g.name}**\n"
             f"> -# **Owner:** {owner_text}\n"
             f"> -# **Created:** {created}\n"
-            f"> -# **Verification:** {str(g.verification_level).replace('_', ' ').title()}\n"
+            f"> -# **Verification:** `{str(g.verification_level).replace('_', ' ').title()}`\n"
             f"> -# **Vanity:** `{vanity}`\n"
-            f"> -# **MFA:** `{mfa}`\n\n"
+            f"> -# **MFA:** `{mfa}`\n"
+            f"\n"
             f"-# **Members**\n"
             f"> -# Total: `{g.member_count}`\n"
             f"> -# Humans: `{humans}`\n"
             f"> -# Bots: `{bots}`\n"
-            f"> -# Boosters: `{booster_count}`\n\n"
+            f"> -# Boosters: `{booster_count}`\n"
+            f"\n"
             f"-# **Channels ({total_channels})**\n"
             f"> -# Text: `{text_channels}`\n"
             f"> -# Voice: `{voice_channels}`\n"
-            f"> -# Categories: `{categories}`\n\n"
+            f"> -# Categories: `{categories}`\n"
+            f"\n"
             f"-# **Counts**\n"
             f"> -# Roles: `{len(g.roles)}/{role_limit}`\n"
             f"> -# Emojis: `{len(g.emojis)}/{emoji_limit}`\n"
-            f"> -# Stickers: `{len(g.stickers)}/{sticker_limit}`\n\n"
+            f"> -# Stickers: `{len(g.stickers)}/{sticker_limit}`\n"
+            f"\n"
             f"-# **Boosts**\n"
             f"> -# Level: `{g.premium_tier}`\n"
             f"> -# Boosts: `{g.premium_subscription_count or 0}`\n"
@@ -680,39 +687,64 @@ class ServerCommands(Package):
         )
 
         if features_str:
-            description += (
+            content += (
                 f"\n\n"
                 f"-# **Features ({len(features)})**\n"
                 f"> -# {features_str}"
             )
 
-        description += (
-            f"\n\n"
-            f"-# `Guild ID:` `{g.id}`"
+        content += f"\n\n-# `Guild ID:` `{g.id}`"
+
+        container = discord.ui.Container()
+
+        container.add_item(
+            discord.ui.TextDisplay(
+                f"-# **Server Information — {g.name}**"
+            )
         )
 
-        container = panel_container(
-            title=f"Server Information — {g.name}",
-            description=description,
-            color=dom_color,
+        container.add_item(
+            discord.ui.Separator()
         )
+
+        container.add_item(
+            discord.ui.TextDisplay(
+                content
+            )
+        )
+
+        assets = []
 
         if icon_url:
-            container.add_button(
-                label="Icon",
-                url=icon_url,
+            assets.append(
+                discord.ui.Button(
+                    label="Icon",
+                    style=discord.ButtonStyle.link,
+                    url=icon_url,
+                )
             )
 
         if banner_url:
-            container.add_button(
-                label="Banner",
-                url=banner_url,
+            assets.append(
+                discord.ui.Button(
+                    label="Banner",
+                    style=discord.ButtonStyle.link,
+                    url=banner_url,
+                )
             )
 
         if splash_url:
-            container.add_button(
-                label="Splash",
-                url=splash_url,
+            assets.append(
+                discord.ui.Button(
+                    label="Splash",
+                    style=discord.ButtonStyle.link,
+                    url=splash_url,
+                )
+            )
+
+        if assets:
+            container.add_item(
+                discord.ui.ActionRow(*assets)
             )
 
         await ctx.send(view=container)
