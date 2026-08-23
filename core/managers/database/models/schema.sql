@@ -386,11 +386,14 @@ CREATE TABLE IF NOT EXISTS antiraid_locked_channels (
 );
 
 CREATE TABLE IF NOT EXISTS honeypot (
-    guild_id    BIGINT PRIMARY KEY,
-    enabled     BOOLEAN DEFAULT FALSE,
-    log_channel BIGINT,
-    action      TEXT DEFAULT 'kick',
-    message     TEXT
+    guild_id         BIGINT PRIMARY KEY,
+    channel_id       BIGINT,
+    message_id       BIGINT,
+    alert_channel_id BIGINT,
+    punishments      TEXT[] NOT NULL DEFAULT ARRAY['softban']::TEXT[],
+    caught           INT NOT NULL DEFAULT 0,
+    enabled          BOOLEAN NOT NULL DEFAULT FALSE,
+    embed_script     TEXT
 );
 
 CREATE TABLE IF NOT EXISTS role_reassign (

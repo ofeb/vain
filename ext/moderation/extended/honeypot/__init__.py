@@ -211,11 +211,11 @@ class Honeypot(Package):
                 if action == "kick":
                     await member.kick(reason=reason)
                     applied.append("kick")
-                    break  
+                    return applied
                 if action == "ban":
                     await member.ban(delete_message_seconds=0, reason=reason)
                     applied.append("ban")
-                    break
+                    return applied
                 if action == "hardban":
                     await member.ban(delete_message_seconds=0, reason=reason)
                     with contextlib.suppress(Exception):
@@ -225,7 +225,7 @@ class Honeypot(Package):
                             reason,
                         )
                     applied.append("hardban")
-                    break
+                    return applied
                 if action == "softban":
                     await member.ban(delete_message_seconds=86400, reason=reason)
                     await member.guild.unban(
@@ -233,12 +233,12 @@ class Honeypot(Package):
                         reason=f"{reason} (softban unban)",
                     )
                     applied.append("softban")
-                    break
+                    return applied
                 if action == "timeout":
                     until = discord.utils.utcnow() + timedelta(seconds=_TIMEOUT_SECONDS)
                     await member.timeout(until, reason=reason)
                     applied.append("timeout")
-                    break
+                    return applied
                 if action == "jail":
                     settings = await self.db.get_server_settings(member.guild.id)
                     jail_role_id = getattr(settings, "jail_role_id", None) if settings else None
@@ -247,7 +247,7 @@ class Honeypot(Package):
                         if role is not None:
                             await member.add_roles(role, reason=reason)
                             applied.append("jail")
-                    break
+                    return applied
             except (discord.Forbidden, discord.HTTPException):
                 continue
         return applied
