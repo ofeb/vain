@@ -26,6 +26,7 @@ class Record(TypedDict, total=False):
     region: Any | None
     send_interface: bool
     default_name: Any | None
+    custom_name: Any | None
     join_role_id: Any | None
     default_status_text: Any | None
     default_status_emoji: Any | None
@@ -83,11 +84,15 @@ class Settings:
 
     @property
     def send_interface(self) -> bool:
-        return bool(self.record.get('send_interface', True))
+        return bool(self.record.get('send_interface', False))
 
     @property
     def default_name(self) -> Any | None:
         return self.record.get('default_name')
+
+    @property
+    def custom_name(self) -> Any | None:
+        return self.record.get('custom_name')
 
     @property
     def join_role_id(self) -> Any | None:
@@ -141,8 +146,9 @@ class Settings:
             'role_id': None,
             'bitrate': None,
             'region': None,
-            'send_interface': True,
+            'send_interface': False,
             'default_name': None,
+            'custom_name': None,
             'join_role_id': None,
             'default_status_text': None,
             'default_status_emoji': None,
@@ -307,6 +313,10 @@ class Settings:
             await db.execute(
                 "ALTER TABLE voicemaster_configuration ADD COLUMN IF NOT EXISTS disabled_buttons TEXT DEFAULT ''"
             )
+        with contextlib.suppress(Exception):
+            await db.execute(
+                "ALTER TABLE voicemaster_configuration ADD COLUMN IF NOT EXISTS custom_name TEXT"
+            )
 
     
 
@@ -360,18 +370,6 @@ class Settings:
     async def fetch_all_panel_rows(db) -> list[dict[str, Any]]:
         rows = await db.fetch(
             "SELECT guild_id, interface_id, panel_message_id FROM voicemaster_configuration"
-        )
-        return [dict(r) for r in rows]
-
-    @staticmethod
-    async def fetch_panel_button_rows(db) -> list[dict[str, Any]]:
-        rows = await db.fetch(
-            """
-            SELECT guild_id, interface_id, panel_message_id,
-                   COALESCE(disabled_buttons, '') AS disabled_buttons
-            FROM voicemaster_configuration
-            WHERE interface_id IS NOT NULL AND panel_message_id IS NOT NULL
-            """
         )
         return [dict(r) for r in rows]
 

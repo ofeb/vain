@@ -50,25 +50,21 @@ class VoiceMaster(VoiceMasterEvents, Package):
     def __init__(self, bot: Vain):
         super().__init__(bot)
         self._cooldowns: dict = {}
-        self._panel_button_cache: dict[int, str] = {}
 
     async def cog_load(self) -> None:
         if getattr(self.bot.db, "pool", None) is None:
             return
     
         await VoiceMasterSettings.ensure_schema(self.bot.db)
+
+        VoiceInterface._cog_ref = self
+        self.bot.add_view(VoiceInterface(self))
     
         if not self._cleanup_loop.is_running():
             self._cleanup_loop.start()
-        if not self._panel_refresh_loop.is_running():
-            self._panel_refresh_loop.start()
-        if not self._button_sync_loop.is_running():
-            self._button_sync_loop.start()
-    
-        async def cog_unload(self) -> None:
-            self._cleanup_loop.cancel()
-            self._panel_refresh_loop.cancel()
-            self._button_sync_loop.cancel()
+
+    async def cog_unload(self) -> None:
+        self._cleanup_loop.cancel()
 
     @tasks.loop(minutes=1)
     async def _cleanup_loop(self):
@@ -101,116 +97,6 @@ class VoiceMaster(VoiceMasterEvents, Package):
         if to_delete:
             await VoiceMasterSettings.delete_empty_channels(self.bot.db, to_delete)
 
-    @tasks.loop(hours=6)
-    async def _panel_refresh_loop(self):
-        await self._refresh_all_panels()
-
-    @_panel_refresh_loop.before_loop
-    async def _before_panel_refresh_loop(self) -> None:
-        await self.bot.wait_until_ready()
-
-    @tasks.loop(seconds=30)
-    async def _button_sync_loop(self):
-        await self._sync_panel_buttons()
-
-    @_button_sync_loop.before_loop
-    async def _before_button_sync_loop(self) -> None:
-        await self.bot.wait_until_ready()
-
-    async def _sync_panel_buttons(self) -> None:
-        """Watch `disabled_buttons` in the database and edit panels live.
-
-        The moment the value changes (button command, jishaku script, ...)
-        the panel is edited so disabled buttons become unclickable with a
-        strikethrough usage line, and everything else stays enabled.
-        """
-        if getattr(self.bot.db, "pool", None) is None:
-            return
-        try:
-            rows = await VoiceMasterSettings.fetch_panel_button_rows(self.bot.db)
-        except Exception:
-            return
-        seen: set[int] = set()
-        for row in rows:
-            guild_id = row.get("guild_id")
-            raw = str(row.get("disabled_buttons") or "")
-            seen.add(guild_id)
-            if self._panel_button_cache.get(guild_id) == raw:
-                continue
-            guild = self.bot.get_guild(guild_id)
-            interface_id = row.get("interface_id")
-            message_id = row.get("panel_message_id")
-            if not guild or not interface_id or not message_id:
-                self._panel_button_cache[guild_id] = raw
-                continue
-            channel = guild.get_channel(int(interface_id))
-            if not isinstance(channel, discord.TextChannel):
-                continue
-            try:
-                message = await channel.fetch_message(int(message_id))
-                view = self._make_interface(
-                    guild,
-                    disabled_buttons=self._get_disabled_buttons({"disabled_buttons": raw}),
-                )
-                await message.edit(view=view)
-            except Exception:
-                continue
-            self._panel_button_cache[guild_id] = raw
-        for gid in list(self._panel_button_cache):
-            if gid not in seen:
-                del self._panel_button_cache[gid]
-
-    async def _edit_guild_panel(self, guild: discord.Guild) -> None:
-        """Re-render this guild's panel from the current DB state."""
-        config = await VoiceMasterSettings.get_config(self.bot.db, guild.id) or {}
-        raw = str(config.get("disabled_buttons") or "")
-        interface_id = config.get("interface_id")
-        message_id = config.get("panel_message_id")
-        if not interface_id or not message_id:
-            return
-        channel = guild.get_channel(int(interface_id))
-        if not isinstance(channel, discord.TextChannel):
-            return
-        try:
-            message = await channel.fetch_message(int(message_id))
-            view = self._make_interface(
-                guild,
-                disabled_buttons=self._get_disabled_buttons(config),
-            )
-            await message.edit(view=view)
-        except Exception:
-            return
-        self._panel_button_cache[guild.id] = raw
-
-    async def _refresh_all_panels(self):
-        if getattr(self.bot.db, "pool", None) is None:
-            return
-        rows = await VoiceMasterSettings.fetch_all_panel_rows(self.bot.db)
-        for row in rows:
-            guild_id = row["guild_id"]
-            interface_id = row["interface_id"]
-            old_msg_id = row["panel_message_id"]
-            if not interface_id:
-                continue
-            guild = self.bot.get_guild(guild_id)
-            if not guild:
-                continue
-            channel = guild.get_channel(interface_id)
-            if not channel:
-                continue
-            if old_msg_id:
-                with contextlib.suppress(discord.HTTPException, discord.NotFound):
-                    old_msg = await channel.fetch_message(old_msg_id)
-                    await old_msg.delete()
-            try:
-                config = await VoiceMasterSettings.get_config(self.bot.db, guild_id)
-                disabled = self._get_disabled_buttons(config or {})
-                msg = await channel.send(view=self._make_interface(guild, disabled_buttons=disabled), silent=True)
-                settings = await VoiceMasterSettings.fetch(self.bot, guild)
-                await settings.upsert(panel_message_id=msg.id)
-            except Exception:
-                continue
-
     async def reconfigure_after_nuke(self, old_channel_id: int, new_channel: discord.TextChannel) -> None:
         """Re-send the voicemaster panel if the nuked channel was the interface."""
         if getattr(self.bot.db, "pool", None) is None:
@@ -236,6 +122,24 @@ class VoiceMaster(VoiceMasterEvents, Package):
             await settings.upsert(panel_message_id=msg.id)
         except Exception:
             pass
+
+    async def _edit_guild_panel(self, guild: discord.Guild) -> None:
+        """Re-render this guild's panel from the current DB state."""
+        config = await VoiceMasterSettings.get_config(self.bot.db, guild.id) or {}
+        interface_id = config.get("interface_id")
+        message_id = config.get("panel_message_id")
+        if not interface_id or not message_id:
+            return
+        channel = guild.get_channel(int(interface_id))
+        if not isinstance(channel, discord.TextChannel):
+            return
+        try:
+            message = await channel.fetch_message(int(message_id))
+            disabled = self._get_disabled_buttons(config)
+            view = self._make_interface(guild, disabled_buttons=disabled)
+            await message.edit(view=view)
+        except Exception:
+            return
 
     def _get_disabled_buttons(self, config: dict) -> set[str]:
         raw = config.get("disabled_buttons") or ""
@@ -265,6 +169,9 @@ class VoiceMaster(VoiceMasterEvents, Package):
 
     @staticmethod
     def _resolve_channel_name(config, member: discord.Member) -> str:
+        custom = str(config.get("custom_name") or "").strip()
+        if custom:
+            return f"{custom} vc"
         value = str(config.get("default_name") or "").strip()
         if value:
             return value
@@ -405,6 +312,7 @@ class VoiceMaster(VoiceMasterEvents, Package):
             "voicemaster messages", "voicemaster bypassed", "voicemaster private",
             "voicemaster ban", "voicemaster unban", "voicemaster bans",
             "voicemaster button", "voicemaster button enable", "voicemaster button disable",
+            "voicemaster customname",
         }
         if ctx.command.qualified_name in admin_commands:
             return True
@@ -518,7 +426,8 @@ class VoiceMaster(VoiceMasterEvents, Package):
             f"> -#**bitrate**: `{config.get('bitrate', 64000) // 1000}kbps`\n"
             f"> -#**region**: `{config.get('region', 'auto')}`\n"
             f"> -#**role**: <@{config.get('role_id', 0)}>\n"
-            f"> -#**default name**: `{config.get('default_name', 'none')}`"
+            f"> -#**default name**: `{config.get('default_name', 'none')}`\n"
+            f"> -#**custom name**: `{config.get('custom_name', 'none')}`"
         )
         await ctx.send(view=_vm_container(f"{ctx.author.display_name}:\n{lines}"))
 
@@ -1027,6 +936,27 @@ class VoiceMaster(VoiceMasterEvents, Package):
             reason=f"VoiceMaster: {ctx.author} set region",
         )
         await ctx.send(view=_vm_container(f"{ctx.author.display_name}: region set to **{region}**"))
+
+    @voicemaster.command(name="customname", aliases=["cn", "cname"], usage="<name>", example="customname education")
+    @has_permissions(manage_guild=True)
+    @describe(name="custom name for voice channels (e.g. 'education' creates 'education vc')")
+    async def voicemaster_customname(self, ctx: Context, *, name: str = "") -> None:
+        """set a custom name for voice channels (creates '{name} vc')"""
+        if not name:
+            try:
+                await VoiceMasterSettings.update_config_field(
+                    self.bot.db, ctx.guild.id, "custom_name", None,
+                )
+                return await ctx.send(view=_vm_container(f"{ctx.author.display_name}: custom name **cleared**"))
+            except Exception:
+                return await ctx.send(view=_vm_container(f"{ctx.author.display_name}: voicemaster is **not configured** in this guild"))
+        try:
+            await VoiceMasterSettings.update_config_field(
+                self.bot.db, ctx.guild.id, "custom_name", name,
+            )
+            await ctx.send(view=_vm_container(f"{ctx.author.display_name}: custom name set to **{name}** (channels will be named `{name} vc`)"))
+        except Exception:
+            await ctx.send(view=_vm_container(f"{ctx.author.display_name}: voicemaster is **not configured** in this guild"))
 
 
 

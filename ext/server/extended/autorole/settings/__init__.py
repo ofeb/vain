@@ -55,20 +55,71 @@ class Settings:
         return self
 
     async def add(self, **fields: Any) -> dict[str, Any]:
-        """Insert a row. Pass columns for `auto_role` except guild_id."""
+        """Insert an auto_role row if it does not already exist."""
+
         if not fields:
             raise ValueError("add() requires column fields")
+
         cols = ["guild_id", *fields.keys()]
         values: list[Any] = [self.guild.id, *fields.values()]
-        placeholders = ", ".join(f"$%d" % i for i in range(1, len(cols) + 1))
+        placeholders = ", ".join(
+            f"${i}" for i in range(1, len(cols) + 1)
+        )
         col_sql = ", ".join(cols)
+
         row = await self.bot.db.fetchrow(
-            f"INSERT INTO auto_role (%s) VALUES (%s) RETURNING *" % (col_sql, placeholders),
+            f"""
+            INSERT INTO auto_role ({col_sql})
+            VALUES ({placeholders})
+            ON CONFLICT (guild_id, role_id) DO NOTHING
+            RETURNING *
+            """,
             *values,
         )
-        data = dict(row) if row else {"guild_id": self.guild.id, **fields}
+
+        if row:
+            data = dict(row)
+
+            self.rows = [
+                existing
+                for existing in self.rows
+                if not (
+                    existing.get("guild_id") == self.guild.id
+                    and existing.get("role_id") == fields.get("role_id")
+                )
+            ]
+            self.rows.append(data)
+
+            return data
+
+        existing = next(
+            (
+                existing
+                for existing in self.rows
+                if existing.get("guild_id") == self.guild.id
+                and existing.get("role_id") == fields.get("role_id")
+            ),
+            None,
+        )
+
+        if existing:
+            return existing
+
+        fresh = await self.bot.db.fetchrow(
+            """
+            SELECT *
+            FROM auto_role
+            WHERE guild_id = $1 AND role_id = $2
+            """,
+            self.guild.id,
+            fields["role_id"],
+        )
+
+        if not fresh:
+            raise RuntimeError("auto_role row exists but could not be fetched")
+
+        data = dict(fresh)
         self.rows.append(data)
-        logger.debug("add auto_role guild=%s fields=%s", self.guild.id, list(fields))
         return data
 
     async def remove_where(self, **match: Any) -> int:

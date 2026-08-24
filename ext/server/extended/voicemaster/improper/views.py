@@ -229,6 +229,8 @@ ALL_BUTTONS = frozenset({
 
 
 class VoiceInterface(ui.LayoutView):
+    _cog_ref: "VoiceMaster | None" = None
+
     def __init__(
         self,
         cog: "VoiceMaster" = None,
@@ -237,7 +239,7 @@ class VoiceInterface(ui.LayoutView):
         channel: discord.VoiceChannel | None = None,
         disabled_buttons: set[str] | None = None,
     ) -> None:
-        self.cog = cog
+        self.cog = cog or VoiceInterface._cog_ref
         self.guild = guild
         self._channel_state = self._get_channel_state(channel) if channel else {"locked": False, "hidden": False}
         self._disabled_buttons: set[str] = disabled_buttons or set()

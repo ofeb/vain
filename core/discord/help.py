@@ -191,7 +191,7 @@ _BLURBS: dict[str, str] = {
     "Server": "Prefixes, starboard, autorole, reactions, logs, tickets, voicemaster, and server setup.",
     "Security": "Antinuke, antiraid, and automod protection modules.",
     "Moderation": "Tools that help you moderate your server.",
-    "Information": "User, guild, and bot lookups, avatars, banners, fortnite, and stats.",
+    "Information": "User, guild, and bot lookups, avatars, banners, and stats.",
     "Utility": "Snipes, reminders, AFK, invite tracker, and utility commands.",
     "Fun": "Games, memes, images, uwulock, and fun commands.",
     "Roleplay": "Hugs, kisses and other various roleplay commands.",
