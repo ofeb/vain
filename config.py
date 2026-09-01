@@ -112,7 +112,7 @@ class database:
 
 class redis:
     enabled: bool = True
-    url: str = "redis://127.0.0.1:6379/0"
+    url: str = "redis://:astral$2026@127.0.0.1:6379/0"
 
 
 class api:
